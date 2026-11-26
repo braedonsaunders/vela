@@ -17,6 +17,7 @@ import { buildHistoryRecap, getPlaylistImport, isHiddenDuplicateTitle, isRecapPe
 import { renderCover } from './covers';
 import { downloadSubtitle, foundSubtitleVtt, searchSubtitles, subtitleLanguages } from './subtitle-search';
 
+import { seedGalleryParity } from './gallery-parity';
 import { scaleGuide } from './guide-fixture';
 import { archivePlan, archiveRange, catchUpFeature, checkTimeshiftCommand, eventProgramme, flagProgramme, goLive, withArchives } from './catch-up';
 import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, setWatchProgramme, sportsAdmin, sportsEnabled, sportsLogo } from './sports';
@@ -126,6 +127,8 @@ const videoLibraries: V.Library[] = labPreset ? [
 // Gallery parity uses the original catalogue unless the feature fixture is selected.
 if (mediaEnabled && process.env.VELA_MOCK_GALLERY_FEATURES === '1') {
   enableGalleryFixtures(Number(process.env.VELA_MOCK_GALLERY_SCALE));
+} else if (mediaEnabled && process.env.VELA_MOCK_GALLERY_PARITY === '1') {
+  seedGalleryParity(process.env.VELA_MOCK_GALLERY_ROWS === '1');
 }
 const libraries: V.Library[] = [...videoLibraries.map(library => experiencesEnabled ? { ...library, experience: library.kind === 'live' ? 'live' : 'watch' } : library),
   ...(mediaEnabled ? mediaLibraries.map(({ experience, ...library }) => experiencesEnabled ? { ...library, experience } : library).map(library => levelsEnabled ? library

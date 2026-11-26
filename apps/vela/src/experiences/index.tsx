@@ -1,6 +1,6 @@
 // A library opens in its experience (core's libraryExperience: the server's name for it, else what
-// it holds). Listen and Read are document experiences. Gallery and Live still use the shared
-// library route for their photo viewer and guide.
+// it holds). Listen, Read and Gallery are document experiences. Live uses the shared library
+// route for its guide.
 import type { ComponentType } from 'react';
 import type { VelaExperience } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
@@ -8,11 +8,12 @@ import type { LibraryParams } from '../browse/library-query';
 import { ListenSection } from '../listen/section';
 import { WatchLibrary } from './watch';
 import { ReadLibrary } from './read';
+import { GalleryLibrary } from './gallery';
+
+export const legacyGallery = process.env.EXPO_PUBLIC_VELA_GALLERY_LEGACY === '1';
 
 export type LibrarySectionProps = { id: string; params: LibraryParams & { m?: string } };
 
-/** Photos and home videos: today the standard library, whose photos open the photo viewer. */
-function GalleryLibrary(props: LibrarySectionProps) { return <WatchLibrary {...props} />; }
 /** Live TV: today the standard library's live tabs, whose channels open the guide and the player. */
 function LiveLibrary(props: LibrarySectionProps) { return <WatchLibrary {...props} />; }
 /** Music, audiobooks and podcasts: the listen experience's documents. */
@@ -22,7 +23,7 @@ export const EXPERIENCE_SECTIONS: Record<VelaExperience, ComponentType<LibrarySe
   watch: WatchLibrary,
   listen: ListenLibrary,
   read: ReadLibrary,
-  gallery: GalleryLibrary,
+  gallery: legacyGallery ? WatchLibrary : GalleryLibrary,
   live: LiveLibrary,
 };
 

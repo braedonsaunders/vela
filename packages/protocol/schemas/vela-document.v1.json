@@ -3834,6 +3834,27 @@
           ],
           "tv": "The transport row and the list beside it are focus guides; the play button takes focus first. A background template is drawn behind the stage and takes no focus."
         },
+        "photoViewer": {
+          "doc": "A photo contained at its original aspect ratio, with its name, taken date and available facts.",
+          "parts": [
+            "photoViewer.root",
+            "photoViewer.stage",
+            "photoViewer.metadata",
+            "photoViewer.eyebrow",
+            "photoViewer.title",
+            "photoViewer.date",
+            "photoViewer.facts"
+          ],
+          "props": {
+            "item": {
+              "doc": "The photo as an item: record or a vela.title value.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "The title frame owns focus and closing."
+        },
         "player": {
           "doc": "The mini player (a Listen player; with `channel` the node is instead the muted live preview): what plays, previous, play and pause, next (spoken word: 15 and 30 s skips), stop, and its bottom edge as the scrubber. Pressing it opens Now Playing.",
           "parts": [
@@ -4666,6 +4687,7 @@
             "lyrics",
             "musicShelf",
             "nowPlaying",
+            "photoViewer",
             "playlistImport",
             "queue",
             "quickTiles",

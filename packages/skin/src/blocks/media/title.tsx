@@ -97,10 +97,10 @@ export function Title({ children, style }: { children: string; style?: TextStyle
   return <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': `${size}px`, 'line-height': '1.02', 'letter-spacing': '-0.015em', color: '$ui.ink' }), style]}>{children}</Text>;
 }
 
-export function Facts({ items }: { items: string[] }) {
+export function Facts({ items, style }: { items: string[]; style?: TextStyle }) {
   const m = useMediaLook();
   const line = items.filter(Boolean).join('  ·  ');
-  return line ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{line}</Text> : null;
+  return line ? <Text style={[m.text({ 'font-size': '14px', color: '$ui.inkSecondary' }), style]}>{line}</Text> : null;
 }
 
 export function Summary({ text, serif = false, style }: { text: string; serif?: boolean; style?: TextStyle }) {

@@ -36,6 +36,12 @@ const readItem = { type: 'value', required: true, doc: 'The book or series as an
 const readItems = { type: 'value', doc: 'The children as item: records, from vela.children.' } as const;
 
 export const RICH_BLOCKS = {
+  photoViewer: {
+    doc: 'A photo contained at its original aspect ratio, with its name, taken date and available facts.',
+    props: { item: { type: 'value', required: true, doc: 'The photo as an item: record or a vela.title value.' } },
+    parts: ['photoViewer.root', 'photoViewer.stage', 'photoViewer.metadata', 'photoViewer.eyebrow', 'photoViewer.title', 'photoViewer.date', 'photoViewer.facts'],
+    templates: [], tv: 'The title frame owns focus and closing.',
+  },
   reader: {
     doc: 'The full-screen book reader, driven by Vela’s reader session.',
     props: { item: readItem },

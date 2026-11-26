@@ -12,12 +12,15 @@
 // ios-fold unfolds the iPhone Duo first (axe hinge set 180) and shoots its inner display.
 // For Read, add --experience read and --variant legacy|document. Use --embedded --app <Vela.app>
 // on the Duo with the matching production JS and Expo DOM reader assets embedded together.
-// Boot the muted device under the platform's lock and start the frozen Read mock first.
+// For Gallery, use --experience gallery and the same frozen fixture profile on both runs.
+// VELA_MOCK_GALLERY_ROWS=1 exposes the Photos home row. Use --embedded for Apple simulators.
+// Boot the muted device under the platform's lock and start the frozen mock first.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { captureName } from './views';
 import { LISTEN_NOW, LISTEN_VIEWS, listenPath, type ListenView } from './listen-views';
+import { GALLERY_NOW, GALLERY_VIEWS, galleryReviewed } from './gallery-views';
 import { READ_NOW, READ_VIEWS, readReviewed } from './read-views';
 import { settledFrames } from './settle';
 
@@ -38,18 +41,20 @@ const root = resolve(import.meta.dir, '../..');
 const port = values['metro-port']!;
 const viewport = platform === 'ios' ? 'ios-phone' : platform;
 const experience = values.experience!;
-if (experience !== 'listen' && experience !== 'read') throw new Error('--experience must be listen or read');
+if (experience !== 'listen' && experience !== 'read' && experience !== 'gallery') throw new Error('--experience must be listen, read or gallery');
 if (values.variant !== 'legacy' && values.variant !== 'document') throw new Error('--variant must be legacy or document');
 const read = experience === 'read';
+const gallery = experience === 'gallery';
+const followDeepLinks = read || gallery;
 const phone = platform === 'ios' || platform === 'ios-fold';
-if (read && phone && !values.embedded) throw new Error('Duo Read captures need --embedded and the app with its embedded reader assets');
-if (values.embedded && (!read || platform === 'androidtv' || !values.app)) throw new Error('--embedded requires Read on an Apple simulator and --app');
-const display = values.display ?? (read && phone ? platform === 'ios-fold' ? '3' : '1' : undefined);
+if (followDeepLinks && phone && !values.embedded) throw new Error('Duo captures need --embedded and the app with its embedded assets');
+if (values.embedded && (!followDeepLinks || platform === 'androidtv' || !values.app)) throw new Error('--embedded requires Read or Gallery on an Apple simulator and --app');
+const display = values.display ?? (followDeepLinks && phone ? platform === 'ios-fold' ? '3' : '1' : undefined);
 
 /** Metro for one start route and listening state; returns a stop function (only its own PID). */
 async function metroFor(route: string, audio: string): Promise<() => void> {
   const log: string[] = [];
-  const expo = read ? [process.execPath, join(root, 'node_modules/.bin/expo')] : ['bun', 'x', 'expo'];
+  const expo = followDeepLinks ? [process.execPath, join(root, 'node_modules/.bin/expo')] : ['bun', 'x', 'expo'];
   const child = Bun.spawn([...expo, 'start', '--port', port, '--clear', '--no-dev'], {
     cwd: join(root, 'apps/vela'), stdout: 'pipe', stderr: 'pipe',
     env: { ...process.env, EXPO_PUBLIC_VELA_SERVER: values.mock!, EXPO_PUBLIC_VELA_MOCK: '1', EXPO_PUBLIC_VELA_START_ROUTES: route,
@@ -131,7 +136,7 @@ const android: Device = {
   },
 };
 const device = platform === 'androidtv' ? android : apple;
-if (platform === 'androidtv' && !read) {
+if (platform === 'androidtv' && !followDeepLinks) {
   adb('shell', 'pm', 'clear', APP);
   adb('shell', 'monkey', '-p', APP, '-c', 'android.intent.category.LEANBACK_LAUNCHER', '1');
   await Bun.sleep(20_000);
@@ -139,7 +144,7 @@ if (platform === 'androidtv' && !read) {
 } else if (platform !== 'androidtv') {
   simctl('keychain', udid, 'reset');
   if (values.app) { try { simctl('uninstall', udid, APP); } catch {} simctl('install', udid, values.app); }
-  if (phone && read) {
+  if (phone && followDeepLinks) {
     axe('hinge', 'set', platform === 'ios-fold' ? '180' : '0');
     simctl('io', udid, 'screenConfig', `--display=${display}`, 'power', 'on');
     await Bun.sleep(3000);
@@ -158,7 +163,7 @@ function runs(view: ListenView): boolean {
 const asked = (name: string) => !values.views || values.views.split(',').includes(name);
 const views = LISTEN_VIEWS.filter(view => runs(view) && asked(view.name));
 const captures: object[] = [];
-if (read) await captureRead();
+if (followDeepLinks) await captureDeepLinks();
 else for (const view of views) {
   const file = captureName(viewport, view.name), frame = join('frames', file.replace(/\.png$/, '.b.png'));
   const route = listenPath(view);
@@ -189,10 +194,12 @@ const manifest = join(out, 'manifest.json');
 const earlier = existsSync(manifest) ? (JSON.parse(readFileSync(manifest, 'utf8')) as { captures: { view: string }[] }).captures : [];
 const merged = [...earlier.filter(c => !captures.some(n => (n as { view: string }).view === c.view)), ...captures];
 writeFileSync(manifest, JSON.stringify({ variant: values.variant, experience, platform,
-  now: read ? READ_NOW : LISTEN_NOW, capturedAt: new Date().toISOString(), udid, captures: merged }, null, 2));
+  now: gallery ? GALLERY_NOW : read ? READ_NOW : LISTEN_NOW, capturedAt: new Date().toISOString(), udid, captures: merged }, null, 2));
 
-async function captureRead(): Promise<void> {
-  const stop = values.embedded ? undefined : await metroFor('/library/books', '');
+async function captureDeepLinks(): Promise<void> {
+  const start = gallery ? '/library/photos' : '/library/books';
+  const pageViews: typeof READ_VIEWS = gallery ? GALLERY_VIEWS : READ_VIEWS;
+  const stop = values.embedded ? undefined : await metroFor(start, '');
   const go = (path: string) => platform === 'androidtv'
     ? adb('shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', `'vela://${path}'`, '-p', APP)
     : simctl('openurl', udid, `vela://${path}`);
@@ -202,16 +209,16 @@ async function captureRead(): Promise<void> {
     if (values.embedded) simctl('launch', udid, APP);
     else device.relaunch();
     await Bun.sleep(settle + (values.embedded ? 4000 : 25_000));
-    for (const view of READ_VIEWS.filter(view => asked(view.name) && (!view.only || view.only.includes(viewport)))) {
+    for (const view of pageViews.filter(view => asked(view.name) && (!view.only || view.only.includes(viewport)))) {
       const file = captureName(viewport, view.name), frame = join('frames', file.replace(/\.png$/, '.b.png'));
       const capture: Record<string, unknown> = { viewport, view: view.name, file, frame, url: view.path, description: view.description,
-        review: readReviewed(view, viewport), ok: false };
+        review: (gallery ? galleryReviewed : readReviewed)(view, viewport), ok: false };
       try {
         if (phone && (view.path.startsWith('/title/') || view.path.startsWith('/read/'))) {
-          go('/library/books');
+          go(start);
           await Bun.sleep(2000);
         }
-        const media = view.name === 'series' ? '&media=series' : view.name === 'book' || view.name === 'standalone' ? '&media=book' : '';
+        const media = gallery && view.path.startsWith('/title/') ? '&media=photo' : view.name === 'series' ? '&media=series' : view.name === 'book' || view.name === 'standalone' ? '&media=book' : '';
         go(view.path + (phone ? media : ''));
         await Bun.sleep(settle);
         const reader = view.path.startsWith('/read/');

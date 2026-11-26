@@ -37,6 +37,7 @@ import { asCard, barPresses, cardOf, cardsOf, parseBool, parseEnum, parseNumber,
 import { BookCover, BookFacts, BookHero, BookReadAction, BookSeriesList, BookSummary, SeriesHero } from './read/book';
 import { TimelineBlock } from './gallery/timeline';
 import { ReaderBlock } from './read/reader';
+import { PhotoViewer } from './gallery/photo';
 import { TrackList, type TrackListOptions } from './listen/track-table';
 
 /** A rich block node as resolved (resolve.ts). */
@@ -112,6 +113,11 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
     case 'visualizer': drawn = <VisualizerBlock mode={props.enum('mode', ['background', 'fullscreen'] as const)} sceneId={props.text('sceneId') || undefined}
       fallback={node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : undefined} />; break;
     case 'timeline': drawn = <TimelineBlock props={props} items={cardsOf(props.value('items'), scoped.screen?.record ?? (() => undefined))} pageKey={scoped.screen?.page.key ?? ''} />; break;
+    case 'photoViewer': {
+      const card = cardOf(props.value('item'), scoped.screen?.record ?? (() => undefined));
+      drawn = card?.media?.class === 'photo' ? <PhotoViewer card={card} /> : node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : null;
+      break;
+    }
     case 'reader':
     case 'bookCover':
     case 'bookHero':

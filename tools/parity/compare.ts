@@ -12,6 +12,7 @@ import { decodePng, encodePng } from './png';
 import { diffImages, maskCoverage, MAX_MASK_PERCENT, movingMask, needsMaskReview, RULE, verdict, type Rect } from './diff';
 import { CAPTURE_SCALE, DEVICE_MASKS, reviewed as sportsReviewed } from './views';
 import { listenReviewed } from './listen-views';
+import { galleryReviewed } from './gallery-views';
 import { readReviewed } from './read-views';
 
 interface Capture { viewport: string; view: string; file: string; frame: string; description: string; review?: string; ok: boolean; error?: string; reviewedRegions?: (Rect & { note: string })[] }
@@ -27,8 +28,8 @@ if (legacy.now !== document.now) console.warn(`warning: the sets were captured a
 const threshold = Number(values.threshold ?? 10);
 // The experience the sets capture (Sports when the manifest does not say) picks its reviewed list.
 const experience = legacy.experience;
-const reviewed = experience === 'read' ? readReviewed : experience === 'listen' ? listenReviewed : sportsReviewed;
-const label = experience === 'read' ? 'Read' : experience === 'listen' ? 'Listen' : 'Sports';
+const reviewed = experience === 'gallery' ? galleryReviewed : experience === 'read' ? readReviewed : experience === 'listen' ? listenReviewed : sportsReviewed;
+const label = experience === 'gallery' ? 'Gallery' : experience === 'read' ? 'Read' : experience === 'listen' ? 'Listen' : 'Sports';
 const png = (dir: string, file: string) => decodePng(new Uint8Array(readFileSync(join(dir, file))));
 
 interface Row { viewport: string; view: string; description: string; status: 'pass' | 'fail' | 'review' | 'missing'; percent?: number; maxDisplacement?: number; changed?: number; masked?: number; maskedPercent?: number; maskReview?: boolean; reasons: string[]; reviewedNotes?: string[]; moved?: { x: number; y: number; width: number; height: number; shift: { dx: number; dy: number } | null }[]; legacy?: string; document?: string; diff?: string; review?: string }
@@ -48,7 +49,7 @@ for (const before of legacy.captures) {
   const diffFile = join('diffs', basename(before.file));
   writeFileSync(join(out, diffFile), encodePng(result.image));
   // Moves are judged in points: a 2x screenshot's 2 px is 1 point.
-  const scale = experience === 'read' && before.viewport === 'ios-fold' ? 3 : CAPTURE_SCALE[before.viewport] ?? 1;
+  const scale = (experience === 'read' || experience === 'gallery') && before.viewport === 'ios-fold' ? 3 : CAPTURE_SCALE[before.viewport] ?? 1;
   // A move is an element's: regions under 10 square points (a glyph's dot, anti-aliasing) cannot be
   // told apart from noise by translation, so they count in the percentage only.
   const counted = result.regions.filter(r => r.displacement !== null && r.pixels >= 10 * scale * scale);
@@ -58,7 +59,7 @@ for (const before of legacy.captures) {
   const maskReview = needsMaskReview(result);
   if (maskReview) judged.reasons.push(`${maskedPercent}% of the frame is masked (review above ${MAX_MASK_PERCENT}%)`);
   Object.assign(row, {
-    status: maskReview || (row.review && (experience !== 'read' || judged.pass)) ? 'review' : judged.pass ? 'pass' : 'fail',
+    status: maskReview || (row.review && ((experience !== 'read' && experience !== 'gallery') || judged.pass)) ? 'review' : judged.pass ? 'pass' : 'fail',
     percent: result.percent, maxDisplacement: result.maxDisplacement, changed: result.changed,
     masked: mask.length, maskedPercent, maskReview, reasons: judged.reasons, ...(reviewedNotes.length ? { reviewedNotes } : {}),
     // The regions that moved too far, for finding them on the diff picture.
