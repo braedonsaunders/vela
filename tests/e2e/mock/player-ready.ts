@@ -6,7 +6,7 @@ function videoState(browser: Browser) {
     const stage = document.querySelector('[data-testid="watch-stage"]');
     for (const element of stage?.querySelectorAll('*') ?? []) {
       const video = element.shadowRoot?.querySelector('video');
-      if (video) return { hasFrame: video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA, paused: video.paused };
+      if (video) return { hasFrame: video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA, paused: video.paused, time: video.currentTime, seeking: video.seeking, readyState: video.readyState };
     }
     return { hasFrame: false, paused: true };
   });
@@ -27,6 +27,10 @@ export async function waitForVideoPlayback(browser: Browser, screen: Screen) {
     await expect(screen.getByTestId('player-toggle')).toHaveAttribute('aria-label', 'Pause', { timeout: 30_000 });
   } finally {
     console.log('QUALITY VIDEO DIAGNOSTICS', JSON.stringify({ before, after: await videoState(browser),
-      events: await browser.evaluate(() => (window as unknown as { velaMediaDiagnostics: unknown }).velaMediaDiagnostics) }));
+      events: await browser.evaluate(() => JSON.stringify({
+        events: (window as unknown as { velaMediaDiagnostics: unknown }).velaMediaDiagnostics,
+        status: document.querySelector('[data-testid="player-status"]')?.innerText,
+        toggle: document.querySelector('[data-testid="player-toggle"]')?.getAttribute('aria-label'),
+      })) }));
   }
 }
