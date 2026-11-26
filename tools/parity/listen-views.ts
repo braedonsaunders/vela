@@ -115,10 +115,12 @@ export function listenPath(view: ListenView): string {
 }
 
 /** Views compared by review, with the reason (a one-line, written acceptance). */
+const NOW_PLAYING_VIEWS = ['now-playing', 'now-playing-lyrics', 'now-playing-sound'];
+
 export const LISTEN_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [
-  { viewports: /^tvos$/, views: ['now-playing', 'now-playing-lyrics', 'now-playing-sound'],
+  { viewports: /^tvos$/, views: NOW_PLAYING_VIEWS,
     reason: 'Now Playing deliberately takes first focus on Play when the transport is ready. Legacy focused Close on Apple TV.' },
-  { viewports: /^androidtv$/, views: ['now-playing'],
+  { viewports: /^androidtv$/, views: NOW_PLAYING_VIEWS,
     reason: 'Now Playing deliberately takes first focus on Play when the transport is ready. Legacy opened with the transport unfocused on Android TV.' },
   { viewports: /^ios-fold$/, views: ['rewind'],
     reason: "The only difference is the iPhone Duo's system status-bar clock (the simulator's own time); a rerun leaving the clock out passes (G1's clock diagnostic)" },
