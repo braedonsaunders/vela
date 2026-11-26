@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ScrollView, Text, View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
 import { msg, type Card } from '@vela/core';
 import { useHost } from '../../host';
+import { saturateBlurhash } from './blurhash-color';
 import { useMediaActions, type MediaActions } from './context';
 import { alpha, RoundButton, useMediaLook, type MediaLook } from './parts';
 
@@ -20,7 +21,7 @@ export function MediaFrame({ framed, accent, backdrop, wideArt, backdropComponen
   const backdropSource = useMemo(() => backdrop ? host.image(backdrop) : undefined, [backdrop, host.image]);
   const backdropStyle: ImageStyle = {
     position: 'absolute', top: wideArt ? 0 : -80, left: wideArt ? 0 : -80, right: wideArt ? 0 : -80, bottom: 0,
-    opacity: wideArt ? 0.6 : 0.42,
+    opacity: wideArt ? 0.6 : backdropComponents ? 0.52 : 0.42,
   };
   const wash = (
     <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: wideArt ? Math.min(640, m.height * 0.8) : 620, overflow: 'hidden' }}>
@@ -64,14 +65,15 @@ function CoverColorBackdrop({ source, components: [x, y], style, transition }: {
       try {
         if (!active) return;
         const hash = await Image.generateBlurhashAsync(thumbnail, [x, y]);
-        if (active) setHash(hash);
+        if (active) setHash(hash ? saturateBlurhash(hash, 1.75) : null);
       } finally {
         thumbnail.release();
       }
     })().catch(() => { /* The frame's accent wash still draws when the cover is unavailable. */ });
     return () => { active = false; };
   }, [source, x, y]);
-  return hash ? <Image source={{ blurhash: hash, width: 96, height: 144 }} contentFit="cover" transition={transition} style={style} /> : null;
+  // Stretch the color field across the wash so a wide screen still shows the full cover palette.
+  return hash ? <Image source={{ blurhash: hash, width: 96, height: 144 }} contentFit="fill" transition={transition} style={style} /> : null;
 }
 
 export function Hero({ cover, children }: { cover: ReactNode; children: ReactNode }) {
