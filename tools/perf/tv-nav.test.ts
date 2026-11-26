@@ -46,6 +46,12 @@ describe('tv-nav press analysis', () => {
       mounts: 2, frames: 3, commits: 1, comps: 80, top: 'Box:4', updated: 'RCTView:3', sources: 'Box:1' });
   });
 
+  test('a last mount that draws nothing settles where it ends', () => {
+    const events: TraceEvents = { keys: [span(0, 1)], focus: [], mounts: [span(20, 1), span(300, 2)],
+      frames: [span(22, 8)], sched: { js: [], main: [], render: [] } };
+    expect(analyzePress(events, [], 'close', 0, ms(4000)).settleMs).toBe(302);
+  });
+
   test('a summary is the median and p90 of the presses that measured it', () => {
     expect(summarize([3, null, 1, 2, 10])).toEqual({ n: 4, median: 2, p90: 10, total: 16 });
     expect(summarize([null])).toEqual({ n: 0, median: null, p90: null, total: 0 });

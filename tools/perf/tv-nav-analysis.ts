@@ -150,7 +150,8 @@ export function analyzePress(
   const created = within(sorted(events.views ?? []), from, to)[CONTENT_VIEWS - 1];
   const contentMount = created ? mounts.find(mount => mount.ts + mount.dur >= created.ts) : undefined;
   const contentFrame = contentMount ? frameEnd(frames, contentMount.ts + contentMount.dur, to + 2000 * MS) : null;
-  const settleFrame = rest ? frameEnd(frames, rest.ts + rest.dur, to + 2000 * MS) : null;
+  // A last mount that draws nothing (props of something off screen) settles where it ends.
+  const settleFrame = rest ? frameEnd(frames, rest.ts + rest.dur, to) ?? rest.ts + rest.dur : null;
   const commits = probe.filter(commit => commit.ts >= from && commit.ts < to);
   const ms = (end: number | null) => (end === null ? null : round((end - from) / MS));
   const heaviest = commits.reduce<ProbeCommit | undefined>((top, c) => (!top || c.comps > top.comps ? c : top), undefined);
