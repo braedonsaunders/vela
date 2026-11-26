@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { parsePlaylist } from '../web/engine/hls';
+import { defaultHlsVariant, parsePlaylist } from '../web/engine/hls';
 
 const base = 'http://192.168.68.65:32550/sessions/media/S/G/live/index.m3u8';
 
@@ -36,7 +36,29 @@ test('a discontinuity marks the segment after it, with its new initialization', 
   expect(list.segments.map((s) => s.init.split('/').at(-1))).toEqual(['a.mp4', 'b.mp4', 'b.mp4']);
 });
 
-test('master, encrypted, byte-range and TS playlists stay outside the pipeline', () => {
+test('a Plex HLS master resolves its default variant relative to the master', () => {
+  const master = [
+    '#EXTM3U',
+    '#EXT-X-STREAM-INF:BANDWIDTH=12768000,CODECS="avc1.640028,ec-3"',
+    'session/vela-id/base/index.m3u8',
+    '#EXT-X-STREAM-INF:BANDWIDTH=1800000,CODECS="avc1.64001e,ec-3"',
+    'session/vela-id/low/index.m3u8',
+  ].join('\r\n');
+  const origin = 'https://lab.example';
+  const variant = defaultHlsVariant(master, `${origin}/video/:/transcode/universal/start.m3u8?session=vela-id`);
+  expect(variant).toBe(`${origin}/video/:/transcode/universal/session/vela-id/base/index.m3u8`);
+  const media = '#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:4,\n0.m4s';
+  expect(defaultHlsVariant(media, variant!)).toBeUndefined();
+  expect(parsePlaylist(media, variant!).segments[0].init).toBe(`${origin}/video/:/transcode/universal/session/vela-id/base/init.mp4`);
+});
+
+test('master resolution rejects a missing URI and an off-origin variant', () => {
+  const stream = '#EXT-X-STREAM-INF:BANDWIDTH=1';
+  expect(() => defaultHlsVariant(`#EXTM3U\n${stream}\n${stream}\nnext.m3u8`, base)).toThrow('HLS default variant is missing');
+  expect(() => defaultHlsVariant(`#EXTM3U\n${stream}\nhttps://other.example/media.m3u8`, base)).toThrow('HLS variant outside broker origin');
+});
+
+test('the fMP4 media parser rejects master, encrypted, byte-range and TS playlists', () => {
   const media = (...lines: string[]) => ['#EXTM3U', '#EXT-X-TARGETDURATION:4', ...lines].join('\n');
   expect(() => parsePlaylist(media('#EXT-X-STREAM-INF:BANDWIDTH=1', 'v.m3u8'), base)).toThrow();
   expect(() => parsePlaylist(media('#EXT-X-KEY:METHOD=AES-128,URI="k"', '#EXT-X-MAP:URI="a.mp4"', '#EXTINF:4,', '0.m4s'), base)).toThrow();
