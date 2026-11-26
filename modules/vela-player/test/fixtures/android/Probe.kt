@@ -3,6 +3,7 @@ package app.ether.vela.player
 import android.net.Uri
 import androidx.media3.datasource.DataSpec
 import com.sun.net.httpserver.HttpServer
+import java.io.IOException
 import java.net.InetSocketAddress
 
 private fun plan(selected: String = "original", session: String = "one", fallback: String = "idle", alternate: Boolean = true) = PlaybackPlan.from(mapOf(
@@ -166,6 +167,8 @@ fun main() {
     } else if (request.requestURI.path == "/media/truncated") {
       request.sendResponseHeaders(200, 10)
       request.responseBody.write("01234".toByteArray())
+      // HttpServer can buffer headers and body until a successful close.
+      request.responseBody.flush()
     } else if (request.requestURI.path == "/media/range") {
       val bytes = "3456".toByteArray()
       request.responseHeaders.add("Content-Range", "bytes 3-6/10")
@@ -215,14 +218,25 @@ fun main() {
     check(runCatching { read("/media/bad-range", 3, 4) }.exceptionOrNull()?.message == "Media request failed")
     check((runCatching { read("/media/refused") }.exceptionOrNull() as MediaHttpFailure).status == 403)
     check((runCatching { read("/media/original-lost") }.exceptionOrNull() as MediaHttpFailure).originalLost)
-    check(runCatching {
-      val source = ScopedMediaDataSource(grant, isOriginal = { true })
+    for (original in listOf(true, false)) {
+      val source = ScopedMediaDataSource(grant, isOriginal = { original })
       try {
-        source.open(DataSpec(Uri.parse(origin + "/media/truncated")))
+        check(source.open(DataSpec(Uri.parse(origin + "/media/truncated"))) == 10L)
         val bytes = ByteArray(20)
-        while (source.read(bytes, 0, bytes.size) >= 0) { }
+        var delivered = 0
+        val failure = runCatching {
+          while (true) {
+            val count = source.read(bytes, 0, bytes.size)
+            if (count < 0) break
+            delivered += count
+          }
+        }.exceptionOrNull()
+        check(delivered == 5) { "Truncation fixture delivered $delivered of 10 bytes" }
+        check(failure is IOException && (failure is OriginalLostFailure) == original) {
+          "Unexpected truncation failure for original=$original: $failure"
+        }
       } finally { source.close() }
-    }.exceptionOrNull() is OriginalLostFailure)
+    }
     val beforeLoop = seen.size
     check(runCatching { read("/media/loop") }.isFailure)
     check(seen.size - beforeLoop == 9)

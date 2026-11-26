@@ -9,6 +9,7 @@ import java.io.EOFException
 import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.ProtocolException
 import java.net.URL
 import java.util.concurrent.atomic.AtomicLong
 
@@ -85,8 +86,15 @@ internal class ScopedMediaDataSource(private val grant: MediaAccess?, private va
   override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
     if (length == 0) return 0
     if (remaining == 0L) return C.RESULT_END_OF_INPUT
-    val count = try { input!!.read(buffer, offset, if (remaining < 0) length else minOf(length.toLong(), remaining).toInt()) }
-      catch (_: IOException) { throw IOException("Media read failed") }
+    val count = try {
+      input!!.read(buffer, offset, if (remaining < 0) length else minOf(length.toLong(), remaining).toInt())
+    } catch (error: IOException) {
+      // Some HTTP stacks throw on short fixed-length bodies instead of returning EOF.
+      val prematureEof = error is EOFException || error.message == "Premature EOF" ||
+        (error is ProtocolException && error.message == "unexpected end of stream")
+      if (original && remaining > 0 && prematureEof) throw OriginalLostFailure()
+      throw IOException("Media read failed")
+    }
     if (count < 0) {
       if (remaining > 0 && original) throw OriginalLostFailure()
       if (remaining > 0) throw EOFException("Incomplete media response")
