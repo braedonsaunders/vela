@@ -13,7 +13,7 @@ import type { ServerAdapter } from '../adapter';
 import type { TrickplayFrame } from '../protocol/trickplay';
 import { TrickplayCache } from './trickplay';
 import { finalRefusal, serverRefused, startRefusal, startRetry } from './start-retry';
-import { engineCommandAnswered, engineCommandSent, heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
+import { engineCommandAnswered, engineCommandSent, eventsBack, eventsLost, heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
 import { followSession } from '../protocol/events';
@@ -22,6 +22,7 @@ import { commandFailure, staleGeneration, type CommandOrigin } from './command-f
 import { VelaError } from '../adapter/errors';
 import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './session-versions';
 import { withPlaying } from './playing-release';
+import { onlyClockMoved } from './plan-clock';
 import { serverEnd } from './server-end';
 import { carriedTrack, fileOf, trackChoice, type TrackChoice } from './track-match';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
@@ -185,6 +186,9 @@ export class Playback {
   private watchdog: ReturnType<typeof setTimeout> | undefined;
   private watchdogAt = 0;
   private cursor = 0;
+  /** The newest plan held back because it only moved the server's clock (plan-clock.ts): later
+   * plans are ordered against it, though the one on show is older. */
+  private clockAhead: V.PlaybackPlan | null = null;
   private liveCursor?: { sessionId: string; sourceGeneration: number; seekGeneration: number; seconds: number };
   private liveTransportIntent?: { sessionId: string; atLive: boolean };
   private liveRecoveryNotice?: { sessionId: string; text: string };
@@ -674,6 +678,14 @@ export class Playback {
         this.giveUp(true);
         return;
       }
+      // A plan that only moves the server's clock stays off the screen: a new plan every second
+      // redrew the player (and handed the engine a new plan) for nothing.
+      const shown = this.box.get().playback.plan;
+      if (!ended && shown && this.box.get().playback.phase === 'playing' && onlyClockMoved(shown, plan)) {
+        this.clockAhead = plan;
+        return;
+      }
+      this.clockAhead = null;
       this.patch({ plan, phase: plan.state === 'ended' ? 'ended' : 'playing' });
       if (ended) this.afterWatching(plan, this.box.get().playback.target, plan.positionSeconds);
     };
@@ -706,7 +718,7 @@ export class Playback {
               }
               // A snapshot read, or a plan replayed from it, before a command the server has since accepted (a seek
               // or a pause) would roll it back. An end is not held back.
-              if (plan.state !== 'ended' && olderThanShown(plan, this.box.get().playback.plan)) return;
+              if (plan.state !== 'ended' && olderThanShown(plan, this.newestShown())) return;
               show(plan);
             };
             const follow = followSession(adapter, present, sessionId, onPlan, attempt.signal, liveEvent => {
@@ -719,6 +731,7 @@ export class Playback {
               if (connected || attempt.signal.aborted) return;
               connected = Date.now();
               clearTimeout(deadline);
+              if (resumed && this.run === run && this.stall && !this.recovering) this.stall = eventsBack(this.stall);
             });
             // A connection whose snapshot read or stream never answers, the first one included, would otherwise leave a paused viewer waiting for ever.
             const timeout = new Promise<never>((_, reject) => {
@@ -747,6 +760,13 @@ export class Playback {
           // briefly unavailable): the media plays on, so the stream is followed again. A server's
           // own answer (the session is gone, the request refused, an error event) restarts at once.
           if (hasEventStream(adapter) && !lost && !serverAnswered(error)) {
+            // The media is trusted to play on only while it is seen playing (stall.ts eventsLost): a
+            // network drop that took its reads down too, or left its engine reloading behind a frozen
+            // picture, is restarted once the attempt's quiet budget passes without play.
+            if (this.run === run && this.stall && !this.recovering && this.box.get().playback.sessionId === sessionId) {
+              this.stall = eventsLost(this.stall, Date.now());
+              this.armWatchdog(sessionId);
+            }
             if (connected && Date.now() - connected >= REFOLLOW_HELD_SECONDS * 1000) refollows = 0;
             if (refollows < REFOLLOW_SECONDS.length) {
               try { await delay(REFOLLOW_SECONDS[refollows++]! * 1000, controller.signal); } catch { break; }
@@ -1331,7 +1351,9 @@ export class Playback {
   private resetRestartBudget(sessionId: string): void {
     if (!this.stall || this.watch?.session !== sessionId) return;
     this.watch.restarts = 0;
-    this.stall = stallWatch(Date.now());
+    // A drop of the events stream still in progress outlives the new allowance.
+    const { played, eventsLost: lost, eventsDown } = this.stall;
+    this.stall = lost === null ? stallWatch(Date.now()) : { ...stallWatch(Date.now()), played, eventsLost: lost, eventsDown };
     this.armWatchdog(sessionId);
   }
 
@@ -1499,6 +1521,16 @@ export class Playback {
   }
 
   /** A player snapshot: live status (reconnecting, delivery, drift) when the engine observes it. */
+  /** The plan on show, with the revision of a newer one of the same generations held back for
+   * moving only the clock: later plans are ordered against what was heard, not what was drawn. */
+  private newestShown(): V.PlaybackPlan | null {
+    const shown = this.box.get().playback.plan;
+    const ahead = this.clockAhead;
+    if (!shown || !ahead || ahead.sessionId !== shown.sessionId || ahead.sourceGeneration !== shown.sourceGeneration
+      || ahead.seekGeneration !== shown.seekGeneration || typeof ahead.revision !== 'number') return shown;
+    return typeof shown.revision !== 'number' || ahead.revision > shown.revision ? { ...shown, revision: ahead.revision } : shown;
+  }
+
   snapshot(snapshot: LiveObservation & StallSample & { audioTrackId?: string | null; subtitleTrackId?: string | null; timeshiftRecoveryEvicted?: boolean | null }): void {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;

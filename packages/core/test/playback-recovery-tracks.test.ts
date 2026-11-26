@@ -1178,7 +1178,9 @@ test('a plan republished with the selection it already showed does not confirm a
       const pick = playback.command('s1', { kind: 'tracks', ...(kind === 'subtitle' ? { subtitleTrackId: null } : { audioTrackId: '1' }), sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'pick' });
       files.set('s1', { ...files.get('s1')!, revision: 2 });
       await run(5000);
-      expect(box.get().playback.plan?.revision).toBe(2);
+      // The republish only moves the server's clock, so it is heard but stays off the screen (plan-clock.ts).
+      expect(box.get().playback.plan?.revision).toBe(1);
+      expect((playback as unknown as { clockAhead: PlaybackPlan | null }).clockAhead?.revision).toBe(2);
       refuse();
       expect(await pick).toBe(false);
       playback.recover('s1');

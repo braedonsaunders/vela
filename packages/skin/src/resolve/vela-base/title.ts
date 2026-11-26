@@ -57,12 +57,20 @@ export const summary: Node = {
   style: { 'line-clamp': '3' },
 };
 
+// Draw the separator in the gap before each item. The row clips it when the item wraps
+// to the left edge, while the padding leaves room for the link's focus ring.
 export const contextLinks = (over: string): Node => ({
   type: 'box',
-  style: { position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px' },
+  style: {
+    position: 'relative', 'z-index': '1', display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap',
+    gap: '10px 22px', 'overflow-x': 'hidden', 'overflow-y': 'hidden', margin: '-3px', padding: '3px',
+  },
   children: [{ type: 'repeat', over, item: {
-    type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '10px' }, children: [
-      { type: 'text', when: [{ test: 'index', is: 'gt', value: '0' }], text: '·' },
+    type: 'box', style: { position: 'relative', 'max-width': '100%' }, children: [
+      {
+        type: 'text', when: [{ test: 'index', is: 'gt', value: '0' }], text: '·',
+        style: { position: 'absolute', right: '100%', top: '0px', width: '22px', 'text-align': 'center' },
+      },
       { type: 'box', when: [{ test: 'context.select' }], press: { action: 'select', arg: '{context.select}' }, role: 'link', label: '{context.label}',
         style: { 'border-radius': '3px' }, hover: { opacity: '0.75' }, focus: { 'box-shadow': '0px 0px 0px 3px $ui.ink' },
         children: [{ type: 'text', text: '{context.label}' }] },
@@ -76,8 +84,7 @@ export const episodeContext: Node = {
   children: [contextLinks('detail.contextParts')],
 };
 
-// On a phone a card is too narrow for the links: wrapped, each line began with a separator. It
-// reads as one clamped line there (the card itself opens the title).
+// A phone card shows one compact line of context. The card itself opens the title.
 export const cardContext: Node = {
   type: 'box', style: { position: 'relative', 'z-index': '1', 'font-size': '12px', color: '$ui.inkSecondary' },
   children: [

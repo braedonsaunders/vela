@@ -275,7 +275,8 @@ export class JellyfinAdapter
             ? { reading: { locator: '', fraction, updatedAt: i.UserData?.LastPlayedDate ?? new Date(0).toISOString() } } : {};
         return {
             ...(projection.media ? { media: projection.media } : {}),
-            id: i.Id, kind: projection.kind, name: i.Name, summary: i.Overview ?? '', year: i.ProductionYear, airDate: i.PremiereDate?.slice(0, 10), genres: i.Genres ?? [], durationSeconds: seconds(i.RunTimeTicks), rating: i.OfficialRating, ratings: [...(i.CommunityRating === undefined ? [] : [{
+            id: i.Id, kind: projection.kind, name: i.Name, summary: i.Overview ?? '', year: i.ProductionYear,
+            airDate: (i.Type === 'Photo' ? i.DateCreated ?? i.PremiereDate : i.PremiereDate)?.slice(0, 10), genres: i.Genres ?? [], durationSeconds: seconds(i.RunTimeTicks), rating: i.OfficialRating, ratings: [...(i.CommunityRating === undefined ? [] : [{
                         source: 'Community', kind: 'audience' as const, value: i.CommunityRating, scale: 10
                     }]), ...(i.CriticRating === undefined ? [] : [{
                         source: 'Critic', kind: 'critic' as const, value: i.CriticRating, scale: 100
@@ -435,7 +436,8 @@ export class JellyfinAdapter
                     tabs: [recommended, tab('library', audiobooksOnly ? 'Audiobooks' : 'Books', 'library'), ...(both ? [tab('audiobooks', 'Audiobooks', 'library', { level: 'audiobook', card: 'square' })] : [])] };
             }
             case 'audiobooks': return { ...base, kind: 'mixed', media: 'audiobook', presentation: { card: 'square' }, browse: browse(media), tabs: [recommended, tab('library', 'Audiobooks', 'library')] };
-            case 'photos': return { ...base, kind: 'mixed', media: 'photo', presentation: { card: 'square' }, dateDisplay: 'date', browse: browse({ year: true, favorite: true }), tabs: [recommended, tab('library', 'Library', 'library')] };
+            case 'photos': return { ...base, kind: 'mixed', media: 'photo', presentation: { card: 'square' }, dateDisplay: 'date', browse: browse({ year: true, favorite: true }),
+                tabs: [recommended, tab('library', 'Library', 'library'), tab('photo-timeline', 'Timeline', 'library', { level: 'item', layout: 'timeline' }), tab('photo-albums', 'Albums', 'library', { level: 'album' })] };
             case 'musicvideos': return { ...base, kind: 'mixed', presentation: { card: 'landscape' }, browse: browse(media) };
             case 'playlists': return { ...base, kind: 'mixed', browse: browse({}), tabs: [tab('library', 'Playlists', 'library')] };
             case 'boxsets': return { ...base, kind: 'mixed', browse: browse({}), tabs: [tab('library', 'Collections', 'library')] };
@@ -510,7 +512,10 @@ export class JellyfinAdapter
                 case 'music': return q.tab === 'artists' ? {} : { Recursive: true, IncludeItemTypes: q.tab === 'tracks' ? 'Audio' : 'MusicAlbum' };
                 case 'books': return { Recursive: true, IncludeItemTypes: 'Book' };
                 // Albums of photos open as directories; the root lists them with any loose photos and clips.
-                case 'photos': return { SortBy: q.sort ? order.SortBy : 'IsFolder,SortName' };
+                case 'photos':
+                    if (q.tab === 'photo-timeline') return { Recursive: true, IncludeItemTypes: 'Photo', SortBy: 'DateCreated,SortName' };
+                    if (q.tab === 'photo-albums') return { Recursive: true, IncludeItemTypes: 'PhotoAlbum' };
+                    return { SortBy: q.sort ? order.SortBy : 'IsFolder,SortName' };
                 case 'musicvideos': return { Recursive: true, IncludeItemTypes: 'MusicVideo' };
                 case 'playlists': return { Recursive: true, IncludeItemTypes: 'Playlist' };
                 case 'boxsets': return { Recursive: true, IncludeItemTypes: 'BoxSet' };
@@ -521,7 +526,7 @@ export class JellyfinAdapter
         const artists = shelf === 'music' && q.tab === 'artists';
         const result = await this.request<Result>('GET', `${artists ? 'Artists/AlbumArtists' : `${user}/Items`}${query({ ...p, ParentId: id, Fields: fields, ...order, ...filters,
             EnableTotalRecordCount: true, ...(artists ? { UserId: (await this.credentials.get())?.viewer.id } : {}), ...params })}`);
-        return contents(this.page(result.Items.map(i => this.entry(i)), result, p.StartIndex), result.TotalRecordCount);
+        return contents(this.page(result.Items.map(i => this.entry(i, { photoAlbum: shelf === 'photos' && q.tab === 'photo-albums' })), result, p.StartIndex), result.TotalRecordCount);
     }
     /** A page of audiobooks with each multi-file book folded into one title. The whole library is
      * indexed first (ids and groups only), so a book's parts are never split across pages. */
@@ -657,6 +662,8 @@ export class JellyfinAdapter
             const result = await this.request<Result>('GET', `${user}/Items${query({ ...p, Fields: fields, EnableTotalRecordCount: true, ...params })}`);
             return this.page(result.Items.filter(i => this.isTitle(i, childHint)).map(i => this.title(i, childHint)), result, p.StartIndex);
         };
+        if (item.Type === 'PhotoAlbum')
+            return read({ ParentId: id, IncludeItemTypes: 'Photo', SortBy: 'DateCreated,SortName', SortOrder: 'Descending' }, { parent: { id, name: item.Name } });
         if (item.Type === 'MusicArtist') {
             const newest = { IncludeItemTypes: 'MusicAlbum', SortBy: 'ProductionYear,SortName', SortOrder: 'Descending' };
             const tagged = await read({ AlbumArtistIds: id, Recursive: true, ...newest });
@@ -673,7 +680,7 @@ export class JellyfinAdapter
         const item = await this.request<Item>('GET', `${await this.userPath()}/Items/${e(id)}`);
         if (!kinds[item.Type ?? ''] && item.Type !== 'MusicVideo' && item.Type !== 'Video' && item.Type !== 'Trailer') {
             const hint = await this.hintFor(item);
-            const title = this.title(item, hint);
+            const title = this.title(item, { ...hint, photoAlbum: item.Type === 'PhotoAlbum' });
             const children = hint.group ? await this.children(id, undefined, 200).catch(() => undefined) : undefined;
             // A multi-file book's length is its parts'.
             if (children && !title.durationSeconds) title.durationSeconds = children.items.reduce((sum, part) => sum + (part.durationSeconds ?? 0), 0) || undefined;

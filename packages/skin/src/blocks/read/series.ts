@@ -61,3 +61,13 @@ export function seriesCanStart(next: Card | undefined, features: { reading: read
   if (media?.class !== 'book') return true;
   return !!media.readingFormat && features.reading.includes(media.readingFormat);
 }
+
+export const READ_SERIES_PRIMARY = 'read-series-primary';
+
+/** A TV can open book details, and reading progress identifies the book to return to. */
+export function tvSeriesBook(ordered: readonly Card[]): Card | undefined {
+  return ordered.find(book => {
+    const progress = book.media?.readingFraction ?? 0;
+    return book.media?.class === 'book' && !book.played && progress > 0 && progress < 0.98;
+  }) ?? ordered[0];
+}

@@ -1,5 +1,6 @@
 // The music app's pieces in the document's `ui` look: tiles with a play button that rises on
 // hover, shelves, the heart, the big play button, a byline whose names open their pages.
+import { joinMeta } from '../../meta-line';
 import { Image } from 'expo-image';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
@@ -183,7 +184,7 @@ export function MusicTile({ card, size: wanted, subtitle, testID, preferred }: {
   const playable = role === 'album' || role === 'track' || card.kind === 'playlist' || role === 'audiobook' || role === 'part' || role === 'show' || role === 'episode';
   // An episode names its show, a part its book; spoken word shows where the viewer is.
   const line = release || (subtitle ?? (round ? msg('media.ui.artist') : role === 'episode' || role === 'part' ? [card.media?.parent?.name, card.media?.byline].filter(Boolean)[0] ?? ''
-    : role === 'show' ? card.media?.byline ?? '' : [card.yearLabel, card.media?.byline].filter(Boolean).join(' · ')));
+    : role === 'show' ? card.media?.byline ?? '' : joinMeta([card.yearLabel, card.media?.byline])));
   const listened = listenedFraction(card);
   return (
     <Surface onPress={() => app.go(placeOf(card))} onMenu={(anchor, mode, opener) => app.menu({ card, anchor, mode, opener })} focusId={card.id} preferred={preferred} testID={testID} label={[card.name, line].filter(Boolean).join(', ')}

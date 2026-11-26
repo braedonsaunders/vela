@@ -76,7 +76,7 @@ describe('Jellyfin media libraries', () => {
     expect(libraries.map(l => [l.name, l.media, l.presentation?.card, l.tabs?.map(t => t.level ?? t.id)])).toEqual([
       ['Music', 'music', 'square', ['recommended', 'albums', 'artist', 'track']],
       ['Books', 'book', 'poster', ['recommended', 'library', 'audiobook']],
-      ['Photos', 'photo', 'square', ['recommended', 'library']],
+      ['Photos', 'photo', 'square', ['recommended', 'library', 'item', 'album']],
     ]);
     // A server without features.libraryExperiences: each library still opens in its experience, by class.
     expect(libraries.map(l => libraryExperience(l, undefined))).toEqual(['listen', 'read', 'gallery']);
@@ -189,4 +189,31 @@ test('an artist whose albums carry no album-artist tags has the albums in its fo
   const albums = await new JellyfinAdapter(BASE, new FakeCredentials()).children('ar9');
   expect(albums.items.map(a => [a.id, a.media?.role])).toEqual([['promo', 'album']]);
   expect(seen.at(-1)!.url.searchParams.get('IncludeItemTypes')).toBe('MusicAlbum');
+});
+
+test('Gallery lists nested Jellyfin photos by taken date and resolves photo album titles and children', async () => {
+  const library = { Id: 'photos', Name: 'Photos', CollectionType: 'homevideos' };
+  const album = { Id: 'lake', Name: 'Lake', Type: 'PhotoAlbum', ChildCount: 1, ImageTags: { Primary: 'lake-cover' } };
+  const photo = { Id: 'sunset', Name: 'Lake at sunset', Type: 'Photo', DateCreated: '2026-01-03T18:10:00Z',
+    People: [{ Id: 'person', Name: 'Mara', Type: 'Subject' }] };
+  const seen = routeFetch({ ...JELLYFIN,
+    'GET /jf/Users/viewer-1/Items/photos': library,
+    'GET /jf/Users/viewer-1/Items/lake': album,
+    'GET /jf/Users/viewer-1/Items': (r: { url: URL }) => {
+      const albums = r.url.searchParams.get('IncludeItemTypes') === 'PhotoAlbum';
+      return { Items: albums ? [album] : [photo], TotalRecordCount: 1 };
+    },
+  });
+  const adapter = new JellyfinAdapter(BASE, new FakeCredentials());
+  const timeline = await adapter.library('photos', { tab: 'photo-timeline', sort: 'released', direction: 'desc' });
+  expect(seen.at(-1)!.url.searchParams.get('Recursive')).toBe('true');
+  expect(seen.at(-1)!.url.searchParams.get('SortBy')).toBe('DateCreated,SortName');
+  expect(timeline.items).toMatchObject([{ kind: 'title', title: { id: 'sunset', airDate: '2026-01-03', media: {
+    class: 'photo', role: 'item', credits: [{ name: 'Mara', personId: 'person', role: 'subject' }],
+  } } }]);
+  expect((await adapter.library('photos', { tab: 'photo-albums' })).items).toMatchObject([
+    { kind: 'title', title: { id: 'lake', media: { class: 'photo', role: 'album', childCount: 1 } } },
+  ]);
+  expect((await adapter.children('lake')).items).toMatchObject([{ id: 'sunset', media: { parents: [{ id: 'lake', name: 'Lake', role: 'album' }] } }]);
+  expect((await adapter.detail('lake')).title.media?.role).toBe('album');
 });

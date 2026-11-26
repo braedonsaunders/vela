@@ -4,6 +4,7 @@
 // come back as page turns and the controls' toggle.
 import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings, TocItem } from '@vela/skin/src/blocks/read/reader-engine';
 import { READER_THEMES } from '@vela/skin/src/blocks/read/reader-engine';
+import { installGroupBy } from './group-by';
 import { headingOrphaned, isTap, READER_COLUMN_START, READER_HEADINGS, readerHeadingRules, readerLayout, safeFraction, startTarget, swipeTurn, tapZone, type Landmark, type SectionInfo } from '@vela/skin/src/blocks/read/reader-layout';
 
 type Input = 'next' | 'previous' | 'toggle-chrome' | 'show-chrome' | 'escape';
@@ -39,6 +40,7 @@ interface FoliateView extends HTMLElement {
 
 const SERIF = '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif';
 const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const FIXED_PAGE_TOUCH_ACTION = 'pan-y pinch-zoom';
 
 function text(value: unknown): string {
   if (!value) return '';
@@ -278,6 +280,7 @@ export function createReaderEngine(): ReaderEngine | null {
       if (!(target instanceof HTMLElement)) throw new Error('The reader needs a page to draw in');
       host = target;
       settings ??= initial;
+      installGroupBy();
       await import('foliate-js/view.js');
       const response = await fetch(source.url);
       if (!response.ok) throw new Error(`The book could not be downloaded (${response.status})`);
@@ -290,7 +293,10 @@ export function createReaderEngine(): ReaderEngine | null {
       target.replaceChildren(opened);
       opened.addEventListener('load', event => {
         const { doc } = (event as CustomEvent<{ doc: Document }>).detail;
-        if (!opened.isFixedLayout) {
+        if (opened.isFixedLayout) {
+          // The renderer's touch policy doesn't cross the iframe boundary.
+          doc.documentElement.style.touchAction = FIXED_PAGE_TOUCH_ACTION;
+        } else {
           fitPictures(doc);
           chapter = doc;
           scheduleHeadings();
@@ -325,6 +331,8 @@ export function createReaderEngine(): ReaderEngine | null {
       // PDFs open through a Metro-safe loader (pdf-book.web.ts); everything else foliate detects itself.
       await opened.open(source.format === 'pdf' ? await (await import('./pdf-book.web')).makePdfBook(file) as never : file);
       if (view !== opened) throw new Error('The reader closed while the book opened');
+      // Keep horizontal drags on the margins in the pointer event stream as well.
+      if (opened.isFixedLayout) opened.renderer.style.touchAction = FIXED_PAGE_TOUCH_ACTION;
       sections = Math.max(1, opened.book.sections.length);
       rtl = opened.book.dir === 'rtl';
       apply(settings ?? initial);

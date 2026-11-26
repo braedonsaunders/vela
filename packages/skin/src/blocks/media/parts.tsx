@@ -10,6 +10,7 @@ import type { Card, CardShape } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { useHost } from '../../host';
 import { useLook, type Look } from '../../widgets/common/look';
+import { useFocusClaim } from '../../widgets/common/focus-claim';
 import { NO_RING, useInteraction } from '../../widgets/common/controls';
 import { MediaGlyph } from './icons';
 
@@ -92,17 +93,18 @@ export function Cover({ uri, shape, size, title, byline, accent, lift = 1 }: {
 }
 
 /** A pill: primary in the document's accent, secondary as a glass control. */
-export function PillButton({ label, icon, primary = false, onPress, testID, nativeID, disabled = false, compact = false, style, labelStyle }: {
-  label: string; icon?: string; primary?: boolean; onPress(): void; testID?: string; nativeID?: string; disabled?: boolean; compact?: boolean;
+export function PillButton({ label, icon, primary = false, onPress, testID, nativeID, disabled = false, compact = false, preferred, style, labelStyle }: {
+  label: string; icon?: string; primary?: boolean; onPress(): void; testID?: string; nativeID?: string; disabled?: boolean; compact?: boolean; preferred?: boolean;
   style?: ViewStyle | ((state: { hover: boolean; focus: boolean }) => ViewStyle | undefined); labelStyle?: TextStyle;
 }) {
   const { ui, text, box } = useMediaLook();
   const { state, handlers } = useInteraction();
+  const claim = useFocusClaim(preferred && !disabled);
   const lit = state.hover || state.focus;
   const ink = primary ? ui.onAccent : ui.ink;
   const height = compact ? 38 : Math.max(44, Number(ui.controlHeight) || 44);
   return (
-    <Pressable {...handlers} onPress={disabled ? undefined : onPress} disabled={disabled} testID={testID} nativeID={nativeID}
+    <Pressable {...handlers} ref={preferred && !disabled ? focusTarget(nativeID) : undefined} hasTVPreferredFocus={claim} onPress={disabled ? undefined : onPress} disabled={disabled} testID={testID} nativeID={nativeID}
       accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }}
       style={[NO_RING, {
         height, paddingHorizontal: compact ? 16 : 24, borderRadius: Math.min(Number(ui.radiusControl) || 999, height / 2), flexDirection: 'row', alignItems: 'center', gap: 9,

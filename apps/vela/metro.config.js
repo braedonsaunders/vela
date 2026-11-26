@@ -23,4 +23,10 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     return { type: 'sourceFile', filePath: path.join(__dirname, 'src', 'media', 'foliate-pdf-stub.js') };
   return resolveRequest ? resolveRequest(context, moduleName, platform) : context.resolveRequest(context, moduleName, platform);
 };
+// Performance runs only (tools/perf/tv-nav.ts): VELA_PERF_PROBE=1 adds the measurement probes.
+if (process.env.VELA_PERF_PROBE === '1') {
+  const polyfills = config.serializer.getPolyfills;
+  const probes = ['react-commits.js', 'js-time.js'].map(file => path.join(root, 'tools', 'perf', 'probe', file));
+  config.serializer.getPolyfills = options => [...polyfills(options), ...probes];
+}
 module.exports = withVelaPlayer(config);

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Card } from '@vela/core';
-import { seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart } from '../src/blocks/read/series';
+import { seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart, tvSeriesBook } from '../src/blocks/read/series';
 
 const book = (id: string, index: number, extra: Partial<NonNullable<Card['media']>> = {}) =>
   ({ id, media: { class: 'book', role: 'book', index, readingFormat: 'epub', ...extra } }) as unknown as Card;
@@ -54,4 +54,12 @@ test('the Start button reads a book and listens to an audiobook, continuing wher
   expect(seriesStart(listen('a', 1))).toMatchObject({ label: 'Start listening', icon: 'headphones' });
   expect(seriesStart(listen('a', 1, 600)).label).toBe('Continue listening');
   expect(seriesStart(listen('a', 1)).unavailable).toContain('Audiobooks');
+});
+
+test('TV series opens the book in progress or the first book in series order', () => {
+  const first = book('one', 1);
+  const second = book('two', 2, { readingFraction: 0.4 });
+  expect(tvSeriesBook([first, second])).toBe(second);
+  expect(tvSeriesBook([first, { ...second, played: true }])).toBe(first);
+  expect(tvSeriesBook([])).toBeUndefined();
 });

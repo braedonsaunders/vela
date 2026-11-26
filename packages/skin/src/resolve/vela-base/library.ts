@@ -148,7 +148,7 @@ export const toolbar: Node = {
     'border-bottom-width': '1px',
     'border-bottom-color': '$ui.glassEdge',
   } as Style,
-  small: { 'padding-top': 'calc(56px + env(safe-area-inset-top))' } as Style,
+  small: { 'padding-top': 'calc(56px + env(safe-area-inset-top))', 'background-color': '$ui.page', 'backdrop-filter': 'none' } as Style,
   states: [{ when: [{ test: 'env.tv' }], style: { 'background-color': '$ui.page' } }],
   children: [
     {

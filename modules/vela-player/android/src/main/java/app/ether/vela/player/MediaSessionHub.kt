@@ -53,6 +53,7 @@ internal interface SessionOwner {
   /** The player whose state (position, playing, duration) the system shows. Main-looper ExoPlayer. */
   val sessionPlayer: Player?
   val sessionIsOnDemandVideo: Boolean get() = false
+  val sessionPositionOffsetMs: Long get() = 0
   val sessionStyle: SessionStyle
   val sessionMetadata: MediaMetadata?
   /** play, pause, next, previous, seek (to `seconds`), skip (by `seconds`). */
@@ -88,6 +89,7 @@ internal object MediaSessionHub {
 
   internal fun command(command: String, seconds: Double?) { owner?.sessionCommand(command, seconds) }
   internal val onDemandVideo: Boolean get() = owner?.sessionIsOnDemandVideo == true
+  internal val positionOffsetMs: Long get() = owner?.sessionPositionOffsetMs ?: 0
   internal val style: SessionStyle get() = owner?.sessionStyle ?: SessionStyle.MUSIC
   internal val metadata: MediaMetadata? get() = owner?.sessionMetadata
 
@@ -152,18 +154,31 @@ internal object MediaSessionHub {
  */
 internal class SessionPlayer(val context: Context, player: Player) : ForwardingSimpleBasePlayer(player) {
   private var sourceTimeline: Timeline? = null
-  private var onDemandTimeline: Timeline? = null
+  private var adjustedTimeline: Timeline? = null
+  private var timelineOffsetMs = 0L
+  private var timelineOnDemand = false
 
-  private fun sessionTimeline(timeline: Timeline): Timeline {
-    if (!MediaSessionHub.onDemandVideo) return timeline
-    if (sourceTimeline !== timeline) {
+  private fun titlePosition(positionMs: Long, offsetMs: Long): Long =
+    if (positionMs == C.TIME_UNSET || positionMs == C.TIME_END_OF_SOURCE) positionMs
+    else (positionMs + offsetMs).coerceAtLeast(0)
+
+  private fun sessionTimeline(timeline: Timeline, offsetMs: Long): Timeline {
+    val onDemand = MediaSessionHub.onDemandVideo
+    if (!onDemand && offsetMs == 0L) return timeline
+    if (sourceTimeline !== timeline || timelineOffsetMs != offsetMs || timelineOnDemand != onDemand) {
       sourceTimeline = timeline
-      onDemandTimeline = object : ForwardingTimeline(timeline) {
+      timelineOffsetMs = offsetMs
+      timelineOnDemand = onDemand
+      adjustedTimeline = object : ForwardingTimeline(timeline) {
         override fun getWindow(index: Int, window: Timeline.Window, projectionUs: Long): Timeline.Window =
-          super.getWindow(index, window, projectionUs).apply { liveConfiguration = null }
+          super.getWindow(index, window, projectionUs).apply {
+            if (onDemand) liveConfiguration = null
+            durationUs = titlePosition(durationUs, offsetMs * 1000)
+            defaultPositionUs = titlePosition(defaultPositionUs, offsetMs * 1000)
+          }
       }
     }
-    return checkNotNull(onDemandTimeline)
+    return checkNotNull(adjustedTimeline)
   }
 
   fun follow(next: Player) {
@@ -186,12 +201,19 @@ internal class SessionPlayer(val context: Context, player: Player) : ForwardingS
       .setAvailableCommands(commands.build())
       .setSeekBackIncrementMs((style.back * 1000).toLong())
       .setSeekForwardIncrementMs((style.forward * 1000).toLong())
-    // An in-progress VOD remux can start with an open HLS playlist. ExoPlayer calls that live,
-    // so Media3's platform bridge publishes an unknown position and zero speed on every event.
-    // Keep the source timeline and position suppliers intact for playback. Only the session
-    // sees an on-demand window, so Media3 can publish position and elapsed-realtime on seeks,
-    // discontinuities and playback rate/state changes.
-    MediaSessionHub.metadata?.let { builder.setPlaylist(sessionTimeline(state.timeline), state.currentTracks, it) }
+    // The notification's seek bar shares the app's title clock, even when a new HLS
+    // source begins at the resume or seek point. Keep the live suppliers so the position
+    // advances between events. A growing VOD or Start over playlist also needs its live
+    // flag cleared here, since the platform bridge hides position for live windows.
+    val offsetMs = MediaSessionHub.positionOffsetMs
+    if (offsetMs != 0L) {
+      builder.setContentPositionMs { titlePosition(state.contentPositionMsSupplier.get(), offsetMs) }
+      builder.setContentBufferedPositionMs { titlePosition(state.contentBufferedPositionMsSupplier.get(), offsetMs) }
+      if (state.hasPositionDiscontinuity) {
+        builder.setPositionDiscontinuity(state.positionDiscontinuityReason, titlePosition(state.discontinuityPositionMs, offsetMs))
+      }
+    }
+    MediaSessionHub.metadata?.let { builder.setPlaylist(sessionTimeline(state.timeline, offsetMs), state.currentTracks, it) }
     return builder.build()
   }
 

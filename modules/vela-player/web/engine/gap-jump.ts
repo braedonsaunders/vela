@@ -22,6 +22,18 @@ export function timeRanges(ranges: TimeRanges): MediaRange[] {
   return Array.from({ length: ranges.length }, (_, i) => ({ start: ranges.start(i), end: ranges.end(i) }));
 }
 
+/** Media ahead across the same rounding gaps that playback can step over. */
+export function playableBufferAhead(currentTime: number, ranges: readonly MediaRange[]): number {
+  let end = currentTime;
+  // TimeRanges are ordered by start time.
+  for (const range of ranges) {
+    if (range.end <= end) continue;
+    if (range.start - end > TINY_GAP_SECONDS) break;
+    end = range.end;
+  }
+  return end - currentTime;
+}
+
 /**
  * The time to move the playhead to, or null where it is (or should stay). A tiny hole is stepped
  * over even from inside the range before it: a playhead a few frames short of a range's end stalls

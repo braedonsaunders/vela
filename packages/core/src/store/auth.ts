@@ -489,6 +489,9 @@ export class Auth {
       if (!(connection.adapter instanceof EtherAdapter)) throw new Error('Plex Home profile switching is not offered by this server.');
       const answer = await connection.adapter.startPlexProfileSwitch({ device: this.session.device, idempotencyKey: this.session.key() });
       if (generation !== this.plexGeneration || epoch !== this.session.epoch || connection !== this.session.selected()) return;
+      if (answer.profiles.length < 2) {
+        throw new Error('There are no other Plex Home profiles to switch to on this server.');
+      }
       this.plexSelection = { token: answer.selectionToken, expiresAt: answer.expiresAt, serverId: connection.record.id, switching: true };
       this.patch({ error: '', plexSwitching: true, plex: { code: '', linkUrl: '', state: 'profiles', choices: [], profiles: answer.profiles } });
     } catch (error) {

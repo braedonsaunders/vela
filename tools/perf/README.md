@@ -22,6 +22,9 @@ Measured performance and load-regression tools for built-in experience documents
 - `record-push.ts`: Structural reader isolation probe that evaluates a screen document's collections against `RecordStore` and counts how many items actually read a pushed `$record` vs how many items are invalidated by `ScreenView`'s root `useRecordReader()`.
 - `data-reads.ts`: Bounded, opt-in load regression for parallel screen page data reads (`N` up to 8, requesting all sources) with 4 open `/vela/v0/live/stream` topics. Enforces a version gate (`>= 0.3.21-preview.32-screens`) before running against `--lab`.
 - `perf.test.ts`: Unit tests for `gate.ts`, `gfxinfo.ts`, `record-push.ts`, and the `data-reads.ts` version gate.
+- `tv-nav.ts`, `tv-nav-analysis.ts`, `tv-nav.test.ts`: per-press D-pad responsiveness on any Android TV emulator or device (section 3).
+- `repack-js.sh`: a measurement APK for a JS-only change (a fresh Hermes bundle in a release APK).
+- `probe/`: measurement-only React commit and JS-time probes, bundled only with `VELA_PERF_PROBE=1`.
 
 ---
 
@@ -120,3 +123,46 @@ The report checks the scene-start and focus budgets and counts UI-thread draws
 over one 60 Hz interval. Missing presentation or frame samples yield an
 unmeasured result. Measure the renderer's own frame intervals separately from
 the UI frame statistics.
+
+---
+
+## 3. D-pad responsiveness per press (`tools/perf/tv-nav.ts`, any Android TV emulator or device)
+
+Drives a named scenario with real key presses (`input keyevent --duration 80`, paced by the device)
+under a Perfetto trace, and reports for every press:
+
+| Column | Meaning |
+| :--- | :--- |
+| `focusMs` | key-down → the native focus change reaching JS (Fabric `topFocus`) |
+| `mountMs` | key-down → end of the first Fabric mount after it (JS answered and it was applied) |
+| `frameMs` | key-down → end of the first RenderThread frame begun after that mount |
+| `settleMs` | key-down → the frame after the press's last mount followed by 400 ms without one |
+| `jsMs`, `mainMs`, `renderMs` | CPU time on the JS thread, the UI thread and RenderThread |
+| `mounts`, `frames` | Fabric mounts applied, frames drawn |
+| `commits`, `comps` | React commits and components rendered (probe builds only) |
+
+It also prints whole-run frames and CPU per second (what a screen costs just being on show; use
+scenario `idle`). Scenarios (`home`, `movies`, `library`, `title`, `player`, `burst`, `idle`) force-stop
+and launch the app, so runs are comparable; `player` reaches playback in unmeasured `setup` presses
+first. The build decides the server: a lab or mock sign-in build (below).
+
+```bash
+# Measurement APK for a JS-only change: this tree's production Hermes bundle in a release APK.
+EXPO_PUBLIC_VELA_SERVER=http://10.0.2.2:7845 EXPO_PUBLIC_VELA_MOCK=1 \
+  tools/perf/repack-js.sh Vela-0.2.77-androidtv.apk ~/.scratch/tmp/vela-perf/after.apk [--probe]
+adb -s emulator-5704 uninstall app.ether.vela; adb -s emulator-5704 install ~/.scratch/tmp/vela-perf/after.apk
+bun tools/perf/tv-nav.ts --serial emulator-5704 --scenario home,library,player --label after --out after.json
+bun tools/perf/tv-nav.ts --compare before.json after.json
+```
+
+- **Release vs probe.** Take CPU and latency numbers from release bundles. `--probe` builds an unminified
+  bundle with `tools/perf/probe/` (Metro adds it only with `VELA_PERF_PROBE=1`): per commit it logs the
+  components rendered (`top`), the host views updated or mounted (`upd`) and where each update started
+  (`src`), and every 200 ms where JS time went (Fabric events, timers by bundle line, `completeRoot`).
+- **Credentials.** A sign-in build embeds the account in the bundle: keep it under `~/.scratch` and delete it.
+- **Software rendering.** On emulators RenderThread time and frame durations are relative only; compare
+  builds on the same emulator, and treat JS/UI CPU and render counts as what carries over to devices.
+- **Native profiles.** `VELA_PERF_PROFILEABLE=1` at prebuild (`plugins/android-profileable.js`) makes a
+  release build profileable (simpleperf `--app app.ether.vela`) and adds a broadcast that runs Hermes's
+  sampling profiler; see the plugin for the commands.
+- `--keep <dir>` keeps each trace for ui.perfetto.dev. Needs `adb` and `trace_processor` (`--adb`, `--tp`).

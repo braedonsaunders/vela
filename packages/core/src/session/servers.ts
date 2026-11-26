@@ -3,7 +3,7 @@ import { randomId } from '../protocol/id';
 
 export type ServerKind = 'ether' | 'jellyfin' | 'emby' | 'plex';
 export interface ServerRecord { id: string; name: string; kind: ServerKind; origin: string; basePath: string; machineIdentifier?: string }
-interface Registry { selectedId: string; servers: ServerRecord[] }
+interface Registry { selectedId: string; servers: ServerRecord[]; hiddenEtherOrigin?: string }
 const registryKey = 'vela.servers';
 
 function validMachineIdentifier(value: unknown, kind: ServerKind): string | undefined {
@@ -32,6 +32,12 @@ export class ServerRegistry {
   get standalone(): boolean {
     return !this.etherOrigin;
   }
+  canAddEther(url: string): boolean {
+    if (this.standalone) return true;
+    const address = serverAddress(url, 'ether');
+    return address.origin === this.etherOrigin && address.basePath === '/';
+  }
+
   private addable(kind: string): boolean {
     return ['jellyfin', 'emby', 'plex'].includes(kind) || (kind === 'ether' && this.standalone);
   }
@@ -43,7 +49,7 @@ export class ServerRegistry {
     if (!raw) return { selectedId: implicit[0]?.id ?? '', servers: implicit };
     const parsed = JSON.parse(raw) as Registry;
     if (!parsed || !Array.isArray(parsed.servers) || typeof parsed.selectedId !== 'string') throw new Error('Invalid server registry');
-    const servers = [...implicit];
+    const servers = parsed.hiddenEtherOrigin === this.etherOrigin ? [] : [...implicit];
     for (const item of parsed.servers) {
       if (!item || item.id === 'ether') continue;
       // A hosted/lab build uses its configured Ether, but must still open a
@@ -56,7 +62,13 @@ export class ServerRegistry {
       if (address.origin !== item.origin || address.basePath !== item.basePath || servers.some(s => s.id === item.id)) throw new Error('Invalid server record');
       servers.push({ id: item.id, name: item.name, kind: item.kind, ...address, ...(machineIdentifier ? { machineIdentifier } : {}) });
     }
-    return { selectedId: servers.some(s => s.id === parsed.selectedId) ? parsed.selectedId : servers[0]?.id ?? '', servers };
+    let hiddenEtherOrigin = typeof parsed.hiddenEtherOrigin === 'string' ? parsed.hiddenEtherOrigin : undefined;
+    // Keep the host available as a sign-in destination if all other servers have been removed.
+    if (!servers.length && implicit.length) {
+      servers.push(...implicit);
+      hiddenEtherOrigin = undefined;
+    }
+    return { selectedId: servers.some(s => s.id === parsed.selectedId) ? parsed.selectedId : servers[0]?.id ?? '', servers, hiddenEtherOrigin };
   }
   private write(value: Registry): void {
     this.store.set(registryKey, JSON.stringify({ ...value, servers: [...value.servers, ...this.dormantEther] }));
@@ -69,12 +81,13 @@ export class ServerRegistry {
   /** The record for this address, added once; a server reached again keeps its ID and session. */
   add(kind: ServerKind, name: string, url: string, machineIdentifier?: string): ServerRecord {
     const machine = validMachineIdentifier(machineIdentifier, kind);
-    if (!this.addable(kind) || !name.trim() || name.length > 100 || machine === null) throw new Error('Invalid server');
+    const hosted = kind === 'ether' && !this.standalone && this.canAddEther(url);
+    if (!(hosted || this.addable(kind)) || !name.trim() || name.length > 100 || machine === null) throw new Error('Invalid server');
     const current = this.read(), address = serverAddress(url, kind);
     const known = current.servers.find(s => s.kind === kind && s.origin === address.origin && s.basePath === address.basePath);
     if (known) return known;
-    const record: ServerRecord = { id: randomId(), name: name.trim(), kind, ...address, ...(machine ? { machineIdentifier: machine } : {}) };
-    this.write({ ...current, servers: [...current.servers, record] });
+    const record: ServerRecord = { id: hosted ? 'ether' : randomId(), name: name.trim(), kind, ...address, ...(machine ? { machineIdentifier: machine } : {}) };
+    this.write({ ...current, hiddenEtherOrigin: hosted ? undefined : current.hiddenEtherOrigin, servers: [...current.servers, record] });
     return record;
   }
   select(id: string): void {
@@ -96,11 +109,12 @@ export class ServerRegistry {
     return record;
   }
   remove(id: string): void {
-    if (id === 'ether') throw new Error('Cannot remove the default server');
     const current = this.read();
+    if (id === 'ether' && current.selectedId === id) throw new Error('Cannot remove the selected host server');
     if (!current.servers.some(s => s.id === id)) throw new Error('Server not found');
     const servers = current.servers.filter(s => s.id !== id);
-    this.write({ selectedId: current.selectedId === id ? servers[0]?.id ?? '' : current.selectedId, servers });
+    this.write({ selectedId: current.selectedId === id ? servers[0]?.id ?? '' : current.selectedId, servers,
+      hiddenEtherOrigin: id === 'ether' ? this.etherOrigin : current.hiddenEtherOrigin });
   }
 }
 

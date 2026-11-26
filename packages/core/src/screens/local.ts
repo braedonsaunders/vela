@@ -8,7 +8,7 @@
 import type * as V from '../wire';
 import type { SourceSpec } from '../../../protocol/screen';
 import { isVelaAction, isVelaSource, VELA_ACTIONS, VELA_LOCAL_RECORDS, VELA_SOURCES, type ImportRecord, type LibraryInfoValue, type ListValue, type PlaylistValue, type TitleValue, type VelaActionName, type VelaSourceName } from '../../../protocol/vela-sources';
-import { hasHistoryRecap, hasLibraryDuplicates, hasLibraryRecommendations, hasLiveTv, hasMusicLibrary, hasTitleChildren } from '../adapter/capabilities';
+import { hasHistoryRecap, hasLibraryDuplicates, hasLibraryRecommendations, hasLiveTv, hasMusicLibrary, hasPersonFilmography, hasTitleChildren } from '../adapter/capabilities';
 import { VelaError } from '../adapter/errors';
 import { audioCardsOf, playStart, resumePoint } from '../audio/cards';
 import { msg } from '../i18n';
@@ -58,6 +58,9 @@ const LIST_PAGE = 100;
 const IMPORT_POLL_MS = 1000;
 
 const unsupported = (): LocalAnswer => ({ error: 'unsupported' });
+
+interface GalleryPage { items: Card[]; cursor?: string }
+const isGalleryPhoto = (card: Card) => card.media?.class === 'photo' && card.media.role === 'item';
 
 /** A source error code from a store's failed loadable. */
 function loadableError(loadable: Loadable<unknown> | undefined): string {
@@ -121,6 +124,7 @@ export class LocalSources {
   /** Forget what the last session left: page counts, the import poll. Live bindings stay (pages re-read). */
   reset(): void {
     this.extra.clear();
+    this.galleryLists.clear();
     this.stopImportPoll();
   }
 
@@ -269,6 +273,41 @@ export class LocalSources {
     return answer;
   }
 
+  private readonly galleryLists = new Map<string, Promise<GalleryPage[] | undefined>>();
+
+  private async galleryPages(
+    key: string, count: number, fresh: boolean,
+    read: (cursor?: string) => Promise<GalleryPage | undefined>, keep: (card: Card) => boolean,
+  ): Promise<LocalAnswer> {
+    const previous = fresh ? undefined : this.galleryLists.get(key);
+    const update = (async () => {
+      const pages = [...(await previous ?? [])];
+      while (pages.length < count) {
+        const cursor = pages.at(-1)?.cursor;
+        if (pages.length && (!cursor || pages.slice(0, -1).some(page => page.cursor === cursor))) break;
+        const page = await read(cursor || undefined);
+        if (!page) return undefined;
+        pages.push(page);
+      }
+      return pages;
+    })();
+    this.galleryLists.set(key, update);
+    try {
+      const pages = await update;
+      if (!pages) return unsupported();
+      const entries = new Map<string, Card>();
+      for (const { items } of pages) for (const card of items) if (keep(card)) entries.set(card.id, card);
+      const cursor = pages.at(-1)?.cursor;
+      return cardList([...entries.values()], !!cursor && !pages.slice(0, -1).some(page => page.cursor === cursor));
+    } catch (error) {
+      if (this.galleryLists.get(key) === update) {
+        if (previous) this.galleryLists.set(key, previous);
+        else this.galleryLists.delete(key);
+      }
+      throw error;
+    }
+  }
+
   private async features(): Promise<{ adapter: object; features: V.ServerCapabilities['features'] | undefined }> {
     const { adapter } = await this.server.ready();
     // The server's features arrive with the bootstrap (Home's read): a page opened first waits for it.
@@ -360,6 +399,43 @@ export class LocalSources {
         const loaded = stores.getState().library[libraryKey(args.id!, query)];
         if (!loaded?.value) return { error: loadableError(loaded) };
         return cardList(loaded.value.items, loaded.value.more);
+      }
+      case 'vela.photoTimeline':
+      case 'vela.photoAlbums':
+      case 'vela.photoPeople': {
+        await this.libraries();
+        const library = stores.getState().libraries.value?.find(item => item.id === args.library);
+        if (!library) return { error: loadableError(stores.getState().libraries) };
+        if (library.media !== 'photo' && library.experience !== 'gallery') return unsupported();
+        const pages = 1 + extraPages;
+        if (from === 'vela.photoPeople') {
+          const tab = library.tabs?.find(item => item.kind === 'people' && item.facet === 'subject');
+          if (!tab) return unsupported();
+          if (args.id) {
+            const { adapter } = await this.server.ready();
+            if (!hasPersonFilmography(adapter as never)) return unsupported();
+            const id = itemId(args.id);
+            return this.galleryPages(`person:${library.id}:${id}`, pages, fresh, cursor =>
+              stores.catalogue.personTitles(id, library.id, cursor), isGalleryPhoto);
+          }
+          return this.galleryPages(`people:${library.id}:${tab.id}`, pages, fresh, cursor => cursor
+            ? stores.catalogue.moreLibraryCollections(library.id, cursor, tab.id)
+            : stores.catalogue.libraryCollectionPage(library.id, tab.id, undefined, fresh), card => card.kind === 'person');
+        }
+        const albums = from === 'vela.photoAlbums';
+        const tab = library.tabs?.find(item => albums
+          ? item.level === 'album' && (item.kind === 'library' || item.kind === 'view' && item.search !== true)
+          : item.level === 'item' && item.kind === 'library');
+        if (albums && !tab) return unsupported();
+        const query: LibraryQuery = albums ? { tab: tab?.id } : { tab: tab?.id, sort: 'released', direction: 'desc' };
+        await stores.catalogue.library(library.id, query, pages, fresh);
+        const loaded = stores.getState().library[libraryKey(library.id, query)];
+        if (!loaded?.value || loaded.load === 'failed') {
+          const error = loadableError(loaded);
+          return ['unsupported_sort', 'invalid_library_query', 'unsupported_library_query'].includes(error) ? unsupported() : { error };
+        }
+        const items = loaded.value.items.filter(albums ? card => card.media?.class === 'photo' && card.media.role === 'album' : isGalleryPhoto);
+        return cardList(items, loaded.value.more);
       }
       case 'vela.favorites': {
         await this.features();

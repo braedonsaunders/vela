@@ -60,6 +60,7 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
   const role = media ? '' : videoRole(title);
   return withContainer(withMedia(withDateDisplay({
     ...(role ? { videoRole: role } : {}),
+    ...(media?.class === 'photo' && media.role === 'album' && title.media?.childCount !== undefined ? { itemCount: media.childCount } : {}),
     id: title.id,
     kind: mediaCardKind(media, title.kind),
     name: title.name,
@@ -194,6 +195,7 @@ export function entry(item: RowEntry, images?: Images, artWidth = 2560): Card {
   if (item.kind === 'person') {
     const model = plainCard(item.person.id, 'person', item.person.name, '', pictures([], images, artWidth), item.receiptToken);
     model.poster = item.person.photo ? artworkURL(item.person.photo, 160, 160, images) ?? '' : '';
+    model.itemCount = item.itemCount;
     model.facts = msg(`data.collectionTitles.${plural(item.itemCount)}`, { count: number(item.itemCount) });
     return model;
   }

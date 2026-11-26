@@ -78,8 +78,14 @@ export function LibraryTabs(_props: Partial<WidgetProps> = {}) {
 function TabStrip() {
   const host = useHost();
   const page = host.env.library;
-  const tabs = toolbarTabs(page);
-  const activeId = page?.tabId ?? page?.view;
+  return <LibraryTabStrip tabs={toolbarTabs(page)} activeId={page?.tabId ?? page?.view} select={id => host.dispatch('libraryView', id)} />;
+}
+
+export function LibraryTabStrip({ tabs, activeId, select }: {
+  tabs: readonly { id: string; label: string }[];
+  activeId?: string;
+  select(id: string): void;
+}) {
   const positions = useRef<Record<string, { x: number; width: number }>>({});
   const reveal = (id: string, animated: boolean) => {
     const position = positions.current[id];
@@ -91,14 +97,14 @@ function TabStrip() {
   useEffect(() => { if (activeId) reveal(activeId, false); }, [activeId, tabs.length]);
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    document.getElementById(`vela-library-view-${page?.tabId ?? page?.view}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [page?.tabId, page?.view]);
+    document.getElementById(`vela-library-view-${activeId}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [activeId]);
   return <View style={[{ position: 'relative', minWidth: 0, flexShrink: 1 }, Platform.OS === 'web' && { width: 'max-content', maxWidth: '100%' } as never]}>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" accessibilityRole="tablist" accessibilityLabel={msg('library.views')}
       {...scrollProps} style={{ minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', gap: 8, padding: 3 }}>
       {tabs.map(tab => <Button key={tab.id} id={`vela-library-view-${tab.id}`} role="tab" label={tab.label}
         onLayout={event => { positions.current[tab.id] = event.nativeEvent.layout; if (activeId === tab.id) reveal(tab.id, false); }}
-        onFocus={() => reveal(tab.id, true)} selected={activeId === tab.id} onPress={() => host.dispatch('libraryView', tab.id)} />)}
+        onFocus={() => reveal(tab.id, true)} selected={activeId === tab.id} onPress={() => select(tab.id)} />)}
     </ScrollView>
     {edges}
   </View>;
@@ -182,7 +188,10 @@ function BrowseControls({ ctx, compact, grow, labels, onLabels }: {
   const sort = model.sorts.find(candidate => candidate.id === model.sort);
   const direction = model.direction === 'asc' ? msg('library.ascending') : msg('library.descending');
   const sortLabel = sort ? `${sort.label} ${sort.directions.length === 2 ? model.direction === 'asc' ? '↑' : '↓' : ''}`.trim() : msg('library.sort');
-  const total = !page?.facetTitle && model.total !== undefined && !page?.loading ? msg(`library.count.${plural(model.total)}`, { count: number(model.total) }) : '';
+  const countString = model.media === 'photo'
+    ? model.tabs?.some(tab => tab.id === page?.tabId && tab.level === 'album') ? 'media.count.albums' : 'gallery.photoCount'
+    : 'library.count';
+  const total = !page?.facetTitle && model.total !== undefined && !page?.loading ? msg(`${countString}.${plural(model.total)}`, { count: number(model.total) }) : '';
   const filtersLabel = active ? msg('library.filtersActive', { count: active }) : msg('library.filters');
   const jumpBuckets = page?.jumpBuckets;
   const activeJump = activeJumpBucket(jumpBuckets, page?.jumpStart);

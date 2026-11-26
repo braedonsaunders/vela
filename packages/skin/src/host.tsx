@@ -43,6 +43,8 @@ export interface SkinHost {
   refreshing?: boolean;
   /** Where the shell draws the route (slot `children`). */
   children?: ReactNode;
+  /** App-supplied controls beside the media title frame's own Close. */
+  mediaTitleActions?: ReactNode;
 }
 
 /** A press argument as a plugin action takes it (protocol ScreenActionArg). */

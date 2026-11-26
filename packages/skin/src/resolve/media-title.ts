@@ -58,3 +58,24 @@ export function inlineMediaTitleCloseTargets(node: RNode): string[] {
   const own = inlineCloseId(node) && typeof node.id === 'string' ? [node.id] : [];
   return [...own, ...node.children.flatMap(inlineMediaTitleCloseTargets)];
 }
+/** Add app-owned actions beside the existing Close without changing the content's flow. */
+export function withInlineMediaTitleActions(node: RNode): RNode {
+  if (node.kind !== 'box') return node;
+  if (!inlineCloseId(node)) {
+    const children = node.children.map(withInlineMediaTitleActions);
+    return children.every((child, index) => child === node.children[index]) ? node : { ...node, children };
+  }
+  const { position, top, left, right, bottom, 'z-index': zIndex, ...style } = node.base.style;
+  const pinned = position === 'absolute';
+  const slot: RNode = { kind: 'slot', slot: 'mediaTitleActions', base: { style: {} }, when: [], states: [], group: false, order: 0 };
+  const close = pinned ? { ...node, base: { ...node.base, style } } : node;
+  return {
+    kind: 'box', group: false, order: node.order, states: [], controlStates: false, when: node.when,
+    base: { style: {
+      'flex-direction': 'row', 'align-items': 'center', gap: '8px',
+      ...(pinned ? { position, ...(top ? { top } : {}), ...(left ? { left } : {}), ...(right ? { right } : {}),
+        ...(bottom ? { bottom } : {}), ...(zIndex ? { 'z-index': zIndex } : {}) } : {}),
+    } },
+    children: pinned && left && !right ? [close, slot] : [slot, close],
+  };
+}

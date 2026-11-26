@@ -11,11 +11,11 @@ type Node = Record<string, any>;
 export const isAudiobookSection = (section: Node) => section.type === 'artist' && /audio ?books?|hörbücher|livres audio/i.test(String(section.title ?? ''));
 
 /** A photo album is a `photo` directory; a photo has media. */
-export const isPhotoAlbum = (n: Node) => n.type === 'photo' && !n.Media?.length;
+export const isPhotoAlbum = (n: Node) => n.type === 'photoalbum' || n.type === 'photo' && !n.Media?.length;
 export const isPhotoAlbumKey = (key: string) => /^album:\d+$/.test(key);
 
 /** The title projection of a Plex node, or undefined when it is not a title (a photo album). */
-export function plexProjection(n: Node, audiobooks = false): { kind: V.TitleKind; media?: V.TitleMedia } | undefined {
+export function plexProjection(n: Node, audiobooks = false, photoAlbumTitle = false): { kind: V.TitleKind; media?: V.TitleMedia } | undefined {
   const id = (key: unknown) => key == null ? undefined : String(key);
   switch (n.type) {
     case 'movie': case 'clip': return { kind: 'movie' };
@@ -35,7 +35,17 @@ export function plexProjection(n: Node, audiobooks = false): { kind: V.TitleKind
         parents: [...(album ? [{ id: album, name: n.parentTitle ?? '', role: 'album' as const }] : []), ...(artist ? [{ id: artist, name: n.grandparentTitle ?? '', role: 'artist' as const }] : [])],
         credits: [{ name: n.originalTitle || n.grandparentTitle || '', role: 'artist' }].filter(c => c.name) } };
     }
-    case 'photo': return isPhotoAlbum(n) ? undefined : { kind: 'movie', media: { class: 'photo', role: 'item', ...photoFacts(n.Media?.[0]?.width, n.Media?.[0]?.height) } };
+    case 'photoalbum': case 'photo': {
+      if (isPhotoAlbum(n)) return photoAlbumTitle ? { kind: 'movie', media: { class: 'photo', role: 'album', ...count(n.childCount ?? n.leafCount) } } : undefined;
+      const album = id(n.parentRatingKey);
+      const facts = photoFacts(n.Media?.[0]?.width, n.Media?.[0]?.height).facts ?? [];
+      const tags: string[] = Array.isArray(n.Tag) ? n.Tag.flatMap((item: Node) => typeof item.tag === 'string' && item.tag ? [item.tag] : []) : [];
+      if (tags.length) facts.push({ label: 'Tags', value: tags.join(', ') });
+      return { kind: 'movie', media: { class: 'photo', role: 'item',
+        ...(facts.length ? { facts } : {}),
+        ...(album ? { parents: [{ id: `album:${album}`, name: n.parentTitle ?? '', role: 'album' }] } : {}),
+      } };
+    }
     default: return undefined;
   }
 }
@@ -147,10 +157,12 @@ export function decidedMedia(decision: Node): Node | undefined {
 }
 /** The part of a decision's output that plays: the one marked selected, else the requested part, else its first. */
 const decidedPart = (media: Node | undefined, index = 0): Node | undefined => media?.Part?.find(chosen) ?? media?.Part?.[index] ?? media?.Part?.[0];
+export function decidedStreams(decision: Node, index = 0): Node[] {
+  return decidedPart(decidedMedia(decision), index)?.Stream ?? [];
+}
 /** Whether a decision copies the video of the requested part (a remux, while the audio may still be converted). */
 export function copiesVideo(decision: Node, index = 0): boolean {
-  const streams: Node[] = decidedPart(decidedMedia(decision), index)?.Stream ?? [];
-  return streams.find(s => Number(s.streamType) === 1)?.decision === 'copy';
+  return decidedStreams(decision, index).find(s => Number(s.streamType) === 1)?.decision === 'copy';
 }
 /** Whether a decision refuses the stream: its general, transcode or MDE code at 2000 or more, as Plezy reads them. */
 export const refusesStream = (decision: Node) => ['generalDecisionCode', 'transcodeDecisionCode', 'mdeDecisionCode'].some(key => Number(decision[key]) >= 2000);

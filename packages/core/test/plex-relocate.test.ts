@@ -749,13 +749,61 @@ describe('Store relocation behaviour', () => {
     }
   });
 
-  test('Servers.plexChoose stores machineIdentifier and relocates an existing Plex record by machineIdentifier without duplicating', async () => {
+  test('adding a detected Plex address saves its identity and reuses it at another address', async () => {
     const store = new MemoryStore();
-    const { record: existing } = await seedPlexServer(store, {
-      origin: OLD_ORIGIN,
-      machineIdentifier: MACHINE,
-      name: 'Old Name',
-    });
+    mockFetch(({ url }) => url.pathname === '/identity'
+      ? Response.json({ MediaContainer: { machineIdentifier: MACHINE } })
+      : new Response('', { status: 404 }));
+    const vela = createVela(platform(store));
+
+    const first = await vela.servers.probe(OLD_ORIGIN);
+    const second = await vela.servers.probe(NEW_DIRECT);
+    expect(first.machineIdentifier).toBe(MACHINE);
+    const original = await vela.servers.add('plex', 'Plex', first.normalizedUrl, first.machineIdentifier);
+    const alias = await vela.servers.add('plex', 'Plex', second.normalizedUrl, second.machineIdentifier);
+
+    expect(original.error).toBe('');
+    expect(alias).toEqual(original);
+    expect(new ServerRegistry(store).read().servers).toEqual([
+      expect.objectContaining({ id: original.id, machineIdentifier: MACHINE }),
+    ]);
+  });
+
+  test('refresh forgets proven Plex aliases and preserves unrelated servers and other viewers', async () => {
+    const store = new MemoryStore();
+    const { registry, record, creds } = await seedPlexServer(store, { machineIdentifier: MACHINE });
+    const duplicate = registry.add('plex', 'Duplicate', NEW_DIRECT, MACHINE);
+    const legacy = registry.add('plex', 'Plex', CUSTOM_HTTPS);
+    const unrelated = registry.add('plex', 'Plex', RELAY_ORIGIN);
+    const other = registry.add('plex', 'Other viewer', 'https://other.example', MACHINE);
+    const duplicateCreds = new ServerCredentials(store, device, () => 'k', duplicate.id);
+    const otherCreds = new ServerCredentials(store, device, () => 'k', other.id);
+    await duplicateCreds.set(await creds.get());
+    await duplicateCreds.setPlexAccount('duplicate-account');
+    await otherCreds.set(tokens('other-token', 'other-viewer'));
+    const calls = mockFetch(({ url }) => url.pathname === '/identity'
+      ? Response.json({ MediaContainer: { machineIdentifier: url.origin === CUSTOM_HTTPS ? MACHINE : 'different-machine' } })
+      : Response.json({ MediaContainer: {} }));
+    const vela = createVela(platform(store));
+
+    await vela.servers.refresh();
+
+    expect(registry.read().servers.map(server => server.id)).toEqual([record.id, unrelated.id, other.id]);
+    expect(registry.read().selectedId).toBe(record.id);
+    expect(await duplicateCreds.get()).toBeNull();
+    expect(await duplicateCreds.plexAccount()).toBeNull();
+    expect(await creds.plexAccount()).toBe('account-token-1');
+    expect(await otherCreds.get()).not.toBeNull();
+    expect(calls.every(call => call.method === 'GET')).toBe(true);
+  });
+
+  test.each([false, true])('Plex linking reuses the existing server (legacy typed address: %s)', async legacy => {
+    const store = new MemoryStore();
+    const registry = new ServerRegistry(store);
+    const existing = legacy
+      ? registry.add('plex', 'Plex', OLD_ORIGIN)
+      : (await seedPlexServer(store, { machineIdentifier: MACHINE, name: 'Old Name' })).record;
+    registry.select(existing.id);
 
     mockFetch(({ url }) => {
       if (url.origin === 'https://plex.tv') {
@@ -773,6 +821,9 @@ describe('Store relocation behaviour', () => {
             connections: [{ uri: NEW_DIRECT, local: false, relay: false, protocol: 'https' }],
           }]);
         }
+      }
+      if (url.origin === OLD_ORIGIN && url.pathname === '/identity') {
+        return Response.json({ MediaContainer: { machineIdentifier: MACHINE } });
       }
       if (url.origin === NEW_DIRECT) {
         if (url.pathname === '/identity') return Response.json({ MediaContainer: { machineIdentifier: MACHINE } });
