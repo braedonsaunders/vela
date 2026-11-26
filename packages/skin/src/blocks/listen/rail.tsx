@@ -3,10 +3,11 @@
 // playlists, liked albums and artists (music) or the books and shows under way (spoken word).
 // Collapsed it is an icon rail. Embedded (Your Library on a phone or a TV) it is a plain list.
 import { useState, type ReactNode } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Platform, ScrollView, Text, View } from 'react-native';
 import { durationLabel, msg, number, type Card, type PlaylistModel } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
+import { focusTarget } from '../../escape';
 import { NO_RING, Glyph, useInteraction } from '../../widgets/common/controls';
 import { alpha, Cover, useMediaLook } from '../../widgets/media/parts';
 import { placeOf, useMusic } from './app';
@@ -260,6 +261,9 @@ function PlaylistThumb({ playlist }: { playlist?: PlaylistModel }) {
   return <View style={{ width: 48, height: 48, borderRadius: 4, backgroundColor: m.ui.control, alignItems: 'center', justifyContent: 'center' }}><Glyph symbol="list" size={20} color={m.ui.inkQuiet} /></View>;
 }
 
+/** Apple TV (tvOS): where the rail's items are named focus targets. */
+const APPLE_TV = Platform.isTV && Platform.OS === 'ios';
+
 export function NavItem({ symbol, label, place, rail, testID }: { symbol: string; label: string; place: MusicPlace; rail: boolean; testID?: string }) {
   const app = useMusic();
   const m = useMediaLook();
@@ -267,8 +271,13 @@ export function NavItem({ symbol, label, place, rail, testID }: { symbol: string
   const { state, handlers } = useInteraction();
   const on = samePlace(app.place, place);
   const lit = state.hover || state.focus;
+  // On Apple TV the rail's items are focus targets by name (music-nav-home, …), so a document can
+  // name its first focus (the listen shell's focus.initial: Home, as the hand-written shell's
+  // focus guide gave it). Android TV's first focus is the app's navigation, so nothing registers
+  // there; web and phones are untouched.
+  const navId = APPLE_TV ? `music-nav-${place.kind}` : undefined;
   return (
-    <Pressable {...handlers} onPress={() => app.go(place)} testID={testID} accessibilityRole="link" accessibilityState={{ selected: on }} accessibilityLabel={label}
+    <Pressable {...handlers} {...(navId ? { ref: focusTarget(navId) as never, nativeID: navId } : {})} onPress={() => app.go(place)} testID={testID} accessibilityRole="link" accessibilityState={{ selected: on }} accessibilityLabel={label}
       style={[NO_RING, { flexDirection: 'row', alignItems: 'center', gap: 16, height: tv ? 60 : 44, width: tv ? 60 : undefined, paddingHorizontal: rail ? 0 : 12, justifyContent: rail ? 'center' : 'flex-start', borderRadius: tv ? 30 : 10,
         backgroundColor: tv && state.focus ? m.ui.ink : lit ? m.ui.control : on && tv ? m.ui.control : 'transparent', transform: [{ scale: tv && state.focus ? 1.08 : 1 }] }, transition('background-color, transform', 120)]}>
       <Glyph symbol={symbol} size={tv ? 28 : 24} color={tv && state.focus ? m.ui.inkInverse : on || lit ? m.ui.ink : m.ui.inkSecondary} />
