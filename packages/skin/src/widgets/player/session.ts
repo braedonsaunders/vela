@@ -174,6 +174,24 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const send = useCallback((input: CommandInput) => {
     // A Studio preview keeps the sound off (quiet-playback.ts forcedMute).
     if (input.type === 'mute' && !input.muted && forcedMute()) return;
+    const current = vela.getState().playback.plan;
+    const live = current?.live;
+    if (current && live && current.sessionId === sessionIdRef.current && (live.timeshift || live.mode === 'startOver')) {
+      const transport = input.type === 'catchUp' ? { kind: 'goLive' as const }
+        : input.type === 'pause' ? { kind: 'pause' as const }
+        : input.type === 'play' ? { kind: 'resume' as const }
+        : input.type === 'seek' ? { kind: 'seek' as const, positionSeconds: input.seconds }
+        : null;
+      if (transport) {
+        setRefused('');
+        void vela.playback.liveTransport(current.sessionId, transport).then(accepted => {
+          if (!accepted || current.sessionId !== sessionIdRef.current || transport.kind === 'seek') return;
+          viewerPaused.current = transport.kind === 'pause';
+          setCommand({ id: ++nextId.current, type: viewerPaused.current ? 'pause' : 'play' });
+        });
+        return;
+      }
+    }
     nextId.current += 1;
     setRefused('');
     if (input.type === 'pause') viewerPaused.current = true;
@@ -185,7 +203,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       pendingSubtitle.current = { commandId: nextId.current, sessionId: sessionIdRef.current, trackId: input.trackId };
     }
     setCommand({ ...input, id: nextId.current } as Command);
-  }, []);
+  }, [vela]);
 
   // The sleep timer (core sleep.ts, as spoken audio has it): an ordinary pause after some minutes, or at
   // the end of what plays, which also holds back anything that would start after it. Each watch starts awake.

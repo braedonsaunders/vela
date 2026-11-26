@@ -37,9 +37,9 @@ export function timeline(blocks: ReadonlyMap<number, GuideModel>, selected: numb
 }
 
 /** Include adjacent days only inside the server's seven-day window. */
-export function requestedDays(first: number, last: number, from: number, to: number, total: number): number[] {
+export function requestedDays(first: number, last: number, from: number, to: number, total: number, firstAvailable = 0): number[] {
   const days: number[] = [];
-  if (from <= 180 && first > 0) days.push(first - 1);
+  if (from <= 180 && first > firstAvailable) days.push(first - 1);
   if (to >= total - 180 && last < 6) days.push(last + 1);
   return days;
 }

@@ -41,15 +41,6 @@ export type PlaybackTarget =
   | { kind: 'programme'; id: string; channelId: string; from?: 'start'; positionSeconds?: number }
   | { kind: 'library-live'; id: string; libraryId: string; tab?: string };
 
-/** The window start a `timeshift_position_evicted` refusal names, or null for any other error. */
-function evictedWindowStart(error: unknown): number | null {
-  if (!(error instanceof VelaError) || error.detail.code !== 'timeshift_position_evicted') return null;
-  // The bounds ride in `details`, or beside the code on servers that flatten them.
-  const start = (error.detail.details as { windowStartSeconds?: unknown } | undefined)?.windowStartSeconds
-    ?? (error.detail as unknown as { windowStartSeconds?: unknown }).windowStartSeconds;
-  return typeof start === 'number' && Number.isFinite(start) ? start : null;
-}
-
 export type PlaybackPhase = 'idle' | 'starting' | 'preparing' | 'playing' | 'ended' | 'failed';
 export type OriginalLostResult = 'reopened' | 'version_unavailable' | 'gone' | 'superseded';
 
@@ -734,6 +725,13 @@ export class Playback {
     return added ?? chosen;
   }
 
+  liveTransport(sessionId: string, command: { kind: 'pause' | 'resume' | 'goLive' } | { kind: 'seek'; positionSeconds: number }): Promise<boolean> {
+    const plan = this.box.get().playback.plan;
+    if (!plan?.live || plan.sessionId !== sessionId) return Promise.resolve(false);
+    return this.command(sessionId, { ...command, sourceGeneration: plan.sourceGeneration,
+      seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() });
+  }
+
   /**
    * A player's session command (seek, pause, track change, path switch, fallback, stop). `origin`
    * says whether the viewer asked for it (a quality pick) or the engine sent it on its own (an
@@ -741,7 +739,7 @@ export class Playback {
    * command gets viewer copy, and one that lost to a newer generation, or that the engine sent
    * on its own, is dropped silently (the engine plans again from the newer plan).
    */
-  async command(sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<void> {
+  async command(sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<boolean> {
     const current = this.box.get().playback;
     if (current.sessionId === sessionId && current.error) this.patch({ error: '' });
     // The engine recovering on its own (a path switch, a fallback) is not progress (stall.ts).
@@ -764,18 +762,14 @@ export class Playback {
           nextPlan = this.withLocalTracks(nextPlan);
         }
         this.patch({ plan: nextPlan });
+        return true;
       }
+      return false;
     } catch (error) {
       answered(null);
       const words = commandFailure(command, error, origin);
       if (words && this.box.get().playback.sessionId === sessionId) this.patch({ error: words });
-      // A paused live position the rewind window left behind resumes at the window's start (spec B2).
-      const start = evictedWindowStart(error);
-      if (start !== null && (command.kind === 'resume' || command.kind === 'seek') && this.box.get().playback.sessionId === sessionId) {
-        const plan = this.box.get().playback.plan;
-        if (plan) await this.command(sessionId, { kind: 'seek', positionSeconds: start, sourceGeneration: plan.sourceGeneration,
-          seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() }, origin);
-      }
+      return false;
     }
   }
 
@@ -809,7 +803,7 @@ export class Playback {
       // still offers its path. A switch the engine sent on its own is tied to the source it was
       // planned against and is not: the engine plans again from the newer plan.
       const generations = staleGeneration(error) ? error.detail.currentGenerations : undefined;
-      const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks'].includes(command.kind);
+      const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks', 'goLive'].includes(command.kind);
       const wanted = command.kind === 'switch' && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
       if ((!absolute && !wanted) || !generations) throw error;
       return sendCommand(api, sessionId, { ...command, ...generations, idempotencyKey: this.session.key() });

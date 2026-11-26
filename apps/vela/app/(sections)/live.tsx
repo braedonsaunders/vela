@@ -29,12 +29,13 @@ export default function Live() {
 function useHandOff(channelId: string, programmeId: string, at: string): GuideFocus | undefined {
   const live = useLiveContext();
   const { day } = useLiveView();
-  const place = useMemo(() => (at ? guideFocus(at, Date.now()) : null), [at]);
+  const archiveDays = live?.controller.catchUpOffer.maxDays ?? 0;
+  const place = useMemo(() => (at ? guideFocus(at, Date.now(), undefined, archiveDays) : null), [at, archiveDays]);
   useEffect(() => {
-    if (live && place && place.day >= 0) live.controller.chooseDay(place.day);
+    if (live && place && place.available) live.controller.chooseDay(place.day);
   }, [live, place]);
   if (!channelId) return undefined;
-  if (place && (place.day < 0 || place.day !== day)) return undefined;
+  if (place && (!place.available || place.day !== day)) return undefined;
   return { channelId, programmeId, minute: place ? place.minute : -1 };
 }
 

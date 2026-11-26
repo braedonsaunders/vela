@@ -92,13 +92,13 @@ async function allPages<T>(read: (cursor?: string) => Promise<Page<T>>): Promise
   }
 }
 
-interface ChannelListings { programmes: Programme[]; ready: boolean; expires: number }
+interface ChannelListings { archiveDays?: number; programmes: Programme[]; ready: boolean; expires: number }
 interface Listings { channels: Channel[]; programmes: Programme[]; loaded: Set<string>; unavailable: Set<string>; retryAt?: number }
 const cache = new Map<string, { at: number; read?: object; value: Promise<Listings> }>();
 // Viewport channel sets overlap. Reuse each channel's completed pages within
 // the same window, so expanding the initial 30 channels to 48 does not reissue
 // the first 30 channels' listings (and their image grants).
-interface ListingEntry { at: number; expires: number; lastReady?: Programme[]; ready?: boolean; read?: object; value: Promise<ChannelListings> }
+interface ListingEntry { at: number; expires: number; lastReady?: Programme[]; archiveDays?: number; ready?: boolean; read?: object; value: Promise<ChannelListings> }
 const channelListings = new Map<string, Map<string, ListingEntry>>();
 function retainedListings(scope: string, id: string, from: number, until: number, read?: object): ChannelListings | undefined {
   const pieces: { from: number; until: number; row: ListingEntry }[] = [];
@@ -117,7 +117,8 @@ function retainedListings(scope: string, id: string, from: number, until: number
     if (covered >= until) {
       const programmes = [...new Map(pieces.sort((a, b) => a.row.at - b.row.at).flatMap(p => p.row.lastReady ?? [])
         .filter(p => Date.parse(p.end) > from && Date.parse(p.start) < until).map(p => [p.id, p])).values()].sort(byStart);
-      return { programmes, ready: true, expires: Math.min(...pieces.map(p => p.row.expires)) };
+      return { archiveDays: pieces.findLast(p => p.row.archiveDays !== undefined)?.row.archiveDays,
+        programmes, ready: true, expires: Math.min(...pieces.map(p => p.row.expires)) };
     }
   }
 }
@@ -151,10 +152,10 @@ function listings(api: GuideApi, scope: string, from: number, until: number, now
     const reads: Promise<Map<string, ChannelListings>>[] = [];
     for (const batch of queries) {
       const ids = batch ?? wanted;
-      const page = (async () => {
+      const page = (async (): Promise<Map<string, ChannelListings>> => {
         const fromISO = new Date(from).toISOString(), untilISO = new Date(until).toISOString();
         const bulk = batch && until - from <= 3 * HOUR ? await readGuideWindow(api, { channelIds: batch, from: fromISO, until: untilISO }) : null;
-        if (bulk) return new Map(bulk.channels.map(row => [row.channelId, { programmes: row.programmes, ready: row.state === 'ready', expires: Date.parse(bulk.validUntil) }]));
+        if (bulk) return new Map(bulk.channels.map(row => [row.channelId, { archiveDays: row.archiveDays, programmes: row.programmes, ready: row.state === 'ready', expires: Date.parse(bulk.validUntil) }]));
         const programmes = await allPages(cursor => {
           if (process.env.EXPO_PUBLIC_VELA_GUIDE_DIAGNOSTICS === '1') {
             const root = globalThis as typeof globalThis & { __velaGuideQueries?: number };
@@ -172,11 +173,12 @@ function listings(api: GuideApi, scope: string, from: number, until: number, now
           if (!answer) throw new Error('Missing channel in guide window');
           return answer.ready ? answer : { ...answer, programmes: previous?.lastReady ?? [] };
         });
-        const entry = { at: now, expires: now + FRESH, lastReady: previous?.lastReady, read, value };
+        const entry: ListingEntry = { at: now, expires: now + FRESH, lastReady: previous?.lastReady, read, value };
         entries.set(id, entry);
         value.then(answer => {
           if (entries.get(id) !== entry) return;
           entry.expires = answer.expires;
+          entry.archiveDays = answer.archiveDays;
           Object.assign(entry, { ready: answer.ready });
           if (answer.ready) entry.lastReady = answer.programmes;
         }, () => { if (entries.get(id) === entry) entries.delete(id); });
@@ -194,10 +196,13 @@ function listings(api: GuideApi, scope: string, from: number, until: number, now
     const allowed = new Set(channels.map(channel => channel.id));
     for (const [id, entry] of entries) {
       if (!retained.has(id) && allowed.has(id) && entry.ready && entry.lastReady && (!read || entry.read === read))
-        retained.set(id, { programmes: entry.lastReady, ready: true, expires: entry.expires });
+        retained.set(id, { archiveDays: entry.archiveDays, programmes: entry.lastReady, ready: true, expires: entry.expires });
     }
     const retryAt = Math.min(...answers.filter(answer => !answer.ready).map(answer => answer.expires));
-    return { channels, programmes: [...retained.values()].flatMap(answer => answer.programmes),
+    return { channels: channels.map(channel => {
+      const archiveDays = retained.get(channel.id)?.archiveDays;
+      return archiveDays === undefined || archiveDays === channel.archiveDays ? channel : { ...channel, archiveDays };
+    }), programmes: [...retained.values()].flatMap(answer => answer.programmes),
       loaded: new Set([...retained].filter(([, answer]) => answer.ready).map(([id]) => id)),
       unavailable: new Set(wanted.filter((_, index) => !answers[index]!.ready)),
       retryAt: Number.isFinite(retryAt) ? retryAt : undefined };
@@ -316,6 +321,7 @@ export interface GuideReadOptions {
   currentUntil?: number;
   /** The server offers catch-up from channel archives (features.liveCatchUp): programmes carry `replay`. */
   archive?: boolean;
+  archiveDays?: number;
 }
 const clockModels = new WeakMap<GuideModel, { at: number; project(now: number): GuideModel }>();
 /** Recompute labels/progress from retained listings without reaching the adapter. */
@@ -335,7 +341,8 @@ export async function loadGuide(api: GuideApi, day: number, now: number, scope: 
 }
 
 async function projectGuide(api: GuideApi, day: number, now: number, scope: string, images?: Images, localeJSON?: string, channelIds?: string[], range?: { from: number; to: number }, options?: GuideReadOptions): Promise<GuideModel> {
-  if (!Number.isInteger(day) || day < 0 || day >= DAYS) throw new Error('Invalid guide day');
+  const firstDay = -Math.max(0, Math.min(30, Math.floor(options?.archiveDays ?? 0)));
+  if (!Number.isInteger(day) || day < firstDay || day >= DAYS) throw new Error('Invalid guide day');
   const { start, end } = withLocale(localeJSON, () => {
     const start = midnight(now, day);
     // A DST day can run 25 hours; the protocol's window is at most 24.
@@ -448,7 +455,7 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
       // The time of day to land on: now today, the same clock time on a later day. The skin places it.
       landing: Math.max(0, Math.min(minutes, (now - midnight(now, 0)) / MINUTE)),
       ticks: Array.from({ length: Math.floor(minutes / 30) }, (_, n) => ({ id: String(start + n * 1800000), label: time(start + n * 1800000), minute: n * 30, hour: n % 2 === 0 })),
-      days: Array.from({ length: DAYS }, (_, offset) => { const at = midnight(now, offset) + 12 * HOUR; return { offset, label: dayName(offset, at), date: date.format(at) }; }),
+      days: Array.from({ length: DAYS - firstDay }, (_, index) => { const offset = firstDay + index; const at = midnight(now, offset) + 12 * HOUR; return { offset, label: dayName(offset, at), date: date.format(at) }; }),
       groups,
       guides,
       tuneOrder: window.channels.map(c => c.id),
@@ -476,12 +483,13 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
  * Where a server timestamp falls in the guide: its local day offset from today (-1 outside
  * the guide's week or unparseable) and its minute from that day's local midnight.
  */
-export function guideFocus(at: string, now: number, localeJSON?: string) {
+export function guideFocus(at: string, now: number, localeJSON?: string, archiveDays = 0) {
   const ms = Date.parse(at);
-  if (!Number.isFinite(ms)) return { day: -1, minute: 0 };
+  if (!Number.isFinite(ms)) return { day: -1, minute: 0, available: false };
   return withLocale(localeJSON, () => {
     const start = midnight(ms, 0), day = Math.round((start - midnight(now, 0)) / DAY);
-    return { day: day >= 0 && day < DAYS ? day : -1, minute: (ms - start) / MINUTE };
+    const available = day >= -archiveDays && day < DAYS;
+    return { day: available ? day : -1, minute: (ms - start) / MINUTE, available };
   });
 }
 

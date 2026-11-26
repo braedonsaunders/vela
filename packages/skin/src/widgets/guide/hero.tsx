@@ -183,7 +183,10 @@ function ReplayPill({ look, channel, programme, onReplay }: {
 }) {
   const kind = programme.replay;
   if (!onReplay || !kind) return null;
-  const label = kind === 'startOver' ? msg('catchUp.startOver') : msg('catchUp.replay');
+  if (kind === 'catchUp') {
+    return <WatchPill look={look} label={msg('catchUp.watch')} onPress={() => onReplay(channel.id, programme.id, kind)} testID="guide-replay" />;
+  }
+  const label = msg('catchUp.startOver');
   return (
     <Press
       label={label}
@@ -257,11 +260,11 @@ function ProgrammeCopy({
       >
         {programme.name}
       </Line>
-      <View style={{ flexDirection: 'row', flexWrap: spacious ? 'wrap' : 'nowrap', gap: compact ? 4 : 12, alignItems: 'center', minWidth: 0 }}>
-        {!small ? (
+      <View style={{ flexDirection: 'row', flexWrap: spacious || (small && !!programme.replay) ? 'wrap' : 'nowrap', gap: compact ? 4 : 12, alignItems: 'center', minWidth: 0 }}>
+        {!small && programme.replay !== 'catchUp' ? (
           <WatchPill look={look} label={watchLabel} onPress={() => onWatch(channel.id)} testID="guide-watch" />
         ) : null}
-        {!small ? <ReplayPill look={look} channel={channel} programme={programme} onReplay={onReplay} /> : null}
+        <ReplayPill look={look} channel={channel} programme={programme} onReplay={onReplay} />
         <Line look={look} size={13} weight={600} tabular>
           {times}
         </Line>
@@ -338,8 +341,8 @@ function SpaciousProgrammeCopy({ look, channel, programme, onWatch, onReplay }: 
         ) : null}
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 }}>
-        <WatchPill look={look} label={programme.airing ? msg('live.watch') : msg('ui.watchChannel', { channel: channel.name })}
-          onPress={() => onWatch(channel.id)} testID="guide-watch" />
+        {programme.replay !== 'catchUp' ? <WatchPill look={look} label={programme.airing ? msg('live.watch') : msg('ui.watchChannel', { channel: channel.name })}
+          onPress={() => onWatch(channel.id)} testID="guide-watch" /> : null}
         <ReplayPill look={look} channel={channel} programme={programme} onReplay={onReplay} />
         <ReplayNote look={look} channel={channel} programme={programme} onReplay={onReplay} />
         {programme.genre ? <Line look={look} size={13} color={look.inkSecondary}>{programme.genre}</Line> : null}

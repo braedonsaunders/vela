@@ -15,7 +15,8 @@ function merge(query: GuideWindowRequest, answers: GuideWindowResponse[]): Guide
     validUntil: new Date(Math.min(...answers.map(answer => Date.parse(answer.validUntil)))).toISOString(),
     channels: query.channelIds.map(channelId => {
       const rows = answers.flatMap(answer => answer.channels.filter(row => row.channelId === channelId));
-      return { channelId, state: rows.some(row => row.state === 'unavailable') ? 'unavailable' : 'ready',
+      const archiveDays = rows.findLast(row => row.archiveDays !== undefined)?.archiveDays;
+      return { channelId, ...(archiveDays === undefined ? {} : { archiveDays }), state: rows.some(row => row.state === 'unavailable') ? 'unavailable' : 'ready',
         programmes: [...new Map(rows.flatMap(row => row.programmes).map(p => [p.id, p])).values()]
           .sort((a, b) => Date.parse(a.start) - Date.parse(b.start) || a.id.localeCompare(b.id)) };
     }),

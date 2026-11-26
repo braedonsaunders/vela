@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRef, type ComponentRef, type ReactNode } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { delayLabel, msg, time } from '@vela/core';
+import { msg, time } from '@vela/core';
 import { easing } from '../../motion';
 import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
@@ -239,14 +239,14 @@ function LiveTimeline({ look, view, blocked, seek, onActive, visible, reveal, st
         disabled={blocked}
         onSeek={seconds => seek(window.start + seconds)}
         onActive={onActive}
-        live={{ label: seconds => delayLabel(span - seconds) || msg('data.live'), color: look.live, atEdge: !window.delayed && !window.startOver }}
+        live={{ label: seconds => time(startsAt + seconds * 1000), color: look.live, atEdge: !window.delayed && !window.startOver }}
       />
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={[look.text(12, 400, look.inkSecondary), { fontVariant: ['tabular-nums'] }]}>
           {live.archive === 'startOver' ? msg('catchUp.startOver') + ' · ' + time(startsAt) : time(startsAt)}
         </Text>
         <Text testID="player-live-delay" style={[look.text(12, live.delay ? 600 : 700, live.delay ? look.ink : look.live), { fontVariant: ['tabular-nums'] }]}>
-          {live.delay || msg('data.live')}
+          {time(live.windowEdgeAt)} · {live.delay || msg('data.live')}
         </Text>
       </View>
     </View>

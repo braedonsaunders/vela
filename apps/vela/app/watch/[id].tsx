@@ -91,12 +91,13 @@ export default function Watch() {
     else router.replace('/');
   }, [stop]);
 
-  const channel = target.kind === 'channel' ? channels?.find(c => c.id === id) : undefined;
+  const liveChannelId = session.view.plan?.channelId || (target.kind === 'channel' ? id : '');
+  const channel = liveChannelId ? channels?.find(c => c.id === liveChannelId) : undefined;
   const programmeChannel = target.kind === 'programme' ? channels?.find(c => c.id === target.channelId) : undefined;
   const title = channel
     ? `${channel.number} · ${channel.name}`
     : target.kind === 'programme'
-      ? [session.view.plan?.title, programmeChannel?.name].filter(Boolean).join(' · ') || msg('catchUp.fromArchive')
+      ? [session.view.plan?.title, !liveChannelId ? programmeChannel?.name : undefined].filter(Boolean).join(' · ') || msg('catchUp.fromArchive')
     : target.kind === 'library-live'
       ? session.view.plan?.title ?? 'Live'
       : heading(skin?.env.detail);

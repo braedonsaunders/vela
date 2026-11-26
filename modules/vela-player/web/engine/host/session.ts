@@ -7,7 +7,7 @@ import { checkWaiting } from './watchdog';
 import { adaptLive } from './live';
 import { adaptCoreQuality, candidateSources } from './quality';
 import { publishHostState, emitHostEvent } from './events';
-import { canRetainOriginal, seekRetainedOriginal } from './file-retention';
+import { retainedSeekPosition, seekRetainedSource } from './file-retention';
 import { readPosition, readDuration, readFrameMetrics } from './position';
 import { failPlayback } from './recovery';
 import { requestSwitch, sendQueuedSeek } from './authorizations';
@@ -60,8 +60,9 @@ export async function loadSession(context: HostContext, session: PlaybackSession
   )
     context.recovery.localDecoderRetries.clear();
   const retained = session.sources.find((source) => source.id === session.selectedSourceId);
-  if (retained && canRetainOriginal(context, session, retained)) {
-    await seekRetainedOriginal(context, session, retained);
+  const retainedPosition = retained ? retainedSeekPosition(context, session, retained) : null;
+  if (retained && retainedPosition !== null) {
+    await seekRetainedSource(context, session, retained, retainedPosition);
     return;
   }
   const pending = context.session.pendingSwitch ?? context.session.droppedSwitch;

@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { MOTION, Presence, useLast } from '../../presence';
-import { catchUpPictureTime, clampSeek, clock, delayLabel, LIVE_SLACK_SECONDS, msg, pictureTime, timeshiftWindow, type TimeshiftWindow } from '@vela/core';
+import { catchUpPictureTime, clock, delayLabel, LIVE_SLACK_SECONDS, msg, pictureTime, timeshiftWindow, type TimeshiftWindow } from '@vela/core';
 import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 import { liveBehind, liveNotices, liveWatchKey, MiniGuide, useLiveContext, useLiveView } from '../guide';
 import { ChromeButton } from './button';
@@ -43,6 +43,8 @@ export interface LiveWatch {
   pictureAt: number;
   /** The real time the window starts (ms): Start over's programme start, else the rewind window's. */
   windowStartAt: number;
+  windowEdgeAt: number;
+  paused: boolean;
   /** Back to live: the edge of this channel, or the channel live from a programme in the archive. */
   backToLive(): void;
   /** The programme on air plays from its start (its start is in the archive); null when it cannot. */
@@ -97,9 +99,9 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
   const measured = plan?.live ? timeshiftWindow({ live: plan.live, receivedAt, now, position, engine: live ? { ...live, edgeMovedAt } : null }) : null;
   // Back to live is taken at its word while the engine moves there and settles its latency.
   const wentLive = useRef(0);
-  const window = measured && measured.delayed && now - wentLive.current < GO_LIVE_GRACE_MS ? { ...measured, delayed: false } : measured;
+  const window = measured && measured.delayed && snapshot?.state !== 'paused' && now - wentLive.current < GO_LIVE_GRACE_MS ? { ...measured, delayed: false } : measured;
   const rewindable = !!window?.seekable;
-  const behindSeconds = window && (window.delayed || window.startOver) ? window.behind
+  const behindSeconds = window ? window.behind
     : plan?.catchUp ? Math.max(0, (now - (catchUpPictureTime(plan, position) ?? now)) / 1000) : 0;
   // A deliberate rewind is no delivery trouble: the window tells the delay, not "N seconds behind".
   // Behind live on purpose, the edge's publication waits are not the picture's business either.
@@ -117,9 +119,9 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
     placed.current = plan.sessionId;
     send?.({ type: 'seek', seconds: placeAt });
   }, [placeAt, plan?.sessionId]);
-  const pictureAt = pictureTime(now, behindSeconds);
+  const pictureAt = catchUpPictureTime(plan ?? {}, position) ?? pictureTime(window?.edgeAt ?? now, window?.behind ?? 0);
   const archiveStart = plan?.catchUp ? Date.parse(plan.catchUp.startAt) : NaN;
-  const windowStartAt = Number.isFinite(archiveStart) ? archiveStart : pictureAt - ((window?.position ?? 0) - (window?.start ?? 0)) * 1000;
+  const windowStartAt = Number.isFinite(archiveStart) ? archiveStart : (window?.edgeAt ?? now) - ((window?.edge ?? 0) - (window?.start ?? 0)) * 1000;
   const guideChannel = channelId ? view.guide?.channels.find(c => c.id === channelId) : undefined;
   const offer = controller?.catchUpOffer;
   const canStartOver = !archived && isLive && !!offer?.archive && !!guideChannel?.nowStartOver && !!guideChannel.nowId;
@@ -139,18 +141,18 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
     behindSeconds,
     pictureAt,
     windowStartAt,
+    windowEdgeAt: window?.edgeAt ?? now,
+    paused: snapshot?.state === 'paused',
     backToLive: () => {
       wentLive.current = Date.now();
-      if (archived) {
+      if (archived?.kind === 'catchUp') {
         controller?.backToLive(archived.channelId);
         return;
       }
-      // The engine knows its own edge; one without a live report seeks to the plan's.
-      if (live?.edgeSeconds != null || !window) send?.({ type: 'catchUp' });
-      else send?.({ type: 'seek', seconds: clampSeek(window, window.edge) });
-      // Live is for watching: a paused picture plays again there. The view takes one command a
-      // render, so the play follows the move rather than replacing it.
-      if (snapshot?.state === 'paused') setTimeout(() => send?.({ type: 'play' }), 250);
+      send?.({ type: 'catchUp' });
+      if (!plan?.live?.timeshift && !window?.startOver && snapshot?.state === 'paused') {
+        setTimeout(() => send?.({ type: 'play' }), 250);
+      }
     },
     leftLive: () => { wentLive.current = 0; },
     startOver: canStartOver && controller && guideChannel
@@ -201,7 +203,7 @@ export function LiveMultiview({ look, watch }: { look: PlayerLook; watch: LiveWa
 /** LIVE at the edge; Back to live (the same control as the others) once the picture trails live, or
  * from a programme in the archive. */
 export function LiveMark({ look, watch, onLeave }: { look: PlayerLook; watch: LiveWatch; onLeave?(): void }) {
-  const offered = watch.behind > 0 || !!watch.window?.delayed || !!watch.archive;
+  const offered = watch.behind > 0 || !!watch.window?.delayed || !!watch.archive || (watch.paused && !!watch.window?.seekable);
   // Pressed, Back to live gives way to the LIVE mark: the bar hands its focus on (onLeave).
   const pressed = useRef(false);
   useEffect(() => {

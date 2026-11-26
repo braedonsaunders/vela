@@ -529,7 +529,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
 
   startPlayback(request: V.PlaybackRequest) {
-    return this.http.request<V.PlaybackPlan | V.PlaybackPreparing>('POST', '/playback', request);
+    const archive = request.channelId && (request.programmeId !== undefined || request.startAt !== undefined);
+    return this.http.request<V.PlaybackPlan | V.PlaybackPreparing>('POST', '/playback',
+      archive ? { ...request, kind: 'channel' } : request);
   }
 
   reportObservation(sessionId: string, observation: V.PlayerObservation) {
