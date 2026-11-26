@@ -27,6 +27,12 @@ interface PlexSession {
   pending: Promise<unknown>;
   /** Pagehide ends session work without waiting for the serial queue. */
   readonly sessionWork: AbortController;
+  /** The progress report queued last, not started yet: a later one in its state and generations takes its place and
+   * its answer, and a command at its generations queued after it, one that will run, keeps its position and sequence without its post (`by`),
+   * its answer then that of the command's first timeline post, or, when the command posts none, accepted once its position is applied. */
+  waiting?: { r: V.PlayerObservation; work?: Promise<V.Ack>; by?: Promise<unknown> };
+  /** The state of the last timeline posted. */
+  posted?: string;
   /** The transcode session of the server's stream while one is started (none while the stream is deferred). */
   transcodeId?: string;
   /** The stopped timeline has been sent; stream cleanup can still be pending. */
@@ -34,6 +40,10 @@ interface PlexSession {
   scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
+  /** The idempotency keys of the mutations queued and not settled yet, each with how many calls carry it. */
+  queued?: Map<string, number>;
+  /** While a command that took over a waiting report runs: answers that report with the command's first timeline post. */
+  carry?: (post: Promise<unknown>) => void;
   /** A title that started without intro or credits markers: when they were last asked for, and how often. */
   markers?: { at: number; asked: number; reading: boolean };
   /** A multi-part item (several files stacked as one title): its parts, the one playing, and the
@@ -1003,49 +1013,72 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     if (s.plan.channelId || s.timelineStopped) return;
     // Once dispatched, the terminal timeline outlives pagehide. Pagehide still stops the stream.
     const keepaliveStarted = state === 'stopped' ? () => { s.timelineStopped = true; } : undefined;
-    try {
-      await this.request('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`, time: Math.round(s.plan.positionSeconds * 1000),
-        duration: s.metadata.duration, state, session: s.plan.sessionId, hasMDE: 1, identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': s.plan.sessionId },
-      'POST', true, s.sessionWork.signal, undefined, keepaliveStarted);
-    } catch (error) {
+    const post = this.request('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`, time: Math.round(s.plan.positionSeconds * 1000),
+      duration: s.metadata.duration, state, session: s.plan.sessionId, hasMDE: 1, identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': s.plan.sessionId },
+    'POST', true, s.sessionWork.signal, undefined, keepaliveStarted).catch(error => {
       // An explicit HTTP refusal allows a retry. A missing reply may follow an accepted timeline.
       if (keepaliveStarted && error instanceof VelaError && error.detail.code === 'plex_http') s.timelineStopped = false;
       throw error;
-    }
+    });
+    s.carry?.(post);
+    delete s.carry;
+    await post;
+    s.posted = state;
   }
   async reportObservation(id: string, r: V.PlayerObservation): Promise<V.Ack> {
     const s = this.session(id);
     const { signal } = s.sessionWork;
-    return this.serialize(s, async () => {
-      if (signal.aborted || s.timelineStopped || s.plan.state === 'ended') return ack;
+    const w = s.waiting;
+    // An end, an invalid position and progress in a stacked title's part before the last are queued on their own.
+    const alone = r.state === 'ended' || !Number.isFinite(r.positionSeconds) || r.positionSeconds < 0 || !!s.stack && s.stack.index < s.stack.parts.length - 1;
+    if (w?.work && !alone && r.state === w.r.state && r.sourceGeneration === w.r.sourceGeneration && r.seekGeneration === w.r.seekGeneration) {
+      if (r.sequence > w.r.sequence) w.r = r;
+      return w.work;
+    }
+    const slot: PlexSession['waiting'] = alone ? undefined : { r };
+    const sent = this.serialize(s, async (): Promise<boolean> => {
+      if (slot) { if (s.waiting === slot) delete s.waiting; r = slot.r; }
+      if (signal.aborted || s.timelineStopped || s.plan.state === 'ended') return true;
       this.generations(s.plan, r);
-      if (r.sequence <= s.sequence) return ack;
+      if (r.sequence <= s.sequence) return true;
       if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0) fail('Invalid playback position');
       // The end of a part that is not the last moves the session on to the next one.
       const stack = s.stack;
       if (stack && stack.index < stack.parts.length - 1 && (r.state === 'ended' || r.positionSeconds >= partOffsets(stack.parts)[stack.index + 1]! - 0.5)) {
         await this.playPart(s, stack.index + 1, 0);
-        if (signal.aborted) return ack;
+        if (signal.aborted) return true;
         s.sequence = r.sequence; s.plan.state = 'playing'; s.plan.revision++;
         await this.timeline(s, 'playing');
-        return ack;
+        return true;
       }
       s.plan.positionSeconds = r.positionSeconds;
-      await this.timeline(s, r.state === 'ended' ? 'stopped' : r.state === 'buffering' ? 'buffering' : r.state);
-      if (signal.aborted) return ack;
+      // A command after it takes the position into its plan, posting it or not (a track or version change does
+      // not); a change from the state last posted is still sent.
+      const state = r.state === 'ended' ? 'stopped' : r.state;
+      const posts = !slot?.by || state !== s.posted;
+      if (posts) await this.timeline(s, state);
+      if (signal.aborted) return true;
       // A natural end is completion; a user's partial stop is only a timeline update.
       if (r.state === 'ended' && s.plan.titleId && !s.scrobbled) {
         await this.request('/:/scrobble', { key: s.metadata.ratingKey, identifier: 'com.plexapp.plugins.library' }, 'PUT', true, signal);
-        if (signal.aborted) return ack;
+        if (signal.aborted) return true;
         s.scrobbled = true;
       }
       if (r.state === 'ended') await this.stopTranscode(s.transcodeId ?? id, s.plan.media === 'audio', signal);
       s.sequence = r.sequence; s.plan.state = r.state === 'ended' ? 'ended' : r.state === 'paused' ? 'paused' : 'playing'; s.plan.revision++;
+      return posts;
+    });
+    // Without its own post it is answered by the timeline post that carries its progress, or as accepted once
+    // pagehide ends the session's work, also while that post is still pending.
+    const work = sent.then(async posts => {
+      if (!posts && !signal.aborted) await Promise.race([slot!.by, new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }))]);
       return ack;
     }).catch(error => {
       if (signal.aborted) return ack;
       throw error;
     });
+    if (slot) s.waiting = Object.assign(slot, { work });
+    return work;
   }
   command(id: string, r: TransportCommand): Promise<V.PlaybackPlan> {
     return this.mutate(id, r, async (s, signal) => {
@@ -1076,7 +1109,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
           s.plan.state = 'playing';
           break;
       }
-    });
+    }, true);
   }
 
   changeTracks(id: string, r: TrackCommand): Promise<V.PlaybackPlan> {
@@ -1207,26 +1240,47 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     id: string,
     r: V.SessionCommand,
     apply: (s: PlexSession, signal: AbortSignal) => Promise<void> | void,
+    posts = false,
   ): Promise<V.PlaybackPlan> {
     const s = this.session(id);
-    return this.serialize(s, async () => {
+    // A seek it will refuse, or a key it answers from its record or that another call still queued carries (which
+    // may yet record it), runs nothing: the waiting report keeps its post.
+    const queued = s.queued ??= new Map();
+    const runs = !s.mutations.has(r.idempotencyKey) && !queued.get(r.idempotencyKey) && !(r.kind === 'seek' && !(Number.isFinite(r.positionSeconds) && r.positionSeconds >= 0));
+    const w = runs && s.waiting?.r.sourceGeneration === r.sourceGeneration && s.waiting.r.seekGeneration === r.seekGeneration ? s.waiting : undefined;
+    queued.set(r.idempotencyKey, (queued.get(r.idempotencyKey) ?? 0) + 1);
+    let carry: ((post?: Promise<unknown>) => void) | undefined;
+    // A command that posts no timeline (a track, path or version change) takes the report's position into its plan
+    // and the report is answered at once; one that posts answers it with that post.
+    if (w) { w.by = posts ? new Promise(resolve => { carry = resolve; }) : Promise.resolve(); void w.by.catch(() => undefined); }
+    const work = this.serialize(s, async () => {
       const { signal } = s.sessionWork;
       if (signal.aborted) fail('Plex playback session ended', 'conflict');
       const saved = s.mutations.get(r.idempotencyKey);
       if (saved) return saved;
       this.generations(s.plan, r);
       if (s.plan.state === 'ended' || (s.timelineStopped && r.kind !== 'stop')) fail('Plex playback session ended', 'conflict');
-      await apply(s, signal);
+      s.carry = carry;
+      try { await apply(s, signal); } finally { delete s.carry; }
       signal.throwIfAborted();
       s.plan.revision++;
       const result = structuredClone(s.plan);
       s.mutations.set(r.idempotencyKey, result);
       return result;
     });
+    // A command that ended without its timeline post answers the report it took over as accepted.
+    void work.catch(() => undefined).then(() => {
+      const left = queued.get(r.idempotencyKey)! - 1;
+      if (left) queued.set(r.idempotencyKey, left); else queued.delete(r.idempotencyKey);
+      carry?.();
+    });
+    return work;
   }
 
-  // Commands and observations share one order, including the final stopped timeline.
+  // Commands and observations share one order, including the final stopped timeline. Anything queued after a
+  // waiting progress report ends it: no later report takes its place.
   private serialize<T>(s: PlexSession, run: () => Promise<T>): Promise<T> {
+    delete s.waiting;
     const work = s.pending.then(run);
     s.pending = work.catch(() => undefined);
     return work;
