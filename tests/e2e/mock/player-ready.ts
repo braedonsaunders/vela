@@ -15,7 +15,7 @@ function videoState(browser: Browser) {
 export async function waitForVideoReady(browser: Browser, screen: Screen) {
   await expect.poll(async () => (await videoState(browser)).hasFrame, { timeout: 45_000 }).toBe(true);
   await expect(screen.getByTestId('player-scrub')).toBeEnabled({ timeout: 30_000 });
-  await expect(screen.getByTestId('player-status')).toBeHidden({ timeout: 45_000 });
+  await expect(screen.getByRole('progressbar', 'Preparing your screening')).toBeHidden({ timeout: 30_000 });
 }
 
 export async function waitForVideoPlayback(browser: Browser, screen: Screen) {
