@@ -34,13 +34,13 @@ export const READ_VIEWS: ReadView[] = [
   { name: 'standalone', path: book('patient-garden'), ready: 'media-byline', description: 'Standalone unread book' },
   { name: 'series', path: '/title/series-saltglass-chronicles?library=books', ready: 'media-book-book-harbour-of-bells',
     description: 'Series page and ordered volumes' },
-  { name: 'reader-epub', path: reader('harbour-of-bells'), ready: 'reader-hint', description: 'Resumed EPUB with chrome hidden', only: READER_VIEWPORTS },
+  { name: 'reader-epub', path: reader('harbour-of-bells'), ready: 'reader-hint', description: 'Resumed EPUB and its reading position', only: READER_VIEWPORTS },
   { name: 'reader-contents', path: reader('harbour-of-bells'), ready: 'reader-hint',
-    steps: [{ press: 'Enter' }, { click: 'reader-contents' }], settled: 'text:Contents', description: 'EPUB contents drawer', only: READER_VIEWPORTS },
+    steps: [{ click: 'reader-contents' }], settled: 'text:Contents', description: 'EPUB contents drawer', only: READER_VIEWPORTS },
   { name: 'reader-appearance', path: reader('harbour-of-bells'), ready: 'reader-hint',
-    steps: [{ press: 'Enter' }, { click: 'reader-type' }], settled: 'text:Text and layout', description: 'EPUB appearance drawer', only: READER_VIEWPORTS },
-  { name: 'reader-pdf', path: reader('field-guide-imaginary-birds'), ready: 'reader-hint', description: 'PDF with chrome hidden', only: READER_VIEWPORTS },
-  { name: 'reader-comic', path: reader('captain-pebble'), ready: 'reader-hint', description: 'Comic with chrome hidden', only: READER_VIEWPORTS },
+    steps: [{ click: 'reader-type' }], settled: 'text:Text and layout', description: 'EPUB appearance drawer', only: READER_VIEWPORTS },
+  { name: 'reader-pdf', path: reader('field-guide-imaginary-birds'), ready: 'reader-hint', description: 'PDF reader', only: READER_VIEWPORTS },
+  { name: 'reader-comic', path: reader('captain-pebble'), ready: 'reader-hint', description: 'Comic reader', only: READER_VIEWPORTS },
 ];
 
 export const READ_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [];

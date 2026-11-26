@@ -108,23 +108,59 @@ try {
           const pages = globalThis.__velaStore?.getState().screens.pages;
           return !!pages && Object.values(pages).some(entry => entry.href === ${JSON.stringify(`vela:read/${page}`)} && entry.load === 'ready');
         }, null, { timeout: 10000 });` : '';
+      // Use the normal edge hover to bring the reader chrome up and keep it there while capturing.
+      const showReaderChrome = read && page === 'reader' ? `
+        await page.mouse.move(1, ${Math.round(viewport.height / 2)});
+        await page.mouse.move(0, ${viewport.height - 1});
+        const toolbar = page.getByTestId('reader-top');
+        await page.waitForTimeout(100);
+        if (await toolbar.evaluate(el => getComputedStyle(el).pointerEvents === 'none')) {
+          await page.evaluate(() => document.activeElement?.blur());
+          await page.keyboard.press('Enter');
+        }` : '';
+      const shoot = read ? `
+        let previous = await page.screenshot();
+        for (let attempt = 0; attempt < 30; attempt++) {
+          await page.waitForTimeout(700);
+          const candidate = await page.screenshot();
+          if (previous.equals(candidate)) {
+            await page.waitForTimeout(700);
+            const primary = await page.screenshot({ path: ${JSON.stringify(join(out, file))} });
+            if (candidate.equals(primary)) {
+              await page.waitForTimeout(700);
+              const confirmed = await page.screenshot({ path: ${JSON.stringify(join(out, frame))} });
+              if (primary.equals(confirmed)) return { url: page.url() };
+              previous = confirmed;
+              continue;
+            }
+            previous = primary;
+            continue;
+          }
+          previous = candidate;
+        }
+        throw new Error('The capture did not settle');
+      ` : `
+        await page.screenshot({ path: ${JSON.stringify(join(out, file))} });
+        await page.waitForTimeout(700);
+        await page.screenshot({ path: ${JSON.stringify(join(out, frame))} });
+        return { url: page.url() };
+      `;
       const code = `async page => {
         await page.setViewportSize({ width: ${viewport.width}, height: ${viewport.height} });
         await page.goto(${JSON.stringify(url)});
         ${waitFor(view.ready)}
         ${verifyDocument}
+        ${read && page === 'reader' ? `await page.getByTestId('reader-opening').waitFor({ state: 'detached', timeout: 30000 });` : ''}
         await page.locator('[data-testid="vela-launch"]').waitFor({ state: 'detached', timeout: 45000 }).catch(() => {});
         await page.evaluate(() => document.fonts.ready);
-        await page.waitForTimeout(2500);
+        await page.waitForTimeout(${read ? 250 : 2500});
+        ${showReaderChrome}
         ${(view.steps ?? []).map(stepCode).join('\n        ')}
         ${view.settled ? waitFor(view.settled) : ''}
         ${scroll && 'selector' in scroll ? `await page.locator(${JSON.stringify(scroll.selector)}).first().evaluate(${SCROLL});` : ''}
         await page.mouse.move(0, ${viewport.height - 1});
-        await page.waitForTimeout(1800);
-        await page.screenshot({ path: ${JSON.stringify(join(out, file))} });
-        await page.waitForTimeout(700);
-        await page.screenshot({ path: ${JSON.stringify(join(out, frame))} });
-        return { url: page.url() };
+        await page.waitForTimeout(${read ? 250 : 1800});
+        ${shoot}
       }`;
       const capture: Capture = { viewport: viewport.name, view: view.name, file, frame, url, description: view.description, review: (read ? readReviewed : listenReviewed)(view, viewport.name), ok: false };
       try {

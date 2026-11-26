@@ -19,6 +19,7 @@ import { parseArgs } from 'node:util';
 import { captureName } from './views';
 import { LISTEN_NOW, LISTEN_VIEWS, listenPath, type ListenView } from './listen-views';
 import { READ_NOW, READ_VIEWS, readReviewed } from './read-views';
+import { settledFrames } from './settle';
 
 const { values } = parseArgs({ options: {
   udid: { type: 'string' }, platform: { type: 'string', default: 'tvos' }, out: { type: 'string' },
@@ -42,13 +43,14 @@ if (values.variant !== 'legacy' && values.variant !== 'document') throw new Erro
 const read = experience === 'read';
 const phone = platform === 'ios' || platform === 'ios-fold';
 if (read && phone && !values.embedded) throw new Error('Duo Read captures need --embedded and the app with its embedded reader assets');
-if (values.embedded && (!read || !phone || !values.app)) throw new Error('--embedded requires Read on iOS and --app');
+if (values.embedded && (!read || platform === 'androidtv' || !values.app)) throw new Error('--embedded requires Read on an Apple simulator and --app');
 const display = values.display ?? (read && platform === 'ios-fold' ? '3' : undefined);
 
 /** Metro for one start route and listening state; returns a stop function (only its own PID). */
 async function metroFor(route: string, audio: string): Promise<() => void> {
   const log: string[] = [];
-  const child = Bun.spawn(['bun', 'x', 'expo', 'start', '--port', port, '--clear', '--no-dev'], {
+  const expo = read ? [process.execPath, join(root, 'node_modules/.bin/expo')] : ['bun', 'x', 'expo'];
+  const child = Bun.spawn([...expo, 'start', '--port', port, '--clear', '--no-dev'], {
     cwd: join(root, 'apps/vela'), stdout: 'pipe', stderr: 'pipe',
     env: { ...process.env, EXPO_PUBLIC_VELA_SERVER: values.mock!, EXPO_PUBLIC_VELA_MOCK: '1', EXPO_PUBLIC_VELA_START_ROUTES: route,
       EXPO_PUBLIC_VELA_PARITY_AUDIO: audio, CI: '1' },
@@ -198,14 +200,25 @@ async function captureRead(): Promise<void> {
         const media = view.name === 'series' ? '&media=series' : view.name === 'book' || view.name === 'standalone' ? '&media=book' : '';
         go(view.path + (phone ? media : ''));
         await Bun.sleep(settle);
-        if (phone && (view.name === 'reader-contents' || view.name === 'reader-appearance')) {
-          axe('tap', '-x', viewport === 'ios-fold' ? '470' : '200', '-y', '310');
-          axe('tap', '--id', view.name === 'reader-contents' ? 'reader-contents' : 'reader-type');
-          await Bun.sleep(2000);
+        const reader = view.path.startsWith('/read/');
+        const probe = join(out, '.settle.png');
+        const take = () => {
+          device.shoot(probe);
+          return readFileSync(probe);
+        };
+        try {
+          if (phone && (view.name === 'reader-contents' || view.name === 'reader-appearance')) {
+            await settledFrames(take, () => Bun.sleep(700), { reader });
+            axe('tap', '-x', viewport === 'ios-fold' ? '470' : '200', '-y', '310');
+            axe('tap', '--id', view.name === 'reader-contents' ? 'reader-contents' : 'reader-type');
+            await Bun.sleep(2000);
+          }
+          const stable = await settledFrames(take, () => Bun.sleep(reader ? 1700 : 700), { reader });
+          writeFileSync(join(out, file), stable.primary);
+          writeFileSync(join(out, frame), stable.confirmed);
+        } finally {
+          rmSync(probe, { force: true });
         }
-        device.shoot(join(out, file));
-        await Bun.sleep(700);
-        device.shoot(join(out, frame));
         capture.ok = true;
         console.log(`ok   ${viewport} ${view.name}`);
       } catch (error) {

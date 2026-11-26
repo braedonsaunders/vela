@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { decodePng, encodePng } from './png';
-import { diffImages, movingMask, RULE, verdict, type Rect } from './diff';
+import { diffImages, maskCoverage, MAX_MASK_PERCENT, movingMask, needsMaskReview, RULE, verdict, type Rect } from './diff';
 import { CAPTURE_SCALE, DEVICE_MASKS, reviewed as sportsReviewed } from './views';
 import { listenReviewed } from './listen-views';
 import { readReviewed } from './read-views';
@@ -31,7 +31,7 @@ const reviewed = experience === 'read' ? readReviewed : experience === 'listen' 
 const label = experience === 'read' ? 'Read' : experience === 'listen' ? 'Listen' : 'Sports';
 const png = (dir: string, file: string) => decodePng(new Uint8Array(readFileSync(join(dir, file))));
 
-interface Row { viewport: string; view: string; description: string; status: 'pass' | 'fail' | 'review' | 'missing'; percent?: number; maxDisplacement?: number; changed?: number; masked?: number; reasons: string[]; reviewedNotes?: string[]; moved?: { x: number; y: number; width: number; height: number; shift: { dx: number; dy: number } | null }[]; legacy?: string; document?: string; diff?: string; review?: string }
+interface Row { viewport: string; view: string; description: string; status: 'pass' | 'fail' | 'review' | 'missing'; percent?: number; maxDisplacement?: number; changed?: number; masked?: number; maskedPercent?: number; maskReview?: boolean; reasons: string[]; reviewedNotes?: string[]; moved?: { x: number; y: number; width: number; height: number; shift: { dx: number; dy: number } | null }[]; legacy?: string; document?: string; diff?: string; review?: string }
 const rows: Row[] = [];
 for (const before of legacy.captures) {
   const after = document.captures.find(c => c.viewport === before.viewport && c.view === before.view);
@@ -54,9 +54,13 @@ for (const before of legacy.captures) {
   const counted = result.regions.filter(r => r.displacement !== null && r.pixels >= 10 * scale * scale);
   result.maxDisplacement = counted.length ? Math.round((Math.max(...counted.map(r => r.displacement!)) / scale) * 100) / 100 : 0;
   const judged = verdict(result);
+  const maskedPercent = Number(maskCoverage(result).toFixed(3));
+  const maskReview = needsMaskReview(result);
+  if (maskReview) judged.reasons.push(`${maskedPercent}% of the frame is masked (review above ${MAX_MASK_PERCENT}%)`);
   Object.assign(row, {
-    status: row.review ? 'review' : judged.pass ? 'pass' : 'fail', percent: result.percent, maxDisplacement: result.maxDisplacement, changed: result.changed,
-    masked: mask.length, reasons: judged.reasons, ...(reviewedNotes.length ? { reviewedNotes } : {}),
+    status: maskReview || (row.review && (experience !== 'read' || judged.pass)) ? 'review' : judged.pass ? 'pass' : 'fail',
+    percent: result.percent, maxDisplacement: result.maxDisplacement, changed: result.changed,
+    masked: mask.length, maskedPercent, maskReview, reasons: judged.reasons, ...(reviewedNotes.length ? { reviewedNotes } : {}),
     // The regions that moved too far, for finding them on the diff picture.
     moved: counted.filter(r => r.displacement! / scale > RULE.maxDisplacement).slice(0, 12).map(({ x, y, width, height, shift }) => ({ x, y, width, height, shift })),
     legacy: relative(out, join(legacyDir, before.file)), document: relative(out, join(documentDir, after.file)), diff: diffFile,
@@ -69,11 +73,11 @@ const lines = [
   `# ${label} parity: ${legacy.platform}`, '',
   `Rule: at most ${RULE.maxPercent}% of pixels differ outside the moving regions, nothing moves more than ${RULE.maxDisplacement} px. Channel threshold ${threshold}/255. Frozen at ${legacy.now}.`, '',
   `Pass ${count('pass')} · fail ${count('fail')} · review ${count('review')} · missing ${count('missing')}`, '',
-  '| Viewport | View | Result | % differing | Max move (px) | Content changes | Masked regions | Notes | Images |',
-  '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-  ...rows.map(r => `| ${r.viewport} | ${r.view} | ${r.status} | ${r.percent ?? ''} | ${r.maxDisplacement ?? ''} | ${r.changed ?? ''} | ${r.masked ?? ''} | ${[...r.reasons, r.review ?? '', ...(r.reviewedNotes ?? []).map(n => `reviewed, left out: ${n}`)].filter(Boolean).join('; ')} | ${r.diff ? `[legacy](${r.legacy}) · [document](${r.document}) · [diff](${r.diff})` : ''} |`),
+  '| Viewport | View | Result | % differing | Max move (px) | Content changes | Masked regions | % masked | Notes | Images |',
+  '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+  ...rows.map(r => `| ${r.viewport} | ${r.view} | ${r.status} | ${r.percent ?? ''} | ${r.maxDisplacement ?? ''} | ${r.changed ?? ''} | ${r.masked ?? ''} | ${r.maskedPercent ?? ''} | ${[...r.reasons, r.review ?? '', ...(r.reviewedNotes ?? []).map(n => `reviewed, left out: ${n}`)].filter(Boolean).join('; ')} | ${r.diff ? `[legacy](${r.legacy}) · [document](${r.document}) · [diff](${r.diff})` : ''} |`),
   '',
 ];
 writeFileSync(join(out, 'report.md'), lines.join('\n'));
 console.log(lines.slice(0, 5).join('\n'));
-if (count('fail') || count('missing')) process.exitCode = 1;
+if (count('fail') || count('missing') || rows.some(row => row.maskReview && !row.review)) process.exitCode = 1;
