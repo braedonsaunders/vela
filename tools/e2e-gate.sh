@@ -12,7 +12,7 @@ if [ ! -f "$env_file" ]; then
   exit 2
 fi
 
-permissions=$(stat -f '%Lp' "$env_file" 2>/dev/null || stat -c '%a' "$env_file")
+permissions=$(stat -c '%a' "$env_file" 2>/dev/null || stat -f '%Lp' "$env_file")
 if [ "$permissions" != 600 ]; then
   echo "Vela e2e environment file must be mode 600 (found $permissions)" >&2
   exit 2

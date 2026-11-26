@@ -130,6 +130,9 @@ advertises them (in parentheses). The Jellyfin and Plex columns are proven by ro
 | `vela.children` (`id`, `role`) | Children, paged | yes | yes | yes |
 | `vela.rows` (`placement`, `titleId`, `libraryId`, `tab`) | Rows: Home's, a title's related ones, a library's (its home tab by default) | yes | yes | yes |
 | `vela.library` (`id`, sort, filters, `tab`, `limit`) | The library listing, paged | yes | yes | yes |
+| `vela.photoTimeline` (`library`) | Photos by taken date, newest first, paged | yes (released sort) | yes | yes |
+| `vela.photoAlbums` (`library`) | The library's photo album level, paged | yes (album level) | yes (PhotoAlbum folders) | yes (photo albums) |
+| `vela.photoPeople` (`library`, optional `id`) | The subject facet, or one subject's photos, paged | yes (subject people tab) | no | no |
 | `vela.favorites` (`role`, `class`, `library`) | Liked items | yes (role lists, else the Favorites playlist) | yes, with `library`: the library's favourite filter on the role's tab | no (Plex keeps no favourites) |
 | `vela.playlists`, `vela.playlist` (`id`) | The viewer's playlists; one playlist and its entries | yes (playlists) | no | no |
 | `vela.recent` | Recent play contexts | yes (play contexts) | no | no |

@@ -4,6 +4,7 @@
 // discography, and (whole, for now) search, spoken word's Home and title pages and the albums grid.
 // Each draws today's engine (pages.tsx, parts.tsx, spoken.tsx, search.tsx, albums.tsx) from its
 // props; with the same data it draws the same pixels.
+import { joinMeta } from '../../meta-line';
 import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
 import { isUnreleased, msg, releaseLabel, type Card } from '@vela/core';
@@ -181,7 +182,7 @@ function TileGridBlock({ props, read, press }: { props: Props; read: RecordReade
         <FocusGroup style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: m.small ? -8 : -12 }}>
           {items.map((card, index) => (
             <MusicTile key={card.id} card={card} size={size} preferred={index === 0} testID={`music-albums-${card.id}`}
-              subtitle={subtitle === 'yearByline' ? [card.yearLabel, card.media?.byline].filter(Boolean).join(' · ') || undefined : shelfSubtitle(card, subtitle)} />
+              subtitle={subtitle === 'yearByline' ? joinMeta([card.yearLabel, card.media?.byline]) || undefined : shelfSubtitle(card, subtitle)} />
           ))}
         </FocusGroup>
       </FocusScope.Provider>

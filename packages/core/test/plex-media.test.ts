@@ -55,7 +55,7 @@ describe('Plex media sections', () => {
       ['Movies', undefined, undefined, undefined],
       ['Music', 'music', 'square', ['recommended', 'albums', 'artist', 'track']],
       ['Audiobooks', 'audiobook', 'square', ['recommended', 'library', 'artist']],
-      ['Photos', 'photo', 'square', ['recommended', 'library']],
+      ['Photos', 'photo', 'square', ['recommended', 'library', 'item', 'album']],
     ]);
     // Plex has no features.libraryExperiences: each library opens in its experience by class.
     expect(libraries.map(l => libraryExperience(l, undefined))).toEqual(['watch', 'listen', 'listen', 'gallery']);
@@ -202,6 +202,38 @@ describe('Plex transcode decisions', () => {
     const decision = seen.find(r => r.url.pathname === '/video/:/transcode/universal/decision')!;
     expect(Object.fromEntries(decision.url.searchParams)).toEqual(Object.fromEntries(stream.searchParams));
     expect(decision.headers.get('X-Plex-Token')).toBe('token-1');
+  });
+
+  test('the accepted decision fills sparse track menus and the new ASS track can be burned in', async () => {
+    const media = single.Media[0]!;
+    const part = media.Part[0]!;
+    const metadataAudio = { id: 31, index: 1, streamType: 2, codec: 'ac3', displayTitle: 'Japanese (metadata)' };
+    const ass = { id: 33, index: 3, streamType: '3', codec: 'ass', displayTitle: 'English (ASS)' };
+    const decisionPath = '/video/:/transcode/universal/decision';
+    const seen = routeFetch({
+      'GET /library/metadata/3': { MediaContainer: { Metadata: [{ ...single, Media: [{ ...media, Part: [{ ...part, Stream: [metadataAudio, { ...metadataAudio, id: '31' }] }] }] }] } },
+      [`GET ${decisionPath}`]: { MediaContainer: { Metadata: [{ Media: [{ Part: [{ Stream: [
+        { ...metadataAudio, codec: 'aac', displayTitle: 'Japanese (decision)' },
+        { id: '32', index: 2, streamType: '2', codec: 'aac', displayTitle: 'English audio' },
+        ass, { ...ass, id: '33', displayTitle: 'Duplicate' },
+        { streamType: 3, codec: 'ass' },
+      ] }] }] }] } },
+      'PUT /library/parts/3': {}, 'GET /video/:/transcode/universal/stop': {},
+    });
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'tracks' } as never);
+    expect(plan.audioTracks.map(t => [t.id, t.name, t.codec])).toEqual([
+      ['31', 'Japanese (metadata)', 'ac3'], ['32', 'English audio', 'aac'],
+    ]);
+    expect(plan.subtitleTracks).toMatchObject([{ id: '33', name: 'English (ASS)', codec: 'ass', delivery: { kind: 'burn-in' } }]);
+    expect(plan.subtitleTracks).toHaveLength(1);
+    expect(plan.selectedSubtitleTrackId).toBeNull();
+
+    const updated = await adapter.changeTracks(plan.sessionId, { kind: 'tracks', subtitleTrackId: '33', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'burn' });
+    expect(updated.selectedSubtitleTrackId).toBe('33');
+    expect(updated.subtitleTracks).toEqual(plan.subtitleTracks);
+    const requests = seen.filter(r => r.url.pathname === decisionPath);
+    expect(requests.map(r => [r.url.searchParams.get('subtitleStreamID'), r.url.searchParams.get('subtitles')])).toEqual([['0', 'auto'], ['33', 'burn']]);
   });
 
   test('a refused decision fails the start, unless the original file can play instead', async () => {
@@ -1417,4 +1449,36 @@ test.each(['pagehide before response', 'pagehide during cleanup', 'queued progre
   }
   expect(cleanupAttempts).toBe(race === 'pagehide before response' ? 1 : 2);
   expect(seen.filter(({ url }) => url.pathname === '/:/timeline').map(({ url }) => url.searchParams.get('state'))).toEqual(['stopped']);
+});
+
+test('Gallery pages Plex photos and albums and resolves an album without losing its photo tags', async () => {
+  const galleryAlbum = { ratingKey: '26', type: 'photoalbum', title: 'Lake', childCount: 1, thumb: '/library/metadata/26/thumb/1' };
+  const galleryPhoto = { ratingKey: '27', type: 'photo', title: 'Lake at sunset', originallyAvailableAt: '2026-01-03',
+    parentRatingKey: '26', parentTitle: 'Lake', Tag: [{ tag: 'Travel' }], Media: [{ width: 1600, height: 1066 }] };
+  const seen = routeFetch({
+    'GET /library/sections': sections,
+    'GET /library/sections/4/all': (r: Seen) => {
+      const albums = r.url.searchParams.get('type') === '14';
+      return { MediaContainer: { Metadata: albums ? [galleryAlbum] : [galleryPhoto], totalSize: 1, librarySectionID: 4 } };
+    },
+    'GET /library/metadata/26': { MediaContainer: { Metadata: [galleryAlbum], librarySectionID: 4 } },
+    'GET /library/metadata/26/children': { MediaContainer: { Metadata: [{ ratingKey: '25', type: 'clip', title: 'Clip' }, galleryPhoto], totalSize: 3 } },
+  });
+  const adapter = plex();
+  expect((await adapter.library('4', { tab: 'photo-timeline', sort: 'released', direction: 'desc' })).items).toMatchObject([
+    { kind: 'title', title: { id: '27', airDate: '2026-01-03', media: { class: 'photo', role: 'item' } } },
+  ]);
+  expect(seen.at(-1)!.url.searchParams.get('type')).toBe('13');
+  expect(seen.at(-1)!.url.searchParams.get('sort')).toBe('originallyAvailableAt:desc');
+  expect((await adapter.library('4', { tab: 'photo-albums' })).items).toMatchObject([
+    { kind: 'title', title: { id: 'album:26', media: { class: 'photo', role: 'album', childCount: 1 } } },
+  ]);
+  expect((await adapter.detail('album:26')).title.id).toBe('album:26');
+  const children = await adapter.children('album:26', undefined, 2);
+  expect(children.nextCursor).toBe('2');
+  expect(children.items).toMatchObject([{ id: '27', media: {
+    parents: [{ id: 'album:26', name: 'Lake', role: 'album' }],
+    facts: [{ label: 'Size', value: '1600 × 1066' }, { label: 'Tags', value: 'Travel' }],
+  } }]);
+  expect(seen.at(-1)!.url.searchParams.has('excludeAllLeaves')).toBe(false);
 });

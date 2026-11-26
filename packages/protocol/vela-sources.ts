@@ -76,6 +76,18 @@ export const VELA_SOURCES = {
     },
     doc: 'A library listing, paged: ListValue.',
   },
+  'vela.photoTimeline': {
+    args: { library: id('The photo library.') },
+    doc: 'Photos by taken date, newest first, paged: ListValue.',
+  },
+  'vela.photoAlbums': {
+    args: { library: id('The photo library.') },
+    doc: 'Photo albums from the library’s album level, paged: ListValue.',
+  },
+  'vela.photoPeople': {
+    args: { library: id('The photo library.'), id: id('With a person id, list their photos instead of the subject facet.', false) },
+    doc: 'The library’s subjects or one subject’s photos, paged: ListValue.',
+  },
   'vela.favorites': {
     args: { role: id('track, album, artist, …'), class: id('A media class (music, audiobook, podcast).', false), library: id("Where the server keeps no liked lists or Favorites playlist (Jellyfin, Plex): the library whose favourite filter lists them.", false) },
     doc: "The viewer's likes of one role, newest first, paged: ListValue.",

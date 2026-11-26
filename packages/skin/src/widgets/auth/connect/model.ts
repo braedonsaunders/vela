@@ -29,6 +29,7 @@ export interface ServerProbe {
   name: string;
   version: string;
   normalizedUrl: string;
+  machineIdentifier?: string;
   /** Why it cannot be added (invalid, unreachable, unsupported, insecure HTTP), or empty. */
   message: string;
 }
@@ -74,7 +75,7 @@ export interface Outcome {
 
 export interface ServerActions {
   probe(url: string): Promise<ServerProbe>;
-  add(kind: string, name: string, url: string): Promise<Outcome>;
+  add(kind: string, name: string, url: string, machineIdentifier?: string): Promise<Outcome>;
   select(id: string): Promise<Outcome>;
   remove(id: string): Promise<Outcome>;
   plexStart(): Promise<unknown>;

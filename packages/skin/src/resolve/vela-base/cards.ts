@@ -2,9 +2,9 @@ import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin'
 import { cardRadius, display, focusRing, gutter, gutterSmall, is, placeholder, pulse, small, veil } from './look';
 
 // A muted trailer preview: a landscape card that opens over the poster while the card's preview
-// plays (home rows that preview on focus). It stays mounted while idle, since the widget inside
-// reports the card's hover and focus as the intent to preview; only its state shows it. A press
-// lands on the card underneath.
+// plays (home rows that preview on focus). In such a row it stays mounted while idle, since the
+// widget inside reports the card's hover and focus as the intent to preview; only its state shows
+// it. A press lands on the card underneath.
 const previewOverlay = (shown: boolean): Style => ({
   position: 'absolute',
   left: '0px',
@@ -29,6 +29,9 @@ const previewing: Condition = { test: 'card.previewing' };
 const fill: Style = { position: 'absolute', inset: '0px', width: '100%', height: '100%', 'object-fit': 'cover' };
 export const cardPreview: Node = {
   type: 'box',
+  // Only a row that previews draws the overlay: a grid's or another row's cards never play one, and
+  // the overlay with its widget was two views and some two dozen components on every card.
+  when: [{ test: 'row.previewOnFocus' }],
   a11y: { hidden: true },
   style: previewOverlay(false),
   states: [

@@ -474,7 +474,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   // Android's content navigator already consumes the system bars. Only watch is
   // full-display; passing the bars to other documents reserves that space twice.
   const contentViewport: Viewport = useMemo(() => Platform.OS === 'android' && !Platform.isTV
-    ? { ...viewport, height: height - insets.top - insets.bottom, insets: NO_INSETS }
+    ? { ...viewport, height: height - insets.top - insets.bottom, insets: NO_INSETS, windowInsets: insets }
     : viewport, [viewport, height, insets]);
   const image = useCallback<SkinHost['image']>(path => {
     const source = assetData[path] ?? assetSource(path, origin);

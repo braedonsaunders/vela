@@ -13,7 +13,7 @@ import { markPlexUnreachable, PLEX_VALIDATE_TIMEOUT_MS } from './relocate';
 import { seriesOrder } from '../series';
 import { randomId } from '../../protocol/id';
 import { withinStreamingCap } from '../../streaming';
-import { copiesVideo, decidedMedia, decidedQuality, deliversProfile, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, isTextSidecar, mediaId, partAt, partOffsets, playingAudio, plexAudioMime, plexMarkers, plexProjection, plexSidecar, plexStreamProfiles, plexVersion, refusesStream } from './media';
+import { copiesVideo, decidedMedia, decidedQuality, decidedStreams, deliversProfile, directAudio, isAudiobookSection, isPhotoAlbum, isPhotoAlbumKey, isTextSidecar, mediaId, partAt, partOffsets, playingAudio, plexAudioMime, plexMarkers, plexProjection, plexSidecar, plexStreamProfiles, plexVersion, refusesStream } from './media';
 import { bifFrameAt, bifFrames, bifHeader, bifInterval, bifOffer, bifTableRange, BIF_HEADER_BYTES, jpegSize, type BifFrame } from './bif';
 export * from './auth';
 
@@ -104,7 +104,7 @@ export function discoverKey(n: Node): string | undefined {
   return typeof n.guid === 'string' ? /^plex:\/\/(movie|show)\/([A-Za-z0-9]+)$/.exec(n.guid)?.[2] : undefined;
 }
 /** Node types rows show: titles, and directories (collections, playlists, albums of photos). */
-const SHOWN = ['movie', 'show', 'season', 'episode', 'collection', 'playlist', 'artist', 'album', 'track', 'photo', 'clip'];
+const SHOWN = ['movie', 'show', 'season', 'episode', 'collection', 'playlist', 'artist', 'album', 'track', 'photo', 'photoalbum', 'clip'];
 const SEARCHED = ['movie', 'show', 'season', 'episode', 'artist', 'album', 'track'];
 /** A series or season is played once every episode is (viewCount there counts episode plays). */
 function plexPlayed(n: Node): boolean {
@@ -320,15 +320,15 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const section = this.sections.get(String(n.librarySectionID ?? ''));
     return !!section && isAudiobookSection(section);
   }
-  private title(n: Node): V.Title {
-    const projection = plexProjection(n, this.audiobooks(n));
+  private title(n: Node, photoAlbumTitle = false): V.Title {
+    const projection = plexProjection(n, this.audiobooks(n), photoAlbumTitle);
     const ratings: V.TitleRating[] = [];
     for (const [field, image, kind] of [['rating', 'ratingImage', 'critic'], ['audienceRating', 'audienceRatingImage', 'audience']] as const)
       if (n[field] !== undefined) ratings.push({ source: n[image] || 'Plex', kind, value: Number(n[field]), scale: 10 });
     let themeMusic: V.ThemeMusic | undefined;
     if (n.theme) { try { themeMusic = { url: this.mediaURL(n.theme), expiresAt: '9999-12-31T23:59:59Z' }; } catch {} }
     const lastViewedAt = Number(n.lastViewedAt) > 0 ? new Date(Number(n.lastViewedAt) * 1000).toISOString() : undefined;
-    return { ...(projection?.media ? { media: projection.media } : {}), id: String(n.ratingKey), kind: projection?.kind ?? n.type, name: n.title || '', summary: n.summary || '', year: n.year, airDate: n.originallyAvailableAt,
+    return { ...(projection?.media ? { media: projection.media } : {}), id: photoAlbumTitle ? `album:${n.ratingKey}` : String(n.ratingKey), kind: projection?.kind ?? n.type, name: n.title || '', summary: n.summary || '', year: n.year, airDate: n.originallyAvailableAt,
       genres: (n.Genre || []).map((g: Node) => g.tag), durationSeconds: seconds(n.duration), rating: n.contentRating, ratings,
       artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: plexPlayed(n), favorite: false, watchlisted: false, ...(lastViewedAt ? { lastViewedAt } : {}) },
       ...(themeMusic ? { themeMusic } : {}), showId: n.grandparentRatingKey ? String(n.grandparentRatingKey) : n.type === 'season' && n.parentRatingKey != null ? String(n.parentRatingKey) : undefined,
@@ -462,7 +462,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       : { ...base, kind: 'mixed', media: 'music', presentation: { card: 'square' }, browse: browse({ genre: true, year: true, played: true }),
           tabs: [tab('recommended', 'Recommended', 'recommended'), tab('albums', 'Albums', 'library'), tab('artists', 'Artists', 'library', { level: 'artist' }), tab('tracks', 'Songs', 'library', { level: 'track', layout: 'list' })] };
     if (n.type === 'photo') return { ...base, kind: 'mixed', media: 'photo', presentation: { card: 'square' }, dateDisplay: 'date', browse: browse({ year: true }),
-      tabs: [tab('recommended', 'Recommended', 'recommended'), tab('library', 'Library', 'library')] };
+      tabs: [tab('recommended', 'Recommended', 'recommended'), tab('library', 'Library', 'library'),
+        tab('photo-timeline', 'Timeline', 'library', { level: 'item', layout: 'timeline' }), tab('photo-albums', 'Albums', 'library', { level: 'album' })] };
     return { ...base, kind: n.type === 'movie' ? 'movies' : n.type === 'show' ? 'shows' : 'mixed', browse: browse({ genre: true, year: true, played: true }) };
   }
   async libraries(q: V.LibrariesQuery): Promise<V.Page<V.Library>> {
@@ -477,10 +478,18 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const direction = q.direction || 'asc';
     // A music section lists albums first; its tabs list artists (or a book section's authors) and songs.
     const section = this.sections.get(id);
-    const type = section?.type === 'artist' ? (q.tab === 'artists' || q.tab === 'authors' ? 8 : q.tab === 'tracks' ? 10 : 9) : undefined;
+    const photoAlbums = section?.type === 'photo' && q.tab === 'photo-albums';
+    const photoTimeline = section?.type === 'photo' && q.tab === 'photo-timeline';
+    const type = section?.type === 'artist' ? (q.tab === 'artists' || q.tab === 'authors' ? 8 : q.tab === 'tracks' ? 10 : 9)
+      : photoAlbums ? 14 : photoTimeline ? 13 : undefined;
     const c = await this.request(`/library/sections/${enc(id)}/all`, { type, sort: `${sorts[sort]}:${direction}`, genre: q.genre, year: q.year, unwatched: q.played === undefined ? undefined : q.played ? 0 : 1,
       'X-Plex-Container-Start': offset(q.cursor), 'X-Plex-Container-Size': q.limit || 100 });
-    return { library, sort, direction, ...page(this.nodes(c).map(n => this.entry(n)), offset(q.cursor), c.totalSize ?? c.size), ...(c.totalSize !== undefined ? { total: Number(c.totalSize) } : {}) };
+    const nodes = this.nodes(c);
+    const entries = nodes.flatMap(n => photoAlbums
+      ? isPhotoAlbum(n) ? [{ id: String(n.ratingKey), kind: 'title' as const, title: this.title(n, true), receiptToken: '' }] : []
+      : photoTimeline && (n.type !== 'photo' || isPhotoAlbum(n)) ? [] : [this.entry(n)]);
+    const paging = page(nodes, offset(q.cursor), c.totalSize ?? c.size);
+    return { library, sort, direction, ...paging, items: entries, ...(c.totalSize !== undefined ? { total: Number(c.totalSize) } : {}) };
   }
   async personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
     const libraries = libraryId ? [libraryId] : (await this.libraries({})).items.map(l => l.id);
@@ -529,13 +538,19 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   async children(id: string, cursor?: string, limit = 100): Promise<V.ChildrenPage> {
     const start = offset(cursor);
     if (!this.sections.size) await this.libraries({}).catch(() => undefined);
-    const c = await this.request(`/library/metadata/${enc(id)}/children`, { 'X-Plex-Container-Start': start, 'X-Plex-Container-Size': limit, excludeAllLeaves: 1 });
-    const nodes = this.nodes(c).filter(n => plexProjection(n) !== undefined);
-    if (nodes[0]?.type === 'album') nodes.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
-    return page(nodes.map(n => this.title(n)), start, c.totalSize ?? (nodes.length < limit ? start + nodes.length : undefined));
+    const photoAlbum = isPhotoAlbumKey(id);
+    const key = photoAlbum ? id.slice(6) : id;
+    const c = await this.request(`/library/metadata/${enc(key)}/children`, {
+      'X-Plex-Container-Start': start, 'X-Plex-Container-Size': limit, excludeAllLeaves: photoAlbum ? undefined : 1,
+    });
+    const nodes = this.nodes(c);
+    const matches = nodes.filter(n => plexProjection(n) !== undefined && (!photoAlbum || n.type === 'photo'));
+    if (matches[0]?.type === 'album') matches.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
+    return { ...page(nodes, start, c.totalSize ?? (nodes.length < limit ? start + nodes.length : undefined)), items: matches.map(n => this.title(n)) };
   }
   async detail(id: string): Promise<V.TitleDetail> {
-    const n = await this.metadata(id);
+    const photoAlbum = isPhotoAlbumKey(id);
+    const n = await this.metadata(photoAlbum ? id.slice(6) : id);
     const series = n.type === 'show' || n.type === 'season';
     const children = series ? await this.every(id, 'children') : [];
     const episodes = n.type === 'show' ? await this.every(id, 'allLeaves') : n.type === 'season' ? children : undefined;
@@ -551,7 +566,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const audio = streams.filter(s => Number(s.streamType) === 2);
     const mainAudio = audio.find(s => Number(s.selected) === 1) ?? audio.find(s => Number(s.default) === 1);
     const person = (p: Node, role?: string) => ({ ...(p.id != null ? { id: String(p.id) } : {}), name: p.tag, role: role || p.role, artwork: p.thumb ? { ...this.artwork({ thumb: p.thumb })[0], kind: 'person' as const } : undefined });
-    return { title: this.title(n), canPlay: ['movie', 'episode', 'track', 'clip'].includes(n.type) && !!n.Media?.length, seasons: n.type === 'show' ? seriesOrder(children) : undefined, episodes: episodes ? seriesOrder(episodes) : undefined, nextUp,
+    return { title: this.title(n, photoAlbum && isPhotoAlbum(n)), canPlay: ['movie', 'episode', 'track', 'clip'].includes(n.type) && !!n.Media?.length, seasons: n.type === 'show' ? seriesOrder(children) : undefined, episodes: episodes ? seriesOrder(episodes) : undefined, nextUp,
       cast: (n.Role || []).map((p: Node) => person(p)), crew: [...(n.Director || []).map((p: Node) => person(p, 'Director')), ...(n.Writer || []).map((p: Node) => person(p, 'Writer'))],
       chapters: this.chapters(n), extras: (n.Extras?.Metadata || []).map((e: Node) => ({ id: String(e.ratingKey), parentId: id, kind: Number(e.extraType) === 1 ? 'trailer' : 'other', name: e.title, durationSeconds: seconds(e.duration), artwork: this.artwork(e)[0], availability: e.Media?.length ? 'ready' : 'unresolved' })),
       mediaSummary: {
@@ -797,19 +812,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const part = stacked ? parts[at.index]! : parts[0]!;
     if (stacked && (r.allowTranscode === false || !(r.client.hls || r.client.mse))) fail('This title is in several parts, which play through the server\'s stream', 'playback');
     const streams: Node[] = part.Stream || [];
-    const tracks = (type: number): V.Track[] => streams.filter(s => Number(s.streamType) === type).map(s => {
-      const external = !!s.key && isTextSidecar(s.codec) ? plexSidecar(new URL(this.mediaURL(s.key)), s.codec, r.client.subtitleFormats ?? []) : undefined;
-      return { id: String(s.id), streamIndex: s.index,
-        kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
-        default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
-        ...(type === 3 ? external
-          ? { ...(external.format === 'webvtt' ? { url: external.url } : {}), delivery: { kind: 'external' as const, format: external.format, url: external.url } }
-          // A native-HLS-only web page cannot read subtitle packets from the original file. Mark
-          // its embedded tracks server-rendered so a later selection switches to Plex HLS and
-          // requests a burn instead of presenting an unusable local track.
-          : { delivery: s.key || !r.client.originalPlayback ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) };
-    });
-    const audioTracks = tracks(2), subtitleTracks = tracks(3);
+    const { audioTracks, subtitleTracks } = this.videoTracks(streams, r.client);
     const audio = r.audioTrackId || audioTracks.find(t => t.default)?.id;
     const subtitle = r.subtitleTrackId === undefined ? subtitleTracks.find(t => t.default)?.id || null : r.subtitleTrackId;
     if (audio && !audioTracks.some(t => t.id === audio) || subtitle && !subtitleTracks.some(t => t.id === subtitle)) fail('Unknown Plex track');
@@ -841,6 +844,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
         const stream = await this.serverStream(query, r.client, !!direct, signal);
         if (stream && direct) paths.unshift({ ...hls, readiness: 'ready', ...stream.path });
         else if (stream) paths.push({ ...hls, readiness: 'ready', ...stream.path });
+        if (stream) this.videoTracks(stream.streams, r.client, { audioTracks, subtitleTracks });
         streamed = stream?.session;
       }
     }
@@ -853,9 +857,32 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const hls = paths.find(p => p.id === 'plex-hls');
     // The track admission judged (an inferred default or first one too) is the one the player opens. A stacked
     // title's parts have their own stream ids, so an inferred one stays out of its plan and its part restarts.
-    return { part, partAudio: audio, plan: { paths, selectedPathId: paths[0]!.id, audioTracks, subtitleTracks, selectedAudioTrackId: stacked ? audio : audio ?? playing.id, selectedSubtitleTrackId: subtitle },
+    const selectedAudioTrackId = stacked ? audio : audio ?? playing.id ?? audioTracks.find(t => t.default)?.id ?? audioTracks[0]?.id;
+    return { part, partAudio: audio, plan: { paths, selectedPathId: paths[0]!.id, audioTracks, subtitleTracks, selectedAudioTrackId, selectedSubtitleTrackId: subtitle },
       ...(stacked && hls?.url ? { stack: { parts, index: at.index, query: Object.fromEntries(new URL(hls.url).searchParams) } } : {}), ...(deferred ? { deferred } : {}),
       ...(streamed ? { transcodeId: streamed } : {}) };
+  }
+  /** Metadata tracks are added first so their labels and source codecs survive the decision. */
+  private videoTracks(streams: Node[], client: V.ClientCapabilities,
+    plan: Pick<V.PlaybackPlan, 'audioTracks' | 'subtitleTracks'> = { audioTracks: [], subtitleTracks: [] }) {
+    for (const s of streams) {
+      const type = Number(s.streamType);
+      if ((type !== 2 && type !== 3) || s.id == null || s.id === '') continue;
+      const tracks = type === 2 ? plan.audioTracks : plan.subtitleTracks;
+      const id = String(s.id);
+      if (tracks.some(track => track.id === id)) continue;
+      const external = !!s.key && isTextSidecar(s.codec) ? plexSidecar(new URL(this.mediaURL(s.key)), s.codec, client.subtitleFormats ?? []) : undefined;
+      tracks.push({ id, streamIndex: s.index,
+        kind: type === 2 ? 'audio' : 'subtitle', language: s.languageCode || 'und', name: s.displayTitle || s.title || s.language || s.codec || '', codec: s.codec || '', channels: s.channels,
+        default: !!s.selected, forced: !!s.forced, hearingImpaired: !!s.hearingImpaired,
+        ...(type === 3 ? external
+          ? { ...(external.format === 'webvtt' ? { url: external.url } : {}), delivery: { kind: 'external' as const, format: external.format, url: external.url } }
+          // A native-HLS-only web page cannot read subtitle packets from the original file. Mark
+          // its embedded tracks server-rendered so a later selection switches to Plex HLS and
+          // requests a burn instead of presenting an unusable local track.
+          : { delivery: s.key || !client.originalPlayback ? { kind: 'burn-in' as const } : { kind: 'embedded' as const } } : {}) });
+    }
+    return plan;
   }
   /**
    * Another of the playing title's files, in the same session from the given position (else the
@@ -922,6 +949,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     // Another part has its own stream ids: the audio known on it is only the one asked for it (the selection read at
     // the start may since have changed).
     if (index !== stack.index) s.partAudio = overrides.audioStreamID;
+    else this.videoTracks(stream.streams, s.request!.client, s.plan);
     stack.index = index;
     s.part = stack.parts[index]!;
     s.transcodeId = stream.session;
@@ -970,7 +998,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
    * not stream it (and, `optional`, when it refuses the request).
    */
   private async serverStream(query: Record<string, string>, client: V.ClientCapabilities, optional = false, signal?: AbortSignal):
-    Promise<{ session: string; query: Record<string, string>; path: { url: string; kind: 'remux' | 'transcode'; quality?: V.QualityTarget } } | null> {
+    Promise<{ session: string; query: Record<string, string>; streams: Node[]; path: { url: string; kind: 'remux' | 'transcode'; quality?: V.QualityTarget } } | null> {
     const profiles = query.segmentContainer === 'mpegts' ? [] : plexStreamProfiles(client);
     const attempts = profiles.length ? profiles : [{}];
     for (const [i, profile] of attempts.entries()) {
@@ -989,7 +1017,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       }
       if (!refusesStream(decided) && deliversProfile(decided, asked) && fitsStreamingCap(decidedMedia(decided), client)) {
         const quality = decidedQuality(decided);
-        return { session: asked.session!, query: asked, path: { url: u.href, kind: copiesVideo(decided, Number(asked.partIndex) || 0) ? 'remux' : 'transcode', ...(quality ? { quality } : {}) } };
+        const index = Number(asked.partIndex) || 0;
+        return { session: asked.session!, query: asked, streams: decidedStreams(decided, index), path: { url: u.href, kind: copiesVideo(decided, index) ? 'remux' : 'transcode', ...(quality ? { quality } : {}) } };
       }
     }
     return null;
@@ -1127,8 +1156,9 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       const subtitle = r.subtitleTrackId === undefined ? s.plan.selectedSubtitleTrackId : r.subtitleTrackId;
       if (audio !== undefined && !s.plan.audioTracks.some(t => t.id === audio)) fail('Unknown Plex audio track');
       if (subtitle != null && !s.plan.subtitleTracks.some(t => t.id === subtitle)) fail('Unknown Plex subtitle track');
-      const burn = s.plan.subtitleTracks.find(t => t.id === subtitle)?.delivery?.kind === 'burn-in';
+      const delivery = s.plan.subtitleTracks.find(t => t.id === subtitle)?.delivery?.kind;
       const path = s.plan.paths.find(p => p.id === s.plan.selectedPathId);
+      const burn = delivery === 'burn-in' || (delivery === 'embedded' && path?.id === 'plex-hls');
       const restart = path?.kind !== 'direct' || burn || !this.audible(s, audio);
       const hls = s.plan.paths.find(p => p.id === 'plex-hls');
       if (restart && (!hls || !hls.url && !s.deferred)) fail('Selected Plex tracks require an unavailable transcode');
@@ -1160,6 +1190,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
               const { quality: _, ...rest } = p;
               return { ...rest, readiness: 'ready' as const, ...stream.path, timelineOriginSeconds: s.plan.positionSeconds };
             });
+            this.videoTracks(stream.streams, s.request!.client, s.plan);
             s.plan.selectedPathId = hls.id;
             s.plan.sourceGeneration++;
             s.transcodeId = stream.session;
@@ -1210,6 +1241,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
           const { quality: _, ...rest } = p;
           return { ...rest, readiness: 'ready' as const, ...stream.path };
         });
+        this.videoTracks(stream.streams, s.request!.client, s.plan);
         s.transcodeId = stream.session;
         delete s.deferred;
       }

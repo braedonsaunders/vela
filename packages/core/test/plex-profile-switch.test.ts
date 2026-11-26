@@ -55,3 +55,10 @@ test('switching maps profile-selection errors without dropping the current sessi
     expect(h.events).toEqual([]);
   }
 });
+
+test('a Plex Home with only one profile on this server says so instead of reporting an invalid selection', async () => {
+  const single = { selectionToken: 'switch-once', expiresAt: '2099-01-01T00:00:00Z', profiles: [{ id: 'owner', name: 'Owner', protected: false }] };
+  const h = harness({ 'POST /vela/v0/auth/plex/profiles/challenge': single });
+  await h.auth.startPlexProfileSwitch();
+  expect(h.state()).toMatchObject({ plexSwitching: true, plex: null, error: 'There are no other Plex Home profiles to switch to on this server.' });
+});

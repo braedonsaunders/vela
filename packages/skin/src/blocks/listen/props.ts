@@ -1,6 +1,7 @@
 // Reading a rich block's props (packages/protocol/rich-blocks.ts) and the small pure rules the
 // Listen blocks share: lists from sources, cards from item: records, disc groups, playlist moves
 // and how many rows draw at once.
+import { joinMeta } from '../../meta-line';
 import { msg, type Card } from '@vela/core';
 import { RICH_BLOCKS, type RichBlockName } from '../../../../protocol/rich-blocks';
 import { deref, type RecordReader } from '../../screen/scope';
@@ -177,7 +178,7 @@ export function shelfSubtitle(card: Card, kind: 'none' | 'year' | 'byline' | 're
     case 'byline': return card.media?.byline || undefined;
     case 'release': {
       const type = releaseKind(card.media?.childCount ?? 0);
-      return [card.yearLabel, type === 'single' ? msg('music.single') : type === 'ep' ? msg('music.ep') : msg('media.ui.album')].filter(Boolean).join(' · ');
+      return joinMeta([card.yearLabel, type === 'single' ? msg('music.single') : type === 'ep' ? msg('music.ep') : msg('media.ui.album')]);
     }
     case 'playlist': return card.kind === 'playlist' ? msg('music.playlist') : undefined;
     default: return undefined;

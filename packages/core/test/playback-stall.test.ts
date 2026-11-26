@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { engineCommandAnswered, engineCommandSent, heardEngine, heardServer, parkedBeforeGap, PATIENCE_SECONDS, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample } from '../src/store/stall';
+import { engineCommandAnswered, engineCommandSent, eventsBack, eventsLost, heardEngine, heardServer, parkedBeforeGap, PATIENCE_SECONDS, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample } from '../src/store/stall';
 import { Playback, initialPlayback } from '../src/store/playback';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
@@ -302,4 +302,37 @@ test('bytes arriving beyond a gap the playhead is parked in front of are not pro
   // The same growth with the playhead inside the buffer is a slow start, still loading.
   const loadingIn = feed(parked.map(sample => ({ ...sample, position: 5.01 })));
   expect(stallDeadline(loadingIn.watch)).toBe(loadingIn.now + QUIET_SECONDS[0] * S);
+});
+
+test('once the events drop, only playing forward keeps the media alive: bytes behind a frozen picture do not', () => {
+  const trickle = (i: number): StallSample => ({ state: 'loading', position: 600, loadProgress: i * 4000 });
+  // Playing, then the events drop at 5 s; the picture plays on 3 s from its buffer and freezes.
+  let { watch, now } = feed(Array.from({ length: 5 }, (_, i) => ({ state: 'playing', position: 590 + i })));
+  watch = eventsLost(watch, now);
+  ({ watch, now } = feed(Array.from({ length: 3 }, (_, i) => ({ state: 'playing', position: 595 + i })), watch, now));
+  const played = now;
+  ({ watch, now } = feed(Array.from({ length: 30 }, (_, i) => trickle(i + 1)), watch, now));
+  // Without the drop, the arriving bytes would keep it waiting; since it, the quiet budget runs from the last play.
+  expect(stallDeadline(watch)).toBe(played + 10 * S);
+  // The events coming back is not enough while the picture stays frozen.
+  watch = eventsBack(watch);
+  expect(stallDeadline(watch)).toBe(played + 10 * S);
+  // A restart's allowance is longer.
+  expect(stallDeadline({ ...watch, attempt: 1 })).toBe(played + 20 * S);
+  // Paused, the viewer is not waiting for anything.
+  expect(stallDeadline(heardEngine(watch, { state: 'paused', position: 600 }, now + S))).toBeNull();
+});
+
+test('an events drop is over when the events are back and the media plays forward', () => {
+  let { watch, now } = feed([{ state: 'playing', position: 10 }, { state: 'playing', position: 11 }]);
+  watch = eventsLost(watch, now);
+  // Playing on while the events are still down does not end the drop: the media may yet go with them.
+  ({ watch, now } = feed([{ state: 'playing', position: 12 }, { state: 'playing', position: 13 }], watch, now));
+  expect(watch.eventsLost).not.toBeNull();
+  watch = eventsBack(watch);
+  ({ watch, now } = feed([{ state: 'playing', position: 14 }], watch, now));
+  expect(watch.eventsLost).toBeNull();
+  // From then on a slow load is believed again while its bytes arrive.
+  ({ watch, now } = feed(Array.from({ length: 30 }, (_, i) => ({ state: 'loading', position: 14, loadProgress: (i + 1) * 4000 })), watch, now));
+  expect(stallDeadline(watch)).toBe(now + 10 * S);
 });

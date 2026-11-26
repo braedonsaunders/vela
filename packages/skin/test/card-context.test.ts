@@ -7,7 +7,7 @@ const episode = { contextParts: [{ label: 'The Gilded Age', select: 'show:1' }, 
 const ctx = { index: 0, card: episode } as unknown as Ctx;
 
 test('card.contextLine joins the context parts into one line', () => {
-  expect(VOCABULARY['card.contextLine']!(ctx, {} as Env)).toBe('The Gilded Age · Season 1 · Episode 1');
+  expect(VOCABULARY['card.contextLine']!(ctx, {} as Env)).toBe('The Gilded Age\u00a0·\u00a0Season 1\u00a0·\u00a0Episode 1');
   expect(VOCABULARY['card.contextLine']!({ index: 0, card: { contextParts: [] } } as unknown as Ctx, {} as Env)).toBe('');
 });
 
@@ -33,6 +33,6 @@ test('a phone card reads its context as one line; a wider card keeps the links',
     walk(cardContext(resolveDocument(cinematic, small ? 390 : 1280).routes.home!)!);
     return found;
   };
-  expect(drawn(true)).toEqual(['The Gilded Age · Season 1 · Episode 1']);
+  expect(drawn(true)).toEqual(['The Gilded Age\u00a0·\u00a0Season 1\u00a0·\u00a0Episode 1']);
   expect(drawn(false)).toEqual(['links']);
 });

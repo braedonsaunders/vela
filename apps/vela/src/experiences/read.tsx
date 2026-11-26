@@ -10,7 +10,7 @@ import { HOME_PLACE, type ExperiencePlace } from '@vela/skin/src/screen/experien
 import type { LibraryParams } from '../browse/library-query';
 import { DocumentScreen } from '../screen';
 import { useAppScreenActions } from '../screen-actions';
-import { useLibraryRoutePage } from './watch';
+import { useLibraryRoutePage } from '../browse/library-route-page';
 
 const goHome = () => router.replace('/');
 const setParams = (params: Record<string, string>) => router.setParams(params);

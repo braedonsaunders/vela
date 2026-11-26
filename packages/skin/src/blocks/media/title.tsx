@@ -1,23 +1,28 @@
 import { Image, type ImageSource } from 'expo-image';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ScrollView, Text, View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
 import { msg, type Card } from '@vela/core';
 import { useHost } from '../../host';
 import { saturateBlurhash } from './blurhash-color';
 import { useMediaActions, type MediaActions } from './context';
 import { alpha, RoundButton, useMediaLook, type MediaLook } from './parts';
+import { MediaContentHeight, MediaFrameViewport } from './viewport';
 
 /** The page: its colour wash from the cover, a blurred cover behind the hero, the back control.
  * Framed, the document's title frame is the page: the wash and the content scroll in its region
  * and the frame's own close control closes it. */
-export function MediaFrame({ framed, accent, backdrop, wideArt, backdropComponents, children }: {
-  framed: boolean; accent: string; backdrop: string; wideArt: boolean; backdropComponents?: [number, number]; children: ReactNode;
+export function MediaFrame({ framed, accent, backdrop, wideArt, backdropComponents, children, titleActions }: {
+  framed: boolean; accent: string; backdrop: string; wideArt: boolean; backdropComponents?: [number, number]; children: ReactNode; titleActions?: ReactNode;
 }) {
   const host = useHost();
   const m = useMediaLook();
   const actions = useMediaActions();
   const tint = accent || m.ui.accent;
   const top = m.tv ? 32 : Math.max(16, host.viewport.insets.top + 12);
+  const paddingTop = framed ? (m.small && !m.tv ? host.viewport.insets.top + 56 + 72 : 72) : top + 56;
+  const viewport = useContext(MediaFrameViewport);
+  const contentHeight = viewport?.height === undefined ? undefined : Math.max(0, viewport.height - paddingTop);
+  const content = viewport ? <MediaContentHeight.Provider value={contentHeight}>{children}</MediaContentHeight.Provider> : children;
   const backdropSource = useMemo(() => backdrop ? host.image(backdrop) : undefined, [backdrop, host.image]);
   const backdropStyle: ImageStyle = {
     position: 'absolute', top: wideArt ? 0 : -80, left: wideArt ? 0 : -80, right: wideArt ? 0 : -80, bottom: 0,
@@ -37,17 +42,18 @@ export function MediaFrame({ framed, accent, backdrop, wideArt, backdropComponen
     // A phone's frame is full-bleed under the shell's bar, its close control at the region's top.
     <View testID="media-page" style={{ position: 'relative' }}>
       {wash}
-      <View testID="media-scroll" style={{ paddingTop: m.tv ? 72 : m.small ? host.viewport.insets.top + 56 + 72 : 72, paddingBottom: 24, paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{children}</View>
+      <View testID="media-scroll" style={{ paddingTop, paddingBottom: 24, paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{content}</View>
     </View>
   );
   return (
     <View style={{ flex: 1, backgroundColor: m.ui.page }} testID="media-page">
       {wash}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: top + 56, paddingBottom: 140 }} testID="media-scroll">
-        <View style={{ paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{children}</View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop, paddingBottom: 140 }} onLayout={viewport?.onLayout} testID="media-scroll">
+        <View style={{ paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{content}</View>
       </ScrollView>
-      <View style={{ position: 'absolute', top, left: m.gutter - 6 }}>
+      <View style={{ position: 'absolute', top, left: m.gutter - 6, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <RoundButton icon="back" label={msg('media.ui.back')} onPress={actions.back} nativeID="detail-close" testID="detail-close" size={42} />
+        {titleActions}
       </View>
     </View>
   );
@@ -97,10 +103,10 @@ export function Title({ children, style }: { children: string; style?: TextStyle
   return <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': `${size}px`, 'line-height': '1.02', 'letter-spacing': '-0.015em', color: '$ui.ink' }), style]}>{children}</Text>;
 }
 
-export function Facts({ items }: { items: string[] }) {
+export function Facts({ items, style }: { items: string[]; style?: TextStyle }) {
   const m = useMediaLook();
   const line = items.filter(Boolean).join('  ·  ');
-  return line ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{line}</Text> : null;
+  return line ? <Text style={[m.text({ 'font-size': '14px', color: '$ui.inkSecondary' }), style]}>{line}</Text> : null;
 }
 
 export function Summary({ text, serif = false, style }: { text: string; serif?: boolean; style?: TextStyle }) {

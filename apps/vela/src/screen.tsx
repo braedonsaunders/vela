@@ -26,6 +26,8 @@ interface Props {
   sharedShell?: boolean;
   /** An experience can host the shared library content inside its document. */
   wrap?: (content: ReactNode, host: SkinHost, active: boolean) => ReactNode;
+  /** A library experience whose document owns the scene content. */
+  libraryScene?: (host: SkinHost, active: boolean) => ReactNode;
   libraryOpeningFocus?: boolean;
   /** Frame controls a TV route prefers when opened. The first visible control wins. */
   initialTVFocus?: readonly string[];
@@ -33,7 +35,7 @@ interface Props {
   node?: RNode;
 }
 
-export function DocumentScreen({ route, entry, library, page, sharedShell = false, node, wrap, libraryOpeningFocus, initialTVFocus }: Props) {
+export function DocumentScreen({ route, entry, library, page, sharedShell = false, node, wrap, libraryScene, libraryOpeningFocus, initialTVFocus }: Props) {
   const vela = useVela();
   const sides = useSideInsets();
   const app = vela.host(route, entry, library);
@@ -119,7 +121,8 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   if (!host || !contentHost || !tree || !drawn) return <View style={{ flex: 1 }} />;
   // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md).
   const search = route === 'home' && contentHost.env.query !== '' ? vela.doc?.routes.search : undefined;
-  const content = route === 'library' ? <LibraryScenes host={contentHost} node={tree} openingFocus={libraryOpeningFocus} /> : <SkinRoute host={contentHost} node={tree} after={search} />;
+  const content = route === 'library' ? <LibraryScenes host={contentHost} node={tree} openingFocus={libraryOpeningFocus}
+    draw={libraryScene} active={isCurrent} /> : <SkinRoute host={contentHost} node={tree} after={search} />;
   const shell = route === 'title' || route === 'person' || sharedShell ? undefined : vela.doc?.shell;
   const mainId = `vela-main-${route}-${library ?? 'all'}`.replace(/[^a-z0-9_-]/gi, '-');
   const main = <View nativeID={mainId} accessibilityRole={Platform.OS === 'web' ? 'main' as never : undefined} {...(Platform.OS === 'web' ? { tabIndex: -1 } : {})} style={{ flex: 1 }}>{wrap ? wrap(content, contentHost, isCurrent) : content}</View>;
@@ -167,7 +170,9 @@ function ModalView({ still, children }: { still: boolean; children: ReactNode })
 }
 
 /** A library view slides like a section: the previous answer leaves as the new one enters. */
-function LibraryScenes({ host, node, openingFocus }: { host: SkinHost; node: RNode; openingFocus?: boolean }) {
+function LibraryScenes({ host, node, openingFocus, draw, active: routeActive }: {
+  host: SkinHost; node: RNode; openingFocus?: boolean; draw?: Props['libraryScene']; active: boolean;
+}) {
   const request = host.env.library?.viewRequest ?? '';
   const view = host.env.library?.view ?? 'library';
   const order: string[] = host.env.library?.model?.tabs?.map(tab => tab.kind) ?? ['recommended', 'library', 'collections', 'genres'];
@@ -247,7 +252,8 @@ function LibraryScenes({ host, node, openingFocus }: { host: SkinHost; node: RNo
     // than being drawn again from nothing alongside the view coming in.
     return <SectionScene key={`scene:${isCurrent ? request : outgoing.current?.request}`} current={isCurrent}
       animated={active} direction={transition.current.direction} offset={isCurrent ? incomingOffset : outgoingOffset}>
-      <SkinRoute host={sceneHost} node={node} openingFocus={openingFocus} hideLibraryViews={!!fixedNav.current && active} />
+      {draw ? draw(sceneHost, routeActive && isCurrent)
+        : <SkinRoute host={sceneHost} node={node} openingFocus={openingFocus} hideLibraryViews={!!fixedNav.current && active} />}
     </SectionScene>;
   };
   return <View ref={frame as never} style={{ flex: 1, overflow: 'hidden' }}>

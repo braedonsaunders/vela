@@ -105,7 +105,8 @@ internal class PlayerController(
   }
 
   override val sessionPlayer: androidx.media3.common.Player? get() = engine?.sessionPlayer
-  override val sessionIsOnDemandVideo: Boolean get() = plan?.live == false
+  override val sessionIsOnDemandVideo: Boolean get() = plan?.let { !it.live || it.startOver } == true
+  override val sessionPositionOffsetMs: Long get() = ((engine?.titleSeconds(0.0) ?: 0.0) * 1000).toLong()
   override val sessionStyle: SessionStyle get() = SessionStyle.VIDEO
   override val sessionMetadata: androidx.media3.common.MediaMetadata? get() = (info ?: SessionInfo("", "", "", null)).metadata(spoken = false, video = true)
 
@@ -115,7 +116,7 @@ internal class PlayerController(
       "play" -> perform(mapOf("type" to "play"))
       "pause" -> perform(mapOf("type" to "pause"))
       "skip" -> seconds?.let { perform(mapOf("type" to "seekBy", "seconds" to it)) }
-      "seek" -> seconds?.let { perform(mapOf("type" to "seek", "seconds" to (engine?.titleSeconds(it) ?: it))) }
+      "seek" -> seconds?.let { perform(mapOf("type" to "seek", "seconds" to it)) }
       else -> return
     }
     report.publish(state, pendingSeek, force = true)

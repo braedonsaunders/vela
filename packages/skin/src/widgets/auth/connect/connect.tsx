@@ -86,7 +86,7 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
     return result;
   });
   const add = (found: ServerProbe) => void run(async () => {
-    const result = await actions.add(found.kind, foundName(found), found.normalizedUrl);
+    const result = await actions.add(found.kind, foundName(found), found.normalizedUrl, found.machineIdentifier);
     if (result.error) return result;
     setAdded({id: result.id, name: foundName(found), kind: found.kind});
     const selected = await actions.select(result.id);

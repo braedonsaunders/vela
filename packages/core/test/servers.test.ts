@@ -96,7 +96,7 @@ describe('ServerRegistry', () => {
     expect(() => servers.relocate(a.id, '', 'https://c.example')).toThrow('Server not found');
   });
 
-  test('removing the selected server selects Ether; Ether cannot be removed', () => {
+  test('removing the selected server selects Ether and keeps the selected host available', () => {
     const { servers } = registry();
     const keep = servers.add('jellyfin', 'Keep', 'https://keep.example');
     const drop = servers.add('emby', 'Drop', 'https://drop.example');
@@ -104,8 +104,35 @@ describe('ServerRegistry', () => {
     servers.remove(drop.id);
     expect(servers.read()).toMatchObject({ selectedId: 'ether' });
     expect(servers.read().servers.map(s => s.id)).toEqual(['ether', keep.id]);
-    expect(() => servers.remove('ether')).toThrow('Cannot remove the default server');
+    expect(() => servers.remove('ether')).toThrow('Cannot remove the selected host server');
     expect(() => servers.remove(drop.id)).toThrow('Server not found');
+  });
+
+  test('removing a non-selected hosted Ether hides it until it is added again', () => {
+    const { servers, store } = registry();
+    const other = servers.add('plex', 'Plex', 'https://plex.example');
+    servers.select(other.id);
+    servers.remove('ether');
+
+    const restored = new ServerRegistry(store, ETHER);
+    expect(restored.read().servers).toEqual([other]);
+    expect(restored.read().selectedId).toBe(other.id);
+    expect(new ServerRegistry(store, 'https://another-host.example').read().servers[0]?.id).toBe('ether');
+
+    restored.add('ether', 'Ether', ETHER);
+    expect(restored.read().servers.map(record => record.id)).toEqual(['ether', other.id]);
+    expect(restored.read().selectedId).toBe(other.id);
+  });
+
+  test('the hosted Ether becomes the sign-in destination again when no servers remain', () => {
+    const { servers } = registry();
+    const other = servers.add('plex', 'Plex', 'https://plex.example');
+    servers.select(other.id);
+    servers.remove('ether');
+    servers.remove(other.id);
+    expect(servers.read().selectedId).toBe('ether');
+    servers.add('plex', 'Different Plex', 'https://different.example');
+    expect(servers.read().selectedId).toBe('ether');
   });
 
   test('a stored selection that no longer exists falls back to Ether', () => {

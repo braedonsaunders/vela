@@ -1,0 +1,44 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "gallery",
+ "screen": "gallery",
+ "page": "photo",
+ "version": "1",
+ "title": "{src.title.item.name}",
+ "presentation": "page",
+ "params": {
+  "id": {
+   "type": "string"
+  },
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {
+  "title": {
+   "from": "vela.title",
+   "id": "{param.id}"
+  }
+ },
+ "tree": {
+  "type": "box",
+  "children": [
+   {
+    "type": "photoViewer",
+    "props": {
+     "item": "{src.title.item}"
+    }
+   },
+   {
+    "type": "slot",
+    "slot": "plugin:gallery.photo.panel",
+    "context": {
+     "title": "{src.title.item.$key}"
+    }
+   }
+  ]
+ }
+}

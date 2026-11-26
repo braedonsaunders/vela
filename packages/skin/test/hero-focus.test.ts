@@ -4,7 +4,7 @@
 // right turn); otherwise to the hero's primary button (Play or Resume, else More info, Restart
 // last), never to the pager.
 import { expect, test } from 'bun:test';
-import { androidHeroAfterTurn, androidHeroPageDirection, heroButtonRank, heroFocusCarry } from '../src/hero-focus';
+import { androidHeroPageDirection, appleHeroInput, heroAfterTurn, heroButtonRank, heroFocusCarry, heroHorizontalMove } from '../src/hero-focus';
 
 const resume = heroButtonRank('play', 'title-1');
 const restart = heroButtonRank('play', 'title-1|||0');
@@ -98,30 +98,16 @@ test('leaving Home with every hero button hands focus to nothing', () => {
   expect(carry.take()).toBeUndefined();
 });
 
-test('hero action edges are the first and last ranked buttons', () => {
+test('mounted hero actions are ordered Play or Resume, Restart, then More info', () => {
   const carry = heroFocusCarry<string>();
-  carry.add('resume', resume);
-  carry.add('more', moreInfo);
-  carry.add('restart', restart);
-  expect(carry.atEdge('resume', -1)).toBe(true);
-  expect(carry.atEdge('more', -1)).toBe(false);
-  expect(carry.atEdge('restart', 1)).toBe(true);
-});
-
-test('measured, the outermost button is where the buttons stand, not their rank', () => {
-  // Resume, Restart, More info stand left to right; Restart ranks last for focus hand-over.
-  const carry = heroFocusCarry<string>();
-  carry.add('resume', resume);
   carry.add('restart', restart);
   carry.add('more', moreInfo);
-  const x = { resume: 76, restart: 374, more: 546 } as Record<string, number>;
-  const at = (target: string) => x[target];
-  expect(carry.atEdge('restart', 1)).toBe(true);
-  expect(carry.atEdge('restart', 1, at)).toBe(false);
-  expect(carry.atEdge('more', 1, at)).toBe(true);
-  expect(carry.atEdge('resume', -1, at)).toBe(true);
-  expect(carry.atEdge('restart', -1, at)).toBe(false);
-  expect(carry.targets()).toEqual(['resume', 'restart', 'more']);
+  carry.add('resume', resume);
+  expect(carry.visualTargets()).toEqual(['resume', 'restart', 'more']);
+  carry.remove('restart');
+  expect(carry.visualTargets()).toEqual(['resume', 'more']);
+  carry.remove('resume');
+  expect(carry.visualTargets()).toEqual(['more']);
 });
 
 test('the focused hero button is known with the time focus came to it', () => {
@@ -223,7 +209,7 @@ test('Android hero buttons page only on a fresh outward key-down', () => {
       slide = (slide + direction + slides.length) % slides.length;
       buttons = slides[slide]!;
       mount();
-      focus = carry.visualTargets()[androidHeroAfterTurn(buttons.length, direction, []).focus]!;
+      focus = carry.visualTargets()[heroAfterTurn(buttons.length, direction, []).focus]!;
     } else if (neighbor && action === 0 && repeat === 0) focus = neighbor;
     return [slide + 1, focus];
   };
@@ -244,9 +230,37 @@ test('Android hero buttons page only on a fresh outward key-down', () => {
   expect(androidHeroPageDirection({ eventType: 'left', eventKeyAction: 0, repeatCount: 0 })).toBeUndefined();
 });
 
-test('Android hero replays fast presses from the new slide edge even when its actions changed', () => {
-  expect(androidHeroAfterTurn(2, 1, [-1])).toEqual({ focus: 0 });
-  expect(androidHeroAfterTurn(3, 1, [-1, -1])).toEqual({ focus: 0 });
-  expect(androidHeroAfterTurn(1, 1, [-1])).toEqual({ focus: 0, turn: -1, remaining: [] });
-  expect(androidHeroAfterTurn(2, -1, [1, 1, -1])).toEqual({ focus: 1, turn: 1, remaining: [-1] });
+test('queued presses replay from the incoming edge against its available actions', () => {
+  expect(heroAfterTurn(2, 1, [{ direction: -1 }])).toEqual({ focus: 0 });
+  expect(heroAfterTurn(3, 1, [{ direction: -1 }, { direction: -1 }])).toEqual({ focus: 0 });
+  expect(heroAfterTurn(1, 1, [{ direction: -1 }])).toEqual({ focus: 0, turn: -1, remaining: [] });
+  expect(heroAfterTurn(2, -1, [{ direction: 1 }, { direction: 1 }, { direction: -1 }]))
+    .toEqual({ focus: 1, turn: 1, remaining: [{ direction: -1 }] });
+});
+
+test('tvOS arrows move exactly one button or turn once from the edge', () => {
+  const left = appleHeroInput({ eventType: 'left', eventKeyAction: 1 })!;
+  const right = appleHeroInput({ eventType: 'right', eventKeyAction: 1 })!;
+
+  expect(heroHorizontalMove(0, 2, right)).toEqual({ focus: 1 });
+  expect(heroHorizontalMove(1, 2, right)).toEqual({ focus: 1, turn: 1 });
+  expect(heroHorizontalMove(1, 2, left)).toEqual({ focus: 0 });
+  expect(heroHorizontalMove(0, 2, left)).toEqual({ focus: 0, turn: -1 });
+
+  expect(heroHorizontalMove(0, 1, right)).toEqual({ focus: 0, turn: 1 });
+  expect(heroHorizontalMove(0, 1, left)).toEqual({ focus: 0, turn: -1 });
+  expect(heroHorizontalMove(1, 3, right)).toEqual({ focus: 2 });
+  expect(heroHorizontalMove(1, 3, left)).toEqual({ focus: 0 });
+  expect(heroHorizontalMove(-1, 0, right)).toEqual({ focus: -1 });
+});
+
+test('tvOS ignores arrow down and hold events and pages on a swipe from any action', () => {
+  expect(appleHeroInput({ eventType: 'right', eventKeyAction: 0 })).toBeUndefined();
+  expect(appleHeroInput({ eventType: 'longRight', eventKeyAction: 1 })).toBeUndefined();
+  expect(appleHeroInput({ eventType: 'right' })).toBeUndefined();
+  const forward = appleHeroInput({ eventType: 'swipeLeft' })!;
+  const back = appleHeroInput({ eventType: 'swipeRight' })!;
+  expect(heroHorizontalMove(0, 3, forward)).toEqual({ focus: 0, turn: 1 });
+  expect(heroHorizontalMove(2, 3, back)).toEqual({ focus: 2, turn: -1 });
+  expect(heroAfterTurn(3, -1, [forward, back])).toEqual({ focus: 0, turn: 1, remaining: [back] });
 });

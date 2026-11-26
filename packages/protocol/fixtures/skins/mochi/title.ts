@@ -652,9 +652,15 @@ export const episodeCard: Node = {
         },
         {
           type: 'text',
-          when: [set('card.played')],
-          text: '{card.facts} · {s:watched}',
+          when: [set('card.played'), set('card.facts')],
+          text: '{card.facts}\u00a0·\u00a0{s:watched}',
           style: { color: '$ink-soft', 'font-size': '13px', 'font-variant-numeric': 'tabular-nums' },
+        },
+        {
+          type: 'text',
+          when: [set('card.played'), not('card.facts')],
+          text: '{s:watched}',
+          style: { color: '$ink-soft', 'font-size': '13px' },
         },
         {
           type: 'text',

@@ -3,11 +3,11 @@ import type { AudioRendition } from '../../../../packages/protocol/types';
 import { PlaybackFault, mutation, appendBuffer } from './buffer';
 export { PlaybackFault } from './buffer';
 import { AdaptiveBitrate, BandwidthEstimator } from './abr';
-import { parsePlaylist, playlistChanged, type Playlist } from './hls';
+import { defaultHlsVariant, parsePlaylist, playlistChanged, type Playlist } from './hls';
 import { cancelled, delay } from './session';
 import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 import { livePlaylistReloadDelayMs } from './core/source/reload';
-import { gapJump, liveSeekLanding, timeRanges } from './gap-jump';
+import { gapJump, liveSeekLanding, playableBufferAhead, timeRanges } from './gap-jump';
 import { fragmentStart, initFacts } from './init-codecs';
 import type { MediaFetch } from './media-auth';
 
@@ -32,7 +32,7 @@ export class SegmentPipeline {
   readonly bandwidth = new BandwidthEstimator();
   readonly abr = new AdaptiveBitrate();
   private ladder: Rendition[] = [];
-  /** The source's own media playlist, played when the plan offers no ladder: codecs come from its init. */
+  /** The default stream when the plan offers no ladder. Its codecs come from its init. */
   private stream?: Rendition;
   private timescales = new Map<number, number>();
   updateRenditions(ladder: Rendition[]) {
@@ -261,7 +261,7 @@ export class SegmentPipeline {
     this.timescales = facts.timescales;
     return facts.mime;
   }
-  /** `streamUrl`: the source's media playlist, played as the only rendition when `ladder` is empty. */
+  /** `streamUrl`: the source manifest, played as the only rendition when `ladder` is empty. */
   async run(ladder: Rendition[], position: number, live: boolean, signal: AbortSignal, streamUrl?: string) {
     const MS = mediaSourceClass();
     if (!MS) throw new PlaybackFault('MediaSource unavailable', 'source');
@@ -313,7 +313,22 @@ export class SegmentPipeline {
     let rendition = candidates.find((r) => r.id === this.initialRenditionId) ?? candidates[0];
     this.abr.expensive = this.expensiveSwitches;
     let startupBuffered = false;
-    let list = await this.playlist(rendition, signal);
+    let list: Playlist;
+    if (rendition === this.stream) {
+      const text = new TextDecoder().decode(await this.bytes(rendition.url, signal));
+      const base = new URL(rendition.url, document.baseURI).href;
+      const variant = defaultHlsVariant(text, base);
+      if (variant) {
+        // Stay on the default variant when the server owns quality selection.
+        rendition = this.stream = { ...rendition, url: variant };
+        this.ladder = [rendition];
+        list = await this.playlist(rendition, signal);
+      } else {
+        list = parsePlaylist(text, base);
+      }
+    } else {
+      list = await this.playlist(rendition, signal);
+    }
     if (!live && this.timelineOriginSeconds)
       list.segments.forEach((s) => {
         s.start += this.timelineOriginSeconds;
@@ -385,9 +400,13 @@ export class SegmentPipeline {
         }
       }
       await this.audio?.applySelection(list, signal);
-      const ahead = bufferAhead(this.video);
+      // Finite playlists can have rounding gaps between fragments. Include the
+      // playable media beyond them so a paused playhead cannot fill the SourceBuffer.
+      const ahead = live ? bufferAhead(this.video)
+        : playableBufferAhead(this.video.currentTime, timeRanges(this.video.buffered));
       const target = live ? this.liveTargetSeconds + this.nominalSegmentSeconds * 2 : 30;
       if (seekingTo === null && (ahead >= target || !this.streamingAllowed)) {
+        if (!live && !first) this.jumpPlaybackGap(false);
         await delay(250, signal);
         continue;
       }
@@ -597,16 +616,18 @@ export class SegmentPipeline {
         await mutation(this.buffer, signal, () => this.buffer!.remove(0, this.video.currentTime - retain));
       }
       await this.audio?.evict(this.video.currentTime - retain, signal);
-      // Tiny holes are stepped over; a live start jumps any hole in front of its first media
-      // (gap-jump.ts). Later large gaps go through visible recovery.
       if (this.video.readyState >= 3 && !this.video.paused) played = true;
-      if (!this.video.seeking && this.video.readyState < 3) {
-        const to = gapJump(this.video.currentTime, timeRanges(this.video.buffered), live && !played);
-        if (to !== null) this.video.currentTime = to;
-      }
+      this.jumpPlaybackGap(live && !played);
       if (live && this.video.buffered.length) {
         this.video.playbackRate = this.livePlaybackRate;
       }
     }
+  }
+
+  private jumpPlaybackGap(liveStarting: boolean) {
+    // Live startup can also jump a large hole before its first media.
+    if (this.video.seeking || this.video.readyState >= 3) return;
+    const to = gapJump(this.video.currentTime, timeRanges(this.video.buffered), liveStarting);
+    if (to !== null) this.video.currentTime = to;
   }
 }

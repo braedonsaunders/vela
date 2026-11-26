@@ -157,7 +157,7 @@ const compactNavigation: Node = {
 const compactDestination = (on: Condition[], press: BoxNode['press'], label: string): Node => ({
   type: 'box', press, label, a11y: { current: on },
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center',
-    height: '48px', padding: '0px 14px', 'border-radius': '$ui.radiusControl', color: '$ui.ink', 'font-size': '15px' },
+    height: '48px', 'flex-shrink': '0', padding: '0px 14px', 'border-radius': '$ui.radiusControl', color: '$ui.ink', 'font-size': '15px' },
   states: [{ when: on, style: { 'background-color': '$ui.controlHover', 'font-weight': '700' } }],
   hover: { 'background-color': '$ui.control' }, focus: navFocus,
   children: [{ type: 'text', text: label, style: { 'line-clamp': '1' } }],
@@ -177,7 +177,9 @@ const compactMenu: Node = {
         'background-color': '$ui.scrim', 'backdrop-filter': 'blur(4px)' } },
     { type: 'box', role: 'navigation', label: 'Main navigation', motion: 'velaPop',
       style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '4px',
-        margin: '10px 12px auto 12px', padding: '12px', 'border-radius': '20px', border: '1px solid $ui.glassEdge',
+        margin: '10px 12px auto 12px', padding: '12px',
+        'max-height': 'calc(100dvh - 76px - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
+        'overflow-y': 'auto', 'border-radius': '20px', border: '1px solid $ui.glassEdge',
         'background-color': '$ui.popover', 'box-shadow': '0px 24px 70px $ui.shadow' },
       children: [
         compactDestination([is('env.section', 'home')], { action: 'home' }, '{t:ui.home}'),

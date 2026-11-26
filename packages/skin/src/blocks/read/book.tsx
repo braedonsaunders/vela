@@ -1,3 +1,4 @@
+import { joinMeta } from '../../meta-line';
 import { useMemo, type ReactNode } from 'react';
 import { Platform, Text, View, type TextStyle } from 'react-native';
 import { msg, number, percent, type Card } from '@vela/core';
@@ -7,7 +8,7 @@ import { Cover, CoverTile, PillButton, Progress, SectionHeading, TextLink, TileG
 import { Buttons, Eyebrow, FactList, Facts, Hero, openByline, Summary, tilesPerRow, Title } from '../media/title';
 import { usePart, usePartStyler, useListenLook } from '../listen/look';
 import { readingChapterLabel } from './book-layout';
-import { seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart } from './series';
+import { READ_SERIES_PRIMARY, seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart, tvSeriesBook } from './series';
 
 /** Books are read on phones, tablets, the web and desktop. A TV offers no Read at all: a book's page
  * there is its details, with a quiet line saying where reading is. */
@@ -53,7 +54,7 @@ export function BookHero({ card, cover = true, action = true }: { card: Card; co
       {fraction > 0 && fraction < 0.98 ? (
         <View style={[{ gap: 8, maxWidth: 420, marginTop: 4 }, progress.box]} testID="media-reading-progress">
           <Progress fraction={fraction} height={5} />
-          <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), progress.text]}>{[msg('media.ui.readProgress', { percent: percent(fraction) }), readingChapterLabel(media.readingLabel)].filter(Boolean).join(' · ')}</Text>
+          <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), progress.text]}>{joinMeta([msg('media.ui.readProgress', { percent: percent(fraction) }), readingChapterLabel(media.readingLabel)])}</Text>
         </View>
       ) : card.played || fraction >= 0.98 ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.accent', 'font-weight': '600' }), progress.text]}>{msg('media.ui.finished')}</Text> : null}
       {action ? template('bookHero.action', <BookReadAction card={card} />) : null}
@@ -119,7 +120,7 @@ function SeriesGrid({ card, items }: { card: Card; items: readonly Card[] }) {
     <>
       <SectionHeading title={copy.heading} />
       <TileGrid gap={gap}>
-        {books.map(book => <CoverTile key={book.id} card={book} size={size} subtitle={[book.media?.indexLabel, book.yearLabel].filter(Boolean).join(' · ')}
+        {books.map(book => <CoverTile key={book.id} card={book} size={size} subtitle={joinMeta([book.media?.indexLabel, book.yearLabel])}
           progress={book.media?.readingFraction} onPress={() => actions.openTitle(book)} testID={`media-book-${book.id}`} />)}
       </TileGrid>
     </>
@@ -137,6 +138,12 @@ export function SeriesHero({ card, items }: { card: Card; items: readonly Card[]
   const next = books.find(book => !book.played && (book.media?.readingFraction ?? 0) < 0.98) ?? books[0];
   const canStart = seriesCanStart(next, store.media.features());
   const start = next ? seriesStart(next) : null;
+  const tvBook = !READS_HERE && start?.icon === 'book' ? tvSeriesBook(books) : undefined;
+  const entry = tvBook ?? next;
+  const label = tvBook
+    ? !tvBook.played && (tvBook.media?.readingFraction ?? 0) > 0 && (tvBook.media?.readingFraction ?? 0) < 0.98
+      ? msg('media.ui.continueReading') : tvBook.name
+    : start?.label;
   const fan = books.slice(0, 3);
   const size = m.small ? 150 : 190;
   const byline = card.media?.byline || books[0]?.media?.byline || '';
@@ -157,8 +164,9 @@ export function SeriesHero({ card, items }: { card: Card; items: readonly Card[]
         style={{ ...m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', 'font-style': 'italic', color: '$ui.ink' }), ...author.text }} /> : null}
       <Facts items={[copy.count, card.genres.slice(0, 2).join(', ')]} />
       <Buttons>
-        {next && start && (READS_HERE || start.icon !== 'book') ? <PillButton primary icon={start.icon} label={start.label}
-          onPress={() => actions.openTitle(next)} disabled={!canStart} testID="media-play" nativeID="media-primary" /> : null}
+        {entry && start && label ? <PillButton primary icon={start.icon} label={label}
+          onPress={() => actions.openTitle(entry)} disabled={!tvBook && !canStart} testID="media-play"
+          nativeID={Platform.isTV ? READ_SERIES_PRIMARY : 'media-primary'} preferred={Platform.isTV} /> : null}
       </Buttons>
       {start && !canStart && (READS_HERE || start.icon !== 'book') ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{start.unavailable}</Text> : null}
       {start && !READS_HERE && start.icon === 'book' ? <ReadElsewhere /> : null}

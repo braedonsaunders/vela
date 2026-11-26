@@ -1,6 +1,5 @@
 // A route's first TV focus. A route that opens (a title page over home) puts focus on its primary
-// action, the first `play` press drawn on its first screen (Resume, Play); a route without one (a
-// series page) on its first piece of content there (a season, an extra). Otherwise the focus
+// action (Resume, Play), or its first piece of content (a season, an extra). Otherwise the focus
 // engine takes the top-left-most control on screen, which is the shell's logo.
 //
 // Only while the route opens: once the viewer has moved focus to anything in it (a press, a widget,
@@ -11,11 +10,12 @@
 import { createContext, useContext, useMemo } from 'react';
 import { Dimensions, Platform, TVEventHandler } from 'react-native';
 import type { Focusable } from './escape';
+import { openingFocusPriority, takesOpeningFocus } from './route-focus-policy';
 import { viewerScrolledSince } from './opening-scroll';
 
 export interface RouteFocus {
   /** A press button of the route was drawn. */
-  offer(target: Focusable, action: string): void;
+  offer(target: Focusable, action: string, titlePrimary?: boolean): void;
   /** Something in the route took focus. */
   focused(): void;
 }
@@ -52,10 +52,6 @@ const PRIMARY_WAIT_MS = 500;
 const OPENING_PRESS_MS = 400;
 /** When a route's opening motion has settled (velaOpen, the longest, runs 640 ms). */
 const SETTLED_MS = 700;
-/** Presses that open a route's content, its first focus when it has no play press; on a plugin
- * screen also its navigation and plugin presses, and (`stop`) a reading stop, in document order. */
-const CONTENT = new Set(['select', 'playExtra', 'navigate', 'plugin', 'setParam', 'stop']);
-
 interface Measurable {
   measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void;
 }
@@ -114,39 +110,45 @@ function firstFocus(): RouteFocus {
   const opened = Date.now();
   const deadline = opened + OPENING_MS;
   let settled = false;
+  let priority = 0;
+  let retry: ReturnType<typeof setTimeout> | undefined;
   let fallback: ReturnType<typeof setTimeout> | undefined;
   const open = () => !settled && Date.now() < deadline;
   const settle = () => {
     settled = true;
     clearTimeout(fallback);
+    clearTimeout(retry);
   };
-  const focus = (target: Focusable) => {
-    if (!open()) return;
-    settle();
+  const focus = (target: Focusable, rank: number) => {
+    if (!open() || !takesOpeningFocus(rank, priority, viewerMovedSince(opened))) return;
+    priority = rank;
+    clearTimeout(retry);
     move(target, opened);
     // A route that opens with a motion (the title card fades and rises in) cannot take focus while
     // it is still all but transparent: the engine refuses it and falls back to whatever it likes
     // (the card's close button). Asked again once the motion has settled, unless the viewer has
     // pressed something meanwhile.
-    setTimeout(() => {
+    retry = setTimeout(() => {
       if (!viewerMovedSince(opened)) move(target, opened);
     }, SETTLED_MS);
   };
   // Measured once laid out; a control off the first screen is passed over.
-  const tryFocus = (target: Focusable) => {
-    requestAnimationFrame(() => onFirstScreen(target, visible => {
-      if (visible) focus(target);
-    }));
+  const tryFocus = (target: Focusable, rank: number, titlePrimary: boolean) => {
+    requestAnimationFrame(() => {
+      if (titlePrimary && Platform.isTV) focus(target, rank);
+      else onFirstScreen(target, visible => { if (visible) focus(target, rank); });
+    });
   };
   return {
-    offer(target, action) {
-      if (!open()) return;
-      if (action === 'play') {
-        tryFocus(target);
+    offer(target, action, titlePrimary = false) {
+      const rank = openingFocusPriority(action, titlePrimary);
+      if (!open() || rank <= priority) return;
+      if (action === 'play' || titlePrimary) {
+        tryFocus(target, rank, titlePrimary);
         return;
       }
-      if (fallback || !CONTENT.has(action)) return;
-      fallback = setTimeout(() => tryFocus(target), PRIMARY_WAIT_MS);
+      if (fallback) return;
+      fallback = setTimeout(() => tryFocus(target, rank, false), PRIMARY_WAIT_MS);
     },
     focused() {
       if (pressedSince(opened)) settle();
