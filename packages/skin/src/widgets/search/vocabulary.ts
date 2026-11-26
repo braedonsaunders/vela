@@ -3,7 +3,7 @@
 // or by description as a fallback); `search.descriptive` stays empty, so a document drawing the
 // two lanes it once had draws one list. The semantics are those of the Contract
 // renderer's table (tools/renderer.ts at afc4578), key for key.
-import { msg } from '@vela/core';
+import { msg, resultKey } from '@vela/core';
 import type { Accessor, Ctx, Env } from '../../vocabulary';
 import type { Hit, LiveChannelHit, LiveProgrammeHit, SearchView } from './model';
 
@@ -39,6 +39,11 @@ const discovered = (s: SearchView) => (s.ai.state === 'off' ? [] : s.ai.items);
 const describing = (s: SearchView) => !!s.byDescription;
 
 export function searchResultAnnouncement(s: SearchView): string {
+  if (s.sections) {
+    const total = s.sections.reduce((count, section) => count + section.results.length, 0);
+    if (!total && s.sections.some(section => section.status === 'loading')) return `Searching for ${s.query}`;
+    return `${total} ${total === 1 ? 'result' : 'results'} for ${s.query}`;
+  }
   if (s.titles.state === 'loading') return `Searching for ${s.query}`;
   if (s.titles.state === 'failed') return `Search failed for ${s.query}`;
   const count = titles(s).length + descriptive(s).length + discovered(s).length
@@ -49,6 +54,12 @@ export function searchResultAnnouncement(s: SearchView): string {
 /** What each result's press does (`action:arg`, as the renderer tracks drawn presses), in the
  * order the results stand: the list's cards, then the live hits (on now, then coming up). */
 export function searchResultPresses(s: SearchView): string[] {
+  if (s.sections) return [
+    ...s.sections.flatMap(section => section.results.map(result => `openSearchResult:${result.ref}`)),
+    ...s.sections.filter(section => section.status === 'failed' || section.status === 'timed-out')
+      .map(section => `searchServerPage:${section.id}`),
+    'searchScope:current',
+  ];
   const card = (x: { id: string; kind: string; receipt: string }) => `select:${x.id}|${x.kind}|${x.receipt}`;
   return [
     ...[...titles(s), ...descriptive(s), ...discovered(s)].map(card),
@@ -62,6 +73,27 @@ export function searchResultPresses(s: SearchView): string[] {
 const programmeLine = (x: LiveProgrammeHit) => (x.episode !== '' ? `${x.episode} · ${x.channelName}` : x.channelName);
 
 export const SEARCH_VOCABULARY: Record<string, Accessor> = {
+  'search.canSearchAll': over(s => yes(!!s.canSearchAll || !!s.sections)),
+  'search.allServers': over(s => yes(!!s.sections)),
+  'search.serverId': c => c.searchSection?.id ?? '',
+  'search.serverName': c => c.searchSection?.name ?? '',
+  'search.serverStatus': c => c.searchSection?.status ?? '',
+  'search.serverError': c => yes(c.searchSection?.status === 'failed' || c.searchSection?.status === 'timed-out'),
+  'search.cardFacts': (c, e) => {
+    if (!c.card) return '';
+    return e.small && (c.searchSection?.results.length ?? 0) >= 3
+      ? [c.card.yearLabel, c.card.durationLabel].filter(Boolean).join(' · ')
+      : c.card.facts;
+  },
+  'search.phoneColumns': c => (c.searchSection?.results.length ?? 0) >= 3 ? '3' : '2',
+  'search.serverHasResults': c => yes(!!c.searchSection?.results.length),
+  'search.serverAction': c => yes(c.searchSection?.status === 'failed' || c.searchSection?.status === 'timed-out'
+    || (c.searchSection?.status === 'ready' && !!c.searchSection.nextCursor)),
+  'search.episodeContext': c => c.card?.episodeContext ?? '',
+  'search.serverEmpty': c => yes(c.searchSection?.status === 'ready' && !c.searchSection.results.length),
+  'search.serverMore': c => yes(c.searchSection?.status === 'ready' && !!c.searchSection.nextCursor),
+  'search.resultRef': c => c.searchResult?.ref ?? '',
+  'search.resultId': c => c.searchSection && c.searchResult ? resultKey(c.searchSection.id, c.searchResult) : '',
   'search.libraryCount': (_, e) => String(e.search?.controls?.searchLibraries ? e.libraries?.length ?? 0 : 0),
   'search.library': over(s => s.controls?.library ?? ''),
   'search.sortCount': over(s => String(s.controls?.searchSorts?.length ?? 0)),
@@ -122,6 +154,10 @@ export function searchCollection(over: string, c: Ctx, e: Env, limit: number): C
     case 'search.kinds': return [{ id: '', label: 'All' }, ...(s.controls?.searchKinds ?? []).map(searchOption)].map((opt, index) => ({ ...c, index, opt: { ...opt, of: 'kind' as const } }));
     case 'search.sorts': return (s.controls?.searchSorts ?? []).map(searchOption).map((opt, index) => ({ ...c, index, opt: { ...opt, of: 'sort' as const } }));
     case 'search.directions': return (s.controls?.searchSorts?.find(x => x.id === s.controls?.sort)?.directions ?? []).map((id, index) => ({ ...c, index, opt: { of: 'sort' as const, id, label: id === 'asc' ? 'Ascending' : 'Descending' } }));
+    case 'search.sections': return (s.sections ?? []).slice(0, limit).map((searchSection, index) =>
+      ({ ...c, searchSection, index, key: searchSection.id }));
+    case 'search.sectionResults': return (c.searchSection?.results ?? []).slice(0, limit).map((searchResult, index) =>
+      ({ ...c, searchResult, card: searchResult.card, index, key: resultKey(c.searchSection!.id, searchResult) }));
     case 'search.titles': return cards(titles(s));
     case 'search.descriptive': return cards(descriptive(s));
     case 'search.ai': return cards(discovered(s));

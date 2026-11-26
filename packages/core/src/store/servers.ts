@@ -114,15 +114,20 @@ export class Servers {
     session.onReset(() => void this.refresh().catch(() => {}));
   }
 
+  private refreshRun = 0;
+
   /** Re-read every server's status. Other servers' sessions are checked with a bounded wait. */
   async refresh(): Promise<void> {
+    const run = ++this.refreshRun;
     if (!this.session.hasServer()) {
       this.patch({ list: [], selectedId: '' });
       return;
     }
     const selected = this.session.selected();
     const registry = this.session.servers.read();
+    this.patch({ selectedId: registry.selectedId });
     const rows = await Promise.all(registry.servers.map(record => this.row(record, selected, registry.selectedId)));
+    if (run !== this.refreshRun) return;
     this.patch({ list: rows, selectedId: registry.selectedId });
   }
 
@@ -233,7 +238,10 @@ export class Servers {
       const epoch = this.session.epoch;
       await endSession(connection, this.session);
       if (connection === this.session.selected() && epoch === this.session.epoch) this.session.resetSession();
-      else await this.refresh();
+      else {
+        this.session.serverSessionChanged?.(id);
+        await this.refresh();
+      }
       return { id, error: '' };
     } catch (error) {
       return { id: '', error: signInFailure(error, 'Sign out failed') };

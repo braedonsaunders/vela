@@ -46,3 +46,14 @@ test('a failed fallback offers a retry once the server allows it', () => {
   expect(read(e, 'search.canRetry')).toBe('true');
   expect(read(e, 'search.describing')).toBe('true');
 });
+
+test('phone search groups fill a two-result row and use three columns for longer lists', () => {
+  const e = env('observatory', {}, {});
+  const results = ['one', 'two', 'three'].map(id => ({ ref: id, card: card(id), viewer: 'v', policy: 'p' }));
+  const columns = (count: number) => SEARCH_VOCABULARY['search.phoneColumns']!({
+    ...c,
+    searchSection: { id: 'server', name: 'Server', status: 'ready', results: results.slice(0, count) },
+  }, e);
+  expect(columns(2)).toBe('2');
+  expect(columns(3)).toBe('3');
+});

@@ -116,6 +116,8 @@ export interface Ctx {
   /** A season's compact selector label; absent when the same card appears outside a selector. */
   seasonLabel?: string;
   hit?: Hit;
+  searchSection?: import('@vela/core').SearchSection;
+  searchResult?: import('@vela/core').SearchResult;
   /** A channel of live.channels or live.favorites. */
   ch?: GuideChannel;
   /** A kind, genre or sort of library.kinds, library.genres or library.sorts. */
@@ -516,7 +518,7 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
 
 /** Shelves keyed by what they hold: a Continue row that moves a title to the front, or a progress
  * shelf added above others, moves the drawn cards and rows instead of redrawing them in place. */
-const IDENTITY = new Set(['home.rows', 'row.items', 'library.rows']);
+const IDENTITY = new Set(['home.rows', 'row.items', 'library.rows', 'search.sections', 'search.sectionResults']);
 
 /** A stable key for a repeated item: its position and the id of the item it binds; for shelves and
  * their cards, their identity. */

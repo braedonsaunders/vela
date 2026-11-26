@@ -80,3 +80,5 @@ export { formatFirstPlayLabel, formatRecapSummary, recapChartBuckets, recapKey, 
 export { biquad, biquadResponseDb, chainResponseDb, crossfadeGains, eqChain, EQ_Q, type Biquad, type EqChain, type EqFilter, type FilterType } from './audio/eq';
 export { albumInOrder, DEFAULT_SOUND, EQ_BANDS_HZ, EQ_PRESETS, EQ_RANGE_DB, LEVELLING_MODES, levellingGain, loudnessOf, PREAMP_RANGE_DB, presetOf, soundSettings, transitionBetween, TRANSITION_LENGTHS, withBand, withPreset, type LevellingMode, type Levelling, type SoundSettings, type Transition, type TransitionLength } from './audio/sound';
 export { childCountsLine, childCountsOf, childrenKey, childSectionLabel, childSections, childSectionsWait, recommendationTabWaits, settledPluginLevels, videoRoleLabel, pluginLevelsOf, recommendationTab, tabCard, type PluginLevels } from './plugin-levels';
+
+export { resultKey, searchServers, type SearchSection, type SearchResult } from './store/multi-search';

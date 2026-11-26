@@ -36,6 +36,8 @@ export interface DiscoveryLane {
 
 export interface SearchView {
   query: string;
+  canSearchAll?: boolean;
+  sections?: import('@vela/core').SearchSection[];
   controls?: Pick<import('@vela/core').SearchState, 'sort' | 'direction' | 'kind' | 'searchSorts' | 'searchKinds' | 'searchLibraries' | 'library'>;
   more?: { fast: boolean; descriptive: boolean };
   titles: TitleLane;

@@ -1,3 +1,4 @@
+import { useSearchReturn } from './search-return';
 import { retainedHost } from './retained-host';
 // One route drawn by the active document: the shell's tree around the route's tree. A document
 // that fails to resolve says so; nothing half-draws. A route with a page model of its own (a
@@ -45,6 +46,7 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   const visibleRoute = !(Platform.isTV && Platform.OS === 'android') || documentIsVisible(route, entry, pathname);
   const isCurrent = (sectionFocused ?? navigationFocused) && visibleRoute;
   useReturnFocus(isCurrent);
+  useSearchReturn(vela.store, route === 'home' && isCurrent, host?.env.query);
   // A section coming back shows what it held at once, and catches up with the live host in a
   // deferred (interruptible) render: redrawing its whole tree before the switch could paint held
   // the click for most of a second. A section's first draw is deferred the same way, so the shell
