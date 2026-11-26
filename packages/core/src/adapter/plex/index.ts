@@ -104,7 +104,7 @@ export function discoverKey(n: Node): string | undefined {
   return typeof n.guid === 'string' ? /^plex:\/\/(movie|show)\/([A-Za-z0-9]+)$/.exec(n.guid)?.[2] : undefined;
 }
 /** Node types rows show: titles, and directories (collections, playlists, albums of photos). */
-const SHOWN = ['movie', 'show', 'season', 'episode', 'collection', 'playlist', 'artist', 'album', 'track', 'photo', 'clip'];
+const SHOWN = ['movie', 'show', 'season', 'episode', 'collection', 'playlist', 'artist', 'album', 'track', 'photo', 'photoalbum', 'clip'];
 const SEARCHED = ['movie', 'show', 'season', 'episode', 'artist', 'album', 'track'];
 /** A series or season is played once every episode is (viewCount there counts episode plays). */
 function plexPlayed(n: Node): boolean {
@@ -320,15 +320,15 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const section = this.sections.get(String(n.librarySectionID ?? ''));
     return !!section && isAudiobookSection(section);
   }
-  private title(n: Node): V.Title {
-    const projection = plexProjection(n, this.audiobooks(n));
+  private title(n: Node, photoAlbumTitle = false): V.Title {
+    const projection = plexProjection(n, this.audiobooks(n), photoAlbumTitle);
     const ratings: V.TitleRating[] = [];
     for (const [field, image, kind] of [['rating', 'ratingImage', 'critic'], ['audienceRating', 'audienceRatingImage', 'audience']] as const)
       if (n[field] !== undefined) ratings.push({ source: n[image] || 'Plex', kind, value: Number(n[field]), scale: 10 });
     let themeMusic: V.ThemeMusic | undefined;
     if (n.theme) { try { themeMusic = { url: this.mediaURL(n.theme), expiresAt: '9999-12-31T23:59:59Z' }; } catch {} }
     const lastViewedAt = Number(n.lastViewedAt) > 0 ? new Date(Number(n.lastViewedAt) * 1000).toISOString() : undefined;
-    return { ...(projection?.media ? { media: projection.media } : {}), id: String(n.ratingKey), kind: projection?.kind ?? n.type, name: n.title || '', summary: n.summary || '', year: n.year, airDate: n.originallyAvailableAt,
+    return { ...(projection?.media ? { media: projection.media } : {}), id: photoAlbumTitle ? `album:${n.ratingKey}` : String(n.ratingKey), kind: projection?.kind ?? n.type, name: n.title || '', summary: n.summary || '', year: n.year, airDate: n.originallyAvailableAt,
       genres: (n.Genre || []).map((g: Node) => g.tag), durationSeconds: seconds(n.duration), rating: n.contentRating, ratings,
       artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: plexPlayed(n), favorite: false, watchlisted: false, ...(lastViewedAt ? { lastViewedAt } : {}) },
       ...(themeMusic ? { themeMusic } : {}), showId: n.grandparentRatingKey ? String(n.grandparentRatingKey) : n.type === 'season' && n.parentRatingKey != null ? String(n.parentRatingKey) : undefined,
@@ -462,7 +462,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       : { ...base, kind: 'mixed', media: 'music', presentation: { card: 'square' }, browse: browse({ genre: true, year: true, played: true }),
           tabs: [tab('recommended', 'Recommended', 'recommended'), tab('albums', 'Albums', 'library'), tab('artists', 'Artists', 'library', { level: 'artist' }), tab('tracks', 'Songs', 'library', { level: 'track', layout: 'list' })] };
     if (n.type === 'photo') return { ...base, kind: 'mixed', media: 'photo', presentation: { card: 'square' }, dateDisplay: 'date', browse: browse({ year: true }),
-      tabs: [tab('recommended', 'Recommended', 'recommended'), tab('library', 'Library', 'library')] };
+      tabs: [tab('recommended', 'Recommended', 'recommended'), tab('library', 'Library', 'library'),
+        tab('photo-timeline', 'Timeline', 'library', { level: 'item', layout: 'timeline' }), tab('photo-albums', 'Albums', 'library', { level: 'album' })] };
     return { ...base, kind: n.type === 'movie' ? 'movies' : n.type === 'show' ? 'shows' : 'mixed', browse: browse({ genre: true, year: true, played: true }) };
   }
   async libraries(q: V.LibrariesQuery): Promise<V.Page<V.Library>> {
@@ -477,10 +478,18 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const direction = q.direction || 'asc';
     // A music section lists albums first; its tabs list artists (or a book section's authors) and songs.
     const section = this.sections.get(id);
-    const type = section?.type === 'artist' ? (q.tab === 'artists' || q.tab === 'authors' ? 8 : q.tab === 'tracks' ? 10 : 9) : undefined;
+    const photoAlbums = section?.type === 'photo' && q.tab === 'photo-albums';
+    const photoTimeline = section?.type === 'photo' && q.tab === 'photo-timeline';
+    const type = section?.type === 'artist' ? (q.tab === 'artists' || q.tab === 'authors' ? 8 : q.tab === 'tracks' ? 10 : 9)
+      : photoAlbums ? 14 : photoTimeline ? 13 : undefined;
     const c = await this.request(`/library/sections/${enc(id)}/all`, { type, sort: `${sorts[sort]}:${direction}`, genre: q.genre, year: q.year, unwatched: q.played === undefined ? undefined : q.played ? 0 : 1,
       'X-Plex-Container-Start': offset(q.cursor), 'X-Plex-Container-Size': q.limit || 100 });
-    return { library, sort, direction, ...page(this.nodes(c).map(n => this.entry(n)), offset(q.cursor), c.totalSize ?? c.size), ...(c.totalSize !== undefined ? { total: Number(c.totalSize) } : {}) };
+    const nodes = this.nodes(c);
+    const entries = nodes.flatMap(n => photoAlbums
+      ? isPhotoAlbum(n) ? [{ id: String(n.ratingKey), kind: 'title' as const, title: this.title(n, true), receiptToken: '' }] : []
+      : photoTimeline && (n.type !== 'photo' || isPhotoAlbum(n)) ? [] : [this.entry(n)]);
+    const paging = page(nodes, offset(q.cursor), c.totalSize ?? c.size);
+    return { library, sort, direction, ...paging, items: entries, ...(c.totalSize !== undefined ? { total: Number(c.totalSize) } : {}) };
   }
   async personTitles(id: string, libraryId?: string, cursor?: string): Promise<V.Page<V.RowEntry>> {
     const libraries = libraryId ? [libraryId] : (await this.libraries({})).items.map(l => l.id);
@@ -529,13 +538,19 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   async children(id: string, cursor?: string, limit = 100): Promise<V.ChildrenPage> {
     const start = offset(cursor);
     if (!this.sections.size) await this.libraries({}).catch(() => undefined);
-    const c = await this.request(`/library/metadata/${enc(id)}/children`, { 'X-Plex-Container-Start': start, 'X-Plex-Container-Size': limit, excludeAllLeaves: 1 });
-    const nodes = this.nodes(c).filter(n => plexProjection(n) !== undefined);
-    if (nodes[0]?.type === 'album') nodes.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
-    return page(nodes.map(n => this.title(n)), start, c.totalSize ?? (nodes.length < limit ? start + nodes.length : undefined));
+    const photoAlbum = isPhotoAlbumKey(id);
+    const key = photoAlbum ? id.slice(6) : id;
+    const c = await this.request(`/library/metadata/${enc(key)}/children`, {
+      'X-Plex-Container-Start': start, 'X-Plex-Container-Size': limit, excludeAllLeaves: photoAlbum ? undefined : 1,
+    });
+    const nodes = this.nodes(c);
+    const matches = nodes.filter(n => plexProjection(n) !== undefined && (!photoAlbum || n.type === 'photo'));
+    if (matches[0]?.type === 'album') matches.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
+    return { ...page(nodes, start, c.totalSize ?? (nodes.length < limit ? start + nodes.length : undefined)), items: matches.map(n => this.title(n)) };
   }
   async detail(id: string): Promise<V.TitleDetail> {
-    const n = await this.metadata(id);
+    const photoAlbum = isPhotoAlbumKey(id);
+    const n = await this.metadata(photoAlbum ? id.slice(6) : id);
     const series = n.type === 'show' || n.type === 'season';
     const children = series ? await this.every(id, 'children') : [];
     const episodes = n.type === 'show' ? await this.every(id, 'allLeaves') : n.type === 'season' ? children : undefined;
@@ -551,7 +566,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     const audio = streams.filter(s => Number(s.streamType) === 2);
     const mainAudio = audio.find(s => Number(s.selected) === 1) ?? audio.find(s => Number(s.default) === 1);
     const person = (p: Node, role?: string) => ({ ...(p.id != null ? { id: String(p.id) } : {}), name: p.tag, role: role || p.role, artwork: p.thumb ? { ...this.artwork({ thumb: p.thumb })[0], kind: 'person' as const } : undefined });
-    return { title: this.title(n), canPlay: ['movie', 'episode', 'track', 'clip'].includes(n.type) && !!n.Media?.length, seasons: n.type === 'show' ? seriesOrder(children) : undefined, episodes: episodes ? seriesOrder(episodes) : undefined, nextUp,
+    return { title: this.title(n, photoAlbum && isPhotoAlbum(n)), canPlay: ['movie', 'episode', 'track', 'clip'].includes(n.type) && !!n.Media?.length, seasons: n.type === 'show' ? seriesOrder(children) : undefined, episodes: episodes ? seriesOrder(episodes) : undefined, nextUp,
       cast: (n.Role || []).map((p: Node) => person(p)), crew: [...(n.Director || []).map((p: Node) => person(p, 'Director')), ...(n.Writer || []).map((p: Node) => person(p, 'Writer'))],
       chapters: this.chapters(n), extras: (n.Extras?.Metadata || []).map((e: Node) => ({ id: String(e.ratingKey), parentId: id, kind: Number(e.extraType) === 1 ? 'trailer' : 'other', name: e.title, durationSeconds: seconds(e.duration), artwork: this.artwork(e)[0], availability: e.Media?.length ? 'ready' : 'unresolved' })),
       mediaSummary: {

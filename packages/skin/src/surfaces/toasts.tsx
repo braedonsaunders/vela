@@ -82,13 +82,13 @@ export function PlayerToasts(props: Placement) {
 
 /** The app's toasts, over every screen except an open player. The remote's play/pause key reaches
  * their Watch; nothing else listens to it outside the player. */
-export function AppToasts(props: Placement) {
+export function AppToasts({ deferred = false, ...props }: Placement & { deferred?: boolean }) {
   const stands = useAppToasterStands();
   const foreground = useForeground();
   useRemote(event => {
-    if (stands && event.eventType === 'playPause' && pressed(event)) takeToastKey();
+    if (stands && !deferred && event.eventType === 'playPause' && pressed(event)) takeToastKey();
   });
-  return stands && foreground ? <Stack {...props} /> : null;
+  return stands && foreground ? <Stack {...props} deferred={deferred} /> : null;
 }
 
 const NO_SURFACES: SurfaceContribution[] = [];
@@ -99,7 +99,7 @@ const primaryChannel = (value: unknown): string => {
   return typeof watch?.primary?.channelId === 'string' ? watch.primary.channelId : '';
 };
 
-function Stack({ look, top, right, playingChannelId, inPlayer = false }: Placement & { inPlayer?: boolean }) {
+function Stack({ look, top, right, playingChannelId, inPlayer = false, deferred = false }: Placement & { inPlayer?: boolean; deferred?: boolean }) {
   const vela = useVela();
   const host = useHost();
   const app = useSurfaceApp();
@@ -109,7 +109,7 @@ function Stack({ look, top, right, playingChannelId, inPlayer = false }: Placeme
   useEffect(() => { for (const alert of superseded) vela.screens.dismissAlert(alert.id); }, [vela, superseded]);
 
   // The remote's play/pause key: the newest toast whose game a channel carries (not the one playing).
-  const keyed = [...shown].reverse().find(alert => {
+  const keyed = deferred ? undefined : [...shown].reverse().find(alert => {
     const channel = alert.ref ? primaryChannel(vela.screens.records.get(alert.ref)?.value) : '';
     return !!channel && channel !== playingChannelId;
   });
@@ -131,7 +131,7 @@ function Stack({ look, top, right, playingChannelId, inPlayer = false }: Placeme
     return () => { native?.(); release(); };
   }, [keyed?.id, app, vela]);
 
-  if (!shown.length) return null;
+  if (deferred || !shown.length) return null;
   const box = toastBox(look.size, look.small, host.viewport.width, look.gutter);
   return (
     <View pointerEvents="box-none" testID="live-alerts" style={{ position: 'absolute', top, right: right ?? look.gutter, width: box.width, gap: look.size(10) }}>

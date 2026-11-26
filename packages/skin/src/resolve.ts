@@ -106,7 +106,7 @@ export type RNode = Common & (
   | { kind: 'image'; src: Template; alt?: Template; fade: boolean; /** Screens: drawn until the image loads, and instead of an empty, refused or failed one. */ fallback?: RNode }
   | { kind: 'icon'; symbol?: string; paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
   | { kind: 'repeat'; over: string; limit: number; implicitLimit?: boolean; item: RNode; /** Screens: a data collection (screen/items.ts). */ items?: Items }
-  | { kind: 'slot'; slot: SlotNode['slot']; inner?: CssT;
+  | { kind: 'slot'; slot: SlotNode['slot'] | 'mediaTitleActions'; inner?: CssT;
     /** A plugin slot (`plugin:<slot id>`): the context its surfaces read, and at most this many of them. */
     context?: Record<string, Template>; limit?: number }
   | { kind: 'widget'; widget: string; params: Record<string, string> }

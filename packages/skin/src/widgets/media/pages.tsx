@@ -1,14 +1,14 @@
 // Purpose-built pages for media titles (docs/media-kinds.md): an album with its tracklist, an
-// artist with songs and albums, an audiobook with chapters or parts, a podcast with its episodes,
-// and a photo. Read handles books and series. A track opens its album, a part its audiobook and
+// artist with songs and albums, an audiobook with chapters or parts, and a podcast with its
+// episodes. Read handles books and series. Gallery handles photos. A track opens its album, a part its audiobook and
 // a podcast episode its show. The app draws one of
 // these in place of the document's title page; each takes the document's `ui` look.
-import { Image } from 'expo-image';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Text, View } from 'react-native';
-import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, localeContext, msg, number, plural, podcastOrder, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
+import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, msg, number, plural, podcastOrder, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
-import { useHost } from '../../host';
+import { dayLabel } from '../../blocks/media/day';
+import { heroCover, MediaTitlePending } from '../../blocks/media/title-pending';
 import { useMediaActions } from './context';
 import { Cover, CoverTile, ListRow, PillButton, Progress, SectionHeading, Segmented, TextLink, TileGrid, useMediaLook, VideoTile, type MediaLook } from './parts';
 import { Buttons, Eyebrow, FactList, Facts, Hero, MediaFrame as Frame, openByline, Summary, tilesPerRow, Title } from '../../blocks/media/title';
@@ -25,8 +25,7 @@ export function MediaTitlePage({ id, framed = false, marked = '' }: { id: string
   if ((role === 'track' || role === 'part' || card?.kind === 'podcastEpisode') && parent) return <MediaTitlePage key={parent.id} id={parent.id} framed={framed} marked={id} />;
   return (
     <Frame framed={framed} accent={card?.accent ?? ''} backdrop={card ? (role === 'artist' && card.backdrop !== card.poster ? card.backdrop : card.poster) : ''} wideArt={role === 'artist' && !!card && card.backdrop !== card.poster}>
-      {!card ? <Pending load={detail} id={id} />
-        : cls === 'photo' ? <PhotoPage card={card} />
+      {!card ? <MediaTitlePending load={detail} id={id} />
         : cls === 'podcast' ? <PodcastPage card={card} marked={marked} />
         : role === 'album' ? <AlbumPage card={card} detail={detail.value!} />
         : role === 'artist' ? <ArtistPage card={card} />
@@ -49,30 +48,6 @@ function useChildren(id: string | undefined, role?: string): Loadable<ChildrenMo
   const children = useVelaState(state => id ? state.children[childrenKey(id, role)] : undefined);
   useEffect(() => { if (id) void store.media.children(id, false, role); }, [store, id, role]);
   return children;
-}
-
-function Pending({ load, id }: { load: Loadable<DetailModel>; id: string }) {
-  const m = useMediaLook();
-  const store = useVela();
-  if (load.load === 'failed') return (
-    <View style={{ paddingVertical: 80, gap: 18, alignItems: 'flex-start' }} accessibilityRole="alert">
-      <Text style={m.text({ 'font-size': '18px' })}>{msg('media.ui.loadFailed')}</Text>
-      <PillButton label={msg('media.ui.retry')} onPress={() => void store.catalogue.title(id, true)} />
-    </View>
-  );
-  const size = heroCover(m);
-  return (
-    <View style={{ flexDirection: m.small ? 'column' : 'row', gap: 32, opacity: 0.7 }} accessibilityLabel="Loading" accessibilityRole="progressbar">
-      <View style={{ width: size, height: size, borderRadius: 10, backgroundColor: m.ui.skeleton }} />
-      <View style={{ flex: 1, gap: 14, justifyContent: 'flex-end' }}>
-        {[0.2, 0.6, 0.35].map((w, i) => <View key={i} style={{ width: `${w * 100}%`, height: i === 1 ? 44 : 14, borderRadius: 8, backgroundColor: m.ui.skeletonLight }} />)}
-      </View>
-    </View>
-  );
-}
-
-function heroCover(m: MediaLook): number {
-  return m.small ? Math.min(300, m.width - m.gutter * 2 - 40) : m.wide ? 320 : 260;
 }
 
 /** Cover beside the title block on wide screens, above it on phones. */
@@ -363,44 +338,6 @@ function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
             onPress={() => actions.play({ items: [card], index: 0, positionSeconds: c.startSeconds, source })} testID={`media-chapter-${i}`} />)}
         </View>
       ) : null}
-      <FactList card={card} />
-    </View>
-  );
-}
-
-/** A date as the viewer reads it ("23 Nov 2026"), else the year label; '' when neither is known. */
-function dayLabel(card: Card): string {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(card.airDate)) {
-    const date = new Date(`${card.airDate}T00:00:00Z`);
-    if (Number.isFinite(date.getTime())) {
-      try { return new Intl.DateTimeFormat(localeContext().formatLocale, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(date); } catch { /* The year below. */ }
-    }
-  }
-  return card.yearLabel;
-}
-
-// ── Photo ────────────────────────────────────────────────────────────────────
-
-/** A photo, as large as the page allows in its own shape, with its name and date. Nothing plays or
- * reads: the page is the picture. */
-function PhotoPage({ card }: { card: Card }) {
-  const m = useMediaLook();
-  const host = useHost();
-  // The largest art the card carries: its landscape sizes are read at the backdrop width.
-  const uri = card.thumbnail || card.backdrop || card.poster;
-  const height = Math.max(240, Math.round(m.height * (m.small ? 0.58 : 0.7)));
-  return (
-    <View testID="media-photo-page">
-      <View style={{ width: '100%', height, marginBottom: m.small ? 20 : 28, alignItems: 'center', justifyContent: 'center' }} testID="media-photo">
-        {uri ? <Image source={host.image(uri)} contentFit="contain" transition={200} accessibilityLabel={card.name}
-          style={{ width: '100%', height: '100%' }} />
-          : <View style={{ width: '60%', height: '80%', borderRadius: 10, backgroundColor: m.ui.skeleton }} />}
-      </View>
-      <View style={{ gap: 8, marginBottom: 32 }}>
-        <Eyebrow>{msg('media.ui.photo')}</Eyebrow>
-        <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '26px' : '34px', 'line-height': '1.1', color: '$ui.ink' })}>{card.name}</Text>
-        <Facts items={[dayLabel(card)]} />
-      </View>
       <FactList card={card} />
     </View>
   );

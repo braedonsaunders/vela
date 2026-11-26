@@ -31,6 +31,8 @@ const mock = spawn(bun, ['run', 'mock-server/main.ts'], {
     PORT: String(mockPort),
     DEV_ORIGIN: `http://127.0.0.1:${port}`,
     VELA_MOCK_SILENT_MEDIA: '1',
+    // Keep the stock catalogue's photo dates stable in both browser runs.
+    VELA_MOCK_NOW: '2026-11-26T15:00:00.000Z',
     VELA_MOCK_SPORTS_FREEZE: '1',
     VELA_MOCK_READ_FREEZE: '1',
     ...(process.env.VELA_MOCK_MEDIA_ROOT ? { VELA_MOCK_MEDIA_ROOT: process.env.VELA_MOCK_MEDIA_ROOT } : {}),

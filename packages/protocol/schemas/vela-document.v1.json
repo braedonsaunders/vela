@@ -3672,6 +3672,44 @@
           "templates": [],
           "tv": "Sliders become − and + (a remote's arrows move the focus)."
         },
+        "galleryDirectory": {
+          "doc": "A paged grid of Gallery albums or people. Each tile shows its artwork, name and count.",
+          "parts": [
+            "galleryDirectory.tile",
+            "galleryDirectory.name",
+            "galleryDirectory.count"
+          ],
+          "props": {
+            "failed": {
+              "doc": "The last source error ({src.x.$error}).",
+              "type": "template"
+            },
+            "items": {
+              "doc": "The list source ({items, more}).",
+              "required": true,
+              "type": "value"
+            },
+            "kind": {
+              "doc": "The directory to display.",
+              "required": true,
+              "type": "enum",
+              "values": [
+                "albums",
+                "people"
+              ]
+            },
+            "pending": {
+              "doc": "Whether a page is being read ({src.x.$pending}).",
+              "type": "value"
+            },
+            "source": {
+              "doc": "The list source name for vela.more.",
+              "type": "template"
+            }
+          },
+          "templates": [],
+          "tv": "Moves by D-pad through album or person tiles."
+        },
         "genres": {
           "doc": "The library's genres as coloured tiles.",
           "parts": [],
@@ -3833,6 +3871,29 @@
             "nowPlaying.background"
           ],
           "tv": "The transport row and the list beside it are focus guides; the play button takes focus first. A background template is drawn behind the stage and takes no focus."
+        },
+        "photoViewer": {
+          "doc": "A photo contained at its original aspect ratio, with its name, taken date and available facts.",
+          "parts": [
+            "photoViewer.root",
+            "photoViewer.stage",
+            "photoViewer.metadata",
+            "photoViewer.eyebrow",
+            "photoViewer.title",
+            "photoViewer.date",
+            "photoViewer.facts",
+            "photoViewer.transport",
+            "photoViewer.control"
+          ],
+          "props": {
+            "item": {
+              "doc": "The photo as an item: record or a vela.title value.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "The title frame owns focus and closing."
         },
         "player": {
           "doc": "The mini player (a Listen player; with `channel` the node is instead the muted live preview): what plays, previous, play and pause, next (spoken word: 15 and 30 s skips), stop, and its bottom edge as the scrubber. Pressing it opens Now Playing.",
@@ -4192,6 +4253,40 @@
           },
           "templates": [],
           "tv": "A focus grid; the first tile takes focus as the page opens."
+        },
+        "timeline": {
+          "doc": "A virtualized square photo grid with calendar headings and cursor paging.",
+          "parts": [
+            "timeline.month",
+            "timeline.day",
+            "timeline.tile"
+          ],
+          "props": {
+            "failed": {
+              "doc": "The last source error ({src.x.$error}).",
+              "type": "template"
+            },
+            "groupByDate": {
+              "default": "true",
+              "doc": "Group photos under calendar headings.",
+              "type": "boolean"
+            },
+            "items": {
+              "doc": "The list source ({items, more}).",
+              "required": true,
+              "type": "value"
+            },
+            "pending": {
+              "doc": "Whether a page is being read ({src.x.$pending}).",
+              "type": "value"
+            },
+            "source": {
+              "doc": "The list source name for vela.more.",
+              "type": "template"
+            }
+          },
+          "templates": [],
+          "tv": "Moves by D-pad through square photo tiles."
         },
         "trackTable": {
           "doc": "A tracklist: number (a play control on hover, a live meter on the track playing), cover, title with the explicit mark and artist, album, the heart, duration and the row menu. Double-click or Enter plays from a track (a tap on touch, select on TV); right-click or long-press opens the menu.",
@@ -4630,6 +4725,7 @@
             "discography",
             "duplicates",
             "eq",
+            "galleryDirectory",
             "genres",
             "homeShelves",
             "importSubtitle",
@@ -4637,6 +4733,7 @@
             "lyrics",
             "musicShelf",
             "nowPlaying",
+            "photoViewer",
             "playlistImport",
             "queue",
             "quickTiles",
@@ -4657,6 +4754,7 @@
             "spokenProgress",
             "spokenTitle",
             "tileGrid",
+            "timeline",
             "trackTable",
             "wash"
           ]
@@ -9355,6 +9453,41 @@
           "args": {},
           "doc": "What plays now: a reference to `nowPlaying:current` (NowPlayingRecord), pushed about once a second while a page reads it.",
           "live": true
+        },
+        "vela.photoAlbums": {
+          "args": {
+            "library": {
+              "doc": "The photo library.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "Photo albums from the library’s album level, paged: ListValue."
+        },
+        "vela.photoPeople": {
+          "args": {
+            "id": {
+              "doc": "With a person id, list their photos instead of the subject facet.",
+              "required": false,
+              "type": "string"
+            },
+            "library": {
+              "doc": "The photo library.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "The library’s subjects or one subject’s photos, paged: ListValue."
+        },
+        "vela.photoTimeline": {
+          "args": {
+            "library": {
+              "doc": "The photo library.",
+              "required": true,
+              "type": "string"
+            }
+          },
+          "doc": "Photos by taken date, newest first, paged: ListValue."
         },
         "vela.playlist": {
           "args": {

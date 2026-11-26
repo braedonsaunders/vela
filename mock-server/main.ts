@@ -11,12 +11,13 @@ import { serveLive, liveFaults } from './live';
 import { trickplaySheet } from './trickplay';
 import { applyCommand, createSession, events, failover, observe, originalLost, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
-import { audioSourceFor, isMediaLibrary, isVideoChild, mediaArtwork, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
+import { audioSourceFor, enableGalleryFixtures, isMediaLibrary, isVideoChild, mediaArtwork, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
 import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, readingWriteTime, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
 import { buildHistoryRecap, getPlaylistImport, isHiddenDuplicateTitle, isRecapPeriod, libraryDuplicateGroups, recordingReleasesForTitle, resolvePlaylistImportSave, setDuplicatePreference, startPlaylistImport } from './music-library';
 import { renderCover } from './covers';
 import { downloadSubtitle, foundSubtitleVtt, searchSubtitles, subtitleLanguages } from './subtitle-search';
 
+import { seedGalleryParity } from './gallery-parity';
 import { scaleGuide } from './guide-fixture';
 import { archivePlan, archiveRange, catchUpFeature, checkTimeshiftCommand, eventProgramme, flagProgramme, goLive, withArchives } from './catch-up';
 import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, setWatchProgramme, sportsAdmin, sportsEnabled, sportsLogo } from './sports';
@@ -123,6 +124,12 @@ const videoLibraries: V.Library[] = labPreset ? [
   { ...fixtureLibraries[1]!, id: '2', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
   { ...fixtureLibraries[1]!, id: '4', name: 'Anime Shows', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
 ] : fixtureLibraries;
+// Parity captures retain the original catalogue and can seed its recommended rows.
+if (mediaEnabled && process.env.VELA_MOCK_GALLERY_PARITY === '1') {
+  seedGalleryParity(process.env.VELA_MOCK_GALLERY_ROWS === '1');
+} else if (mediaEnabled && process.env.VELA_MOCK_GALLERY_FEATURES !== '0') {
+  enableGalleryFixtures(Number(process.env.VELA_MOCK_GALLERY_SCALE));
+}
 const libraries: V.Library[] = [...videoLibraries.map(library => experiencesEnabled ? { ...library, experience: library.kind === 'live' ? 'live' : 'watch' } : library),
   ...(mediaEnabled ? mediaLibraries.map(({ experience, ...library }) => experiencesEnabled ? { ...library, experience } : library).map(library => levelsEnabled ? library
     : { ...library, tabs: library.tabs?.filter(tab => !(tab.kind === 'recommended' && tab.card)) }) : [])];

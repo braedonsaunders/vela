@@ -29,14 +29,14 @@ export function shelfOf(collectionType: string | undefined): Shelf {
 /** How a title of a non-video library is read: an audiobook library's audio is books, not songs;
  * `group` marks the folder (Jellyfin) or album (Emby) that holds a multi-file book's parts, and
  * `parent` the book a part belongs to. */
-export interface MediaHint { audiobook?: boolean; group?: boolean; parent?: { id: string; name: string };
+export interface MediaHint { photoAlbum?: boolean; audiobook?: boolean; group?: boolean; parent?: { id: string; name: string };
   /** Emby counts an artist's songs and albums together: no album count is shown. */ emby?: boolean }
 
 /** The audio item types: Jellyfin's AudioBook, both servers' Audio. */
 export const isAudioItem = (i: Item) => i.Type === 'Audio' || i.Type === 'AudioBook';
 
-/** Item types that are titles (pages and playback), as opposed to folders, albums of photos,
- * playlists and collections, which open as directories. */
+/** Project a title and its media role. Gallery reads photo albums as titles; folder views can
+ * still open them as directories. */
 export function titleProjection(i: Item, hint: MediaHint = {}): { kind: V.TitleKind; media?: V.TitleMedia } | undefined {
   switch (i.Type) {
     case 'Movie': case 'MusicVideo': case 'Video': case 'Trailer': return { kind: 'movie' };
@@ -58,7 +58,14 @@ export function titleProjection(i: Item, hint: MediaHint = {}): { kind: V.TitleK
       const format = readingFormat(i);
       return { kind: 'movie', media: { class: 'book', role: 'book', credits: authors(i), ...(format ? { reading: { format } } : {}) } };
     }
-    case 'Photo': return { kind: 'movie', media: { class: 'photo', role: 'item', ...photoFacts(i.Width, i.Height) } };
+    case 'Photo': {
+      const credits = i.People?.filter(person => /^(subject|person)$/i.test(person.Type ?? '')).map(person => ({ name: person.Name, role: 'subject', personId: person.Id }));
+      return { kind: 'movie', media: { class: 'photo', role: 'item', ...photoFacts(i.Width, i.Height),
+        ...(hint.parent ? { parents: [{ ...hint.parent, role: 'album' }] } : {}),
+        ...(credits?.length ? { credits } : {}),
+      } };
+    }
+    case 'PhotoAlbum': return hint.photoAlbum ? { kind: 'movie', media: { class: 'photo', role: 'album', ...count(i.ChildCount) } } : undefined;
     case 'Folder': return hint.group ? { kind: 'show', media: { class: 'audiobook', role: 'audiobook', ...count(i.ChildCount), credits: authors(i) } } : undefined;
     default: return undefined;
   }

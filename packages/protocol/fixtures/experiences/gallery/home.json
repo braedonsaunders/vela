@@ -1,0 +1,32 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "gallery",
+ "screen": "gallery",
+ "page": "home",
+ "version": "1",
+ "title": "{s:photos}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {},
+ "tree": {
+  "type": "slot",
+  "slot": "children",
+  "style": {
+   "flex": "1",
+   "min-height": "0px"
+  },
+  "inner": {
+   "flex": "1"
+  }
+ },
+ "strings": {
+  "photos": "Photos"
+ }
+}
