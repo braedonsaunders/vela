@@ -571,7 +571,17 @@ export class SegmentPipeline {
         first = false;
       }
       if (first) {
-        const start = live ? Math.max(next.start, position) : position;
+        let start = live ? Math.max(next.start, position) : position;
+        if (live && !this.startLiveAtEdge) {
+          // An authorized starting position can fall between advertised and playable media.
+          const buffered = timeRanges(this.video.buffered);
+          const landing = liveSeekLanding(start, buffered)?.position ?? gapJump(start, buffered, true);
+          if (landing === null) {
+            sequence++;
+            continue;
+          }
+          start = landing;
+        }
         // Assigning currentTime at zero still starts a media seek. Start-over media is
         // already at zero, and a flush while its first frames are arriving can stall WebKit.
         if (this.video.currentTime !== start) this.video.currentTime = start;

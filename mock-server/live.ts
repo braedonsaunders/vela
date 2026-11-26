@@ -12,12 +12,12 @@ const epoch = Date.now() - (timeshiftMinutes ? 20 * 60_000 : 60_000);
  * relay starting from its backlog published it (Ether, November 2026: 5 s). A player that parks at
  * the playlist's time sits in front of a hole it never fills.
  */
-export const liveFaults = { gapEvery: 0, delayEvery: 0, delayMs: 8000, mediaLeadSeconds: 0 };
+export const liveFaults = { gapEvery: 0, delayEvery: 0, delayMs: 8000, mediaLeadSeconds: 0, rewindSegments: 0 };
 /** The newest published segment's sequence number. */
 export const edgeSequence = (now = Date.now()) => Math.floor((now - epoch) / 4000);
 /** The segment carrying a wall-clock instant (negative before the broadcast began: the archive). */
 export const sequenceAt = (ms: number) => Math.floor((ms - epoch) / 4000);
-const windowSegments = () => (timeshiftMinutes ? timeshiftMinutes * 15 : 12);
+const windowSegments = () => liveFaults.rewindSegments || (timeshiftMinutes ? timeshiftMinutes * 15 : 12);
 export function liveWindow() {
   const edgeSeq = edgeSequence(), edge = edgeSeq * 4;
   // As Ether publishes it: one exact sequence and its time from the playlist this plan was made

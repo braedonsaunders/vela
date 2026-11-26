@@ -115,7 +115,8 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
   // so the session is placed at its start once, when the engine itself reports the window (a seek
   // before then is refused; one that never reports places Start over on its own).
   const placed = useRef('');
-  const placeAt = archived?.kind === 'startOver' && window?.seekable && live?.edgeSeconds != null && snapshot?.state === 'playing' && plan && placed.current !== plan.sessionId
+  const placeAt = archived?.kind === 'startOver' && window?.seekable && live?.edgeSeconds != null && snapshot?.state === 'playing'
+    && plan?.seekGeneration === 0 && placed.current !== plan.sessionId
     // A second in: a live engine reads position 0 as "join at the edge".
     && window.position - window.start > LIVE_SLACK_SECONDS ? window.start + 1 : null;
   useEffect(() => {
