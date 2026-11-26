@@ -121,9 +121,6 @@ export function ServerSwitcher({ params }: WidgetProps) {
         );
       })}
       <Row label={params.addLabel || msg('connect.add')} onPress={switcher.openConnect} disabled={busy} testID="server-add" />
-      {switcher.consoleUrl && Platform.OS === 'web' ? (
-        <Row label={msg('server.backToEther')} href={switcher.consoleUrl} testID="back-to-ether" />
-      ) : null}
       {error ? <Alert>{error}</Alert> : null}
     </View>
   );

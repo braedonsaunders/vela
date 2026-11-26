@@ -750,7 +750,6 @@
   "server.retryNow": "Trying again now…",
   "server.rejected": "The server didn't accept those details.",
   "server.webLinkExpired": "This sign-in link expired. Choose Watch in Ether again.",
-  "server.backToEther": "Back to Ether",
   "server.codeExpired": "The code expired.",
   "server.probe.invalid": "Enter a server address, like 192.168.1.20:8096.",
   "server.probe.unreachable": "Nothing answered at that address.",
