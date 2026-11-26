@@ -4,15 +4,12 @@ import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useVelaState } from '@vela/core/react';
-import { HostContext } from '@vela/skin/src/host';
-import { ReaderHostContext, ReaderPage } from '@vela/skin/src/blocks/read/reader';
+import { ReaderHostContext } from '@vela/skin/src/blocks/read/reader';
 import { takeReaderOrigin } from '@vela/skin/src/blocks/read/reader-origin';
 import { DEFAULT_READER_SETTINGS, type ReaderLocation, type ReaderSettings } from '@vela/skin/src/blocks/read/reader-engine';
 import { preferences } from '../../src/data/preferences';
 import { createReaderEngine } from '../../src/media/reader-engine';
 import { useVela } from '../../src/vela';
-import { config } from '../../src/data/config';
 import { ReadDocument } from '../../src/experiences/read-document';
 
 const SETTINGS = 'reader-settings';
@@ -23,8 +20,6 @@ export default function Read() {
   const vela = useVela();
   const active = useIsFocused();
   const store = vela.store;
-  const detail = useVelaState(state => state.titles[id]);
-  const card = detail?.value?.title[0];
   const titleHost = vela.host('title', id, library);
   // The reader's paper runs beneath the system bars and keeps its bars clear of them itself
   // (reader.tsx); Android's content routes are handed a viewport with the bars already taken off.
@@ -39,7 +34,6 @@ export default function Read() {
     try { return { ...DEFAULT_READER_SETTINGS, ...JSON.parse(preferences.get(SETTINGS) || '{}') as Partial<ReaderSettings> }; }
     catch { return DEFAULT_READER_SETTINGS; }
   });
-  useEffect(() => { void store.catalogue.title(id); }, [store, id]);
   const changeSettings = useCallback((next: ReaderSettings) => {
     setSettings(next);
     try { preferences.set(SETTINGS, JSON.stringify(next)); } catch { /* Kept for this visit only. */ }
@@ -72,15 +66,10 @@ export default function Read() {
   const session = useMemo(() => ({
     open, engine, settings, onSettings: changeSettings, onLocation, onClose: close, origin,
   }), [open, engine, settings, changeSettings, onLocation, close, origin]);
-  if (host && config.readDocuments) return (
+  if (!host) return <View style={{ flex: 1, backgroundColor: '#fbf9f4' }} />;
+  return (
     <ReaderHostContext.Provider value={session}>
       <ReadDocument page="reader" id={id} library={library} host={host} active={active} back={close} />
     </ReaderHostContext.Provider>
-  );
-  if (!host || !card) return <View style={{ flex: 1, backgroundColor: '#fbf9f4' }} />;
-  return (
-    <HostContext.Provider value={host}>
-      <ReaderPage card={card} {...session} />
-    </HostContext.Provider>
   );
 }

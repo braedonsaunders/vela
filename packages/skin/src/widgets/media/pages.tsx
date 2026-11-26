@@ -1,24 +1,17 @@
 // Purpose-built pages for media titles (docs/media-kinds.md): an album with its tracklist, an
-// artist with songs and albums, a book with its cover, author, series and reading progress, a
-// series of books, an audiobook with chapters or parts, a podcast with its episodes, a photo. A
-// track opens its album, a part its audiobook and a podcast episode its show. The app draws one of
+// artist with songs and albums, an audiobook with chapters or parts, a podcast with its episodes,
+// and a photo. Read handles books and series. A track opens its album, a part its audiobook and
+// a podcast episode its show. The app draws one of
 // these in place of the document's title page; each takes the document's `ui` look.
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Text, View } from 'react-native';
-import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, localeContext, msg, number, opensMediaPage, plural, podcastOrder, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
+import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, localeContext, msg, number, plural, podcastOrder, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useHost } from '../../host';
 import { useMediaActions } from './context';
 import { Cover, CoverTile, ListRow, PillButton, Progress, SectionHeading, Segmented, TextLink, TileGrid, useMediaLook, VideoTile, type MediaLook } from './parts';
 import { Buttons, Eyebrow, FactList, Facts, Hero, MediaFrame as Frame, openByline, Summary, tilesPerRow, Title } from '../../blocks/media/title';
-import { BookHero, BookSeriesList, BookSummary, SeriesHero } from '../../blocks/read/book';
-
-/** The card kinds this page draws (core's opensMediaPage); anything else, a video show among
- * them, stays with the document's title page. */
-export function isMediaPageRole(kind: string): boolean {
-  return opensMediaPage(kind);
-}
 
 /** `framed`: drawn inside the document's title frame (the `mediaPage` widget), which brings the
  * scrim, the opening motion and the close control; otherwise a page of its own. */
@@ -37,9 +30,8 @@ export function MediaTitlePage({ id, framed = false, marked = '' }: { id: string
         : cls === 'podcast' ? <PodcastPage card={card} marked={marked} />
         : role === 'album' ? <AlbumPage card={card} detail={detail.value!} />
         : role === 'artist' ? <ArtistPage card={card} />
-        : role === 'book' ? <BookPage card={card} />
-        : role === 'series' ? <SeriesPage card={card} />
-        : <AudiobookPage card={card} detail={detail.value!} />}
+        : cls === 'audiobook' ? <AudiobookPage card={card} detail={detail.value!} />
+        : null}
     </Frame>
   );
 }
@@ -289,31 +281,6 @@ function useChildrenItems(id: string): Card[] {
   return useChildren(id)?.value?.items ?? EMPTY;
 }
 const EMPTY: Card[] = [];
-
-// The legacy frame still supplies these pieces until the Read documents take over the route.
-function BookPage({ card }: { card: Card }) {
-  const seriesId = card.media?.parents.find(parent => parent.role === 'series')?.id;
-  const books = useChildren(seriesId)?.value?.items ?? EMPTY;
-  return (
-    <View>
-      <BookHero card={card} />
-      <BookSummary card={card} />
-      <FactList card={card} />
-      <BookSeriesList card={card} items={books} />
-    </View>
-  );
-}
-
-function SeriesPage({ card }: { card: Card }) {
-  const books = useChildrenItems(card.id);
-  return (
-    <View>
-      <SeriesHero card={card} items={books} />
-      <BookSummary card={card} />
-      <BookSeriesList card={card} items={books} />
-    </View>
-  );
-}
 
 // ── Audiobook ────────────────────────────────────────────────────────────────
 

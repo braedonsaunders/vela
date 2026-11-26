@@ -1,7 +1,6 @@
 // A library opens in its experience (core's libraryExperience: the server's name for it, else what
-// it holds). Each experience is its own seam: listen is the audio app; read, gallery and live draw
-// today's pages (the standard library with the book pages and reader, the photo viewer, the guide)
-// until their own designs replace them here, without touching the contract.
+// it holds). Listen and Read are document experiences. Gallery and Live still use the shared
+// library route for their photo viewer and guide.
 import type { ComponentType } from 'react';
 import type { VelaExperience } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
@@ -9,7 +8,6 @@ import type { LibraryParams } from '../browse/library-query';
 import { ListenSection } from '../listen/section';
 import { WatchLibrary } from './watch';
 import { ReadLibrary } from './read';
-import { config } from '../data/config';
 
 export type LibrarySectionProps = { id: string; params: LibraryParams & { m?: string } };
 
@@ -23,7 +21,7 @@ function ListenLibrary({ id, params }: LibrarySectionProps) { return <ListenSect
 export const EXPERIENCE_SECTIONS: Record<VelaExperience, ComponentType<LibrarySectionProps>> = {
   watch: WatchLibrary,
   listen: ListenLibrary,
-  read: config.readDocuments ? ReadLibrary : WatchLibrary,
+  read: ReadLibrary,
   gallery: GalleryLibrary,
   live: LiveLibrary,
 };
