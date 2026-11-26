@@ -1179,9 +1179,11 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const arg = press ? fill(press.arg, ctx, env) : '';
       const kind = (node.id && fill(node.id, ctx, env).startsWith('episode-')) ? 'episode' : press?.action === 'select' && arg.includes('|season|') ? 'season' : press?.action === 'playExtra' ? 'extra' : undefined;
       const unepisode = kind && !disabled ? episodeNav?.register(target, kind, ctx.index) : undefined;
-      if (press) routeFocus?.offer(target, press.action);
+      if (press && !disabled && !unfocusable && node.directionalFocus !== false && selectable(node)) {
+        routeFocus?.offer(target, press.action, env.route === 'title' && press.action === 'play' && node.testId === 'detail-play');
+      }
       // A reading stop is the route's first focus when nothing else offers itself first (a final game's panels).
-      else if (stop && ctx.screen) routeFocus?.offer(target, 'stop');
+      else if (!press && stop && ctx.screen) routeFocus?.offer(target, 'stop');
       const release = () => {
         if (releaseButton.current !== release) return;
         releaseButton.current = undefined;

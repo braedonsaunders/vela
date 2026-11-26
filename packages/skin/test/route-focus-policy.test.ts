@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readLibraryOpeningFocus, readTitleOpeningFocus, restoreRouteFocus, returnFocusTarget } from '../src/route-focus-policy';
+import { openingFocusPriority, takesOpeningFocus, readLibraryOpeningFocus, readTitleOpeningFocus, restoreRouteFocus, returnFocusTarget } from '../src/route-focus-policy';
 
 test('native touch navigation does not restore TV focus over the keyboard', () => {
   expect(restoreRouteFocus('android', false)).toBe(false);
@@ -37,4 +37,16 @@ test('a redraw while the player closes can replace the hero Resume control with 
   expect(returnFocusTarget(opener, buttons)).toBeUndefined();
   buttons.set('new-play', 'play:t1');
   expect(returnFocusTarget(opener, buttons)).toBe('new-play');
+});
+
+test('a delayed series action takes precedence over trailer and episode-row focus', () => {
+  const trailer = openingFocusPriority('playExtra');
+  const episode = openingFocusPriority('play');
+  const primary = openingFocusPriority('play', true);
+  expect(takesOpeningFocus(trailer, 0, false)).toBe(true);
+  expect(takesOpeningFocus(episode, trailer, false)).toBe(true);
+  expect(takesOpeningFocus(primary, episode, false)).toBe(true);
+  expect(takesOpeningFocus(trailer, primary, false)).toBe(false);
+  expect(takesOpeningFocus(primary, trailer, true)).toBe(false);
+  expect(takesOpeningFocus(openingFocusPriority('toggle'), 0, false)).toBe(false);
 });
