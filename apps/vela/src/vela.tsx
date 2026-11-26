@@ -6,7 +6,7 @@ import type { SkinDocument } from '../../../packages/protocol/skin';
 // with (the active document, the view state documents read, and what presses do). A signed-out
 // server sends the viewer to /sign-in.
 import { router, usePathname } from 'expo-router';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createVela, stopSessionsOnPageHide, type Vela as Store, type VelaState } from '@vela/core';
@@ -64,7 +64,7 @@ import { useLiveController } from './live';
 import { useMultiviewController } from './multiview';
 import { MultiviewProvider, useMultiview } from '@vela/skin/src/widgets/multiview';
 import { LaunchGate } from './launch';
-import { launchReady } from './launch-state';
+import { launchReady, fontLoadRevision } from './launch-state';
 import { Previews } from './previews';
 import { createHostStateSelector } from './host-state';
 import { useViewState } from './view-state';
@@ -78,7 +78,7 @@ import { useTopShelf } from './top-shelf';
 export interface Vela {
   /** The core store, for its actions (`vela.store.auth.signIn`, …). */
   store: Store;
-  /** The host a route draws with; null until the document and its fonts are ready. */
+  /** The host a route draws with once a document and the initial fonts are ready. */
   host(route: RouteName, entry: string, library?: string): SkinHost | null;
   doc: ResolvedDocument | null;
   docError: string | null;
@@ -302,7 +302,9 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const [docIndex, setDocIndex] = useState(initialDocument);
   /** Whether the viewer chose the document (`?skin=`, the picker); else the server's default applies. */
   const [picked, setPicked] = useState(() => DOCUMENTS[initialDocument()]?.id !== DOCUMENTS[0]?.id);
-  const [fontsReady, setFontsReady] = useState(false);
+  const [fontRevision, updateFontLoad] = useReducer(fontLoadRevision, 0);
+  const fontsReady = fontRevision > 0;
+  const nativeFontRevision = Platform.OS === 'web' ? undefined : fontRevision;
   const origin = state.servers.list.find(s => s.selected)?.origin ?? '';
   // Open menus and panels belong to the session they were opened in: signing out or in, or
   // switching server, closes them (a menu left open on sign-out would greet the next sign-in).
@@ -418,9 +420,9 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   }, [raw, width, branding, previewSkin]);
 
   useEffect(() => {
-    setFontsReady(false);
+    updateFontLoad('loading');
     const source = (path: string) => assetData[path] ?? assetSource(path, origin);
-    void Promise.all([loadFonts(APP_FONTS, source), loadFonts(raw.fonts, source)]).finally(() => setFontsReady(true));
+    void Promise.all([loadFonts(APP_FONTS, source), loadFonts(raw.fonts, source)]).finally(() => updateFontLoad('settled'));
   }, [raw, origin, assetData]);
 
   // The appearance picker: the viewer's choice applies at once and is remembered on this device.
@@ -521,9 +523,10 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     const routeViewport = route === 'watch' ? viewport : contentViewport;
     const inputs = [resolved.doc, env, routeViewport, dispatch, image, setQuery, view.setFlag, loadMore, view.stepHero];
     const previous = hosts.current.get(key);
-    if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.host;
+    if (previous && previous.host.fontRevision === nativeFontRevision && inputs.every((v, i) => v === previous.inputs[i])) return previous.host;
     const result: SkinHost = {
       doc: resolved.doc,
+      fontRevision: nativeFontRevision,
       env,
       viewport: routeViewport,
       stepHero: view.stepHero,
@@ -551,7 +554,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     };
     hosts.current.set(key, { inputs, host: result, libraries: state.libraries.value });
     return result;
-  }, [readEnvironment, resolved.doc, fontsReady, state, view, live, liveView, width, viewport, contentViewport, dispatch, image, setQuery, loadMore, prefetch, visualizes]);
+  }, [readEnvironment, resolved.doc, fontsReady, nativeFontRevision, state, view, live, liveView, width, viewport, contentViewport, dispatch, image, setQuery, loadMore, prefetch, visualizes]);
 
   const openTitle = useCallback((id: string) => store.catalogue.view(id), [store]);
   const art = useMemo(

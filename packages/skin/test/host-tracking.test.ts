@@ -23,6 +23,15 @@ describe('tracked host', () => {
     expect(reader.host.env.flags).toEqual(['menu']);
   });
 
+  test('a native font registration redraws a reader whose other inputs are unchanged', () => {
+    const host = base({ heroIndex: 0 }, { fontRevision: 1 });
+    const source = new HostSource(host);
+    const reader = new HostReader(source);
+    expect(reader.host.viewport.width).toBe(100);
+    source.publish({ ...host, fontRevision: 2 });
+    expect(reader.snapshot()).toBe(1);
+  });
+
   test('reads see the latest host, including keys first read after a change', () => {
     const source = new HostSource(base({ heroIndex: 0 }));
     const reader = new HostReader(source);
