@@ -1,3 +1,4 @@
+import { allowsOfflineRoute, isPlayableDownload } from '@vela/core';
 import { appearanceAsset, installedDigest, installedDocument, chosenSkin, packDocument } from '@vela/skin/src/installed';
 import type { SkinDocument } from '../../../packages/protocol/skin';
 // The app's state for its routes: the core store (sessions, servers, catalogue, search, playback,
@@ -200,7 +201,7 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   useSeriesTracks(store);
   const live = useLiveController(store, signedIn ? auth.revision : null);
   const multiview = useMultiviewController(store, signedIn ? auth.revision : null, live);
-  useSignedOutGate(auth.phase);
+  useSignedOutGate(state);
   useTopShelf(auth, state.home);
 
   useEffect(() => {
@@ -223,8 +224,10 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   }, [store, homeReady, libraryIds, auth.revision]);
 
   const serverSwitch = useMemo(
-    () => ({ servers, actions: store.servers, brandingName: state.appearance.value?.branding?.name, consoleUrl, openConnect: () => router.push('/connect') }),
-    [servers, store, state.appearance.value?.branding?.name, consoleUrl],
+    () => ({ servers, actions: store.servers, brandingName: state.appearance.value?.branding?.name, consoleUrl, openConnect: () => router.push('/connect'),
+      ...(state.downloads.supported ? { openDownloads: () => router.push('/downloads') } : {}),
+    }),
+    [servers, store, state.appearance.value?.branding?.name, consoleUrl, state.downloads.supported],
   );
 
   // The providers wrap the app whether or not they have a value: wrapping on sign-in would remount
@@ -255,14 +258,24 @@ function useStartRoutes(homeReady: boolean): void {
 }
 
 /** A signed-out server's viewer goes to its sign-in page; nothing else draws for them. */
-function useSignedOutGate(phase: VelaState['auth']['phase']): void {
+function offlineAccess(state: VelaState, pathname: string): boolean {
+  if (SIGNED_OUT_ROUTES.includes(pathname)) return true;
+  const { downloads, auth } = state;
+  return downloads.supported && downloads.hydrated && !!auth.viewerId &&
+    allowsOfflineRoute(auth.phase, pathname, id => downloads.items.some(item => item.titleId === id && isPlayableDownload(item)));
+}
+
+function useSignedOutGate(state: VelaState): void {
+  const { phase } = state.auth;
   const pathname = usePathname();
+  const allowed = offlineAccess(state, pathname);
+  const waiting = phase === 'offline' && state.downloads.supported && !state.downloads.hydrated;
   useEffect(() => {
-    if ((phase === 'signed-out' || phase === 'offline') && !SIGNED_OUT_ROUTES.includes(pathname)) {
+    if (!waiting && (phase === 'signed-out' || phase === 'offline') && !allowed) {
       const search = Platform.OS === 'web' ? window.location.search : '';
       router.replace({ pathname: '/sign-in', params: { returnTo: `${pathname}${search}` } });
     }
-  }, [phase, pathname]);
+  }, [phase, pathname, allowed, waiting]);
 }
 
 interface AppHostProps {
@@ -308,8 +321,15 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     const active = () => {
       void store.appearance.load();
       if (store.getState().auth.phase === 'offline') void store.auth.retry();
+      else void store.downloads.replayProgress();
     };
-    const subscription = AppState.addEventListener('change', next => { if (next === 'active') active(); });
+    const subscription = AppState.addEventListener('change', next => {
+      if (next === 'active') active();
+      if (next === 'background') void store.playback.checkpointDownload()?.catch(() => {});
+    });
+    const progressRetry = setInterval(() => {
+      if (AppState.currentState === 'active') void store.downloads.replayProgress();
+    }, 30_000);
     const visible = () => { if (document.visibilityState === 'visible') active(); };
     if (Platform.OS === 'web') {
       window.addEventListener('online', active);
@@ -317,6 +337,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     }
     return () => {
       subscription.remove();
+      clearInterval(progressRetry);
       if (Platform.OS === 'web') {
         window.removeEventListener('online', active);
         document.removeEventListener('visibilitychange', visible);
@@ -538,7 +559,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   return (
     <VelaContext.Provider value={value}>
       {Platform.OS === 'web' && <DocumentTitle pathname={pathname} />}
-      <LaunchGate ready={launchReady(state.auth.phase, state.home.load, fontsReady, SIGNED_OUT_ROUTES.includes(pathname), !!resolved.error, state.home.slow)}
+      <LaunchGate ready={launchReady(state.auth.phase, state.home.load, fontsReady, offlineAccess(state, pathname), !!resolved.error, state.home.slow)}
         brandingReady={state.appearance.load === 'ready' || state.appearance.load === 'failed'} branding={appearance?.branding}>
         <Previews store={store} state={state} onHome={pathname === '/' && !pickerOpen} heroIndex={view.heroIndex} still={view.still} searchFocused={view.flags.includes('search-focused')}>
           {children}

@@ -1,3 +1,4 @@
+import { useVelaState } from '@vela/core/react';
 // The watch route: a title, a channel (`?kind=channel`) or an extra (`?kind=extra`) played full
 // screen through VelaPlayerView, under the player chrome in the active document's look. Core's
 // playback slice starts, follows and stops the session; this route is the trusted host that hands
@@ -37,6 +38,17 @@ function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?
 }
 
 export default function Watch() {
+  const { id, kind } = useLocalSearchParams<{ id: string; kind?: string }>();
+  const { store } = useVela();
+  const phase = useVelaState(state => state.auth.phase);
+  const hydrated = useVelaState(state => state.downloads.hydrated);
+  if (phase !== 'signed-in' && !(phase === 'offline' && hydrated && !kind && store.downloads.isPlayable(id))) {
+    return <View style={styles.stage} />;
+  }
+  return <WatchPlayer />;
+}
+
+function WatchPlayer() {
   const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string; showId?: string }>();
   const { host, openTitle, store } = useVela();
   const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from, showId), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId]);
@@ -72,13 +84,15 @@ export default function Watch() {
   // which would pop the player: its removal waits while a menu holds Back.
   usePreventRemove(useBackHeld(), backFromNavigation);
 
-  useEffect(() => (id && target.kind === 'title' ? openTitle(id) : undefined), [id, target.kind, openTitle]);
+  const local = session.view.plan?.sessionId.startsWith('local-') === true;
+  const offline = useVelaState(state => state.auth.phase === 'offline');
+  useEffect(() => (!offline && !store.downloads.isPlayable(id) && id && target.kind === 'title' ? openTitle(id) : undefined), [id, target.kind, openTitle, offline, store]);
 
   // Media authorization belongs to the signed-in session (src/media-access.ts), not to a watch.
 
   // An episode's next one: the chrome offers it (and on the final credits, in place of Skip
   // credits). Starting it keeps this route, so the session in hand stops before the next begins.
-  const next = useNextEpisode(target.kind === 'title' ? skin?.env.detail?.title[0] : undefined);
+  const next = useNextEpisode(!offline && !local && target.kind === 'title' ? skin?.env.detail?.title[0] : undefined);
   const nextEpisode = useMemo<NextEpisode | null>(() => next ? {
     label: episodeLabel(next),
     play: () => router.setParams({ id: next.id, kind: undefined, positionSeconds: undefined, mediaSourceId: undefined, audioTrackId: undefined, versionId: undefined, showId: next.showId ?? showId }),
@@ -88,8 +102,8 @@ export default function Watch() {
   const close = useCallback(() => {
     stop();
     if (router.canGoBack()) router.back();
-    else router.replace('/');
-  }, [stop]);
+    else router.replace(offline || local ? '/downloads' : '/');
+  }, [stop, offline, local]);
 
   const channel = target.kind === 'channel' ? channels?.find(c => c.id === id) : undefined;
   const programmeChannel = target.kind === 'programme' ? channels?.find(c => c.id === target.channelId) : undefined;
