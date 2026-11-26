@@ -1271,7 +1271,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onBlur={() => set('focus', false)}
         accessible accessibilityRole="summary" accessibilityLabel={a11y.accessibilityLabel ?? sectionText(node, ctx, env)} testID={a11y.testID} />
     ) : null;
-    const guide = node.press ? undefined : tvGuide(node, env, band);
+    const guide = node.press ? undefined : tvGuide(node, env, band, ctx);
     // A reading stop takes focus without doing anything, so the remote can scroll to it.
     const stopProps = stop && web ? {
       focusable: true,
@@ -1369,10 +1369,13 @@ const stackedActions: ViewStyle = { flexDirection: 'column', alignItems: 'stretc
  * around the sign-in card kept the first D-pad press from reaching its fields. An escape scope
  * (a menu, a drawer) is one too, and while open it keeps focus inside: moving off its edges stays
  * on its items rather than reaching the page behind. */
-function tvGuide(node: Extract<RNode, { kind: 'box' }>, env: Env, band: boolean) {
+function tvGuide(node: Extract<RNode, { kind: 'box' }>, env: Env, band: boolean, ctx: Ctx) {
   if (!Platform.isTV) return undefined;
   const scope = !!node.escape?.length;
-  const region = node.role === 'navigation' || (band && Platform.OS === 'ios' && focusableWithin(node));
+  // Coming down from the centred scope should enter a search group at its first card on
+  // Android TV, even when the group's sparse grid ends well to the left of the scope.
+  const searchGrid = Platform.OS === 'android' && !!ctx.searchSection && fill(node.id, ctx, env).startsWith('vela-search-server-grid-');
+  const region = searchGrid || node.role === 'navigation' || (band && Platform.OS === 'ios' && focusableWithin(node));
   if (!scope && !region) return undefined;
   // Flags are read only by a scope: a flag change redraws scopes, not every region.
   const trap = scope && selectEnv(env, 'flags', `scope:${node.escape!.join(',')}`, flags => scopeOpen(node.escape!, flags));

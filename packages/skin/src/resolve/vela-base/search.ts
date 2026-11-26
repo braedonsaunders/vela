@@ -524,6 +524,7 @@ export const groupedSearch: Node = {
           serverNote([{ test: 'search.serverEmpty' }], '{t:search.serverEmpty}'),
           {
             ...titleGrid,
+            id: 'vela-search-server-grid-{search.serverId}',
             when: [{ test: 'search.serverHasResults' }],
             style: { ...(titleGrid as BoxNode).style, 'grid-template-columns': 'repeat(auto-fill, minmax(150px, 1fr))' },
             small: { ...(titleGrid as BoxNode).small, 'grid-template-columns': 'repeat({search.phoneColumns}, minmax(0px, 1fr))' },
