@@ -57,8 +57,11 @@ test.setup('Home release gate: a fresh sign-in opens Home', { sessions: ['lab-vi
     await expect(scrubber).toBeEnabled({ timeout: 30_000 });
     await scrubber.press('End');
     await expect(screen.getByText('46:02')).toBeVisible({ timeout: 30_000 });
-    await screen.getByRole('button', 'Play').tap();
-    await expect(screen.getByRole('button', 'Finished')).toBeVisible({ timeout: 45_000 });
+    // Seeking to the end may already finish the episode (playback was running); otherwise start it.
+    const finished = screen.getByRole('button', 'Finished');
+    const play = screen.getByRole('button', 'Play');
+    if (!(await finished.isVisible()) && (await play.isVisible())) await play.tap().catch(() => {});
+    await expect(finished).toBeVisible({ timeout: 45_000 });
     await screen.getByRole('button', 'Close player').tap();
     await expect(screen.getByRole('link', 'Home')).toBeVisible({ timeout: 30_000 });
     await expect(screen.getByRole('heading', 'Up Next')).toHaveCount(1, { timeout: 30_000 });
