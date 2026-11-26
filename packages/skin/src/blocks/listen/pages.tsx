@@ -4,7 +4,7 @@
 import { Image } from 'expo-image';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { Platform, Text, View } from 'react-native';
-import { albumOrder, durationLabel, msg, number, type Card, type Row } from '@vela/core';
+import { albumOrder, durationLabel, msg, number, releaseLabel, type Card, type Row } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { currentInQueue } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
@@ -14,7 +14,7 @@ import { alpha, Cover, useMediaLook, type MediaLook } from '../../widgets/media/
 import { placeOf, useMusic } from './app';
 import { useChildren, useDetailRows, useLibraryRows, useLiked, usePlaylist, usePlaylists, useRecent, useTitle } from './data';
 type FacetValue = { id: string; label: string; count: number };
-import { Chip, LikedCover, playlistCard, Byline, FocusGroup, FocusScope, Heart, Icon, IconButton, MusicTile, PlayFab, Shelf, Surface, transition, Wash } from './parts';
+import { Chip, LikedCover, playlistCard, Byline, FocusGroup, FocusScope, Heart, Icon, IconButton, MusicTile, PlayFab, ReleaseStatus, Shelf, Surface, transition, Wash } from './parts';
 import { listeningWords } from './listening';
 import { TrackList } from './track-table';
 import { compactMusic, musicTV } from './layout';
@@ -255,6 +255,7 @@ function AlbumView({ card }: { card: Card }) {
   const children = useChildren(card.id);
   const tracks = useMemo(() => albumOrder(children?.value?.items ?? []), [children?.value]);
   const playing = usePlayingFrom(card.id);
+  const release = releaseLabel(card.airDate);
   const source = { id: card.id, name: card.name, kind: 'title' as const };
   const artist = card.media?.parents.find(p => p.role === 'artist');
   const kind = (card.media?.childCount ?? tracks.length) <= 3 ? msg('music.single') : (card.media?.childCount ?? tracks.length) <= 6 ? msg('music.ep') : msg('media.ui.album');
@@ -266,14 +267,16 @@ function AlbumView({ card }: { card: Card }) {
           <Byline card={card} facts={[card.yearLabel, tracks.length ? totalLabel(tracks) : '']} />
         </Header>
         <ActionBar>
-          <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" opensPage />
-          <IconButton symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(tracks, 0, source, true)} />
+          {release ? <ReleaseStatus label={release} /> : <>
+            <PlayFab playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" opensPage />
+            <IconButton symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(tracks, 0, source, true)} />
+          </>}
           <Heart card={card} size={44} iconSize={26} />
           <MoreButton card={card} />
         </ActionBar>
         <TrackList tracks={tracks} options={{ source }} />
         <View style={{ paddingVertical: 28, gap: 4 }}>
-          {card.airDate ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{new Date(card.airDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</Text> : null}
+          {card.airDate ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{new Date(card.airDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })}</Text> : null}
           {card.media?.facts.filter(f => f.label === 'Label').map(f => <Text key={f.label} style={m.text({ 'font-size': '12px', color: '$ui.inkQuiet' })}>© {f.value}</Text>)}
         </View>
       </View>

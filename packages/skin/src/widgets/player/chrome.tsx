@@ -48,7 +48,7 @@ export function PlayerChrome() {
 function failureOf(state: PlayerChromeState, view: PlayerView): Failed | null {
   if (state.startFailure) {
     const message = state.startFailure.capacity ? msg('player.capacity') : state.startFailure.message;
-    return { message, capacity: state.startFailure.capacity };
+    return { ...state.startFailure, message };
   }
   if (state.failure && !state.failure.recoverable) return { message: state.failure.message, capacity: false };
   if (view.state === 'failed') return { message: view.reason || msg('ui.playbackCouldnTBeStarted'), capacity: false };

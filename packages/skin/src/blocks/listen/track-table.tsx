@@ -6,7 +6,7 @@
 // lists draw their first rows with the page and the rest over the next frames.
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
-import { clock, msg, number, type Card } from '@vela/core';
+import { clock, isUnreleased, msg, number, releaseLabel, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { currentInQueue } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
@@ -144,8 +144,12 @@ function TrackRow({ track, index, tracks, options, wide, disc, drag }: { track: 
   const playing = current && (phase === 'playing' || phase === 'buffering' || phase === 'loading');
   const more = useRef<ComponentRef<typeof View>>(null);
   const entry = options.playlist?.entryIds[index] ? { playlistId: options.playlist.id, entryId: options.playlist.entryIds[index]! } : undefined;
-  const audio = tracks.filter(t => t.media?.audio);
-  const play = () => app.play(audio, audio.indexOf(track), options.source);
+  const release = releaseLabel(track.airDate);
+  const play = () => {
+    const audio = tracks.filter(t => t.media?.audio && !isUnreleased(t.airDate));
+    const at = audio.indexOf(track);
+    if (at >= 0) app.play(audio, at, options.source);
+  };
   const openMenu: MenuOpen = (anchor, mode, opener) => app.menu({ card: track, anchor, mode, opener, entry });
   const openFromMore = () => more.current?.measureInWindow((x: number, y: number, width: number, height: number) =>
     app.menu({ card: track, anchor: { kind: 'card', rect: { left: x, top: y, right: x + width, bottom: y + height } }, mode: 'pointer', entry }));
@@ -168,17 +172,17 @@ function TrackRow({ track, index, tracks, options, wide, disc, drag }: { track: 
   const durationPart = usePart('trackTable.duration').text;
   const marker = drag && drag.dragging >= 0 && drag.over === index && drag.dragging !== index ? (drag.dragging < index ? 'bottom' : 'top') : '';
   const row = (
-    <Surface onPress={touch || tv ? play : undefined} onDoubleClick={touch || tv ? undefined : play} onMenu={openMenu} focusId={track.id} testID={`music-track-${track.id}`} selected={current}
-      label={[track.name, artist, track.media?.clockLabel].filter(Boolean).join(', ')}
-      style={(lit, focus) => [{ height: tv ? 72 : options.covers ? 60 : 52, borderRadius: tv ? 12 : 8, backgroundColor: lit ? m.ui.control : current ? alpha(m.ui.accent, 0.1) : 'transparent',
+    <Surface onPress={!release && (touch || tv) ? play : undefined} onDoubleClick={!release && !touch && !tv ? play : undefined} onMenu={openMenu} focusId={track.id} testID={`music-track-${track.id}`} selected={current}
+      label={[track.name, artist, release || track.media?.clockLabel].filter(Boolean).join(', ')}
+      style={(lit, focus) => [{ height: tv ? 72 : release || options.covers ? 60 : 52, borderRadius: tv ? 12 : 8, backgroundColor: lit ? m.ui.control : current ? alpha(m.ui.accent, 0.1) : 'transparent',
         transform: [{ scale: tv && focus ? 1.02 : 1 }] },
         focus ? (tv ? { borderWidth: 2, borderColor: m.ui.ink } : m.box({ 'box-shadow': `inset 0px 0px 0px 1.5px ${m.ui.ink}` })) : tv ? { borderWidth: 2, borderColor: 'transparent' } : {}, transition('background-color, transform', 120),
         rowStyle?.({ hover: lit, focus }), drag?.dragging === index ? { opacity: 0.5 } : null]}
       contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: touch ? 12 : 16, paddingHorizontal: touch ? 8 : 16 }}>
-      {lit => templated ? look.template!('trackTable.row', track, { index, number: numberLabel, active: current, playing, disc, lit }, index) : (
+      {lit => templated && !release ? look.template!('trackTable.row', track, { index, number: numberLabel, active: current, playing, disc, lit }, index) : (
         <>
           <View style={{ width: 28, alignItems: 'center' }} pointerEvents="box-none">
-            {lit && !tv ? (
+            {lit && !tv && !release ? (
               <Pressable onPress={() => (current ? app.toggle() : play())} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : `${msg('media.ui.play')} ${track.name}`} style={NO_RING}>
                 <MediaGlyph name={playing ? 'pause' : 'play'} size={16} color={m.ui.ink} />
               </Pressable>
@@ -190,6 +194,7 @@ function TrackRow({ track, index, tracks, options, wide, disc, drag }: { track: 
             {options.covers ? <Cover uri={track.poster} shape="square" size={42} title={track.name} accent={track.accent} lift={0.3} /> : null}
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={[m.text({ 'font-size': tv ? '20px' : '15px', 'font-weight': '550', color: current ? m.ui.accent : '$ui.ink' }), titlePart, rowText]}>{track.name}</Text>
+              {release ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkSecondary' })}>{release}</Text> : null}
               {artist || (duplicatesAvailable && recordingId && !m.small) ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   {track.media?.facts.some(f => f.label === 'Explicit' && f.value !== 'false') ? <Explicit /> : null}

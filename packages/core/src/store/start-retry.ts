@@ -3,6 +3,7 @@
 // never more than a minute away. Anything else is final: the viewer is told, not kept waiting.
 // Shared by core's playback slice and the live preview tile, which tunes channels itself.
 import { VelaError } from '../adapter/errors';
+import { unreleasedMessage } from '../release-date';
 
 /** Total attempts (the first included) when the server does not say. */
 const DEFAULT_ATTEMPTS = 3;
@@ -16,7 +17,7 @@ const MAX_WAIT_SECONDS = 60;
  * the refusal is final (not retryable, out of attempts, or too far away).
  */
 export function startRetry(error: unknown, retries: number): number {
-  if (!(error instanceof VelaError)) return 0;
+  if (!(error instanceof VelaError) || error.detail.code === 'title_unreleased') return 0;
   const retry = error.detail.retry;
   if (retry?.allowed !== true) return 0;
   const header = Number(error.retryAfter ?? NaN);
@@ -34,7 +35,9 @@ export function startRetry(error: unknown, retries: number): number {
  * is not final: a session being recovered waits those out.
  */
 export function finalRefusal(error: unknown): boolean {
-  if (!(error instanceof VelaError) || error.detail.retry?.allowed === true) return false;
+  if (!(error instanceof VelaError)) return false;
+  if (error.detail.code === 'title_unreleased') return true;
+  if (error.detail.retry?.allowed === true) return false;
   return error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429;
 }
 
@@ -56,7 +59,11 @@ export interface StartRefusal {
   errorClass: string;
 }
 
-export function startRefusal(error: unknown, fallback = ''): StartRefusal {
-  if (error instanceof VelaError) return { message: error.message || fallback, code: error.detail.code, errorClass: error.detail.class };
+export function startRefusal(error: unknown, fallback = '', airDate?: string): StartRefusal {
+  if (error instanceof VelaError) {
+    const { code, class: errorClass } = error.detail;
+    const message = code === 'title_unreleased' ? unreleasedMessage(airDate) : error.message || fallback;
+    return { message, code, errorClass };
+  }
   return { message: error instanceof Error && error.message ? error.message : fallback, code: '', errorClass: '' };
 }

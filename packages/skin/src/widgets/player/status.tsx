@@ -14,6 +14,7 @@ import { Spinner } from './spinner';
 import { useFocusClaim } from '../common/focus-claim';
 
 export interface Failed {
+  unreleased?: boolean;
   message: string;
   /** All of the server's streams are in use: trying again later may work. */
   capacity: boolean;
@@ -112,9 +113,9 @@ function FailureCard({
           marginTop: look.size(6),
         }}
       >
-        <Pill look={look} label={msg('ui.tryAgain')} primary preferred onPress={onRetry} testID="player-retry" />
+        {failed.unreleased ? null : <Pill look={look} label={msg('ui.tryAgain')} primary preferred onPress={onRetry} testID="player-retry" />}
         {useOriginal ? <Pill look={look} label={msg('player.streaming.useOriginal')} onPress={useOriginal} testID="player-use-original" /> : null}
-        <Pill look={look} label={msg('ui.closePlayer')} onPress={onClose} testID="player-failure-close" />
+        <Pill look={look} label={msg('ui.closePlayer')} preferred={failed.unreleased} onPress={onClose} testID="player-failure-close" />
       </View>
       {zap ? (
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: look.size(10) }}>

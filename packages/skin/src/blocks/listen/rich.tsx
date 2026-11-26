@@ -135,7 +135,7 @@ function TrackTableBlock({ props, ctx, empty }: { props: Props; ctx: Ctx; empty?
     ...(playlistId && entryIds.some(Boolean) ? { playlist: { id: playlistId, entryIds } } : {}),
   };
   // A stable list while the same tracks are named (the engine's progressive drawing keys on it).
-  const key = tracks.map(t => t.id).join('|');
+  const key = tracks.map(t => `${t.id}:${t.airDate}`).join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stable = useMemo(() => tracks, [key]);
   if (!stable.length && empty) return <>{empty(ctx)}</>;
