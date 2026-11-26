@@ -186,9 +186,14 @@ internal class PlayerController(
     // (the oldest segment). Later recovery/reloads must keep explicit positions. A start-over
     // plan's playlist begins at the programme's start, where it is joined (its plan position).
     val firstJoin = next.live && startedLiveSession != next.sessionId
-    val initialLiveJoin = firstJoin && !next.startOver && next.seekGeneration == 0 && next.positionSeconds <= 0.0
+    val recoveryAtMs = next.timeshiftRecoveryAtMs.takeIf { firstJoin }
+    val liveEdge = next.timeshiftClock?.edgeSeconds
+    val initialLiveJoin = firstJoin && !next.startOver && recoveryAtMs == null &&
+      ((liveEdge != null && (next.positionSeconds <= 0.0 || next.positionSeconds == liveEdge)) ||
+        (next.seekGeneration == 0 && next.positionSeconds <= 0.0))
     if (next.live) startedLiveSession = next.sessionId
-    start(next, path, url, source, if (initialLiveJoin) null else next.positionSeconds)
+    start(next, path, url, source, if (initialLiveJoin) null else next.positionSeconds,
+      recoveryAtMs = recoveryAtMs)
     if (firstJoin && next.startOver) pendingLiveStart = next.positionSeconds
   }
 
@@ -255,7 +260,8 @@ internal class PlayerController(
 
   // Playback
 
-  private fun start(plan: PlaybackPlan, path: PlanPath, url: Uri, source: String, position: Double?) {
+  private fun start(plan: PlaybackPlan, path: PlanPath, url: Uri, source: String, position: Double?,
+                    recoveryAtMs: Double? = null, windowOffset: Boolean = false) {
     if (activeSource != source) { readRetryStarted = 0L; readRetryAttempt = 0 }
     stop()
     activeSource = source
@@ -326,7 +332,7 @@ internal class PlayerController(
     if (path.isOriginalFile) client.state.format.declaredFrameRate = path.originalFrameRate
     if (ownsDisplay) host.preferDisplay(displayFacts)
     client.volume(if (ambient || report.muted) 0f else report.volume.toFloat())
-    client.load(url, plan, position)
+    client.load(url, plan, position, recoveryAtMs = recoveryAtMs, windowOffset = windowOffset)
     client.play(wantsPlay)
     if (ownsDisplay) MediaSessionHub.claim(context, this)
     report.publish(state, null, force = true)
@@ -341,7 +347,7 @@ internal class PlayerController(
       val url = path?.url?.let(MediaAccessStore::resolve)
       if (position != null && path != null && url != null) {
         Log.w("vela-media3", "expired live window: resume at oldest + ${position}s of ${window}s, speed 1.0")
-        start(current, path, url, activeSource, position)
+        start(current, path, url, activeSource, position, windowOffset = true)
         return
       }
     }
@@ -423,16 +429,12 @@ internal class PlayerController(
     if (path.isOriginalFile && audioId != null && state.audioId != audioId) {
       engine?.select("audio", audioId)
     }
-    val subtitleIndex = if (subtitle?.isExternal == false) subtitle.streamIndex else null
-    val subtitleId = subtitleIndex?.let { state.trackId("sub", it) }
+    val subtitleId = subtitle?.let { localSubtitleId(it.id) }
     if (subtitleId != null) {
       if (state.subtitleId != subtitleId) {
         engine?.select("sub", subtitleId)
       }
-    } else if (subtitle?.isExternal == true) {
-      val localId = state.tracks.firstOrNull { it["plan-id"] == subtitle.id }?.get("id") as? Long
-      if (localId != null && state.subtitleId != localId) engine?.select("sub", localId)
-    } else if ((subtitle == null && report.subtitleTrackId?.startsWith("mpv-sub-") != true) || subtitle?.isExternal == true) {
+    } else if (subtitle == null && report.subtitleTrackId?.startsWith("mpv-sub-") != true) {
       engine?.select("sub", null)
     }
   }
@@ -499,7 +501,7 @@ internal class PlayerController(
         // (BehindLiveWindowException) already restarted near its start in recover(), still paused.
         val window = state.live
         if (plan?.live == true && pendingSeek == null && window != null) {
-          LiveTimeline.resumeTarget(window, state.windowPosition)?.let { seek(it) }
+          LiveTimeline.resumeTarget(window, state.livePosition)?.let { seek(it) }
         }
         engine?.play(true)
       }
@@ -607,6 +609,9 @@ internal class PlayerController(
     return null
   }
 
+  private fun localSubtitleId(id: String): Long? =
+    state.tracks.firstOrNull { it["type"] == "sub" && it["plan-id"] == id }?.get("id") as? Long
+
   private fun selectSubtitle(id: String?): String? {
     if (id == report.subtitleTrackId) return null
     val local = id?.takeIf { it.startsWith("mpv-sub-") }?.removePrefix("mpv-sub-")?.toLongOrNull()
@@ -636,7 +641,7 @@ internal class PlayerController(
       return null
     }
     if (external != null) {
-      val localId = state.tracks.firstOrNull { it["plan-id"] == id }?.get("id") as? Long
+      val localId = localSubtitleId(id)
       report.subtitleTrackId = id
       report.subtitleClientOnly = true
       // A sidecar the plan just added is still being prepared: applyTracks selects it when it appears.
@@ -644,7 +649,7 @@ internal class PlayerController(
       else report.publish(state, pendingSeek, force = true)
       return null
     }
-    val engineId = track.streamIndex?.takeIf { playsOriginal }?.let { state.trackId("sub", it) }
+    val engineId = if (playsOriginal) localSubtitleId(id) else null
     if (engineId == null) {
       report.sessionCommand(mapOf("kind" to "tracks", "subtitleTrackId" to id))
       return null

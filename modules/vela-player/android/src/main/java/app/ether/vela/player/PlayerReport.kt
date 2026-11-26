@@ -113,10 +113,12 @@ internal class PlayerReport(
     }
     val phase = phase(state, seekTarget)
     val now = SystemClock.elapsedRealtime()
-    if (force || phase != lastPhase || now - lastSnapshot >= 250) {
+    if (force || state.timeshiftRecoveryEvicted || phase != lastPhase || now - lastSnapshot >= 250) {
       lastSnapshot = now
       lastPhase = phase
-      emitSnapshot(snapshot(plan, state, phase, seekTarget))
+      val payload = snapshot(plan, state, phase, seekTarget)
+      state.timeshiftRecoveryEvicted = false
+      emitSnapshot(payload)
     }
     val failure = state.failure
     if (failure != null) {
@@ -152,6 +154,7 @@ internal class PlayerReport(
       "sessionId" to (plan?.sessionId ?: ""),
       "sourceGeneration" to (plan?.sourceGeneration ?: 0),
       "seekGeneration" to (plan?.seekGeneration ?: 0),
+      "timeshiftRecoveryEvicted" to state.timeshiftRecoveryEvicted.takeIf { it },
       "state" to phase,
       "capabilities" to mapOf("pip" to (!previewing && pictureInPicture()), "fullscreen" to false, "audioSwitch" to !previewing),
       "qualityIds" to emptyList<String>(),
@@ -159,9 +162,8 @@ internal class PlayerReport(
       "audioTracks" to plan?.audioTracks.orEmpty().map { it.snapshot },
       "subtitleTracks" to (plan?.subtitleTracks.orEmpty().map { it.snapshot } + state.tracks.mapNotNull { track ->
         val id = track["id"] as? Long
-        val index = (track["ff-index"] as? Long)?.toInt()
         if (plan?.selectedPath?.isOriginalFile != true || track["type"] != "sub" || track["external"] == true || id == null ||
-          (index != null && plan?.subtitleTracks.orEmpty().any { it.streamIndex == index })) null
+          track["plan-id"] != null) null
         else mapOf("id" to "mpv-sub-$id", "label" to (track["title"] ?: track["lang"] ?: "Subtitle $id"), "language" to (track["lang"] ?: "und"), "codec" to (track["codec"] ?: ""))
       }),
       "audioTrackIds" to plan?.audioTracks.orEmpty().map { it.id },
@@ -228,8 +230,7 @@ internal class PlayerReport(
     return if (state.tracks.isEmpty()) "media-metadata" else "initial-buffer"
   }
 
-  /** The model.ts LiveSnapshot: the window on the axis of `position` (Media3's window time, from 0 to the
-   * window's duration), and how far behind live that is. */
+  /** The model.ts LiveSnapshot: window bounds in the same clock as position, and the live lag. */
   private fun live(state: PlayerState, seekTarget: Double?): Map<String, Any?> {
     val position = seekTarget ?: state.position
     val window = state.live
