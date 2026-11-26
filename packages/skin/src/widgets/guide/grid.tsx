@@ -52,7 +52,7 @@ export interface GridProps {
   still: boolean;
   selected: { channel: string; programme: string };
   /** Where to open: a time of day, and a channel to bring into view (a search hand-off). */
-  landing: { minute: number; channelId: string };
+  landing: { minute: number; channelId: string; explicit: boolean };
   onSelect(channel: GuideChannel, programme: GuideProgramme | null): void;
   onPress(channel: GuideChannel, programme: GuideProgramme): void;
   onWatch(channelId: string): void;
@@ -68,7 +68,7 @@ export const GuideGrid = memo(GuideGridContent, (a, b) =>
   a.liveView === b.liveView && a.look === b.look && a.small === b.small && a.zoom === b.zoom && a.still === b.still
   && a.active === b.active
   && a.selected.channel === b.selected.channel && a.selected.programme === b.selected.programme
-  && a.landing.channelId === b.landing.channelId && (!a.landing.channelId || a.landing.minute === b.landing.minute)
+  && a.landing.explicit === b.landing.explicit && a.landing.channelId === b.landing.channelId && (!a.landing.channelId || a.landing.minute === b.landing.minute)
   && a.onSelect === b.onSelect && a.onPress === b.onPress && a.onWatch === b.onWatch
   && a.onVisible === b.onVisible && a.onRange === b.onRange && a.handle === b.handle
   && sameGridContent(a.model, a.rows, b.model, b.rows));
