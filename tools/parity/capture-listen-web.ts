@@ -38,7 +38,9 @@ if (!fixedTime && experience !== 'listen') throw new Error('--experience must be
 const variant = values.variant ?? 'document';
 if (variant !== 'legacy' && variant !== 'document') throw new Error('--variant must be legacy or document');
 const now = gallery ? GALLERY_NOW : read ? READ_NOW : LISTEN_NOW;
-const views = pick(gallery ? GALLERY_VIEWS : read ? READ_VIEWS : LISTEN_VIEWS.map(view => ({ ...view, path: listenPath(view) })), values.views);
+const listenViews = LISTEN_VIEWS.map(view => ({ ...view, path: listenPath(view) }));
+type AnyView = (typeof GALLERY_VIEWS)[number] | (typeof READ_VIEWS)[number] | (typeof listenViews)[number];
+const views = pick<AnyView>(gallery ? GALLERY_VIEWS : read ? READ_VIEWS : listenViews, values.views);
 const viewports = pick(gallery ? GALLERY_WEB_VIEWPORTS : read ? READ_WEB_VIEWPORTS : LISTEN_WEB_VIEWPORTS, values.viewports);
 
 const scratch = join(out, '.playwright');
