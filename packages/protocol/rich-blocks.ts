@@ -46,7 +46,7 @@ export const RICH_BLOCKS = {
   photoViewer: {
     doc: 'A photo contained at its original aspect ratio, with its name, taken date and available facts.',
     props: { item: { type: 'value', required: true, doc: 'The photo as an item: record or a vela.title value.' } },
-    parts: ['photoViewer.root', 'photoViewer.stage', 'photoViewer.metadata', 'photoViewer.eyebrow', 'photoViewer.title', 'photoViewer.date', 'photoViewer.facts'],
+    parts: ['photoViewer.root', 'photoViewer.stage', 'photoViewer.metadata', 'photoViewer.eyebrow', 'photoViewer.title', 'photoViewer.date', 'photoViewer.facts', 'photoViewer.transport', 'photoViewer.control'],
     templates: [], tv: 'The title frame owns focus and closing.',
   },
   reader: {

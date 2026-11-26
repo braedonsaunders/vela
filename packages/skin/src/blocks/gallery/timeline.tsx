@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { FlatList, Platform, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { localeContext, msg, number, plural, type Card } from '@vela/core';
 import { useScreenBusy } from '@vela/core/react';
+import { notePress, trackButton } from '../../escape';
 import { FocusPressable } from '../../focus';
 import { useHost } from '../../host';
 import type { Props } from '../rich';
@@ -10,10 +11,12 @@ import { useInteraction } from '../../widgets/common/controls';
 import { useBlockLook } from '../look';
 import { usePart, usePartStyler } from '../listen/look';
 import { useMediaLook } from '../media/parts';
+import { GalleryOpenPhotoContext } from './viewer-nav';
 import { photoRows, timelineRows, type TimelineRow } from './timeline-layout';
 
 export function GalleryGridBlock({ props, items, pageKey, directory = false }: { props: Props; items: Card[]; pageKey: string; directory?: boolean }) {
   const host = useHost();
+  const openPhoto = useContext(GalleryOpenPhotoContext);
   const m = useMediaLook();
   const month = usePart('timeline.month');
   const day = usePart('timeline.day');
@@ -142,7 +145,11 @@ export function GalleryGridBlock({ props, items, pageKey, directory = false }: {
                 <GalleryTile key={photo.id} card={photo} size={size} focusRoom={focusRoom} row={index} column={column}
                   labelHeight={labelHeight} directory={directoryKind} preferred={index === firstPhoto && column === 0}
                   onPress={() => {
-                    if (!directoryKind) { host.dispatch('select', photo.id); return; }
+                    if (!directoryKind) {
+                      if (openPhoto && pageKey) openPhoto(photo.id, pageKey);
+                      else host.dispatch('select', photo.id);
+                      return;
+                    }
                     const page = directoryKind === 'albums' ? 'album' : 'person';
                     host.screenPress?.({ action: 'navigate', arg: '', args: { page, id: photo.id, name: photo.name }, control: `gallery-${page}-${photo.id}` });
                   }} />
@@ -167,19 +174,24 @@ function GalleryTile({ card, size, focusRoom, row, column, preferred, labelHeigh
   const style = usePartStyler([directory ? 'galleryDirectory.tile' : 'timeline.tile']);
   const nameStyle = usePart('galleryDirectory.name').text;
   const countStyle = usePart('galleryDirectory.count').text;
-  const total = card.media?.childCount ?? 0;
-  const count = directory === 'people' ? card.facts
-    : directory === 'albums' ? msg(`gallery.photoCount.${plural(total)}`, { count: number(total) }) : '';
+  const total = card.itemCount;
+  const count = directory && total !== undefined ? msg(`gallery.photoCount.${plural(total)}`, { count: number(total) }) : '';
   const radius = directory === 'people' ? size / 2 : directory ? m.box({ 'border-radius': '$ui.radiusCard' }).borderRadius : 0;
+  const button = useRef<ComponentRef<typeof FocusPressable>>(null);
+  const pressKey = `gallery:${directory ?? 'photo'}:${card.id}`;
+  const connect = useCallback((target: ComponentRef<typeof FocusPressable> | null) => {
+    button.current = target;
+    return trackButton(target, pressKey);
+  }, [pressKey]);
   const label = count ? `${card.name}, ${count}` : card.name;
   // A focused TV photo grows within half the gap. Directory labels keep their fixed size.
   const scale = Platform.isTV && focusRoom && !directory && state.focus && !host.env.still ? 1 + focusRoom / size : 1;
   return (
-    <FocusPressable {...handlers} accessibilityRole="button" accessibilityLabel={label}
+    <FocusPressable ref={connect} {...handlers} accessibilityRole="button" accessibilityLabel={label}
       testID={`gallery-${directory === 'people' ? 'person' : directory === 'albums' ? 'album' : 'photo'}-${card.id}`}
       hasTVPreferredFocus={Platform.isTV && preferred}
       {...(Platform.OS === 'web' ? { dataSet: { galleryRow: row, galleryColumn: column } } : {})}
-      onPress={onPress}
+      onPress={() => { notePress(button.current, pressKey); onPress(); }}
       style={[{ width: size, height: size + labelHeight, borderRadius: radius, transform: [{ scale }] }, style?.({ focus: state.focus, hover: state.hover })]}>
       <View style={{ height: size, borderRadius: radius, backgroundColor: m.ui.raised, overflow: 'hidden', alignItems: 'stretch', justifyContent: 'center' }}>
         {card.poster ? <Image source={host.image(card.poster)} contentFit="cover" recyclingKey={card.id} style={{ flex: 1 }} />

@@ -19,12 +19,20 @@ export function photoRows<T extends DatedPhoto>(photos: readonly T[], columns: n
   return rows;
 }
 
+function datedPhotos<T extends DatedPhoto>(photos: readonly T[]) {
+  return photos.map(photo => ({ photo, date: dateKey(photo.airDate) }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/** The viewer opened from the timeline follows the same dates and equal-date order as the grid. */
+export function orderTimelinePhotos<T extends DatedPhoto>(photos: readonly T[]): T[] {
+  return datedPhotos(photos).map(entry => entry.photo);
+}
+
 /** Group by calendar dates, without converting a photo to the viewer's time zone. */
 export function timelineRows<T extends DatedPhoto>(photos: readonly T[], columns: number): TimelineRow<T>[] {
   const months = new Map<string, Map<string, T[]>>();
-  const dated = photos.map(photo => ({ photo, date: dateKey(photo.airDate) }));
-  dated.sort((a, b) => b.date.localeCompare(a.date));
-  for (const { photo, date } of dated) {
+  for (const { photo, date } of datedPhotos(photos)) {
     const month = date.slice(0, 7);
     const days = months.get(month) ?? new Map<string, T[]>();
     if (!months.has(month)) months.set(month, days);

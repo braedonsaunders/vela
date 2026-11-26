@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { photoRows, timelineRows } from '../src/blocks/gallery/timeline-layout';
+import { orderTimelinePhotos, photoRows, timelineRows } from '../src/blocks/gallery/timeline-layout';
 
 const photo = (id: string, airDate: string) => ({ id, airDate });
 
@@ -31,4 +31,11 @@ test('album and person grids preserve their source order without headings', () =
     { kind: 'photos', key: 'old', photos: [old, current] },
     { kind: 'photos', key: 'undated', photos: [undated] },
   ]);
+});
+
+test('the opening timeline and its viewer agree about equal dates and undated photos', () => {
+  const input = [photo('older', '2025-01-02'), photo('first', '2025-11-03'), photo('second', '2025-11-03'), photo('undated', '')];
+  const visible = timelineRows(input, 3).flatMap(row => row.kind === 'photos' ? row.photos : []);
+  expect(orderTimelinePhotos(input)).toEqual(visible);
+  expect(visible.map(item => item.id)).toEqual(['first', 'second', 'older', 'undated']);
 });

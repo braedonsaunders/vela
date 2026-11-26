@@ -182,7 +182,10 @@ function BrowseControls({ ctx, compact, grow, labels, onLabels }: {
   const sort = model.sorts.find(candidate => candidate.id === model.sort);
   const direction = model.direction === 'asc' ? msg('library.ascending') : msg('library.descending');
   const sortLabel = sort ? `${sort.label} ${sort.directions.length === 2 ? model.direction === 'asc' ? '↑' : '↓' : ''}`.trim() : msg('library.sort');
-  const total = !page?.facetTitle && model.total !== undefined && !page?.loading ? msg(`library.count.${plural(model.total)}`, { count: number(model.total) }) : '';
+  const countString = model.media === 'photo'
+    ? model.tabs?.some(tab => tab.id === page?.tabId && tab.level === 'album') ? 'media.count.albums' : 'gallery.photoCount'
+    : 'library.count';
+  const total = !page?.facetTitle && model.total !== undefined && !page?.loading ? msg(`${countString}.${plural(model.total)}`, { count: number(model.total) }) : '';
   const filtersLabel = active ? msg('library.filtersActive', { count: active }) : msg('library.filters');
   const jumpBuckets = page?.jumpBuckets;
   const activeJump = activeJumpBucket(jumpBuckets, page?.jumpStart);

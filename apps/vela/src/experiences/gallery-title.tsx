@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { useVelaState } from '@vela/core/react';
 import { ScreenActive, type SkinHost } from '@vela/skin';
 import { HostContext, useHost } from '@vela/skin/src/host';
+import { PhotoNavigationContext } from '@vela/skin/src/blocks/gallery/viewer-nav';
 import { MediaActionsContext } from '@vela/skin/src/blocks/media/context';
 import { MediaFrame } from '@vela/skin/src/blocks/media/title';
 import { MediaTitlePending } from '@vela/skin/src/blocks/media/title-pending';
@@ -16,10 +17,12 @@ import { useReaderActions } from '../media/reader-actions';
 import { DocumentScreen } from '../screen';
 import { useAppScreenActions } from '../screen-actions';
 import { useVela } from '../vela';
+import { useGallerySequence } from './gallery-sequence';
 
 interface Props {
   id: string;
   library?: string;
+  galleryFrom?: string;
   active: boolean;
   back(): void;
 }
@@ -28,31 +31,33 @@ const target = { kind: 'screen', id: builtinScreenId('gallery'), page: 'photo' }
 const href = builtinHref('gallery', 'photo');
 const setParams = (params: Record<string, string>) => router.setParams(params);
 
-export function GalleryTitleScreen({ id, library, active, back }: Props) {
+export function GalleryTitleScreen({ id: initialId, library, galleryFrom, active, back }: Props) {
+  const { id, navigation } = useGallerySequence(initialId, library, galleryFrom, active);
   const vela = useVela();
   const host = vela.host('title', id, library);
   const frame = vela.doc?.mediaTitleSlot;
   const actions = useMediaPageActions(library, back, useMediaPlayerActions(), useReaderActions(library));
   const page = useCallback((current: SkinHost): SkinHost => ({
     ...current,
+    // The modal's route still owns Back and focus, while the frame describes the selected photo.
+    env: host?.env ?? current.env,
     children: <GalleryTitlePage id={id} library={library} active={active} back={back} framed />,
-  }), [id, library, active, back]);
-  if (frame) return (
-    <MediaActionsContext.Provider value={actions}>
-      <DocumentScreen route="title" entry={id} library={library} node={frame} page={page} />
-    </MediaActionsContext.Provider>
-  );
-  if (!host) return <View style={{ flex: 1 }} />;
-  return (
+  }), [host, id, library, active, back]);
+  const body = frame ? (
+    <DocumentScreen route="title" entry={initialId} library={library} node={frame} page={page} />
+  ) : host ? (
     <ScreenActive.Provider value={active}>
       <FocusBoundary active={active} enterWhenReady style={{ flex: 1 }} accessibilityViewIsModal>
         <HostContext.Provider value={host}>
-          <MediaActionsContext.Provider value={actions}>
-            <GalleryTitlePage id={id} library={library} active={active} back={back} framed={false} />
-          </MediaActionsContext.Provider>
+          <GalleryTitlePage id={id} library={library} active={active} back={back} framed={false} />
         </HostContext.Provider>
       </FocusBoundary>
     </ScreenActive.Provider>
+  ) : <View style={{ flex: 1 }} />;
+  return (
+    <PhotoNavigationContext.Provider value={navigation}>
+      <MediaActionsContext.Provider value={actions}>{body}</MediaActionsContext.Provider>
+    </PhotoNavigationContext.Provider>
   );
 }
 
