@@ -48,6 +48,7 @@ const bookPage: ScreenDocument = {
     title: { from: 'vela.title', id: '{param.id}' },
     series: { from: 'vela.children', id: '{src.title.seriesId}' },
     progress: { from: 'vela.readingProgress', id: '{param.id}' },
+    preview: { from: 'vela.children', id: '{src.title.seriesId}', limit: 1 },
   },
 };
 
@@ -90,6 +91,9 @@ test('a book document reads its series from the book detail and can bind reading
     const series = page().sources.series as ListValue;
     expect(series.items.map(item => item.$record)).toEqual(mediaChildren(seriesId).map(item => `item:${item.id}`));
     expect(page().sources.progress).toMatchObject({ fraction: expect.any(Number) });
+    expect(page().sources.preview).toMatchObject({ items: series.items.slice(0, 1), more: true });
+    await store.screens.action(handle.key, { name: 'vela.more', args: { source: 'preview' } });
+    expect(page().sources.preview).toMatchObject({ items: series.items.slice(0, 2), more: series.items.length > 2 });
   } finally {
     handle.release();
   }

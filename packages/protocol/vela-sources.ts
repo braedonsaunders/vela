@@ -43,7 +43,11 @@ export const VELA_SOURCES = {
     doc: 'One title: TitleValue. Its `item:` record carries the card; the source adds what only a detail read knows.',
   },
   'vela.children': {
-    args: { id: id('The parent title.'), role: { type: 'string', doc: 'One child level (album, track, concert); every child when absent.' } },
+    args: {
+      id: id('The parent title.'),
+      role: { type: 'string', doc: 'One child level (album, track, concert); every child when absent.' },
+      limit: { type: 'int', doc: 'Children per page (1 to 1000; 100 when absent).' },
+    },
     doc: "A title's children in the server's order, paged: ListValue.",
   },
   'vela.rows': {

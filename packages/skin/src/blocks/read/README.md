@@ -7,7 +7,8 @@ defines props, parts and templates for validation and schema generation.
 
 Each block takes an `item` from `vela.title`. `seriesHero` and `bookSeriesList`
 also take `items` from `vela.children`. For a book’s series shelf, use
-`{src.title.seriesId}` as the children source’s id. A title’s card carries its
+`{src.title.seriesId}` as the children source’s id. Use `limit: 1000` to match the existing series grid’s
+initial read. A title’s card carries its
 reading fraction and label. `vela.readingProgress` also exposes them alongside
 its locator for document bindings.
 

@@ -9194,6 +9194,10 @@
               "required": true,
               "type": "string"
             },
+            "limit": {
+              "doc": "Children per page (1 to 1000; 100 when absent).",
+              "type": "int"
+            },
             "role": {
               "doc": "One child level (album, track, concert); every child when absent.",
               "type": "string"
