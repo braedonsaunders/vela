@@ -52,7 +52,7 @@ Each step reaches parity with today's pages before the code it replaces is delet
 | Area | Today |
 | --- | --- |
 | Watch pages (home, library, title, person, collection, search, live home) | Already skin documents (`routes.*`) over a fixed vocabulary of app data (`vocabulary.ts`), with compiled widgets for the hard parts |
-| Listen (the music app) | Built-in documents since the Listen hard cut: `packages/protocol/fixtures/experiences/listen/*` (shell and pages) over the rich and page-level blocks in `packages/skin/src/blocks/listen/*`. The hand-written `widgets/music` is deleted. |
+| Listen (the music app) | Built-in shell and page documents in `packages/protocol/fixtures/experiences/listen` over the blocks in `packages/skin/src/blocks/listen`. |
 | Read | `widgets/media/reader*` (engine, layout, opening) and `app/read/[id].tsx` |
 | Gallery | No dedicated experience; photos open as ordinary library pages |
 | Live | The guide and multiview are native widgets and routes; Sports is moving to plugin documents |
@@ -241,16 +241,16 @@ then deletes the code it replaces in the same release. There are no long-lived d
 
 1. **Sports** (in progress). It proves the renderer, sources, records, live updates, surfaces,
    parity tooling and the hard cut.
-2. **Listen.** The music app becomes the `listen` experience:
+2. **Listen** (complete). The `listen` experience uses
    - shell documents for desktop, phone and TV;
    - page documents for home, artist, album, playlist, liked, search, Now Playing and queue;
    - the native blocks `player`, `nowPlaying`, `queue`, `lyrics`, `trackTable`, `eq`, `rail` and
      `bar`;
    - slots for album, artist and Now Playing panels.
 
-   Data comes from `vela.*` sources over the music API that thr_9ahkvmww6a's plan adds to
-   Ether. The plan's Ether model work is unchanged; only the Vela drawing becomes documents.
-   `widgets/music/*` is deleted at parity (done: the hard cut removed it and the flag that drew it).
+   `ListenSection` draws the library through `ExperienceView`. The audio dock opens the Now Playing and
+   visualizer documents. Data comes from `vela.*` sources over the music API. The parity tools compare
+   new document captures with the archived baselines recorded from `experiences/pre-listen`.
 3. **Read.** Library pages and a `reader` block with styleable chrome. The reader engine stays
    native.
 4. **Gallery.** A `timeline` grid, a `photoViewer` block, and albums and people pages.
@@ -292,10 +292,8 @@ Watch, or rides along with step 1's surfaces if the owner wants it earlier.
 
 - **Artist extras** (bio, upcoming concerts) come as an `ether.music` surface in
   `listen.artist.panel` once slot surfaces exist. No music-specific fields go into core.
-- **Sequencing:** the music section-B work happening now in `widgets/music` puts its engines in
-  core stores and in the rich blocks. These engines are AutoMix and crossfade, EQ, levelling,
-  word-timed lyrics, recap charts and the import flow. That way they carry over to documents
-  unchanged, and only the drawing is replaced at Listen parity.
+- **Music engines** live in core stores and the rich blocks. They cover AutoMix and crossfade, EQ,
+  levelling, word-timed lyrics, recap charts and playlist import.
 - **Jellyfin and Plex:** `unsupported` per part. Nothing changes on Ether.
 
 ### Agreed with Ether's plugin-screens lead (2026-11-24)
@@ -383,7 +381,7 @@ The owner approved this plan. Building starts once three things are done:
 Listen builds on those layouts. The rules are the same as for Sports:
 
 - Parity comes first (at most 1% of pixels differ, nothing moves more than 2 px, and every remaining difference is reviewed).
-- `widgets/music` is cut hard in the same release.
+- The same release removes the hand-written music shell.
 - Everything is built on an integration branch, `experiences/main`, kept green and rebased on main.
 
 ### Workers
@@ -394,7 +392,7 @@ Listen builds on those layouts. The rules are the same as for Sports:
 | G2, document system | Claude | Built-in documents (bundled; `owner: "vela"`), skin `experiences` overrides merged over them, `platforms` variants, the rich-block parts API, slot surfaces (`presentation: "slot"` and `$defs.Slots` in the generated schema, with the Sports aliases kept), and the schema renamed to `vela-document.v1.json` | `packages/skin/src/resolve*`, `screen/*`, `packages/protocol` |
 | G3, author tools | Gemini (commits and pushes after every working step; the lead checks its branch at least hourly, and moves the scope to a Claude worker at the first stall) | `bun tools/skin.ts serve <document>` plus a preview mode for skins and built-in pages (the device frames: phone, tablet, desktop, TV), the validator's JSON report, and the TV perf harness (`tools/perf`) as a gate for built-in documents | `tools/*` |
 | L1, Listen blocks | Claude | The rich blocks `player`, `nowPlaying`, `queue`, `lyrics`, `trackTable`, `eq`, `rail` and `bar`, wrapping today's engines and the section-B blocks (`blocks/sound`, `recap`, `import`, `duplicates`) unchanged, with their parts lists | `packages/skin/src/blocks/listen/*` |
-| L2, Listen documents and parity | Claude | The `listen` shell documents (wide, phone, TV, fold) and the page documents (home, artist, album, playlist, liked, search, Now Playing, queue, import, Rewind, duplicates); legacy baselines first (web, phone, fold, Apple TV, Android TV), then parity, then the hard cut of `widgets/music` | `packages/protocol/fixtures/experiences/listen/*`, `tools/parity` |
+| L2, Listen documents and parity | Claude | The `listen` shell documents (wide, phone, TV, fold) and the page documents (home, artist, album, playlist, liked, search, Now Playing, queue, import, Rewind, duplicates), plus parity against the archived baselines | `packages/protocol/fixtures/experiences/listen/*`, `tools/parity` |
 
 ### Order
 

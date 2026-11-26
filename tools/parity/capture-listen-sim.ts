@@ -3,7 +3,7 @@
 // state, EXPO_PUBLIC_VELA_PARITY_AUDIO), the Debug app is relaunched on it, and the screen is shot
 // twice, 700 ms apart. Views with steps are web-only unless they give `keys` (tvOS: axe HID keys).
 //
-//   bun tools/parity/capture-listen-sim.ts --udid <udid|adb serial> --platform ios|ios-fold|tvos|androidtv --variant legacy|document --out <dir>
+//   bun tools/parity/capture-listen-sim.ts --udid <udid|adb serial> --platform ios|ios-fold|tvos|androidtv --out <dir>
 //     [--mock http://127.0.0.1:7951] [--metro-port 8952] [--views home,album] [--settle 9000] [--app <Vela.app>] [--display <id>]
 //
 // The mock must run with LISTEN_MOCK_ENV and silent media (listen-mock.ts). The simulator plays the
@@ -17,12 +17,12 @@ import { captureName } from './views';
 import { LISTEN_NOW, LISTEN_VIEWS, listenPath, type ListenView } from './listen-views';
 
 const { values } = parseArgs({ options: {
-  udid: { type: 'string' }, platform: { type: 'string', default: 'tvos' }, variant: { type: 'string', default: 'legacy' }, out: { type: 'string' },
+  udid: { type: 'string' }, platform: { type: 'string', default: 'tvos' }, out: { type: 'string' },
   mock: { type: 'string', default: 'http://127.0.0.1:7951' }, views: { type: 'string' }, settle: { type: 'string', default: '9000' },
   'metro-port': { type: 'string', default: '8952' }, display: { type: 'string' }, app: { type: 'string' },
 } });
 if (!values.udid || !values.out) throw new Error('--udid and --out are required');
-const variant = values.variant!, platform = values.platform!, udid = values.udid;
+const platform = values.platform!, udid = values.udid;
 const out = resolve(values.out);
 mkdirSync(join(out, 'frames'), { recursive: true });
 const settle = Number(values.settle);
@@ -147,4 +147,4 @@ for (const view of views) {
 const manifest = join(out, 'manifest.json');
 const earlier = existsSync(manifest) ? (JSON.parse(readFileSync(manifest, 'utf8')) as { captures: { view: string }[] }).captures : [];
 const merged = [...earlier.filter(c => !captures.some(n => (n as { view: string }).view === c.view)), ...captures];
-writeFileSync(manifest, JSON.stringify({ variant, experience: 'listen', platform, now: LISTEN_NOW, capturedAt: new Date().toISOString(), udid, captures: merged }, null, 2));
+writeFileSync(manifest, JSON.stringify({ variant: 'document', experience: 'listen', platform, now: LISTEN_NOW, capturedAt: new Date().toISOString(), udid, captures: merged }, null, 2));

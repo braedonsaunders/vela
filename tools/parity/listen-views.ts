@@ -1,7 +1,6 @@
 // The Listen parity matrix: which views of the listen experience (the music app, audiobooks and
-// podcasts) are captured, at which viewports, and how each reaches its state. The legacy variant is
-// the hand-written widgets/music (deleted in the hard cut; its captures are archived baselines); the
-// document variant is the built-in listen documents.
+// podcasts) are captured, at which viewports, and how each reaches its state. Compare the built-in
+// Listen documents with the archived baselines from the hand-written music app.
 //
 // Every capture runs against the frozen mock (LISTEN_MOCK_ENV): fixture dates pinned, a few titles
 // already liked, silent media. Listening state is the app's own and is set per view by the mock build's
@@ -105,8 +104,7 @@ export const LISTEN_VIEWS: ListenView[] = [
   { name: 'podcast', description: 'A podcast show: episodes', library: 'podcasts', place: 'title:podcast-kettle-and-compass', ready: 'spoken-show' },
 ];
 
-/** Where a variant draws a Listen view on the web. Both variants live at the library route today;
- * the documents keep the address (`?m=`), so old links still open the same page. */
+/** The Listen view's library route. The documents keep the `?m=` address so existing links work. */
 export function listenPath(view: ListenView): string {
   const params = new URLSearchParams();
   if (view.place) params.set('m', view.place);

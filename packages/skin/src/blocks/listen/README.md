@@ -1,9 +1,7 @@
 # Listen rich blocks
 
-The music app's interactive parts as rich document blocks (docs/experiences.md: Blocks). Each block
-is a native engine (moved here unchanged from `widgets/music`, deleted at the Listen hard cut)
-that a document places, feeds and styles. A document never replaces an engine, its focus
-management or its timing.
+The music app's interactive parts as rich document blocks. Each block is a native engine that a
+document places, feeds and styles. The block owns its focus management and timing.
 
 The registry — every block's props, parts, part templates and TV rules — is
 [`packages/protocol/rich-blocks.ts`](../../../../protocol/rich-blocks.ts). It is pure data: the

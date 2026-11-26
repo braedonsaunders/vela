@@ -1,14 +1,14 @@
 // Capture the Listen parity views on the web with the host's playwright-cli (headless, muted Chrome).
 //
-//   bun tools/parity/capture-listen-web.ts --variant legacy|document --out <dir> --app http://localhost:8951
+//   bun tools/parity/capture-listen-web.ts --out <dir> --app http://localhost:8951
 //     [--views home,album] [--viewports web-1440,web-390]
 //
 // The mock must run with LISTEN_MOCK_ENV (listen-views.ts) and silent media, and Metro must build a
 // mock app (EXPO_PUBLIC_VELA_MOCK=1) so the parity hook sets the listening state. Run a fresh mock
 // per capture set: playing a queue records progress on the server, so two sets compare only when
 // they ran the same views in the same order from the same start. The browser clock is pinned to
-// LISTEN_NOW. The legacy music app was deleted in the hard cut: its captures are the archived
-// baselines (the legacy variant runs only from a checkout of experiences/pre-listen). Each view is captured twice, 700 ms apart, for the moving-region mask.
+// LISTEN_NOW. Compare these document captures with the archived baselines. Each view is captured
+// twice, 700 ms apart, for the moving-region mask.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -16,11 +16,9 @@ import { captureName, target } from './views';
 import { LISTEN_NOW, LISTEN_VIEWS, LISTEN_WEB_VIEWPORTS, listenPath, listenReviewed, type Step } from './listen-views';
 
 const { values } = parseArgs({ options: {
-  variant: { type: 'string', default: 'legacy' }, out: { type: 'string' }, app: { type: 'string', default: 'http://localhost:8951' },
+  out: { type: 'string' }, app: { type: 'string', default: 'http://localhost:8951' },
   views: { type: 'string' }, viewports: { type: 'string' },
 } });
-const variant = values.variant!;
-if (variant !== 'legacy' && variant !== 'document') throw new Error('--variant is legacy or document');
 if (!values.out) throw new Error('--out <dir> is required');
 const out = resolve(values.out);
 mkdirSync(join(out, 'frames'), { recursive: true });
@@ -125,5 +123,5 @@ try {
   const manifest = join(out, 'manifest.json');
   const earlier = existsSync(manifest) ? (JSON.parse(readFileSync(manifest, 'utf8')) as { captures: Capture[] }).captures : [];
   const merged = [...earlier.filter(c => !captures.some(n => n.viewport === c.viewport && n.view === c.view)), ...captures];
-  writeFileSync(manifest, JSON.stringify({ variant, experience: 'listen', platform: 'web', now: LISTEN_NOW, capturedAt: new Date().toISOString(), app: values.app, captures: merged }, null, 2));
+  writeFileSync(manifest, JSON.stringify({ variant: 'document', experience: 'listen', platform: 'web', now: LISTEN_NOW, capturedAt: new Date().toISOString(), app: values.app, captures: merged }, null, 2));
 }
