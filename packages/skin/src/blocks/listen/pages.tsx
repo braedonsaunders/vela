@@ -1,6 +1,7 @@
 // The audio app's music pages: Home, an album, an artist, a playlist, Liked Songs (spoken word's
 // Home, book and show pages are in spoken.tsx, which chooses between the two). Built from the store's ordinary reads; every page
 // takes the document's `ui` look and the artwork's colour.
+import { joinMeta } from '../../meta-line';
 import { Image } from 'expo-image';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import { Platform, Text, View } from 'react-native';
@@ -374,7 +375,7 @@ function useDiscography(card: Card) {
   return { full, short, reading, releases };
 }
 
-const releaseLine = (a: Card) => [a.yearLabel, (a.media?.childCount ?? 0) <= 3 ? msg('music.single') : (a.media?.childCount ?? 0) <= 6 ? msg('music.ep') : msg('media.ui.album')].filter(Boolean).join(' · ');
+const releaseLine = (a: Card) => joinMeta([a.yearLabel, (a.media?.childCount ?? 0) <= 3 ? msg('music.single') : (a.media?.childCount ?? 0) <= 6 ? msg('music.ep') : msg('media.ui.album')]);
 
 /** The artist's image band: the eyebrow, the name, the releases and genres. */
 export function ArtistHero({ card }: { card: Card }) {
@@ -389,7 +390,7 @@ export function ArtistHero({ card }: { card: Card }) {
         <View style={{ paddingHorizontal: pad(m), paddingBottom: 22 }}>
           <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', 'letter-spacing': '0.16em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })}>{msg('media.ui.artist')}</Text>
           <Text accessibilityRole="header" numberOfLines={1} style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? (card.name.length > 14 ? '40px' : '54px') : card.name.length > 18 ? '64px' : '96px', 'line-height': '1', 'letter-spacing': '-0.03em', color: '$ui.ink' })}>{card.name}</Text>
-          <Text style={[m.text({ 'font-size': '15px', color: '$ui.inkSecondary' }), { marginTop: 10 }]}>{[releases ? msg('music.releasesCount', { count: number(releases) }) : '', card.genres.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}</Text>
+          <Text style={[m.text({ 'font-size': '15px', color: '$ui.inkSecondary' }), { marginTop: 10 }]}>{joinMeta([releases ? msg('music.releasesCount', { count: number(releases) }) : '', card.genres.slice(0, 2).join(', ')])}</Text>
         </View>
       </View>
   );

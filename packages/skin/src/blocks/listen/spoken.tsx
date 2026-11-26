@@ -2,6 +2,7 @@
 // chapters or parts, where the viewer left off), a podcast show (hosts, episodes newest first with
 // played state and resume) and any other container a plugin serves. The shell, the bar, the queue
 // and Now Playing are music's; only the words, the lists and what Play means differ.
+import { joinMeta } from '../../meta-line';
 import { useMemo, useRef, useState, type ComponentRef } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { clock, currentInQueue, durationLabel, localeContext, msg, number, plural, podcastOrder, type Card, type DetailModel, type Row } from '@vela/core';
@@ -158,7 +159,7 @@ export function Credits({ card, size = 15 }: { card: Card; size?: number }) {
 function Facts({ items }: { items: string[] }) {
   const m = useMediaLook();
   const shown = items.filter(Boolean);
-  return shown.length ? <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}>{shown.join(' · ')}</Text> : null;
+  return shown.length ? <Text style={m.text({ 'font-size': '15px', color: '$ui.inkSecondary' })}>{joinMeta(shown)}</Text> : null;
 }
 
 /** Where the viewer is: a bar and what is left (and the chapter). */
@@ -285,7 +286,7 @@ export function SpokenProgress({ card }: { card: Card }) {
   const { resumable, total, position, chapter } = useAudiobook(card);
   return (
     <>
-      {resumable && total ? <Underway fraction={Math.min(1, position / total)} label={[msg('media.ui.left', { time: durationLabel(Math.max(0, total - position)) }), chapter?.name].filter(Boolean).join(' · ')} /> : null}
+      {resumable && total ? <Underway fraction={Math.min(1, position / total)} label={joinMeta([msg('media.ui.left', { time: durationLabel(Math.max(0, total - position)) }), chapter?.name])} /> : null}
       {card.played ? <Text style={m.text({ 'font-size': '13px', 'font-weight': '700', color: '$ui.inkQuiet' })}>{msg('media.ui.finished')}</Text> : null}
     </>
   );
@@ -566,14 +567,14 @@ function EpisodeRow({ episode, current, playing, state, onPlay }: { episode: Car
           {m.small ? null : <View pointerEvents="none"><Cover uri={episode.poster} shape="square" size={tv ? 96 : 80} title={episode.name} accent={episode.accent} lift={0.3} /></View>}
           <View pointerEvents="none" style={{ flex: 1, minWidth: 0, gap: 4, opacity: episode.played && !current ? 0.66 : 1 }}>
             <Text numberOfLines={1} style={m.text({ 'font-size': '12px', 'font-weight': '650', 'letter-spacing': '0.04em', color: '$ui.inkQuiet' })}>
-              {[dayLabel(episode), !episode.played && !underway(episode) ? msg('listening.new') : ''].filter(Boolean).join(' · ')}
+              {joinMeta([dayLabel(episode), !episode.played && !underway(episode) ? msg('listening.new') : ''])}
             </Text>
             <Text numberOfLines={2} style={m.text({ 'font-size': tv ? '21px' : '16px', 'font-weight': '700', color: current ? m.ui.accent : '$ui.ink' })}>{episode.name}</Text>
             {episode.summary ? <Text numberOfLines={2} style={m.text({ 'font-size': '13px', 'line-height': '1.45', color: lit ? '$ui.inkSecondary' : '$ui.inkQuiet' })}>{episode.summary}</Text> : null}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
               {fraction > 0 ? <View style={{ width: 96 }}><Progress fraction={fraction} height={4} /></View> : null}
               <Text style={m.text({ 'font-size': '12px', 'font-weight': episode.played ? '700' : '450', color: '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' })}>
-                {[state || '', !state && episode.durationSeconds ? durationLabel(episode.durationSeconds) : ''].filter(Boolean).join(' · ')}
+                {joinMeta([state || '', !state && episode.durationSeconds ? durationLabel(episode.durationSeconds) : ''])}
               </Text>
             </View>
           </View>

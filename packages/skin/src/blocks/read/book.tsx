@@ -1,3 +1,4 @@
+import { joinMeta } from '../../meta-line';
 import { useMemo, type ReactNode } from 'react';
 import { Platform, Text, View, type TextStyle } from 'react-native';
 import { msg, number, percent, type Card } from '@vela/core';
@@ -53,7 +54,7 @@ export function BookHero({ card, cover = true, action = true }: { card: Card; co
       {fraction > 0 && fraction < 0.98 ? (
         <View style={[{ gap: 8, maxWidth: 420, marginTop: 4 }, progress.box]} testID="media-reading-progress">
           <Progress fraction={fraction} height={5} />
-          <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), progress.text]}>{[msg('media.ui.readProgress', { percent: percent(fraction) }), readingChapterLabel(media.readingLabel)].filter(Boolean).join(' · ')}</Text>
+          <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), progress.text]}>{joinMeta([msg('media.ui.readProgress', { percent: percent(fraction) }), readingChapterLabel(media.readingLabel)])}</Text>
         </View>
       ) : card.played || fraction >= 0.98 ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.accent', 'font-weight': '600' }), progress.text]}>{msg('media.ui.finished')}</Text> : null}
       {action ? template('bookHero.action', <BookReadAction card={card} />) : null}
@@ -119,7 +120,7 @@ function SeriesGrid({ card, items }: { card: Card; items: readonly Card[] }) {
     <>
       <SectionHeading title={copy.heading} />
       <TileGrid gap={gap}>
-        {books.map(book => <CoverTile key={book.id} card={book} size={size} subtitle={[book.media?.indexLabel, book.yearLabel].filter(Boolean).join(' · ')}
+        {books.map(book => <CoverTile key={book.id} card={book} size={size} subtitle={joinMeta([book.media?.indexLabel, book.yearLabel])}
           progress={book.media?.readingFraction} onPress={() => actions.openTitle(book)} testID={`media-book-${book.id}`} />)}
       </TileGrid>
     </>

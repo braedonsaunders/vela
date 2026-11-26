@@ -166,6 +166,6 @@ test('shelves show a song\'s album once, and word their tiles by kind', () => {
   expect(shelfSubtitle(album, 'year')).toBe('2019');
   expect(shelfSubtitle(album, 'byline')).toBe('Lanterns');
   expect(shelfSubtitle(album, 'none')).toBeUndefined();
-  expect(shelfSubtitle(album, 'release')?.startsWith('2019 · ')).toBe(true);
+  expect(shelfSubtitle(album, 'release')?.startsWith('2019\u00a0·\u00a0')).toBe(true);
   expect(shelfSubtitle(album, 'playlist')).toBeUndefined();
 });

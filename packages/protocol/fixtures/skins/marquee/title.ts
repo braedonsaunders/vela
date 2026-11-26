@@ -533,7 +533,7 @@ const noSubLine: Condition[][] = [
 const episodeMeta: Node[] = [
   { type: 'use', template: 'velaCardContext', when: [set('card.hasContext')] },
   { type: 'text', text: '{card.durationLabel}', style: metaStyle, when: [set('card.hasContext'), set('card.durationLabel')] },
-  ...subLine(metaStyle, {}, ' · {card.durationLabel}').slice(2).map(
+  ...subLine(metaStyle, {}, '\u00a0·\u00a0{card.durationLabel}').slice(2).map(
     (n) => ({ ...n, when: [...(n.when ?? []), unset('card.hasContext'), set('card.durationLabel')] }) as Node,
   ),
   ...subLine(metaStyle, {}).slice(2).map(

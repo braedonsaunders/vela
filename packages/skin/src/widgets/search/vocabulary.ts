@@ -3,6 +3,7 @@
 // or by description as a fallback); `search.descriptive` stays empty, so a document drawing the
 // two lanes it once had draws one list. The semantics are those of the Contract
 // renderer's table (tools/renderer.ts at afc4578), key for key.
+import { joinMeta } from '../../meta-line';
 import { msg, resultKey } from '@vela/core';
 import type { Accessor, Ctx, Env } from '../../vocabulary';
 import type { Hit, LiveChannelHit, LiveProgrammeHit, SearchView } from './model';
@@ -82,14 +83,14 @@ export const SEARCH_VOCABULARY: Record<string, Accessor> = {
   'search.cardFacts': (c, e) => {
     if (!c.card) return '';
     return e.small && (c.searchSection?.results.length ?? 0) >= 3
-      ? [c.card.yearLabel, c.card.durationLabel].filter(Boolean).join(' · ')
-      : c.card.facts;
+      ? joinMeta([c.card.yearLabel, c.card.durationLabel])
+      : joinMeta([c.card.facts]);
   },
   'search.phoneColumns': c => (c.searchSection?.results.length ?? 0) >= 3 ? '3' : '2',
   'search.serverHasResults': c => yes(!!c.searchSection?.results.length),
   'search.serverAction': c => yes(c.searchSection?.status === 'failed' || c.searchSection?.status === 'timed-out'
     || (c.searchSection?.status === 'ready' && !!c.searchSection.nextCursor)),
-  'search.episodeContext': c => c.card?.episodeContext ?? '',
+  'search.episodeContext': c => joinMeta([c.card?.episodeContext]),
   'search.serverEmpty': c => yes(c.searchSection?.status === 'ready' && !c.searchSection.results.length),
   'search.serverMore': c => yes(c.searchSection?.status === 'ready' && !!c.searchSection.nextCursor),
   'search.resultRef': c => c.searchResult?.ref ?? '',
