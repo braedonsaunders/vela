@@ -59,6 +59,7 @@ enum OfflineDownloadsProbe {
                     done.signal()
                 }
             }
+            try downloads.writeSnapshot(["items": [["serverId": "srv-plex", "viewerId": "viewer-1", "titleId": "101", "status": "queued"]]])
             try downloads.startTransfer([
                 "serverId": "srv-plex",
                 "viewerId": "viewer-1",
@@ -102,6 +103,13 @@ enum OfflineDownloadsProbe {
             let mediaValues = try mediaURL.resourceValues(forKeys: [.isExcludedFromBackupKey])
             guard mediaValues.isExcludedFromBackup == true else {
                 fputs("media file not excluded from backup\n", stderr)
+                exit(1)
+            }
+            let relaunched = OfflineDownloads(rootDirectory: root)
+            let restored = (relaunched.readSnapshot()["items"] as? [[String: Any]])?.first
+            guard restored?["status"] as? String == "completed",
+                  restored?["mediaPath"] as? String == "srv-plex/viewer-1/101/media.mkv" else {
+                fputs("completed download was not restored from the native transfer status\n", stderr)
                 exit(1)
             }
             downloads.removeViewer(serverId: "srv-plex", viewerId: "viewer-1")

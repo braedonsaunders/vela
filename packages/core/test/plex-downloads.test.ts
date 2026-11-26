@@ -161,3 +161,15 @@ describe('PlexAdapter MediaDownloads', () => {
     await expect(allowedAdapter.resolveDownload('101')).rejects.toThrow('several parts');
   });
 });
+
+test('Plex replays a partial offline timeline with its original observation time', async () => {
+  const requests = routeFetch({ 'POST /:/timeline': { MediaContainer: {} } });
+  await plex().replayWatchProgress('101', {
+    serverId: 'plex', viewerId: 'viewer', titleId: '101', positionSeconds: 23.25, durationSeconds: 120,
+    completed: false, observedAt: '2026-11-25T00:00:00Z', idempotencyKey: 'offline-1',
+  });
+  expect(requests).toHaveLength(1);
+  expect(Object.fromEntries(requests[0]!.url.searchParams)).toMatchObject({
+    ratingKey: '101', state: 'stopped', offline: '1', updated: '1795564800', time: '23250', duration: '120000',
+  });
+});

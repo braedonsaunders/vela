@@ -114,11 +114,43 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
     }
 
     func readSnapshot() -> [String: Any] {
+        // Reattach to transfers still owned by the system after the app has relaunched.
+        if useBackgroundSession {
+            reconnectTasks(in: wifiSession)
+            reconnectTasks(in: cellularSession)
+        }
         lock.lock()
         defer { lock.unlock() }
-        let items = (readJSON(at: rootDirectory.appendingPathComponent("index.json")) as? [[String: Any]]) ?? []
+        let records = (readJSON(at: rootDirectory.appendingPathComponent("index.json")) as? [[String: Any]]) ?? []
+        let items = records.map { record -> [String: Any] in
+            guard let directory = eventDirectory(record),
+                  let event = readJSON(at: directory.appendingPathComponent("transfer-status.json")) as? [String: Any] else {
+                return record
+            }
+            var updated = record.merging(event) { _, latest in latest }
+            if event["status"] as? String == "completed" {
+                updated.removeValue(forKey: "previousCompleted")
+                updated.removeValue(forKey: "error")
+                updated.removeValue(forKey: "errorCode")
+                updated.removeValue(forKey: "neededBytes")
+            }
+            return updated
+        }
         let outbox = (readJSON(at: rootDirectory.appendingPathComponent("outbox.json")) as? [[String: Any]]) ?? []
         return ["items": items, "outbox": outbox]
+    }
+
+    private func reconnectTasks(in session: URLSession) {
+        session.getAllTasks { [weak self] tasks in
+            guard let self else { return }
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            for case let task as URLSessionDownloadTask in tasks {
+                guard let key = task.taskDescription, self.transfers[key] != nil, self.activeTasks[key] == nil,
+                      task.state == .running || task.state == .suspended else { continue }
+                self.activeTasks[key] = task
+            }
+        }
     }
 
     func writeSnapshot(_ snapshot: [String: Any]) throws {
@@ -253,9 +285,15 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
               let url = URL(string: meta.url) else {
             throw NSError(domain: "VelaDownloads", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid download directory or URL"])
         }
+        lock.lock()
+        let previous = transfers[meta.key]
+        lock.unlock()
+        let sameFile = previous.map { $0.etag == meta.etag && $0.container == meta.container && $0.byteLength == meta.byteLength } ?? true
+        let sameRequest = previous.map { $0.url == meta.url && $0.headers == meta.headers && $0.wifiOnly == meta.wifiOnly } ?? false
         cancelTask(forKey: meta.key)
         var dir = titleDir
         ensureDirectory(&dir, excludeFromBackup: true)
+        try? FileManager.default.removeItem(at: titleDir.appendingPathComponent("transfer-status.json"))
         saveTransferMeta(meta)
 
         let session = meta.wifiOnly ? wifiSession : cellularSession
@@ -263,7 +301,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         let partFile = partialMediaURL(for: meta)
         let task: URLSessionDownloadTask
 
-        if preferResumeData, let resumeData = try? Data(contentsOf: resumeFile), !resumeData.isEmpty {
+        if preferResumeData, sameFile, sameRequest, let resumeData = try? Data(contentsOf: resumeFile), !resumeData.isEmpty {
             try? FileManager.default.removeItem(at: resumeFile)
             task = session.downloadTask(withResumeData: resumeData)
         } else {
@@ -272,14 +310,12 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
             for (name, value) in meta.headers {
                 req.setValue(value, forHTTPHeaderField: name)
             }
-            if preferResumeData,
+            if preferResumeData, sameFile, let etag = meta.etag, !etag.isEmpty,
                let attrs = try? FileManager.default.attributesOfItem(atPath: partFile.path),
                let existingBytes = (attrs[.size] as? NSNumber)?.int64Value,
                existingBytes > 0 {
                 req.setValue("bytes=\(existingBytes)-", forHTTPHeaderField: "Range")
-                if let etag = meta.etag, !etag.isEmpty {
-                    req.setValue(etag, forHTTPHeaderField: "If-Range")
-                }
+                req.setValue(etag, forHTTPHeaderField: "If-Range")
             } else {
                 try? FileManager.default.removeItem(at: partFile)
             }
@@ -338,13 +374,17 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         lastProgressAt[key] = now
         lock.unlock()
 
-        let expected: Int64? = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : meta.byteLength
+        let response = downloadTask.response as? HTTPURLResponse
+        let offset = response?.statusCode == 206 && downloadTask.originalRequest?.value(forHTTPHeaderField: "Range") != nil
+            ? Self.startByteFromContentRange(response?.value(forHTTPHeaderField: "Content-Range")) ?? 0 : 0
+        let expected = meta.byteLength ?? Self.totalBytesFromContentRange(response?.value(forHTTPHeaderField: "Content-Range"))
+            ?? (totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite + offset : nil)
         var event: [String: Any] = [
             "serverId": meta.serverId,
             "viewerId": meta.viewerId,
             "titleId": meta.titleId,
             "status": "downloading",
-            "bytesWritten": totalBytesWritten,
+            "bytesWritten": totalBytesWritten + offset,
         ]
         if let expected, expected > 0 { event["byteLength"] = expected }
         emitEvent(event)
@@ -363,9 +403,14 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
 
         let http = downloadTask.response as? HTTPURLResponse
         let status = http?.statusCode ?? 200
-        if status >= 400 {
+        if status != 200 && status != 206 {
             let (code, message) = Self.classifyHTTPError(status: status, response: http)
             failTransfer(meta, code: code, message: message, bytesWritten: 0)
+            return
+        }
+
+        if let expected = meta.etag, let received = http?.value(forHTTPHeaderField: "ETag"), expected != received {
+            failTransfer(meta, code: "corrupt", message: "The original file changed. Retry to get a fresh download.", bytesWritten: 0)
             return
         }
 
@@ -378,6 +423,13 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
 
         do {
             if status == 206, FileManager.default.fileExists(atPath: partFile.path) {
+                let size = (try FileManager.default.attributesOfItem(atPath: partFile.path)[.size] as? NSNumber)?.int64Value
+                guard let offset = Self.startByteFromContentRange(http?.value(forHTTPHeaderField: "Content-Range")),
+                      size == offset, let etag = meta.etag, http?.value(forHTTPHeaderField: "ETag") == etag else {
+                    try? FileManager.default.removeItem(at: partFile)
+                    failTransfer(meta, code: "corrupt", message: "The server returned a different file range. Retry the download.", bytesWritten: 0)
+                    return
+                }
                 try Self.appendFile(from: location, to: partFile)
             } else {
                 try? FileManager.default.removeItem(at: partFile)
@@ -437,6 +489,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
             "bytesWritten": actualSize,
             "byteLength": actualSize,
             "mediaPath": mediaRelative,
+            "completedAt": ISO8601DateFormatter().string(from: Date()),
         ]
         if let etag = http?.value(forHTTPHeaderField: "ETag") ?? meta.etag {
             event["etag"] = etag
@@ -573,7 +626,21 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         ])
     }
 
+    private func eventDirectory(_ record: [String: Any]) -> URL? {
+        guard let server = record["serverId"] as? String, let viewer = record["viewerId"] as? String,
+              let title = record["titleId"] as? String else { return nil }
+        return safeChildDirectory([server, viewer, title])
+    }
+
     private func emitEvent(_ payload: [String: Any]) {
+        // Completion can arrive before JavaScript has attached a listener. Store the update next
+        // to the file so an older index write from JavaScript cannot hide a verified download.
+        if payload["status"] as? String != "downloading", let dir = eventDirectory(payload) {
+            lock.lock()
+            let snapshot = payload.filter { JSONSerialization.isValidJSONObject([$0.value]) }
+            try? writeJSONAtomically(snapshot, to: dir.appendingPathComponent("transfer-status.json"))
+            lock.unlock()
+        }
         emit?(payload)
     }
 
@@ -657,6 +724,10 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         try? mutable.setResourceValues(values)
+        #if os(iOS)
+        try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                                               ofItemAtPath: url.path)
+        #endif
     }
 
     private func readJSON(at url: URL) -> Any? {
@@ -681,6 +752,11 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
             if chunk.isEmpty { break }
             try output.write(contentsOf: chunk)
         }
+    }
+
+    private static func startByteFromContentRange(_ header: String?) -> Int64? {
+        guard let header, header.hasPrefix("bytes "), let dash = header.firstIndex(of: "-") else { return nil }
+        return Int64(header[header.index(header.startIndex, offsetBy: 6)..<dash])
     }
 
     private static func totalBytesFromContentRange(_ header: String?) -> Int64? {

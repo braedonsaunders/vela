@@ -70,6 +70,9 @@ export interface DownloadRecord {
   bytesWritten: number;
   etag?: string;
   lastModified?: string;
+  /** Reusing a still-valid Ether grant lets URLSession resume its existing request. */
+  grantKey?: string;
+  grantExpiresAt?: V.Timestamp;
   status: DownloadStatus;
   error?: string;
   errorCode?: DownloadErrorCode;
@@ -290,18 +293,17 @@ export function visibleDownloads(items: readonly DownloadRecord[], serverId: str
  * `file://` URL. Storing relative paths keeps files valid when iOS rotates the app container UUID.
  */
 export function resolveDownloadFileUrl(baseDirectoryUrl: string, relativePath: string): string {
-  const trimmed = relativePath.trim().replace(/^\/+/, '');
-  if (!trimmed || trimmed.split('/').some(segment => segment === '' || segment === '.' || segment === '..')) {
+  const segments = relativePath.trim().replace(/^\/+/, '').split('/');
+  if (segments.some(segment => !segment || segment === '.' || segment === '..' || segment.includes('\\'))) {
     throw new Error('Invalid relative download path');
   }
-  const normalizedBase = baseDirectoryUrl.endsWith('/') ? baseDirectoryUrl : `${baseDirectoryUrl}/`;
-  const base = new URL(normalizedBase);
-  if (base.protocol !== 'file:') throw new Error('Downloads base directory must be a file: URL');
-  const resolved = new URL(trimmed, base);
-  if (resolved.protocol !== 'file:' || !resolved.pathname.startsWith(base.pathname)) {
-    throw new Error('Download path escapes base directory');
+  // Swift supplies an escaped absolute base URL and raw path components. React Native's URL
+  // parser does not implement pathname semantics for file: URLs.
+  if (!/^file:\/\/\/[^?#]+$/.test(baseDirectoryUrl)) {
+    throw new Error('Downloads base directory must be a file: URL');
   }
-  return resolved.href;
+  const base = baseDirectoryUrl.endsWith('/') ? baseDirectoryUrl : `${baseDirectoryUrl}/`;
+  return base + segments.map(encodeURIComponent).join('/');
 }
 
 /** Whether a record has a verified local copy ready for offline playback (including while a replacement downloads). */
@@ -457,6 +459,7 @@ export function offlineProgressSuperseded(entry: OfflineProgressEntry, watch: V.
 export class Downloads {
   private readonly port: DownloadsPort | undefined;
   private writing = Promise.resolve();
+  private readonly pendingTransferEvents: DownloadTransferProgress[] = [];
   private replaying: Promise<void> | undefined;
   private lastAuthPhase: AuthPhase | undefined;
   private hydrating: Promise<void> | undefined;
@@ -473,7 +476,8 @@ export class Downloads {
     if (this.port) {
       this.box.update('downloads', state => ({ ...state, supported: true }));
       this.unsubscribePort = this.port.subscribe?.(event => {
-        void this.applyTransferEvent(event).catch(() => {});
+        if (!this.state.hydrated) this.pendingTransferEvents.push(event);
+        else void this.applyTransferEvent(event).catch(() => {});
       });
     }
     this.box.subscribe(() => this.syncActiveViewer());
@@ -537,7 +541,12 @@ export class Downloads {
   hydrate(): Promise<void> {
     if (!this.port) return Promise.resolve();
     if (this.state.hydrated) return Promise.resolve();
-    return this.hydrating ??= this.readFromPort().then(() => { void this.replayProgress(); }).finally(() => {
+    return this.hydrating ??= this.readFromPort().then(async () => {
+      for (const event of this.pendingTransferEvents.splice(0)) {
+        await this.applyTransferEvent(event).catch(() => {});
+      }
+      void this.replayProgress();
+    }).finally(() => {
       this.hydrating = undefined;
     });
   }
@@ -631,6 +640,7 @@ export class Downloads {
   /** Resolve a title's original file from the server, check space, and enqueue its background transfer. */
   async enqueue(titleId: string, options?: { versionId?: string }): Promise<DownloadRecord | null> {
     if (!this.port) return null;
+    let pending: DownloadRecord | undefined;
     try {
       const connection = await this.session.ready();
       const adapter = connection.adapter;
@@ -642,13 +652,19 @@ export class Downloads {
       const serverId = connection.record.id;
       const viewerId = tokens?.viewer.id || this.box.get().auth.viewerId;
       if (!serverId || !viewerId) throw new Error('Sign in required');
+      const currentViewer = () => {
+        const { auth } = this.box.get();
+        return auth.phase === 'signed-in' && auth.serverId === serverId && auth.viewerId === viewerId;
+      };
       const client = await this.session.declared().catch(() => undefined);
+      const grantKey = this.session.key();
       const resolved = await adapter.resolveDownload(titleId, {
         versionId: options?.versionId,
         subtitleFormats: client?.subtitleFormats,
-        idempotencyKey: this.session.key(),
+        idempotencyKey: grantKey,
       });
       const freeBytes = await this.port.freeBytes().catch(() => null);
+      if (!currentViewer()) return null;
       const space = checkDownloadSpace({
         requestedBytes: resolved.byteLength,
         existingItems: this.state.allItems,
@@ -697,6 +713,7 @@ export class Downloads {
         byteLength: resolved.byteLength,
         bytesWritten: 0,
         etag: resolved.etag,
+        ...(resolved.expiresAt ? { grantKey, grantExpiresAt: resolved.expiresAt } : {}),
         status: 'queued',
         createdAt: new Date().toISOString(),
         originalVideo: resolved.originalVideo,
@@ -717,7 +734,9 @@ export class Downloads {
           : { positionSeconds: 0, played: false },
         ...(previousCompleted ? { previousCompleted } : {}),
       };
+      pending = record;
       await this.upsertRecord(record, freeBytes, '');
+      if (!currentViewer() || this.item(titleId) !== record) return null;
       await this.port.startTransfer({
         serverId,
         viewerId,
@@ -734,7 +753,10 @@ export class Downloads {
       });
       return record;
     } catch (error) {
-      this.box.update('downloads', state => ({ ...state, error: message(error, 'Download could not be started') }));
+      const text = message(error, 'Download could not be started');
+      if (pending && this.item(titleId) === pending) {
+        await this.upsertRecord({ ...pending, status: 'failed', error: text }, undefined, text).catch(() => {});
+      } else this.box.update('downloads', state => ({ ...state, error: text }));
       return null;
     }
   }
@@ -745,7 +767,11 @@ export class Downloads {
     const record = this.item(titleId);
     if (!record || (record.status !== 'queued' && record.status !== 'downloading')) return;
     await this.port.pauseTransfer(record.serverId, record.viewerId, titleId);
-    await this.upsertRecord({ ...record, status: 'paused' });
+    const current = this.item(titleId);
+    if (current?.viewerId === record.viewerId && current.serverId === record.serverId &&
+        (current.status === 'queued' || current.status === 'downloading')) {
+      await this.upsertRecord({ ...current, status: 'paused' });
+    }
   }
 
   /** Resume a paused or failed download after re-checking space and minting fresh headers/grant. */
@@ -758,15 +784,22 @@ export class Downloads {
       const adapter = connection.adapter;
       if (!hasMediaDownloads(adapter)) throw new Error('Downloads are not supported on this server');
       const client = await this.session.declared().catch(() => undefined);
+      const expires = Date.parse(record.grantExpiresAt ?? '');
+      const grantKey = record.grantKey && expires > Date.now() + 30_000 ? record.grantKey : this.session.key();
       const resolved = await adapter.resolveDownload(titleId, {
         versionId: record.versionId,
         subtitleFormats: client?.subtitleFormats,
-        idempotencyKey: this.session.key(),
+        idempotencyKey: grantKey,
       });
+      if (this.item(titleId) !== record) return false;
+      const sameSource = (!record.sourceId || !resolved.sourceId || record.sourceId === resolved.sourceId) &&
+        (!record.byteLength || !resolved.byteLength || record.byteLength === resolved.byteLength) &&
+        (!record.etag || !resolved.etag || record.etag === resolved.etag);
       const freeBytes = await this.port.freeBytes().catch(() => null);
+      if (this.item(titleId) !== record) return false;
       const space = checkDownloadSpace({
         requestedBytes: resolved.byteLength ?? record.byteLength,
-        existingItems: this.state.allItems,
+        existingItems: sameSource ? this.state.allItems : this.state.allItems.map(item => item === record ? { ...item, bytesWritten: 0 } : item),
         serverId: record.serverId,
         viewerId: record.viewerId,
         titleId,
@@ -783,20 +816,30 @@ export class Downloads {
         }, freeBytes, space.message);
         return false;
       }
-      const sameSource = (!record.sourceId || !resolved.sourceId || record.sourceId === resolved.sourceId) &&
-        (!record.byteLength || !resolved.byteLength || record.byteLength === resolved.byteLength) &&
-        (!record.etag || !resolved.etag || record.etag === resolved.etag);
       const updated: DownloadRecord = {
         ...record,
-        byteLength: resolved.byteLength ?? record.byteLength,
+        sourceId: resolved.sourceId,
+        container: resolved.container,
+        mimeType: resolved.mimeType,
+        originalVideo: resolved.originalVideo,
+        audioTracks: resolved.audioTracks,
+        subtitleTracks: resolved.subtitleTracks,
+        selectedAudioTrackId: resolved.selectedAudioTrackId,
+        selectedSubtitleTrackId: resolved.selectedSubtitleTrackId,
+        chapters: resolved.chapters,
+        markers: resolved.markers,
+        byteLength: resolved.byteLength ?? (sameSource ? record.byteLength : undefined),
         bytesWritten: sameSource ? record.bytesWritten : 0,
-        etag: resolved.etag ?? record.etag,
+        etag: resolved.etag ?? (sameSource ? record.etag : undefined),
+        grantKey: resolved.expiresAt ? grantKey : undefined,
+        grantExpiresAt: resolved.expiresAt,
         status: 'queued',
         error: undefined,
         errorCode: undefined,
         neededBytes: undefined,
       };
       await this.upsertRecord(updated, freeBytes, '');
+      if (this.item(titleId) !== updated) return false;
       await this.port.resumeTransfer({
         serverId: record.serverId,
         viewerId: record.viewerId,

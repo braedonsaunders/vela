@@ -338,3 +338,10 @@ serves a live AAC transcode (`stream.m4a`) the way Ether serves one it has not f
 whatever the Range, chunked, no Content-Length, `Accept-Ranges: none`, produced by ffmpeg at
 `VELA_MOCK_TRANSCODE_SPEED` times real time (default 4). `VELA_MOCK_AUDIO_TRANSCODE=1` transcodes
 every track, to exercise that path in a browser that plays every original.
+
+Set `VELA_MOCK_DOWNLOADS=1` to enable original-file download grants for movies
+and episodes. The ticket serves the current `/__admin/original` fixture, or
+`direct.mp4` when no format fixture is selected. It supports byte ranges,
+`If-Range` and a stable ETag across tickets for the same file. The signed-in
+capabilities response reports the three-grant daily allowance. Offline watch
+writes use the observed time to resolve stale updates.
