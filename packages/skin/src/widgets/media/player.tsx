@@ -4,7 +4,7 @@
 // Both take the active document's `ui` look.
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode, type Ref } from 'react';
-import { Platform, ScrollView, Text, TVFocusGuideView, View, type ViewStyle } from 'react-native';
+import { findNodeHandle, Platform, ScrollView, Text, TVFocusGuideView, View, type ViewStyle } from 'react-native';
 import { AUDIO_RATES, chapterEnd, clock, currentInQueue, durationLabel, msg, number, upNext, type AudioState, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
@@ -225,10 +225,11 @@ function rateLabel(rate: number): string { return `${number(rate, { maximumFract
 export interface VisualizerSwitch { on: boolean; onToggle(on: boolean): void }
 
 /** Now Playing: the whole-screen player. */
-export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualizer, hidden = false, open = true, background }: {
+export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualizer, hidden = false, open = true, setPlayTarget, background }: {
   onClose(): void; panel?: 'queue' | 'lyrics' | 'sound'; onOpenVisualizer?(): void; visualizer?: VisualizerSwitch; hidden?: boolean;
   /** The dock can keep the controls drawn while it closes. */
   open?: boolean;
+  setPlayTarget?(tag: number | undefined): void;
   /** The `nowPlaying` block's background (its nowPlaying.background template: a visualizer), drawn
    *  over the artwork's wash and under the tint, taking no focus. */
   background?: ReactNode;
@@ -244,7 +245,16 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   const item = currentInQueue(audio.queue);
   const [laidOut, setLaidOut] = useState(false);
   const [entered, setEntered] = useState(false);
-  const playRef = useMemo(() => Platform.isTV ? focusTarget(NOW_PLAYING_PLAY) : undefined, []);
+  const playRef = useMemo(() => {
+    if (!Platform.isTV) return undefined;
+    const register = focusTarget(NOW_PLAYING_PLAY);
+    return (target: ComponentRef<typeof Pressable> | null) => {
+      if (!target) return;
+      const forget = register(target);
+      setPlayTarget?.(findNodeHandle(target) ?? undefined);
+      return () => { forget?.(); setPlayTarget?.(undefined); };
+    };
+  }, [setPlayTarget]);
   useEffect(() => { if (!open) setEntered(false); }, [open]);
   const initialFocus = nowPlayingFirstFocus({ tv: Platform.isTV, open: open && !hidden && !!item, laidOut, entered });
   useEffect(() => {

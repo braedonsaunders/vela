@@ -269,7 +269,7 @@ function NowPlayingBlock({ props, press, background }: { props: Props; press?(p:
   return (
     <View style={{ flex: 1, minHeight: 0 }} testID="listen-now-playing">
       <NowPlaying onClose={onClose} panel={panel === 'lyrics' || panel === 'sound' || panel === 'queue' ? panel : undefined} hidden={dock?.hidden} open={dock?.open}
-        visualizer={dock ? dock.visualizer : offered ? visualizerSwitch : undefined} onOpenVisualizer={onOpenVisualizer}
+        visualizer={dock ? dock.visualizer : offered ? visualizerSwitch : undefined} onOpenVisualizer={onOpenVisualizer} setPlayTarget={dock?.setPlayTarget}
         background={background && item ? background(item, { playing, accent: item.accent }) : undefined} />
     </View>
   );

@@ -16,6 +16,8 @@ export interface ListenDock {
   hidden: boolean;
   /** False during the overlay's exit, while the document is still mounted. */
   open: boolean;
+  /** The Apple TV focus guide's entry destination, while the Play control is attached. */
+  setPlayTarget?(tag: number | undefined): void;
 }
 
 export const ListenDockContext = createContext<ListenDock | null>(null);
