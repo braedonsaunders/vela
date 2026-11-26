@@ -33,7 +33,10 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   const host = useMemo(() => app && page ? page(app) : app, [app, page]);
   const season = route === 'title' ? host?.env.season : '';
   useEffect(() => {
-    if (season) void vela.store.catalogue.title(season);
+    if (!season) return;
+    const controller = new AbortController();
+    void vela.store.catalogue.title(season, false, controller.signal);
+    return () => controller.abort();
   }, [season, vela.store]);
   // On TV, focus returns to the card or button that opened the route above when it closes.
   const navigationFocused = useIsFocused();

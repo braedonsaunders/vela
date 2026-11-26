@@ -11,11 +11,15 @@ import { msg } from '../i18n';
 import { randomId } from '../protocol/id';
 import { cappedClient, type StreamingLimit } from '../streaming';
 import { SessionCredentials } from '../session';
-import { ServerCredentials, ServerRegistry } from '../session/servers';
+import { ServerCredentials, ServerRegistry, type ServerRecord } from '../session/servers';
 import type { MediaCapabilities, VelaPlatform } from './platform';
 
 /** `session`: the viewer signed in or out. `server`: another server was selected. */
 export type ResetKind = 'session' | 'server';
+
+export interface PlexRelocatorHandle {
+  tryRelocate(connection: Connection, epoch: number, error: unknown, signal?: AbortSignal): Promise<boolean>;
+}
 
 /** A standalone app before its first server is added: nothing to read from or sign in to. */
 export class NoServerError extends Error {
@@ -39,6 +43,7 @@ export class Session {
   private readonly connections = new Map<string, Connection>();
   private readonly resetListeners = new Set<(kind: ResetKind, refused?: boolean) => void>();
   private readonly forgetListeners = new Set<(id: string) => void>();
+  private relocator: PlexRelocatorHandle | undefined;
   /** The server last read as selected: undefined before the first read, '' while there is none. */
   private activeId: string | undefined;
   private deviceValue: V.Device | undefined;
@@ -73,6 +78,16 @@ export class Session {
       this.audioValue = engine;
       this.setMedia(media);
     });
+  }
+
+  /** Attach the Plex relocation coordinator (wired once by createVela). */
+  setRelocator(relocator: PlexRelocatorHandle): void {
+    this.relocator = relocator;
+  }
+
+  /** Try to relocate an unreachable directly linked Plex server; resolves true if relocated and reset. */
+  relocatePlex(connection: Connection, epoch: number, error: unknown, signal?: AbortSignal): Promise<boolean> {
+    return this.relocator?.tryRelocate(connection, epoch, error, signal) ?? Promise.resolve(false);
   }
 
   /** This install's stable device: its ID is kept with the secrets. */
@@ -146,6 +161,22 @@ export class Session {
     this.signingIn = undefined;
     this.negotiation = undefined;
     for (const listener of [...this.resetListeners]) listener('session');
+  }
+
+  /** Reset the currently selected server (e.g. after re-linking it at a new address). */
+  resetSelectedServer(): void {
+    this.resetServer();
+  }
+
+  /** Update a saved server's address in place (keeping ID and session) and reset once if selected. */
+  relocateServer(id: string, name: string, url: string, machineIdentifier?: string): ServerRecord {
+    const record = this.registry.relocate(id, name, url, machineIdentifier);
+    this.connections.delete(id);
+    if (this.activeId === id || (this.activeId === undefined && this.registry.read().selectedId === id)) {
+      this.activeId = id;
+      this.resetServer();
+    }
+    return record;
   }
 
   private resetServer(refused = false): void {

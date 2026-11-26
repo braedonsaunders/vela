@@ -115,7 +115,7 @@ export class PlexLink {
    * The chosen server's first connection that proves it is that server: its own `/identity`
    * must name the resource's machine identifier, read with redirects refused.
    */
-  async choose(code: string, id: string, pageSecure: boolean, signIn: { device: Device; idempotencyKey: string }): Promise<{ kind: 'ether' | 'plex'; name: string; origin: string; origins: string[]; tokens: Tokens | null; accountToken?: string; note?: string }> {
+  async choose(code: string, id: string, pageSecure: boolean, signIn: { device: Device; idempotencyKey: string }): Promise<{ kind: 'ether' | 'plex'; name: string; origin: string; origins: string[]; tokens: Tokens | null; accountToken?: string; machineIdentifier?: string; note?: string }> {
     const resource = this.resources.find(r => r.clientIdentifier === id);
     const account = this.account;
     if (!account || this.pin?.code !== code || !resource) throw new Error('Link Plex again to choose a server');
@@ -146,7 +146,7 @@ export class PlexLink {
       this.cancel();
       // Every address this server publishes, so a record added by one of them is recognised as this server.
       const origins = resource.connections.flatMap(c => { try { return [new URL(c.uri).origin]; } catch { return []; } });
-      return { kind: ether ? 'ether' : 'plex', name: ether?.name || resource.name || 'Plex', origin, origins, tokens, ...(ether ? {} : { accountToken: account.token }) };
+      return { kind: ether ? 'ether' : 'plex', name: ether?.name || resource.name || 'Plex', origin, origins, tokens, ...(ether ? {} : { accountToken: account.token, machineIdentifier: resource.clientIdentifier }) };
     }
     throw new Error('This Plex server could not be reached from here');
   }

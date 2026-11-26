@@ -25,6 +25,7 @@ import { Audio, initialAudio, type AudioState } from './audio';
 import { initialServers, Servers, type ServersState } from './servers';
 import { initialPlayerSettings, PlayerSettings, type PlayerSettingsState } from './player-settings';
 import { initialSeriesTracks, SeriesTracks, type SeriesTracksState } from './series-tracks';
+import { PlexRelocator } from './plex-relocate';
 import { Session } from './session';
 import { idle, StateBox, type Loadable } from './state';
 
@@ -138,6 +139,7 @@ const bucket = (width: number) => Math.min(MAX_ART_WIDTH, Math.max(ART_STEP, Mat
 export function createVela(options: VelaOptions): Vela {
   const box = new StateBox<VelaState>(initialState);
   const session = new Session(options);
+  session.setRelocator(new PlexRelocator(box, session));
   let artWidth = bucket(options.artWidth);
   const width = () => artWidth;
   const auth = new Auth(box, session, options);
