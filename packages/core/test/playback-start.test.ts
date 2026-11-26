@@ -4,6 +4,7 @@ import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
 import type { PlaybackPlan } from '../src/wire';
+import { VelaError } from '../src/adapter/errors';
 
 test('startup is visible synchronously and repeat starts are ignored, not queued', async () => {
   let resolve!: (plan: PlaybackPlan) => void;
@@ -119,4 +120,55 @@ test.each([false, true])('stop respects the originating viewer after switching (
   progress.resolve({ accepted: true });
   await Promise.all([reporting, stopping]);
   expect(calls).toEqual(changed ? ['origin:progress'] : ['origin:progress', 'origin:stop']);
+});
+
+test.each([false, true])('stale stop retries on the opening server only while its viewer matches (viewer changed: %s)', async changed => {
+  const plan = {
+    sessionId: 's', sourceGeneration: 0, seekGeneration: 0, state: 'playing', titleId: 't',
+    paths: [], audioTracks: [], subtitleTracks: [],
+  } as unknown as PlaybackPlan;
+  const generations = { sourceGeneration: 1, seekGeneration: 2 };
+  const started = Promise.withResolvers<void>();
+  const stopReply = Promise.withResolvers<PlaybackPlan>();
+  const calls: unknown[] = [];
+  const origin = {
+    startPlayback: async () => plan,
+    sessionSnapshot: async () => ({ plan }),
+    command: async (_id: string, command: unknown) => {
+      calls.push(command);
+      if (calls.length !== 1) return { ...plan, state: 'ended' };
+      started.resolve();
+      return stopReply.promise;
+    },
+    unloadStop: () => [{ url: 'https://original.example/stop', method: 'POST' }],
+  };
+  const connection = { adapter: origin, plan: (value: PlaybackPlan) => value };
+  let active = connection;
+  let viewer = 'original';
+  const session = {
+    epoch: 0, onReset() {}, ready: async () => active, negotiate: async () => {},
+    client: {}, key: () => 'retry',
+    tokens: async () => ({ viewer: { id: viewer } }),
+  };
+  const box = new StateBox({ playback: initialPlayback } as VelaState);
+  const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
+  await playback.start({ kind: 'title', id: 't' });
+  const stopping = playback.stop();
+  await started.promise;
+  active = { ...connection, adapter: { ...origin, command: async () => {
+    calls.push('Stop reached the selected server');
+    return plan;
+  } } };
+  session.epoch++;
+  if (changed) viewer = 'different-profile';
+  stopReply.reject(new VelaError({
+    class: 'request', code: 'stale_generation', message: 'Generation changed',
+    currentGenerations: generations, retry: { allowed: false },
+  }, 409));
+  await stopping;
+  expect(calls).toEqual([
+    { kind: 'stop', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'stop-s-0-0' },
+    ...(changed ? [] : [{ kind: 'stop', ...generations, idempotencyKey: 'retry' }]),
+  ]);
+  expect(playback.stopOnUnload(() => {})).toBe(0);
 });
