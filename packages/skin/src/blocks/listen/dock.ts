@@ -14,8 +14,8 @@ export interface ListenDock {
   visualizer?: VisualizerSwitch;
   /** The full-screen visualizer covers Now Playing (it stays mounted, keeping its tab). */
   hidden: boolean;
-  /** Now Playing has drawn (a TV: the dock gives it focus, as when it opened). */
-  shown?(): void;
+  /** False during the overlay's exit, while the document is still mounted. */
+  open: boolean;
 }
 
 export const ListenDockContext = createContext<ListenDock | null>(null);

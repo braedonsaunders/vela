@@ -3,11 +3,12 @@
 // for music, speed, 15/30-second skips, chapters and a sleep timer for audiobooks, and the queue.
 // Both take the active document's `ui` look.
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode, type Ref } from 'react';
 import { Platform, ScrollView, Text, TVFocusGuideView, View, type ViewStyle } from 'react-native';
 import { AUDIO_RATES, chapterEnd, clock, currentInQueue, durationLabel, msg, number, upNext, type AudioState, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
+import { focusElement, focusTarget } from '../../escape';
 import { useHost } from '../../host';
 import { NO_RING, useInteraction } from '../common/controls';
 import { useMediaActions } from './context';
@@ -19,6 +20,7 @@ import { SoundBlock, SoundSection } from '../../blocks/sound';
 import { musicTV } from '../../blocks/listen/layout';
 import { nowPlayingSideBySide } from './window-layout';
 import { listForItem, toggleSound, type NowPlayingList } from './now-playing-list';
+import { NOW_PLAYING_PLAY, nowPlayingFirstFocus } from './now-playing-focus';
 import { usePart } from '../../blocks/listen/look';
 
 const web = Platform.OS === 'web';
@@ -133,12 +135,17 @@ function MiniScrubber({ position, duration, onSeek, onPreview }: { position: num
   );
 }
 
-function PlayButton({ playing, size, onPress, testID, nativeID, preferred }: { playing: boolean; size: number; onPress(): void; testID?: string; nativeID?: string; preferred?: boolean }) {
+function PlayButton({ playing, size, onPress, testID, nativeID, preferred, focusRef, onLayout, onFocus }: {
+  playing: boolean; size: number; onPress(): void; testID?: string; nativeID?: string; preferred?: boolean;
+  focusRef?: Ref<ComponentRef<typeof Pressable>>; onLayout?(): void; onFocus?(): void;
+}) {
   const m = useMediaLook();
   const { state, handlers } = useInteraction();
   const lit = state.hover || state.focus;
   return (
-    <Pressable {...handlers} onPress={onPress} testID={testID} nativeID={nativeID} {...(preferred ? { hasTVPreferredFocus: true } : {})} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : msg('media.player.play')}
+    <Pressable {...handlers} ref={focusRef} onPress={onPress} onLayout={onLayout}
+      onFocus={() => { handlers.onFocus(); onFocus?.(); }} testID={testID} nativeID={nativeID}
+      {...(preferred ? { hasTVPreferredFocus: true } : {})} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : msg('media.player.play')}
       style={[NO_RING, { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center',
         backgroundColor: lit ? m.ui.inkHover : m.ui.accent, transform: [{ scale: state.pressed ? 0.94 : lit ? 1.04 : 1 }] },
         state.focus ? m.box({ 'box-shadow': `0px 0px 0px 4px ${m.ui.focusHalo}` }) : {},
@@ -218,8 +225,10 @@ function rateLabel(rate: number): string { return `${number(rate, { maximumFract
 export interface VisualizerSwitch { on: boolean; onToggle(on: boolean): void }
 
 /** Now Playing: the whole-screen player. */
-export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualizer, hidden = false, background }: {
+export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualizer, hidden = false, open = true, background }: {
   onClose(): void; panel?: 'queue' | 'lyrics' | 'sound'; onOpenVisualizer?(): void; visualizer?: VisualizerSwitch; hidden?: boolean;
+  /** The dock can keep the controls drawn while it closes. */
+  open?: boolean;
   /** The `nowPlaying` block's background (its nowPlaying.background template: a visualizer), drawn
    *  over the artwork's wash and under the tint, taking no focus. */
   background?: ReactNode;
@@ -233,6 +242,22 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   const queue = useLast(live.queue);
   const audio = { ...live, queue: live.queue ?? queue ?? null };
   const item = currentInQueue(audio.queue);
+  const [laidOut, setLaidOut] = useState(false);
+  const [entered, setEntered] = useState(false);
+  const playRef = useMemo(() => Platform.isTV ? focusTarget(NOW_PLAYING_PLAY) : undefined, []);
+  useEffect(() => { if (!open) setEntered(false); }, [open]);
+  const initialFocus = nowPlayingFirstFocus({ tv: Platform.isTV, open: open && !hidden && !!item, laidOut, entered });
+  useEffect(() => {
+    if (!initialFocus) return;
+    // A view can lay out during the opening fade, while tvOS still excludes it from focus.
+    // Stop at the first focus event, so moving the remote never brings Play back into focus.
+    const deadline = performance.now() + 2000;
+    let frame = requestAnimationFrame(function requestPlay() {
+      focusElement(initialFocus);
+      if (performance.now() < deadline) frame = requestAnimationFrame(requestPlay);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [initialFocus]);
   const [panel, setPanel] = useState<'' | 'speed' | 'sleep'>('');
   const source = useInteraction();
   const shownPanel = useLast(panel || undefined);
@@ -330,7 +355,10 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
             : <RoundButton icon="shuffle" label={msg('media.player.shuffle')} onPress={() => store.audio.toggleShuffle()} active={audio.queue.shuffle} testID="now-playing-shuffle" />}
           {book ? <RoundButton icon="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={54} testID="now-playing-back15" />
             : <RoundButton icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} size={54} testID="now-playing-previous" iconSize={22} />}
-          <PlayButton playing={playing} size={76} onPress={() => store.audio.toggle()} testID="now-playing-toggle" nativeID="now-playing-toggle" preferred={Platform.isTV} />
+          <PlayButton playing={playing} size={76} onPress={() => store.audio.toggle()}
+            testID={NOW_PLAYING_PLAY} nativeID={NOW_PLAYING_PLAY} preferred={Platform.isTV && open && !entered}
+            focusRef={playRef} onLayout={Platform.isTV ? () => setLaidOut(true) : undefined}
+            onFocus={Platform.isTV && open ? () => setEntered(true) : undefined} />
           {book ? <RoundButton icon="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={54} testID="now-playing-forward30" />
             : <RoundButton icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} size={54} testID="now-playing-next" iconSize={22} />}
           {book

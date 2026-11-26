@@ -1,7 +1,7 @@
 // The app's audio: the platform engine attached to the store's queue, the system's media
 // session kept in step, and the mini player and Now Playing drawn over every route.
 import { router, usePathname } from 'expo-router';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Platform, StyleSheet, TVFocusGuideView, View } from 'react-native';
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,18 +41,14 @@ const dockStrip = { position: 'absolute', left: 0, right: 0, bottom: 0 } as cons
  * presents pages inside the root view, and Android draws the dock above its stack already. */
 const Above = Platform.OS === 'ios' && !Platform.isTV ? FullWindowOverlay : Fragment;
 
-type Focusable = { requestTVFocus?(): void };
-// RN's generated TV guide declarations omit the ref that its implementation forwards.
-const FocusGuide = TVFocusGuideView as ComponentType<ComponentProps<typeof TVFocusGuideView> & { ref?: Ref<Focusable> }>;
-
 /** On a TV, Now Playing draws over a page that stays in the focus engine: while open it takes the
  * focus and keeps it (the remote's presses never reach the page beneath), and gives it back on close. */
-function TVFocusTrap({ open, children, guideRef }: { open: boolean; children: ReactNode; guideRef: Ref<Focusable> }) {
+function TVFocusTrap({ open, children }: { open: boolean; children: ReactNode }) {
   if (!Platform.isTV) return <>{children}</>;
   return (
-    <FocusGuide ref={guideRef} style={fill} autoFocus focusable={open} trapFocusUp={open} trapFocusDown={open} trapFocusLeft={open} trapFocusRight={open}>
+    <TVFocusGuideView style={fill} focusable={open} trapFocusUp={open} trapFocusDown={open} trapFocusLeft={open} trapFocusRight={open}>
       {children}
-    </FocusGuide>
+    </TVFocusGuideView>
   );
 }
 const SOUND_PREFERENCE = 'sound';
@@ -202,11 +198,10 @@ export function AudioDock() {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [fullscreen, leaveVisualizer]);
-  // Wait until the Now Playing document draws before requesting focus for the TV guide.
-  const trap = useRef<Focusable>(null);
-  const focusTrap = useCallback(() => { setTimeout(() => trap.current?.requestTVFocus?.(), 400); }, []);
-  const dock = useMemo<ListenDock>(() => ({ close, openVisualizer: readyToOpen ? openVisualizer : undefined, visualizer: visualizerSwitch, hidden: fullscreen, shown: focusTrap }),
-    [close, readyToOpen, openVisualizer, visualizerSwitch, fullscreen, focusTrap]);
+  const nowPlayingOpen = playing && open;
+  const dock = useMemo<ListenDock>(() => ({
+    close, openVisualizer: readyToOpen ? openVisualizer : undefined, visualizer: visualizerSwitch, hidden: fullscreen, open: nowPlayingOpen,
+  }), [close, readyToOpen, openVisualizer, visualizerSwitch, fullscreen, nowPlayingOpen]);
   const noBack = useCallback(() => undefined, []);
   const noParams = useCallback(() => undefined, []);
   const screenActions = useAppScreenActions({ host: host ?? null, back: noBack, setParams: noParams });
@@ -221,11 +216,11 @@ export function AudioDock() {
   // it took focus, and tvOS scrolled its page to the transport, leaving the artwork and the Up Next
   // tabs above the screen.
   const nowPlaying = (
-    <Presence shown={playing && open} still={still} offstage={Platform.isTV ? { opacity: 0 } : { y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
-      <TVFocusTrap open={playing && open} guideRef={trap}>
+    <Presence shown={nowPlayingOpen} still={still} offstage={Platform.isTV ? { opacity: 0 } : { y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
+      <TVFocusTrap open={nowPlayingOpen}>
         <View collapsable={false} style={[fill, visuals && { backgroundColor: pageColor }]} testID={fullscreen ? 'visualizer-page' : undefined} accessibilityViewIsModal>
           <ListenDockContext.Provider value={dock}>
-            <ScreenView target={NOW_PLAYING_TARGET} href={builtinHref('listen', 'nowPlaying')} params={nowPlayingParams} host={host} active={playing && open}
+            <ScreenView target={NOW_PLAYING_TARGET} href={builtinHref('listen', 'nowPlaying')} params={nowPlayingParams} host={host} active={nowPlayingOpen}
               actions={screenActions} route={false} quiet />
             {fullscreen ? <View style={fill}><ScreenView target={VISUALIZER_TARGET} href={builtinHref('listen', 'visualizer')} host={host} active actions={screenActions} route={false} quiet /></View> : null}
           </ListenDockContext.Provider>

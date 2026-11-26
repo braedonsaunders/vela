@@ -3,7 +3,7 @@
 // arguments), its parts (document, node and skin styles already merged) and its part templates;
 // this file reads them in the block's context, publishes the parts and templates to the engine
 // below (look.tsx), and draws the engine. Engines keep their own data reads, focus and timing.
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Platform, View } from 'react-native';
 import { currentInQueue, msg, withBand, type HistoryRecapPeriod } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
@@ -263,15 +263,12 @@ function NowPlayingBlock({ props, press, background }: { props: Props; press?(p:
   const panel = props.text('panel');
   // Inside the app's audio dock the dock closes Now Playing and opens the visualizer.
   const dock = useListenDock();
-  const drawn = !!item && !dock?.hidden;
-  const shown = dock?.shown;
-  useEffect(() => { if (drawn && Platform.isTV) shown?.(); }, [drawn, shown]);
   const onClose = dock?.close ?? closer(props.text('closeFlag'), press) ?? (() => undefined);
   const onOpenVisualizer = dock ? dock.openVisualizer
     : offered && flag && visualizerSwitch?.on && press ? () => press({ action: 'open', arg: flag, args: {}, control: 'now-playing-visualizer' }) : undefined;
   return (
     <View style={{ flex: 1, minHeight: 0 }} testID="listen-now-playing">
-      <NowPlaying onClose={onClose} panel={panel === 'lyrics' || panel === 'sound' || panel === 'queue' ? panel : undefined} hidden={dock?.hidden}
+      <NowPlaying onClose={onClose} panel={panel === 'lyrics' || panel === 'sound' || panel === 'queue' ? panel : undefined} hidden={dock?.hidden} open={dock?.open}
         visualizer={dock ? dock.visualizer : offered ? visualizerSwitch : undefined} onOpenVisualizer={onOpenVisualizer}
         background={background && item ? background(item, { playing, accent: item.accent }) : undefined} />
     </View>
