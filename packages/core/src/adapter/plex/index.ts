@@ -1009,15 +1009,19 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return { accepted: true };
   }
 
-  private async timeline(s: PlexSession, state: string) {
+  private async timeline(s: PlexSession, state: string, retried = false) {
     if (s.plan.channelId || s.timelineStopped) return;
     // Once dispatched, the terminal timeline outlives pagehide. Pagehide still stops the stream.
     const keepaliveStarted = state === 'stopped' ? () => { s.timelineStopped = true; } : undefined;
     const post = this.request('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`, time: Math.round(s.plan.positionSeconds * 1000),
       duration: s.metadata.duration, state, session: s.plan.sessionId, hasMDE: 1, identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': s.plan.sessionId },
-    'POST', true, s.sessionWork.signal, undefined, keepaliveStarted).catch(error => {
+    'POST', true, retried ? undefined : s.sessionWork.signal, undefined, keepaliveStarted).catch(error => {
       // An explicit HTTP refusal allows a retry. A missing reply may follow an accepted timeline.
-      if (keepaliveStarted && error instanceof VelaError && error.detail.code === 'plex_http') s.timelineStopped = false;
+      if (keepaliveStarted && error instanceof VelaError && error.detail.code === 'plex_http') {
+        s.timelineStopped = false;
+        // Pagehide skipped the stopped timeline because this one was on the wire; send it once more on its own.
+        if (s.sessionWork.signal.aborted && !retried) void this.timeline(s, 'stopped', true).catch(() => {});
+      }
       throw error;
     });
     s.carry?.(post);
