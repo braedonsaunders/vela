@@ -142,7 +142,7 @@ export class Playback {
    * and its latest plan: what a page being unloaded stops (`stopOnUnload`). One leaves once its stop
    * was answered (or failed), or the server ended it. An attached session is its owner's, never held.
    */
-  private readonly held = new Map<string, { adapter: ServerAdapter; plan: V.PlaybackPlan }>();
+  private readonly held = new Map<string, { adapter: ServerAdapter; plan: V.PlaybackPlan; epoch: number }>();
   /** Progress of the current session (stall.ts): when it is stalled, and how many restarts it has had. */
   private stall: StallWatch | undefined;
   /**
@@ -196,10 +196,14 @@ export class Playback {
   ) {
     this.trickplay.subscribe(() => this.trickplayChanged());
     session.onReset(() => {
-      this.end();
-      this.watch = undefined;
+      const plan = this.box.get().playback.plan ?? this.abandoned;
+      if (plan && this.held.has(plan.sessionId)) void this.stop();
+      else {
+        this.end();
+        this.watch = undefined;
+        this.box.update('playback', () => initialPlayback);
+      }
       this.media = undefined;
-      this.box.update('playback', () => initialPlayback);
     });
   }
 
@@ -918,7 +922,10 @@ export class Playback {
     const ended = observation.state === 'ended';
     this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
     // Known as in flight at once, so a stop issued right after (an advance, Stop) waits for it.
-    const sent = this.session.ready().then(connection => connection.adapter.reportObservation(sessionId, observation));
+    const held = this.held.get(sessionId);
+    const sent = held
+      ? held.adapter.reportObservation(sessionId, observation)
+      : this.session.ready().then(connection => connection.adapter.reportObservation(sessionId, observation));
     this.reporting = sent.catch(() => undefined);
     // A session may go on past the player's end (a multi-part title's next part): show its plan at once.
     if (ended) void sent.then(() => this.followNow?.(sessionId), () => undefined);
@@ -1074,15 +1081,17 @@ export class Playback {
 
   /** Release a session that played, then publish the resume state the server kept for it. */
   private async finish(plan: V.PlaybackPlan, target: PlaybackTarget | null, phase: PlaybackPhase, last: LastPosition | undefined, reported: Promise<V.Ack | undefined>, handedOver = false): Promise<void> {
+    const held = this.held.get(plan.sessionId);
+    const epoch = held?.epoch ?? this.session.epoch;
     let confirmedPosition: number | undefined;
     try {
+      const adapter = held?.adapter ?? (await this.session.ready()).adapter;
       const ack = await reported;
-      const connection = await this.session.ready();
       const endedOnHandover = handedOver && last?.ended && ack?.accepted;
       if (!endedOnHandover) {
         this.stopped(plan.sessionId);
         try {
-          await connection.adapter.command(plan.sessionId, {
+          await adapter.command(plan.sessionId, {
             kind: 'stop',
             sourceGeneration: plan.sourceGeneration,
             seekGeneration: plan.seekGeneration,
@@ -1091,16 +1100,16 @@ export class Playback {
         } finally { this.held.delete(plan.sessionId); }
       } else this.held.delete(plan.sessionId);
       const titleId = plan.titleId ?? (target?.kind === 'title' ? target.id : '');
-      if (titleId && plan.purpose !== 'preview') {
+      if (epoch === this.session.epoch && titleId && plan.purpose !== 'preview') {
         // Some servers return the raw session cursor even though their resume policy drops
         // it. Read the persisted watch state before publishing any resume UI.
-        const detail = await connection.adapter.detail(titleId, true);
+        const detail = await adapter.detail(titleId, true);
         confirmedPosition = detail.title.watch?.positionSeconds;
       }
     } catch {
       // Ended, expired or already stopped: the server holds nothing for it.
     }
-    if (phase !== 'ended') this.afterWatching(plan, target, confirmedPosition, last, reported);
+    if (epoch === this.session.epoch && phase !== 'ended') this.afterWatching(plan, target, confirmedPosition, last, reported);
   }
 
   /**
@@ -1118,7 +1127,8 @@ export class Playback {
     // 5%). Publish only its answer, never a local position that will immediately disappear.
     if (confirmedPosition !== undefined) this.watched(watched);
     const media = target?.kind === 'title' ? target.media : undefined;
-    void reported.then(() => this.reconcile(watched, media));
+    const epoch = this.session.epoch;
+    void reported.then(() => { if (epoch === this.session.epoch) this.reconcile(watched, media); });
   }
 
   private end(): void {
@@ -1273,7 +1283,7 @@ export class Playback {
 
   /** A session this client opened, held until its stop is answered (`held`). */
   private hold(adapter: ServerAdapter, plan: V.PlaybackPlan): void {
-    this.held.set(plan.sessionId, { adapter, plan });
+    this.held.set(plan.sessionId, { adapter, plan, epoch: this.session.epoch });
   }
 
   /** A held session's newer plan (its generations, or the server ending it) replaces the one held. */

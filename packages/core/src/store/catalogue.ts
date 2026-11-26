@@ -72,12 +72,15 @@ export class Catalogue {
     return hasTitleManagement(api) ? api.titleActions(id) : null;
   }
   async setTitleWatch(id: string, change: { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false }) {
+    const epoch = this.session.epoch;
     const api = (await this.session.ready()).adapter;
+    this.session.check?.(epoch, 'watch action');
     if (!hasTitleManagement(api)) throw new Error('Title actions are unavailable');
     const before = this.box.get();
     this.box.replace(optimisticWatchState(before, id, change));
     try {
       await api.setTitleWatch(id, { ...change, idempotencyKey: this.session.key() });
+      if (epoch !== this.session.epoch) return;
       void this.title(id, true);
       // A library's recommended rows (a plugin library's Continue watching, say) live outside the
       // store: patch the held answers at once, and let any library on show read its rows again.
@@ -91,7 +94,7 @@ export class Catalogue {
     } catch (error) {
       // A removal has no card left to map back into the row, so restore the captured immutable
       // snapshot rather than trying to synthesize an inverse mutation.
-      this.box.replace(before);
+      if (epoch === this.session.epoch) this.box.replace(before);
       throw new Error(msg('cardMenu.actionFailed'), { cause: error });
     }
   }
