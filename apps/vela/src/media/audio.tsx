@@ -29,12 +29,14 @@ import { onOpenNowPlaying, type NowPlayingPanel } from '@vela/skin/src/blocks/li
 import { wideMusic } from '@vela/skin/src/widgets/media/window-layout';
 import { useMediaPlayerActions } from './player-actions';
 import { useReaderActions } from './reader-actions';
+import { FocusBoundary } from '../focus-boundary';
 import { useAppScreenActions } from '../screen-actions';
 import { ScreenView } from '@vela/skin/src/screen/host';
 import { builtinHref } from '@vela/skin/src/resolve/builtin';
 import { ListenDockContext, type ListenDock } from '@vela/skin/src/blocks/listen/dock';
 
 const fill = StyleSheet.absoluteFill;
+const screenStyle = { flex: 1 };
 const dockStrip = { position: 'absolute', left: 0, right: 0, bottom: 0 } as const;
 /** On iPhone and iPad a title page is a native modal, presented above the root view: the dock rides in
  * a window of its own above it, so the mini player and Now Playing stay on top of an album's page. A TV
@@ -96,7 +98,7 @@ function followMediaSession(store: Store): () => void {
 const NOW_PLAYING_TARGET = { kind: 'screen' as const, id: 'vela.listen', page: 'nowPlaying' };
 const VISUALIZER_TARGET = { kind: 'screen' as const, id: 'vela.listen', page: 'visualizer' };
 
-export function AudioDock() {
+export function AudioDock({ children }: { children: ReactNode }) {
   const vela = useVela();
   const store = vela.store;
   const audio = useVelaState(state => state.audio);
@@ -206,7 +208,11 @@ export function AudioDock() {
   const noParams = useCallback(() => undefined, []);
   const screenActions = useAppScreenActions({ host: host ?? null, back: noBack, setParams: noParams });
   const nowPlayingParams = useMemo<Record<string, string>>(() => (panel ? { panel } : {} as Record<string, string>), [panel]);
-  if (!host) return null;
+  // A route still mounting under the overlay can request TV focus without a remote press.
+  const screens = Platform.isTV
+    ? <FocusBoundary active={!nowPlayingOpen} style={screenStyle}>{children}</FocusBoundary>
+    : children;
+  if (!host) return <>{screens}</>;
   const bottom = Math.max(14, insets.bottom + 10);
   const still = host.env.still;
   // Now Playing rises out of the mini player and sinks back into it: its top starts and ends at the
@@ -232,22 +238,25 @@ export function AudioDock() {
     </Presence>
   );
   return (
-    <HostContext.Provider value={host}>
-      <MediaActionsContext.Provider value={actions}>
-        <Above>
-          {/* On tvOS a view drawn over the page hides the focus guides beneath it from the focus engine
-              (the nav, the music rail, a page's bands): a full-screen layer under the mini player kept
-              the remote from leaving it, or a page, for any of them. On a TV the mini player's layer
-              is only as tall as the bar, and Now Playing has a layer of its own while it is open. */}
-          <View pointerEvents="box-none" style={Platform.isTV ? [dockStrip, { height: bottom + MINI_PLAYER_HEIGHT }] : fill}>
-            <Presence shown={playing && !open && !inMusicShell} still={still} offstage={{ y: 18, scale: 0.98 }} exitMs={MOTION.quick} style={fill}>
-              <MiniPlayer onOpen={() => setOpen(true)} bottom={bottom} />
-            </Presence>
-            {Platform.isTV ? null : nowPlaying}
-          </View>
-          {Platform.isTV ? nowPlaying : null}
-        </Above>
-      </MediaActionsContext.Provider>
-    </HostContext.Provider>
+    <>
+      {screens}
+      <HostContext.Provider value={host}>
+        <MediaActionsContext.Provider value={actions}>
+          <Above>
+            {/* On tvOS a view drawn over the page hides the focus guides beneath it from the focus engine
+                (the nav, the music rail, a page's bands): a full-screen layer under the mini player kept
+                the remote from leaving it, or a page, for any of them. On a TV the mini player's layer
+                is only as tall as the bar, and Now Playing has a layer of its own while it is open. */}
+            <View pointerEvents="box-none" style={Platform.isTV ? [dockStrip, { height: bottom + MINI_PLAYER_HEIGHT }] : fill}>
+              <Presence shown={playing && !open && !inMusicShell} still={still} offstage={{ y: 18, scale: 0.98 }} exitMs={MOTION.quick} style={fill}>
+                <MiniPlayer onOpen={() => setOpen(true)} bottom={bottom} />
+              </Presence>
+              {Platform.isTV ? null : nowPlaying}
+            </View>
+            {Platform.isTV ? nowPlaying : null}
+          </Above>
+        </MediaActionsContext.Provider>
+      </HostContext.Provider>
+    </>
   );
 }

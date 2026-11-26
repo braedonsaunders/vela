@@ -114,9 +114,9 @@ export function listenPath(view: ListenView): string {
   return `/library/${view.library ?? 'music'}${query ? `?${query}` : ''}`;
 }
 
-/** Views compared by review, with the reason (a one-line, written acceptance). */
 const NOW_PLAYING_VIEWS = ['now-playing', 'now-playing-lyrics', 'now-playing-sound'];
 
+/** Views compared by review, with the reason (a one-line, written acceptance). */
 export const LISTEN_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [
   { viewports: /^tvos$/, views: NOW_PLAYING_VIEWS,
     reason: 'Now Playing deliberately takes first focus on Play when the transport is ready. Legacy focused Close on Apple TV.' },

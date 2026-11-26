@@ -15,8 +15,9 @@ export default function Layout() {
       <SurfaceProvider>
         <VisualizerProvider>
           <SystemBar />
-          <Screens />
-          <AudioDock />
+          <AudioDock>
+            <Screens />
+          </AudioDock>
           <SurfaceToasts />
         </VisualizerProvider>
       </SurfaceProvider>
