@@ -50,6 +50,13 @@ export interface Env {
   canPlay?: boolean;
   /** Screen documents (env.isTV): a TV device, where env.tv is the TV class (a TV, or a window 1600px or wider). */
   isTV?: boolean;
+  /** Screen documents, renderer 20: the device can run the music visualizer (env.canVisualize); the
+   * platform (env.platform: ios, android, web, desktop, tv); the form factor (env.form: small, wide, tv,
+   * fold); a foldable's posture while partly open (env.fold: book, tabletop; '' otherwise). */
+  canVisualize?: boolean;
+  platform?: 'ios' | 'android' | 'web' | 'desktop' | 'tv';
+  form?: 'small' | 'wide' | 'tv' | 'fold';
+  fold?: '' | 'book' | 'tabletop';
   home?: HomeModel;
   heroIndex: number;
   libraries: Destination[];

@@ -68,6 +68,7 @@ export interface PlaybackSession {
   mediaId: string;
   edition: string;
   selectedSourceId?: string;
+  selectedVersionId?: string;
   serverControlled?: boolean;
   sources: Source[];
   position?: number;

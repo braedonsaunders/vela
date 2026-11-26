@@ -345,3 +345,12 @@ and episodes. The ticket serves the current `/__admin/original` fixture, or
 `If-Range` and a stable ETag across tickets for the same file. The signed-in
 capabilities response reports the three-grant daily allowance. Offline watch
 writes use the observed time to resolve stale updates.
+
+Listen parity knobs (tools/parity/listen-mock.ts sets them all): `VELA_MOCK_NOW=<ISO>` pins the
+instant the fixtures' relative dates count from; `VELA_MOCK_LIKED=<title id>,…` marks titles liked;
+`VELA_MOCK_FAVORITES_LIST=1` serves Ether's liked lists by role (`GET /favorites/titles`,
+`features.favoritesList`); `VELA_MOCK_LYRICS=1` serves timed lyrics for music tracks
+(`GET /titles/:id/lyrics`, a line every five seconds, instrumental for the test signals);
+`VELA_MOCK_PLAYLIST_TRACKS=<track id>,…` adds the music playlist "Evening Drive"
+(`playlist-evening-drive`). `VELA_MOCK_MUSIC_ROOT` can point at a silenced copy of the music files
+(`bun tools/parity/silent-music.ts --to <dir>`).

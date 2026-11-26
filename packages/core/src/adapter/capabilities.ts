@@ -1,5 +1,6 @@
 import type * as V from '../wire';
 import type { SkinDocument } from '../wire';
+import type { LibraryJumpBucket } from '../models';
 import type { EventHandler } from '../protocol/sse';
 import type { ServerAdapter } from './index';
 import type { ScreenTarget } from '../screens/keys';
@@ -72,6 +73,14 @@ export interface LibraryRecommendations {
   libraryRows(id: string, kind: V.Library['kind'], fresh?: boolean, tab?: string): Promise<(V.Row | V.SurfaceRow)[]>;
   libraryCollections(id: string, cursor?: string, tab?: string, search?: string): Promise<V.Page<V.RowEntry>>;
   libraryGenres(id: string): Promise<{ id: string; label: string }[]>;
+}
+
+/** Server-provided first-character buckets for jumping into a title-sorted library without paging from A. */
+export interface LibraryJumpIndex {
+  libraryJumpIndex(libraryId: string, query?: Pick<V.LibraryBrowseQuery, 'tab' | 'sort' | 'direction'>): Promise<LibraryJumpBucket[]>;
+}
+export function hasLibraryJumpIndex(adapter: ServerAdapter): adapter is ServerAdapter & LibraryJumpIndex {
+  return 'libraryJumpIndex' in adapter && typeof (adapter as unknown as LibraryJumpIndex).libraryJumpIndex === 'function';
 }
 
 /** Static live streams exposed inside a content library, separate from Live TV and its guide. */

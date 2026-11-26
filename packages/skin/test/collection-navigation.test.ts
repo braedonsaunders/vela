@@ -7,7 +7,7 @@ test('opening a collection pushes a named, counted view under its Collections ta
     params: {
       id: 'movies', view: 'collections', facetTitle: 'Popular · 64 titles', collectionId: 'popular',
       query: undefined, facets: undefined, sort: undefined, dir: undefined, kind: undefined,
-      genre: undefined, year: undefined, played: undefined, fav: undefined,
+      genre: undefined, year: undefined, played: undefined, fav: undefined, start: undefined,
     },
   });
 });

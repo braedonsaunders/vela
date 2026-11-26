@@ -1,0 +1,7 @@
+// The renderer's version, on its own so tools (tools/screen-schema.ts) read it without the resolver.
+
+/** The highest document renderer version this renderer draws (docs/skin-schema.md). Renderer 19
+ * adds plugin screen documents and their blocks (docs/plugin-screens.md); renderer 20 adds built-in
+ * page documents, skin experience overrides, platform and form variants, rich blocks and their parts,
+ * generic block fallbacks and slot surfaces (docs/experiences.md). */
+export const RENDERER_VERSION = 20;

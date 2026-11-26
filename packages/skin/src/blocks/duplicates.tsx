@@ -1,7 +1,6 @@
 // Self-contained rich block for B8b Duplicate recording review (`packages/skin/src/blocks/duplicates.tsx`).
 // Exposes the duplicate recording groups list, release comparison rows, preferred release selection,
-// and prefer-and-hide-others action over `@vela/core`'s `store.music` duplicates engine, independent
-// of `widgets/music` page code so the Listen experience documents reuse it unchanged.
+// and prefer-and-hide-others action over `@vela/core`'s `store.music` duplicates engine.
 import { useEffect, useState } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
 import {
