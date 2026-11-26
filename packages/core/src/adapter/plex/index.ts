@@ -29,7 +29,7 @@ interface PlexSession {
   readonly sessionWork: AbortController;
   /** The progress report queued last, not started yet: a later one in its state and generations takes its place and
    * its answer, and a command at its generations queued after it, one that will run, keeps its position and sequence without its post (`by`),
-   * its answer then that of the command's first timeline post, or accepted when the command posts none. */
+   * its answer then that of the command's first timeline post, or, when the command posts none, accepted once its position is applied. */
   waiting?: { r: V.PlayerObservation; work?: Promise<V.Ack>; by?: Promise<unknown> };
   /** The state of the last timeline posted. */
   posted?: string;
@@ -40,8 +40,8 @@ interface PlexSession {
   scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
-  /** The idempotency keys of the mutations queued and not settled yet. */
-  queued?: Set<string>;
+  /** The idempotency keys of the mutations queued and not settled yet, each with how many calls carry it. */
+  queued?: Map<string, number>;
   /** While a command that took over a waiting report runs: answers that report with the command's first timeline post. */
   carry?: (post: Promise<unknown>) => void;
   /** A title that started without intro or credits markers: when they were last asked for, and how often. */
@@ -931,12 +931,16 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       if (r.state === 'ended') await this.stopTranscode(s.transcodeId ?? id, s.plan.media === 'audio', signal);
       s.sequence = r.sequence; s.plan.state = r.state === 'ended' ? 'ended' : r.state === 'paused' ? 'paused' : 'playing'; s.plan.revision++;
       return posts;
+    });
+    // Without its own post it is answered by the timeline post that carries its progress, or as accepted once
+    // pagehide ends the session's work, also while that post is still pending.
+    const work = sent.then(async posts => {
+      if (!posts && !signal.aborted) await Promise.race([slot!.by, new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }))]);
+      return ack;
     }).catch(error => {
-      if (signal.aborted) return true;
+      if (signal.aborted) return ack;
       throw error;
     });
-    // Without its own post it is answered by the timeline post that carries its progress.
-    const work = sent.then(async posts => { if (!posts) await slot!.by; return ack; });
     if (slot) s.waiting = Object.assign(slot, { work });
     return work;
   }
@@ -969,7 +973,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
           s.plan.state = 'playing';
           break;
       }
-    });
+    }, true);
   }
 
   changeTracks(id: string, r: TrackCommand): Promise<V.PlaybackPlan> {
@@ -1100,16 +1104,19 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     id: string,
     r: V.SessionCommand,
     apply: (s: PlexSession, signal: AbortSignal) => Promise<void> | void,
+    posts = false,
   ): Promise<V.PlaybackPlan> {
     const s = this.session(id);
-    // A seek it will refuse, or a key it answers from its record or that is queued already, runs nothing: the
-    // waiting report keeps its post.
-    const queued = s.queued ??= new Set();
-    const runs = !s.mutations.has(r.idempotencyKey) && !queued.has(r.idempotencyKey) && !(r.kind === 'seek' && !(Number.isFinite(r.positionSeconds) && r.positionSeconds >= 0));
+    // A seek it will refuse, or a key it answers from its record or that another call still queued carries (which
+    // may yet record it), runs nothing: the waiting report keeps its post.
+    const queued = s.queued ??= new Map();
+    const runs = !s.mutations.has(r.idempotencyKey) && !queued.get(r.idempotencyKey) && !(r.kind === 'seek' && !(Number.isFinite(r.positionSeconds) && r.positionSeconds >= 0));
     const w = runs && s.waiting?.r.sourceGeneration === r.sourceGeneration && s.waiting.r.seekGeneration === r.seekGeneration ? s.waiting : undefined;
-    if (runs) queued.add(r.idempotencyKey);
+    queued.set(r.idempotencyKey, (queued.get(r.idempotencyKey) ?? 0) + 1);
     let carry: ((post?: Promise<unknown>) => void) | undefined;
-    if (w) { w.by = new Promise(resolve => { carry = resolve; }); void w.by.catch(() => undefined); }
+    // A command that posts no timeline (a track, path or version change) takes the report's position into its plan
+    // and the report is answered at once; one that posts answers it with that post.
+    if (w) { w.by = posts ? new Promise(resolve => { carry = resolve; }) : Promise.resolve(); void w.by.catch(() => undefined); }
     const work = this.serialize(s, async () => {
       const { signal } = s.sessionWork;
       if (signal.aborted) fail('Plex playback session ended', 'conflict');
@@ -1125,8 +1132,12 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       s.mutations.set(r.idempotencyKey, result);
       return result;
     });
-    // A command that posted no timeline answers the report it took over as accepted.
-    if (runs) void work.catch(() => undefined).then(() => { queued.delete(r.idempotencyKey); carry?.(); });
+    // A command that ended without its timeline post answers the report it took over as accepted.
+    void work.catch(() => undefined).then(() => {
+      const left = queued.get(r.idempotencyKey)! - 1;
+      if (left) queued.set(r.idempotencyKey, left); else queued.delete(r.idempotencyKey);
+      carry?.();
+    });
     return work;
   }
 

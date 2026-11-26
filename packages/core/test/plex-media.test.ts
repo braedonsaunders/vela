@@ -1241,6 +1241,99 @@ describe('Plex progress beside commands on a slow server', () => {
     expect(settled.map(r => r.status === 'fulfilled' ? r.value : r.reason instanceof VelaError && r.reason.status)).toEqual([{ accepted: true }, 500]);
     expect(posts()).toEqual(['playing 17', 'stopped 19']);
   });
+
+  /** Holds the next request matching `method path`, once answered, until the returned function is called. */
+  const hold = (method: string, path: string) => {
+    const routed = globalThis.fetch;
+    let release = () => {};
+    const held = new Promise<void>(resolve => { release = resolve; });
+    let waiting = true;
+    globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) => {
+      const answer = await routed(input, init);
+      if (waiting && (init?.method ?? 'GET') === method && new URL(String(input)).pathname === path) { waiting = false; await held; }
+      return answer;
+    }, { preconnect: () => {} }) as typeof fetch;
+    return release;
+  };
+
+  test('a command queued again with its key while a retry of it is in flight does not take the waiting report\'s post', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'v', positionSeconds: 0 } as never);
+    const resume = { kind: 'resume' as const, idempotencyKey: 'v1', sourceGeneration: 0, seekGeneration: 0 };
+    server.failing = true;
+    const first = adapter.command(plan.sessionId, resume);
+    await settle();
+    const second = adapter.command(plan.sessionId, resume);
+    const release = hold('POST', '/:/timeline');
+    server.release();
+    server.failing = false;
+    expect(await first.catch(error => error instanceof VelaError && error.status)).toBe(500);
+    await settle();
+    expect(posts()).toEqual(['playing 0', 'playing 0']);
+    const report = adapter.reportObservation(plan.sessionId, at(1, 19));
+    const third = adapter.command(plan.sessionId, resume);
+    release();
+    expect(await report).toEqual({ accepted: true });
+    expect(await third).toEqual(await second);
+    expect(posts()).toEqual(['playing 0', 'playing 0', 'playing 19']);
+  });
+
+  test('a report taken over by a command that posts no timeline is answered once its position is applied, not when the command ends', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'a', positionSeconds: 0 } as never);
+    const first = adapter.reportObservation(plan.sessionId, at(1, 17));
+    await settle();
+    const report = adapter.reportObservation(plan.sessionId, at(2, 19));
+    const release = hold('PUT', '/library/parts/3');
+    const tracks = adapter.changeTracks(plan.sessionId, { kind: 'tracks', subtitleTrackId: '32', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'a1' });
+    server.release();
+    expect(await first).toEqual({ accepted: true });
+    expect(await Promise.race([report, settle().then(() => 'still waiting')])).toEqual({ accepted: true });
+    release();
+    expect((await tracks).positionSeconds).toBe(19);
+    expect(posts()).toEqual(['playing 17']);
+  });
+
+  test('a report taken over by a pause is accepted when the page is unloaded during the pause\'s post', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'u', positionSeconds: 0 } as never);
+    const first = adapter.reportObservation(plan.sessionId, at(1, 17));
+    await settle();
+    const report = adapter.reportObservation(plan.sessionId, at(2, 19));
+    const paused = adapter.command(plan.sessionId, { kind: 'pause', idempotencyKey: 'u1', sourceGeneration: 0, seekGeneration: 0 }).catch(error => error);
+    const release = hold('POST', '/:/timeline');
+    server.release();
+    expect(await first).toEqual({ accepted: true });
+    await settle();
+    expect(posts()).toHaveLength(2);
+    adapter.unloadStop(plan.sessionId, plan);
+    expect(await Promise.race([report.catch(error => error), settle().then(() => 'still waiting')])).toEqual({ accepted: true });
+    release();
+    await paused;
+  });
+
+  test('a report taken over by a stop is accepted when the page is unloaded, though the stop\'s post later answers 404', async () => {
+    const { server } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'z', positionSeconds: 0 } as never);
+    const first = adapter.reportObservation(plan.sessionId, at(1, 17));
+    await settle();
+    const report = adapter.reportObservation(plan.sessionId, at(2, 19));
+    const stopped = adapter.command(plan.sessionId, { kind: 'stop', idempotencyKey: 'z1', sourceGeneration: 0, seekGeneration: 0 }).catch(error => error);
+    refuse('POST', '/:/timeline', 404);
+    const release = hold('POST', '/:/timeline');
+    server.release();
+    expect(await first).toEqual({ accepted: true });
+    await settle();
+    adapter.unloadStop(plan.sessionId, plan);
+    expect(await Promise.race([report.catch(error => error), settle().then(() => 'still waiting')])).toEqual({ accepted: true });
+    release();
+    await stopped;
+    expect(await report).toEqual({ accepted: true });
+  });
 });
 
 test.each(['pagehide before response', 'pagehide during cleanup', 'queued progress'] as const)('Plex sends one terminal timeline with %s', async race => {
