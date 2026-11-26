@@ -37,6 +37,9 @@ export function mutedBrowser(browser: 'chromium' | 'webkit', options: { allowSof
       });
       const context = globalThis.WebGL2RenderingContext;
       if (!context) return;
+      // The visualizer uses this fence only to benchmark its first frame.
+      // Keep drawing real frames without applying the device budget to a shared runner.
+      context.prototype.fenceSync = () => null;
       const getParameter = context.prototype.getParameter;
       context.prototype.getParameter = function(parameter: number) {
         const debug = this.getExtension('WEBGL_debug_renderer_info');
