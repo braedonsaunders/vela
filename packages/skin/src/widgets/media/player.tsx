@@ -256,7 +256,9 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
     };
   }, [setPlayTarget]);
   useEffect(() => { if (!open) setEntered(false); }, [open]);
-  const initialFocus = nowPlayingFirstFocus({ tv: Platform.isTV, open: open && !hidden && !!item, laidOut, entered });
+  const { preferPlay, requestTarget: initialFocus } = nowPlayingFirstFocus({
+    tv: Platform.isTV, open: open && !hidden && !!item, laidOut, entered,
+  });
   useEffect(() => {
     if (!initialFocus) return;
     // A view can lay out during the opening fade, while tvOS still excludes it from focus.
@@ -366,7 +368,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
           {book ? <RoundButton icon="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={54} testID="now-playing-back15" />
             : <RoundButton icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} size={54} testID="now-playing-previous" iconSize={22} />}
           <PlayButton playing={playing} size={76} onPress={() => store.audio.toggle()}
-            testID={NOW_PLAYING_PLAY} nativeID={NOW_PLAYING_PLAY} preferred={Platform.isTV && open && !entered}
+            testID={NOW_PLAYING_PLAY} nativeID={NOW_PLAYING_PLAY} preferred={preferPlay}
             focusRef={playRef} onLayout={Platform.isTV ? () => setLaidOut(true) : undefined}
             onFocus={Platform.isTV && open ? () => setEntered(true) : undefined} />
           {book ? <RoundButton icon="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={54} testID="now-playing-forward30" />
