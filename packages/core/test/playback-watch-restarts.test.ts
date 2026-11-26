@@ -9,16 +9,17 @@ import { VelaError } from '../src/adapter/errors';
 
 const S = 1000;
 
-/** A Playback over a fake server, on a fake clock: every session it is given fails as soon as it starts. */
+/** A Playback over a fake server, on a fake clock, with explicit session expiry. */
 async function withHarness(run: (h: {
   refuse: (error: unknown) => void;
+  expire: (id: string) => void;
   playback: Playback;
   box: StateBox<VelaState>;
   started: string[];
   stops: string[];
   plan: (id: string) => PlaybackPlan;
   advance: (ms: number) => Promise<void>;
-}) => Promise<void>): Promise<void> {
+}) => Promise<void>, preparePlan?: (plan: PlaybackPlan) => void): Promise<void> {
   const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout, originalNow = Date.now;
   const timers = new Map<number, { at: number; fire: () => unknown }>();
   let sequence = 0, clock = 0;
@@ -38,20 +39,42 @@ async function withHarness(run: (h: {
   };
   try {
     const started: string[] = [], stops: string[] = [];
+    const expired = new Set<string>();
     let sessions = 0;
     let refusal: unknown;
-    const plan = (id: string) => ({ sessionId: id, revision: 1, state: 'playing', channelId: 'news', live: {}, positionSeconds: 0,
-      audioTracks: [], subtitleTracks: [], sourceGeneration: 0, seekGeneration: 0 } as unknown as PlaybackPlan);
+    const plans = new Map<string, PlaybackPlan>();
+    const plan = (id: string) => {
+      const existing = plans.get(id);
+      if (existing) return existing;
+      const next: PlaybackPlan = { sessionId: id, revision: 1, state: 'playing', channelId: 'news', live: { mode: 'adaptive' }, positionSeconds: 0,
+        paths: [], selectedPathId: '', audioTracks: [], subtitleTracks: [], selectedSubtitleTrackId: null, chapters: [],
+        fallback: { state: 'idle' }, sourceGeneration: 0, seekGeneration: 0 };
+      preparePlan?.(next);
+      plans.set(id, next);
+      return next;
+    };
     const adapter = {
       startPlayback: async () => { if (refusal) throw refusal; const id = `s${++sessions}`; started.push(id); return plan(id); },
-      sessionSnapshot: async (id: string) => ({ plan: plan(id) }),
+      sessionSnapshot: async (id: string) => {
+        if (expired.has(id)) throw new VelaError({ class: 'not-found', code: 'session_not_found', message: 'Session expired', retry: { allowed: false } }, 404);
+        return { plan: plan(id) };
+      },
       command: async (id: string, c: { kind: string }) => { if (c.kind === 'stop') stops.push(id); return plan(id); },
+      goLive: async (id: string) => {
+        const next = { ...plan(id), live: { mode: 'adaptive' as const } };
+        delete next.catchUp;
+        plans.set(id, next);
+        return next;
+      },
+      titleVersions: async () => [],
+      clearVersionChoice: async () => ({}),
+      switchVersion: async (id: string, command: { versionId: string }) => ({ ...plan(id), selectedVersionId: command.versionId }),
       detail: async () => ({ title: {} }),
     };
     const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
     const box = new StateBox({ playback: initialPlayback, auth: { phase: 'signed-in' } } as VelaState);
     const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
-    await run({ refuse: error => { refusal = error; }, playback, box, started, stops, plan, advance });
+    await run({ expire: id => expired.add(id), refuse: error => { refusal = error; }, playback, box, started, stops, plan, advance });
   } finally { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; Date.now = originalNow; }
 }
 
@@ -165,4 +188,92 @@ test('a restart the server itself refuses ends in its words; one it cannot answe
       await playback.stop();
     });
   } finally { console.warn = warn; }
+});
+
+const startOver: PlaybackTarget = { kind: 'programme', id: 'airing', channelId: 'news', from: 'start' };
+
+const watches: [string, PlaybackTarget][] = [
+  ['catch-up', { kind: 'programme', id: 'archive', channelId: 'news', range: { startAt: '2026-11-25T00:00:00Z', durationSeconds: 5400 } }],
+  ['Start over', startOver],
+  ['timeshift', channel],
+  ['a title', { kind: 'title', id: 'film' }],
+];
+
+test.each(watches)('%s recovers from a stall and an expiry an hour apart, then still bounds a loop', async (kind, target) => {
+  await withHarness(async ({ playback, box, plan, expire, advance, started }) => {
+    await playback.attach(target, plan('initial'));
+    await advance(15 * S);
+    expect(box.get().playback.sessionId).toBe('s1');
+    for (let second = 0; second <= 3600; second++) {
+      playback.snapshot({ sessionId: 's1', live: null, state: 'playing', position: second });
+      await advance(S);
+    }
+    expect(started).toEqual(['s1']);
+    const recovered = box.get().playback.plan!;
+    playback.detach('initial');
+    await playback.attach(target, recovered);
+    // Reattaching the replacement must preserve the forgiveness earned by its healthy playback.
+    for (const [id, replacement] of [['s1', 's2'], ['s2', 's3']] as const) {
+      expire(id);
+      await advance(9 * S);
+      expect(box.get().playback.sessionId).toBe(replacement);
+      expect(box.get().playback.phase).toBe('playing');
+    }
+    expire('s3');
+    await advance(9 * S);
+    expect(started).toEqual(['s1', 's2', 's3']);
+    expect(box.get().playback.errorCode).toBe('playback_stalled');
+  }, plan => {
+    if (kind === 'timeshift') {
+      plan.live = { mode: 'adaptive', timeshift: { maxMinutes: 120 }, windowStartSeconds: 0, liveEdgeSeconds: 7200,
+        anchor: { mediaSequence: 1, windowStartSeconds: 0 }, edgeAt: '2026-11-25T02:00:00Z' };
+    } else if (target.kind === 'programme') {
+      delete plan.channelId;
+      plan.catchUp = { channelId: target.channelId, startAt: target.range?.startAt ?? '2026-11-25T00:00:00Z' };
+      if (target.from === 'start') plan.live = { mode: 'startOver', windowStartSeconds: 0, liveEdgeSeconds: 7200 };
+      else delete plan.live;
+    } else {
+      delete plan.channelId;
+      delete plan.live;
+    }
+  });
+});
+
+test('Go live restores a Start over watch’s budget after a stall and an expiry', async () => {
+  await withHarness(async ({ playback, box, expire, advance, started }) => {
+    await playback.start(startOver);
+    await advance(15 * S);
+    expect(box.get().playback.sessionId).toBe('s2');
+    expire('s2');
+    await advance(9 * S);
+    expect(box.get().playback.sessionId).toBe('s3');
+
+    expect(box.get().playback.plan?.live?.mode).toBe('startOver');
+    expect(await playback.liveTransport('s3', { kind: 'goLive' })).toBe(true);
+    expect(box.get().playback.plan?.live?.mode).toBe('adaptive');
+    expire('s3');
+    await advance(9 * S);
+    expect(started).toEqual(['s1', 's2', 's3', 's4']);
+    expect(box.get().playback.sessionId).toBe('s4');
+    expect(box.get().playback.phase).toBe('playing');
+  }, plan => {
+    plan.live = { mode: 'startOver', windowStartSeconds: 0, liveEdgeSeconds: 7200 };
+    plan.catchUp = { channelId: 'news', startAt: '2026-11-25T00:00:00Z' };
+    delete plan.channelId;
+  });
+});
+
+test('choosing a new version gives a title a fresh restart allowance', async () => {
+  await withHarness(async ({ playback, box, advance, started }) => {
+    await playback.start({ kind: 'title', id: 'film' });
+    playback.recover('s1');
+    await advance(2 * S);
+    playback.recover('s2');
+    await advance(2 * S);
+    expect((await playback.switchVersion('s3', 'other-version')).selectedVersionId).toBe('other-version');
+    playback.recover('s3');
+    await advance(2 * S);
+    expect(started).toEqual(['s1', 's2', 's3', 's4']);
+    expect(box.get().playback.phase).toBe('playing');
+  });
 });
