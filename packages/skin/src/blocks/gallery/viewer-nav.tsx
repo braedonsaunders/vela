@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, View, type GestureResponderEvent, type ViewStyle } from 'react-native';
+import { Modal, Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { msg, type Card } from '@vela/core';
 import { focusElement, focusTarget } from '../../escape';
@@ -13,7 +13,8 @@ import { dayLabel } from '../media/day';
 import { MediaGlyph } from '../media/icons';
 import { useMediaLook } from '../media/parts';
 import { FactList, Facts } from '../media/title';
-import { photoInfoFacts, photoSwipe, type PhotoDirection } from './viewer-nav-model';
+import { PhotoTouchSurface } from './photo-touch';
+import { photoInfoFacts, type PhotoDirection } from './viewer-nav-model';
 
 export interface GalleryOpenPhoto {
   (id: string, pageKey: string): void;
@@ -44,48 +45,19 @@ const SURFACE_ID = 'gallery-photo-stage';
 const FULLSCREEN_ID = 'gallery-photo-fullscreen';
 const web = Platform.OS === 'web';
 
-function usePhotoSwipe(onMove: (direction: PhotoDirection) => void) {
-  const start = useRef<{ x: number; y: number } | null>(null);
-  const swiped = useRef(false);
-  return {
-    swiped,
-    handlers: {
-      onTouchStart(event: GestureResponderEvent) {
-        const { touches } = event.nativeEvent;
-        const touch = touches[0];
-        start.current = touches.length === 1 && touch ? { x: touch.pageX, y: touch.pageY } : null;
-        swiped.current = false;
-      },
-      onTouchCancel() { start.current = null; },
-      onTouchEnd(event: GestureResponderEvent) {
-        const touch = event.nativeEvent.changedTouches[0];
-        const from = start.current;
-        start.current = null;
-        if (!from || !touch) return;
-        const direction = photoSwipe(from, { x: touch.pageX, y: touch.pageY });
-        if (direction) {
-          swiped.current = true;
-          onMove(direction);
-        }
-      },
-    },
-  };
-}
-
 export function PhotoViewerTopBar() {
   const navigation = useContext(PhotoNavigationContext);
   if (!navigation || navigation.fullscreen) return null;
   return <PhotoDisplayControls navigation={navigation} />;
 }
 
-export function PhotoViewerNavigation({ navigation, card, children }: {
-  navigation: PhotoNavigation; card: Card; children: ReactNode;
+export function PhotoViewerNavigation({ navigation, card, ratio, children }: {
+  navigation: PhotoNavigation; card: Card; ratio?: number; children: ReactNode;
 }) {
   const { active, fullscreen, chrome, info, move, setInfo, setChrome, setFullscreen } = navigation;
   const [hover, setHover] = useState(false);
   const wasFullscreen = useRef(false);
   const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const inline = usePhotoSwipe(move);
 
   const hide = useCallback(() => {
     clearTimeout(timeout.current);
@@ -162,13 +134,13 @@ export function PhotoViewerNavigation({ navigation, card, children }: {
 
   return (
     <>
-      <View style={StyleSheet.absoluteFill} {...inline.handlers}
+      <View style={StyleSheet.absoluteFill}
         {...(web ? { onPointerEnter: () => setHover(true), onPointerLeave: () => setHover(false) } : {})}>
-        {children}
+        <PhotoTouchSurface key={card.id} ratio={ratio} onSwipe={move}>{children}</PhotoTouchSurface>
         {!fullscreen ? <PhotoArrows navigation={navigation} pointerInside={hover} /> : null}
         {info && !fullscreen ? <PhotoInfo card={card} /> : null}
       </View>
-      {fullscreen ? <FullscreenPhoto card={card} navigation={navigation} reveal={reveal} hide={hide} /> : null}
+      {fullscreen ? <FullscreenPhoto card={card} ratio={ratio} navigation={navigation} reveal={reveal} hide={hide} /> : null}
     </>
   );
 }
@@ -236,13 +208,14 @@ function PhotoArrows({ navigation, pointerInside, reveal }: { navigation: PhotoN
   );
 }
 
-function FullscreenPhoto({ card, navigation, reveal, hide }: {
-  card: Card; navigation: PhotoNavigation; reveal(): void; hide(): void;
+function FullscreenPhoto({ card, ratio, navigation, reveal, hide }: {
+  card: Card; ratio?: number; navigation: PhotoNavigation; reveal(): void; hide(): void;
 }) {
   const host = useHost();
   const m = useMediaLook();
   const stage = usePart('photoViewer.stage');
-  const swipe = usePhotoSwipe(direction => { reveal(); navigation.move(direction); });
+  const lastTouch = useRef(0);
+  const toggle = navigation.chrome ? hide : reveal;
   const uri = photoImage(card);
   const top = host.viewport.insets.top + (m.tv ? 24 : 16);
   const right = (host.viewport.sides?.right ?? 0) + (m.tv ? 28 : 16);
@@ -253,14 +226,16 @@ function FullscreenPhoto({ card, navigation, reveal, hide }: {
     <Modal visible animationType="none" presentationStyle="fullScreen" onRequestClose={back}
       onShow={() => { focusElement(SURFACE_ID); }}>
       <View style={{ flex: 1, backgroundColor: m.ui.page }} testID="gallery-photo-fullscreen-stage">
-        <FocusPressable ref={focusTarget(SURFACE_ID)} {...swipe.handlers} nativeID={SURFACE_ID} testID={SURFACE_ID} accessibilityRole="button"
+        <FocusPressable ref={focusTarget(SURFACE_ID)} nativeID={SURFACE_ID} testID={SURFACE_ID} accessibilityRole="button"
           {...(web ? { dataSet: { velaFocus: 'frame' } } : {})}
           accessibilityLabel={msg(navigation.chrome ? 'gallery.hideControls' : 'gallery.showControls')}
           hasTVPreferredFocus={Platform.isTV} onPress={() => {
-            if (!Platform.isTV && !swipe.swiped.current) (navigation.chrome ? hide : reveal)();
-            swipe.swiped.current = false;
+            if (!Platform.isTV && Date.now() - lastTouch.current > 350) toggle();
           }} style={[StyleSheet.absoluteFill, NO_RING, stage.box]}>
-          {uri ? <Image source={host.image(uri)} contentFit="contain" accessibilityLabel={card.name} style={StyleSheet.absoluteFill} /> : null}
+          <PhotoTouchSurface key={card.id} ratio={ratio} onTap={toggle} onTouch={() => { lastTouch.current = Date.now(); }}
+            onSwipe={direction => { reveal(); navigation.move(direction); }}>
+            {uri ? <Image source={host.image(uri)} contentFit="contain" accessibilityLabel={card.name} style={StyleSheet.absoluteFill} /> : null}
+          </PhotoTouchSurface>
         </FocusPressable>
         {navigation.chrome ? <>
           <View pointerEvents="box-none" style={{ position: 'absolute', right, top }}>

@@ -65,11 +65,11 @@ export function ExperienceView({ experience, libraryId, place: asked, go, host, 
   const shellTarget = useMemo(() => ({ kind: 'screen' as const, id: screen, page: 'shell' }), [screen]);
   const pageTarget = useMemo(() => ({ kind: 'screen' as const, id: screen, page: place.page }), [screen, place.page]);
   const inline = content !== undefined;
-  const pageChildren = content ?? pageHeader;
+  const pageChildren = inline ? content : pageHeader;
   const pageHost = useMemo(() => pageChildren === undefined ? host : { ...host, children: pageChildren }, [pageChildren, host]);
   const page = (
     <ScreenView key={key} target={pageTarget} href={builtinHref(experience, place.page)} params={pageParams} host={pageHost} active={active} route={!inline && pageHeader === undefined}
-      actions={pageActions} scrollKey={`${experience}:${libraryId}:${key}`} />
+      actions={pageActions} scrollKey={pageHeader === undefined ? `${experience}:${libraryId}:${key}` : undefined} />
   );
   // The shell draws the page where its document puts the `children` slot.
   const shellHost = useMemo<SkinHost>(() => ({ ...host, children: page }), [host, page]);

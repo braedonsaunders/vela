@@ -95,7 +95,6 @@ function GalleryLibraryExperience({ id, address, name, host, active }: {
   }, [active, parent, place.page]);
 
   const header = <GalleryHeader tab={tab} albums={albums} people={people} back={parent ? back : undefined} select={id => {
-    if (id === tab && parent) { back(); return; }
     go(id === 'albums' || id === 'people' ? { page: id, params: {} } : TIMELINE_PLACE);
   }} />;
   return (

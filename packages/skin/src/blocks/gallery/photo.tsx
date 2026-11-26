@@ -10,6 +10,7 @@ import { photoImage, PhotoNavigationContext, PhotoViewerNavigation } from './vie
 import { Eyebrow, FactList, Facts } from '../media/title';
 import { MediaContentHeight } from '../media/viewport';
 import { photoStageHeight } from './photo-layout';
+import { PhotoTouchSurface } from './photo-touch';
 
 /** The image retains its aspect ratio. The title frame owns scrolling and closing. */
 export function PhotoViewer({ card }: { card: Card }) {
@@ -38,7 +39,7 @@ export function PhotoViewer({ card }: { card: Card }) {
   const image = uri ? <Image key={navigation ? uri : undefined} source={host.image(uri)} contentFit="contain" transition={200} accessibilityLabel={card.name}
     onLoad={event => {
       const source = event.source;
-      if (navigation && source.width > 0 && source.height > 0) setImageSize({ uri, ratio: source.width / source.height });
+      if (source.width > 0 && source.height > 0) setImageSize({ uri, ratio: source.width / source.height });
     }} style={{ width: '100%', height: '100%' }} />
     : <View style={{ width: '60%', height: '80%', borderRadius: 10, backgroundColor: m.ui.skeleton }} />;
   return (
@@ -46,7 +47,8 @@ export function PhotoViewer({ card }: { card: Card }) {
       onLayout={navigation ? event => setWidth(event.nativeEvent.layout.width) : undefined}>
       <View testID="media-photo" style={[{ width: stageWidth, height, marginBottom: gap, alignSelf: 'center',
         alignItems: 'center', justifyContent: 'center' }, stage.box]}>
-        {navigation ? <PhotoViewerNavigation card={card} navigation={navigation}>{image}</PhotoViewerNavigation> : image}
+        {navigation ? <PhotoViewerNavigation card={card} ratio={ratio} navigation={navigation}>{image}</PhotoViewerNavigation>
+          : <PhotoTouchSurface key={card.id} ratio={ratio}>{image}</PhotoTouchSurface>}
       </View>
       <View testID="gallery-photo-caption" style={[{ gap: 8, marginBottom: navigation ? bottomInset : 32 }, metadata.box]}
         onLayout={event => setCaptionHeight(event.nativeEvent.layout.height)}>

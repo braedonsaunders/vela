@@ -29,3 +29,8 @@ beside Close. Previous and Next overlay the image and appear only when their
 neighbour exists. The image's aspect ratio and the measured caption determine
 its height. Fullscreen uses the same controls and hides them after three idle
 seconds. Pointer, touch, keyboard and remote input reveal them again.
+
+On touch, pinch to zoom or double-tap to toggle between fit and 2× at
+the tap point. A drag pans within the enlarged image, and a horizontal
+swipe at fit moves to the neighbouring photo. Changing photos resets the
+zoom. The TV viewer uses its remote controls.
