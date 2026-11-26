@@ -4,6 +4,7 @@
 // come back as page turns and the controls' toggle.
 import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings, TocItem } from '@vela/skin/src/blocks/read/reader-engine';
 import { READER_THEMES } from '@vela/skin/src/blocks/read/reader-engine';
+import { installGroupBy } from './group-by';
 import { headingOrphaned, isTap, READER_COLUMN_START, READER_HEADINGS, readerHeadingRules, readerLayout, safeFraction, startTarget, swipeTurn, tapZone, type Landmark, type SectionInfo } from '@vela/skin/src/blocks/read/reader-layout';
 
 type Input = 'next' | 'previous' | 'toggle-chrome' | 'show-chrome' | 'escape';
@@ -278,6 +279,7 @@ export function createReaderEngine(): ReaderEngine | null {
       if (!(target instanceof HTMLElement)) throw new Error('The reader needs a page to draw in');
       host = target;
       settings ??= initial;
+      installGroupBy();
       await import('foliate-js/view.js');
       const response = await fetch(source.url);
       if (!response.ok) throw new Error(`The book could not be downloaded (${response.status})`);
