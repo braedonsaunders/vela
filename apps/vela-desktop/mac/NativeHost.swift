@@ -111,6 +111,8 @@ public func velaCall(_ pointer: UnsafeMutableRawPointer, _ operation: UnsafePoin
             let access = try? VelaMediaAuth(value)
             native.hasAccess = access != nil
             VelaMediaAccessStore.set(access, generation: (value["generation"] as? NSNumber)?.intValue ?? 0)
+        case "caption-insets":
+            native.session.setCaptionInsets(value)
         case "bounds":
             let x = value["x"] as? Double ?? 0, y = value["y"] as? Double ?? 0
             let w = max(0, value["width"] as? Double ?? 0), h = max(0, value["height"] as? Double ?? 0)

@@ -108,7 +108,12 @@ export const createWebPlayerHost: CreateWebPlayerHost = (element, initialProps, 
     if (next.videoFill !== props.videoFill) {
       surface.video.style.objectFit = next.videoFill ? 'cover' : 'contain';
     }
+    engine.setCaptionInsets(next.captionInsets);
+    const captionOnly = next.captionInsets !== props.captionInsets &&
+      next.plan === props.plan && next.session === props.session && next.command === props.command &&
+      next.serverError === props.serverError && next.videoFill === props.videoFill;
     props = next;
+    if (captionOnly) return;
     const currentRevision = ++revision;
     void apply(next, currentRevision).catch((error) => {
       if (disposed || currentRevision !== revision) return;

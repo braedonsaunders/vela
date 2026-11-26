@@ -248,6 +248,9 @@ public final class VelaPlayerModule: Module {
             Prop("tile") { (view: VelaPlayerView, tile: Int?) in
                 view.setTile(tile)
             }
+            Prop("captionInsets") { (view: VelaPlayerView, insets: [String: Any]?) in
+                view.setCaptionInsets(insets)
+            }
             Prop("videoFill") { (view: VelaPlayerView, fill: Bool?) in
                 view.setVideoFill(fill ?? false)
             }

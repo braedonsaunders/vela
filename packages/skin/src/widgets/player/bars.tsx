@@ -129,8 +129,11 @@ interface BottomProps {
   stepFrom(): number | null;
   blocked: boolean;
   opened: Opened;
+  presentPanel: boolean;
   info: boolean;
   menuHeight: number;
+  onMenuLayout(width: number, height: number): void;
+  onRowLayout(height: number): void;
   bleed?: ViewStyle;
   send(command: CommandInput): void;
   seek(seconds: number): void;
@@ -317,8 +320,8 @@ function Controls(props: BottomProps) {
     }
   };
   const cluster: ViewStyle = { flex: 1, minWidth: 0, flexDirection: 'row', justifyContent: 'flex-end', gap };
-  const panel = menu ? (
-    <MenuPanel look={look} name={names[menu]} maxHeight={menuHeight} wide={menu === 'quality' && !!state.plan?.versions?.length} anchorRef={anchorRef} onClose={closeMenu}>
+  const panel = menu && props.presentPanel ? (
+    <MenuPanel look={look} name={names[menu]} maxHeight={menuHeight} wide={menu === 'quality' && !!state.plan?.versions?.length} anchorRef={anchorRef} onClose={closeMenu} onPanelLayout={props.onMenuLayout}>
       {contents(menu)}
     </MenuPanel>
   ) : null;
@@ -367,7 +370,7 @@ function Controls(props: BottomProps) {
   const channels = <LiveZap look={look} watch={live} disabled={!live.canZap} />;
   if (look.small) {
     return (
-      <View ref={anchorRef} collapsable={false} testID="player-phone-controls"
+      <View ref={anchorRef} collapsable={false} onLayout={event => props.onRowLayout(event.nativeEvent.layout.height)} testID="player-phone-controls"
         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap }}>
           {play}
@@ -384,7 +387,7 @@ function Controls(props: BottomProps) {
     );
   }
   return (
-    <View ref={anchorRef} collapsable={false} style={{ flexDirection: 'row', alignItems: 'center', gap }}>
+    <View ref={anchorRef} collapsable={false} onLayout={event => props.onRowLayout(event.nativeEvent.layout.height)} style={{ flexDirection: 'row', alignItems: 'center', gap }}>
       {play}
       {timeline || rewind ? steps : null}
       {timeline ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}

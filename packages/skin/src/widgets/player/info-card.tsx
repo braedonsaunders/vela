@@ -4,12 +4,12 @@
 // format, frame rate, matching; channels, objects, lossless, passthrough or rendered, MAT). A fact the
 // engine does not report is left out, never guessed.
 import { BlurView } from 'expo-blur';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { msg } from '@vela/core';
 import type { PlayerLook } from './look';
 import type { PlayerView } from './present';
 
-export function InfoCard({ look, view, top }: { look: PlayerLook; view: PlayerView; top: number }) {
+export function InfoCard({ look, view, top, onLayout }: { look: PlayerLook; view: PlayerView; top: number; onLayout?: (event: LayoutChangeEvent) => void }) {
   const s = view.stats;
   const facts: [string, string][] = [
     [msg('player.info.buffer'), s.buffer],
@@ -38,6 +38,7 @@ export function InfoCard({ look, view, top }: { look: PlayerLook; view: PlayerVi
       accessibilityLabel={msg('player.info')}
       pointerEvents="none"
       testID="player-info"
+      onLayout={onLayout}
       style={{
         position: 'absolute',
         top,

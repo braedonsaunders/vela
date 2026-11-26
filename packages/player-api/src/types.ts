@@ -53,7 +53,16 @@ export interface PlayerMetadata {
   artworkUrl?: string;
 }
 
+/** Caption-only insets in view points (CSS pixels on web), measured from the player edges. */
+export interface CaptionInsets {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
 export interface VelaPlayerProps {
+  captionInsets?: CaptionInsets;
   /** The session to play. A newer revision or generation of the same session replaces it. */
   session?: PlaybackSession;
   /** A server plan, translated by the implementation; used instead of `session`. */

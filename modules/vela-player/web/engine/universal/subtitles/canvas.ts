@@ -6,7 +6,7 @@ export interface SubtitleViewport {
   y: number;
   width: number;
   height: number;
-  bottomInset: number;
+  pictureHeight: number;
 }
 const bitmapCanvases = new WeakMap<PGSBitmap, HTMLCanvasElement>();
 export function paintPGS(context: CanvasRenderingContext2D, display: PGSDisplay, viewport: SubtitleViewport) {
@@ -53,10 +53,10 @@ export function paintText(
   preferences: SubtitlePreferences,
   viewport: SubtitleViewport,
 ) {
+  if (viewport.width < 8 || viewport.height < 8) return;
   const factor = { small: 0.75, medium: 1, large: 1.25, xl: 1.6 }[preferences.subtitleSize];
-  const size = Math.max(12, viewport.height * 0.058) * factor,
-    lineHeight = size * 1.25,
-    padding = size * 0.24;
+  const preferredSize = Math.max(12, viewport.pictureHeight * 0.058) * factor;
+  let size = preferredSize;
   const font = (style: SubtitleTextStyle) =>
     `${style.italic ? 'italic ' : ''}${style.bold ? 'bold ' : ''}${size}px "Noto Sans", sans-serif`;
   const wrap = (runs: readonly SubtitleTextRun[], width: number) => {
@@ -100,18 +100,29 @@ export function paintText(
   context.textBaseline = 'top';
   context.textAlign = 'left';
   let stack = 0;
-  const inset = preferences.subtitlePosition === 'raised' ? Math.max(0, viewport.bottomInset) : 0;
+  const margin = viewport.height * (preferences.subtitlePosition === 'raised' ? 0.16 : 0.06);
   for (const cue of cues) {
-    const maxWidth = viewport.width * Math.min(cue.size ?? 0.9, 0.98),
-      lines = wrap(cue.runs, maxWidth);
-    const height = lines.length * lineHeight,
-      anchor =
-        viewport.x +
-        (cue.position ?? (cue.align === 'left' ? 0.05 : cue.align === 'right' ? 0.95 : 0.5)) * viewport.width;
-    let y =
-      cue.line === undefined
-        ? viewport.y + viewport.height * 0.94 - inset - height - stack
-        : viewport.y + cue.line * viewport.height;
+    size = preferredSize;
+    let lineHeight = size * 1.25;
+    let padding = size * 0.24;
+    const layout = () => wrap(cue.runs, Math.max(1, Math.min(
+      viewport.width * (cue.size ?? 0.9), viewport.width - padding * 2,
+    )));
+    let lines = layout();
+    const available = Math.max(1, viewport.height - margin - stack);
+    while ((lines.length * lineHeight + 2 * padding > available || padding * 2 + size > viewport.width) && size > 4) {
+      size *= 0.85;
+      lineHeight = size * 1.25;
+      padding = size * 0.24;
+      lines = layout();
+    }
+    const height = lines.length * lineHeight;
+    const anchor = viewport.x +
+      (cue.position ?? (cue.align === 'left' ? 0.05 : cue.align === 'right' ? 0.95 : 0.5)) * viewport.width;
+    const desiredY = cue.line === undefined
+      ? viewport.y + viewport.height - margin - height - stack
+      : viewport.y + cue.line * viewport.height;
+    let y = Math.max(viewport.y + padding, Math.min(viewport.y + viewport.height - height - padding, desiredY));
     if (cue.line === undefined) stack += height + padding;
     for (const line of lines) {
       const width = line.reduce((sum, token) => sum + token.width, 0);
