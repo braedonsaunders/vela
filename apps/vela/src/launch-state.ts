@@ -9,3 +9,9 @@ export function launchReady(phase: string, load: string, fonts: boolean, authRou
   return fonts && (docError || ((phase === 'signed-out' || phase === 'offline') && authRoute) ||
     (phase === 'signed-in' && (load === 'ready' || load === 'failed' || homeSlow)));
 }
+
+/** The first completed load releases the route host. Subsequent loads keep it mounted and
+ * advance the revision on completion so native text can pick up newly registered fonts. */
+export function fontLoadRevision(revision: number, phase: 'loading' | 'settled'): number {
+  return phase === 'settled' ? revision + 1 : revision;
+}

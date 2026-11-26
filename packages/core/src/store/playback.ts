@@ -16,7 +16,7 @@ import { finalRefusal, serverRefused, startRefusal, startRetry } from './start-r
 import { engineCommandAnswered, engineCommandSent, heardEngine, heardServer, QUIET_SECONDS, stallDeadline, stallVerdict, stallWatch, type StallSample, type StallWatch } from './stall';
 import { liveStatus, type LiveObservation } from '../live/player';
 import type { Watched } from '../discovery/progress';
-import { followSession, forgetSession } from '../protocol/events';
+import { followSession } from '../protocol/events';
 import { randomId } from '../protocol/id';
 import { commandFailure, staleGeneration, type CommandOrigin } from './command-failure';
 import { VelaError } from '../adapter/errors';
@@ -26,6 +26,8 @@ import { serverEnd } from './server-end';
 import { carriedTrack, trackChoice, type TrackChoice } from './track-match';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
 import { matchSeriesTracks, playableLocally } from '../series-tracks';
+import { atLiveEdge, liveRestart, liveRestartSeek, type LiveResume } from '../live/recovery';
+import { msg } from '../i18n';
 import type { ArchiveRange } from '../live/timeshift';
 import type { SeriesTracks } from './series-tracks';
 import type { Session } from './session';
@@ -105,6 +107,7 @@ interface Intent {
   key: string;
   /** Asked again under a new key after the server answered with a session that had already ended. */
   fresh?: boolean;
+  liveResume?: LiveResume;
 }
 
 /** How many sessions this client stopped are remembered (`stoppedSessions`). */
@@ -112,6 +115,15 @@ const STOPPED_REMEMBERED = 32;
 
 const MAX_PREPARATIONS = 30;
 const POLL_SECONDS = 5;
+/**
+ * A session's events stream that drops while its media plays on is followed again after these
+ * many seconds (together they span Ether's 15 s disconnect grace) before the session is restarted.
+ * A connection up for `REFOLLOW_HELD_SECONDS` from the stream's opening starts them over, events or not.
+ */
+const REFOLLOW_SECONDS = [1, 2, 4, 4, 4];
+const REFOLLOW_HELD_SECONDS = 30;
+/** A connection whose snapshot read and stream have not both answered within this many seconds counts as failed. */
+const REFOLLOW_OPEN_SECONDS = 10;
 /** A plan offered with placeholder versions is read once more this long after it starts. */
 const COLD_VERSIONS_SECONDS = 4;
 /** A server that offers scrub thumbnails only once a session streams is asked again this often, while the viewer scrubs. */
@@ -148,6 +160,9 @@ export class Playback {
   private watchdog: ReturnType<typeof setTimeout> | undefined;
   private watchdogAt = 0;
   private cursor = 0;
+  private liveCursor?: { sessionId: string; sourceGeneration: number; seekGeneration: number; seconds: number };
+  private liveTransportIntent?: { sessionId: string; atLive: boolean };
+  private liveRecoveryNotice?: { sessionId: string; text: string };
   private localTracks = false;
   private audio: string | undefined;
   private subtitle: string | null | undefined;
@@ -272,7 +287,10 @@ export class Playback {
     const watch = this.watch;
     if (watch?.target !== watchOf(target) || watch.session !== plan.sessionId) this.watch = { target: watchOf(target), session: plan.sessionId, restarts: 0 };
     this.stall = stallWatch(Date.now(), this.watch!.restarts);
-    this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
+    // The live owner can take over a replacement while its recovery notice is still showing.
+    const notice = this.liveRecoveryNotice;
+    const error = notice?.sessionId === plan.sessionId ? notice.text : '';
+    this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId, error });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
   }
@@ -356,6 +374,50 @@ export class Playback {
       return;
     }
     this.hold(connection.adapter, plan, viewerId ? { connection, viewer: viewerId } : undefined);
+    let evicted = false;
+    if (intent.liveResume) {
+      const resume = intent.liveResume;
+      const command = async (transport: { kind: 'goLive' } | { kind: 'seek'; positionSeconds: number }) =>
+        connection.plan(await this.send(connection.adapter, plan.sessionId, {
+          ...transport, sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+          idempotencyKey: `${intent.key}-${transport.kind}`,
+        }));
+      let failure: { error: unknown } | undefined;
+      try {
+        if (resume.kind !== 'edge') {
+          const position = liveRestartSeek(resume, plan);
+          if (position === 'evicted') evicted = true;
+          // A fresh live plan can use zero to mean join live. A seek to zero is explicit.
+          else if (resume.kind === 'timeshift' || position !== plan.positionSeconds) {
+            try {
+              plan = await command({ kind: 'seek', positionSeconds: position });
+            } catch (error) {
+              const code = error instanceof VelaError ? error.detail.code : undefined;
+              evicted = resume.kind === 'timeshift' &&
+                (code === 'timeshift_outside_window' || code === 'timeshift_position_evicted');
+              if (!evicted) throw error;
+            }
+          }
+        }
+        if ((evicted || resume.kind === 'edge') && plan.live?.timeshift && this.run === run && epoch === this.session.epoch) {
+          plan = await command({ kind: 'goLive' });
+        }
+      } catch (error) {
+        failure = { error };
+      }
+      if (failure || this.run !== run || epoch !== this.session.epoch) {
+        this.stopped(plan.sessionId);
+        try {
+          await this.send(connection.adapter, plan.sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
+            seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` });
+          this.held.delete(plan.sessionId);
+        } catch { /* Keep it held for cleanup if the server could not be reached. */ }
+        if (failure && this.run === run && epoch === this.session.epoch) {
+          this.failed({ ...intent, key: `recover-${randomId()}` }, failure.error, attempt, preparation);
+        }
+        return;
+      }
+    }
     // A replacement session that already carries the viewer's tracks needs no command, and a live
     // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
     // refuse track commands. Only choices that name a track in the new plan are carried, by id on
@@ -449,12 +511,25 @@ export class Playback {
     this.recovering = false;
     this.established = true;
     this.recoveryAttempt = 0;
-    if (this.watch?.target !== watchOf(target)) this.watch = { target: watchOf(target), session: '', restarts: 0 };
+    const watchTarget = this.box.get().playback.target ?? target;
+    if (this.watch?.target !== watchOf(watchTarget)) this.watch = { target: watchOf(watchTarget), session: '', restarts: 0 };
     this.watch.session = plan.sessionId;
     this.stall = stallWatch(Date.now(), this.watch.restarts);
     this.cursor = plan.positionSeconds ?? 0;
-    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, versions: null });
+    if (intent.liveResume && plan.live?.timeshift) {
+      this.liveTransportIntent = { sessionId: plan.sessionId, atLive: evicted || intent.liveResume.kind === 'edge' };
+    }
+    const notice = evicted ? msg('catchUp.recoveredLive') : '';
+    if (notice) this.liveRecoveryNotice = { sessionId: plan.sessionId, text: notice };
+    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: notice, errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, versions: null });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
+    if (notice) {
+      setTimeout(() => {
+        if (this.liveRecoveryNotice?.sessionId === plan.sessionId) this.liveRecoveryNotice = undefined;
+        const { playback } = this.box.get();
+        if (playback.sessionId === plan.sessionId && playback.error === notice) this.patch({ error: '' });
+      }, 5000);
+    }
     this.followSession(run, connection, plan.sessionId);
     // Placeholder versions (Play pressed before the title's release search finished) are read
     // again once, shortly after the start; opening the quality menu reads them again too.
@@ -555,27 +630,80 @@ export class Playback {
       void adapter.sessionSnapshot(sessionId).then(snapshot => { if (snapshot.plan.sessionId === sessionId) show(present(withPlaying(snapshot.plan, snapshot))); }).catch(() => undefined);
     };
     const loop = async () => {
+      let refollows = 0, connected = 0, lost = false;
       while (this.run === run && !controller.signal.aborted && this.box.get().playback.phase === 'playing') {
         try {
           if (hasEventStream(adapter)) {
-            await followSession(adapter, present, sessionId, show, controller.signal, liveEvent => {
+            connected = 0;
+            const resumed = refollows > 0;
+            let plans = 0, deadline: ReturnType<typeof setTimeout> | undefined;
+            // Each connection has its own signal, so one given up on below cannot follow on later.
+            const attempt = new AbortController();
+            const abort = () => attempt.abort();
+            controller.signal.addEventListener('abort', abort, { once: true });
+            // The first plan is the snapshot read before connecting. Followed again after a drop, an end
+            // the player never reached in that snapshot means the server let the session go while its events
+            // were down (Ether's disconnect grace): it is restarted, not finished. Once the snapshot showed
+            // the session alive, an end on the stream is the server's own and takes the end path.
+            const onPlan = (plan: V.PlaybackPlan) => {
+              const index = plans++;
+              if (resumed && index === 0 && plan.state === 'ended' && !(this.lastPosition?.sessionId === sessionId && this.lastPosition.ended)) {
+                lost = true;
+                throw new Error('Session ended while its events were down');
+              }
+              // A snapshot read, or a plan replayed from it, before a command the server has since accepted (a seek
+              // or a pause) would roll it back. An end is not held back.
+              if (plan.state !== 'ended' && olderThanShown(plan, this.box.get().playback.plan)) return;
+              show(plan);
+            };
+            const follow = followSession(adapter, present, sessionId, onPlan, attempt.signal, liveEvent => {
               if (this.run !== run || controller.signal.aborted) return;
               const current = this.box.get().playback.liveEvent;
               if (current?.id !== liveEvent?.id || current?.feed !== liveEvent?.feed) this.patch({ liveEvent });
+            }, () => {
+              // The stream opened (or sent anything, a heartbeat included): the connection counts as up.
+              // An attempt already given up on that answers late is not this connection.
+              if (connected || attempt.signal.aborted) return;
+              connected = Date.now();
+              clearTimeout(deadline);
             });
-            if (!controller.signal.aborted && this.box.get().playback.phase !== 'ended') this.recover(sessionId);
-            break;
+            // A connection whose snapshot read or stream never answers, the first one included, would otherwise leave a paused viewer waiting for ever.
+            const timeout = new Promise<never>((_, reject) => {
+              deadline = setTimeout(() => reject(new Error('Session events did not answer')), REFOLLOW_OPEN_SECONDS * 1000);
+            });
+            try {
+              await Promise.race([follow, timeout]);
+            } finally {
+              clearTimeout(deadline);
+              controller.signal.removeEventListener('abort', abort);
+              attempt.abort();
+            }
+            if (controller.signal.aborted || this.box.get().playback.phase !== 'playing') {
+              if (!controller.signal.aborted && this.box.get().playback.phase !== 'ended') this.recover(sessionId);
+              break;
+            }
+            throw new Error('Session events ended');
           }
           const snapshot = await adapter.sessionSnapshot(sessionId);
           if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
           show(present(withPlaying(snapshot.plan, snapshot)));
           await delay(POLL_SECONDS * 1000, controller.signal);
-        } catch {
-          if (!controller.signal.aborted) this.recover(sessionId);
+        } catch (error) {
+          if (controller.signal.aborted) break;
+          // Only the events connection was lost (it ended, the network dropped it, the server was
+          // briefly unavailable): the media plays on, so the stream is followed again. A server's
+          // own answer (the session is gone, the request refused, an error event) restarts at once.
+          if (hasEventStream(adapter) && !lost && !serverAnswered(error)) {
+            if (connected && Date.now() - connected >= REFOLLOW_HELD_SECONDS * 1000) refollows = 0;
+            if (refollows < REFOLLOW_SECONDS.length) {
+              try { await delay(REFOLLOW_SECONDS[refollows++]! * 1000, controller.signal); } catch { break; }
+              continue;
+            }
+          }
+          this.recover(sessionId);
           break;
         }
       }
-      forgetSession(sessionId);
     };
     void loop();
   }
@@ -675,7 +803,7 @@ export class Playback {
    * engine's own retries, or the server lost it. One intent owns all triggers. A session that has
    * had its last restart without playing again is not restarted: the viewer is told instead.
    */
-  recover(sessionId: string, reason = 'failed'): void {
+  recover(sessionId: string, reason = 'failed', livePosition?: number): void {
     const run = this.run;
     const current = this.box.get().playback;
     if (sessionId.startsWith('local-') && current.sessionId === sessionId) {
@@ -706,12 +834,20 @@ export class Playback {
       this.subtitle = current.plan?.selectedSubtitleTrackId;
       this.subtitleChoice = trackChoice(current.plan, current.plan?.subtitleTracks, this.subtitle ?? undefined);
     }
+    const { plan } = current;
+    const sample = this.liveCursor;
+    const saved = sample?.sessionId === sessionId && sample.sourceGeneration === plan?.sourceGeneration &&
+      sample.seekGeneration === plan?.seekGeneration ? sample.seconds : plan?.positionSeconds ?? 0;
+    const position = livePosition !== undefined && Number.isFinite(livePosition) ? livePosition : saved;
+    const transport = this.liveTransportIntent;
+    const restart = plan && liveRestart(current.target, plan, Math.max(0, position),
+      transport?.sessionId === sessionId ? transport.atLive : !current.live?.canCatchUp && atLiveEdge(plan, position));
     const target = current.target.kind === 'title'
       ? { ...current.target, positionSeconds: this.cursor, audioTrackId: this.audio ?? current.plan?.selectedAudioTrackId }
-      : current.target;
+      : restart?.target ?? current.target;
     this.abandoned = current.plan;
     this.patch({ phase: 'preparing', plan: null, error: '', errorClass: '', retryAfterSeconds: 1, versions: null });
-    this.scheduleRecovery({ run, target, key: `recover-${randomId()}` });
+    this.scheduleRecovery({ run, target, key: `recover-${randomId()}`, liveResume: restart?.resume });
   }
 
   private scheduleRecovery(intent: Intent, old: V.PlaybackPlan | null = this.abandoned): void {
@@ -893,6 +1029,9 @@ export class Playback {
           nextPlan = this.withLocalTracks(nextPlan);
         } else {
           nextPlan = this.withLocalTracks(nextPlan);
+        }
+        if (nextPlan.live && (command.kind === 'goLive' || command.kind === 'seek' || command.kind === 'pause')) {
+          this.liveTransportIntent = { sessionId, atLive: command.kind === 'goLive' };
         }
         this.patch({ plan: nextPlan });
         return true;
@@ -1088,10 +1227,17 @@ export class Playback {
   }
 
   /** A player snapshot: live status (reconnecting, delivery, drift) when the engine observes it. */
-  snapshot(snapshot: LiveObservation & StallSample & { audioTrackId?: string | null; subtitleTrackId?: string | null }): void {
+  snapshot(snapshot: LiveObservation & StallSample & { seekTarget?: number | null; audioTrackId?: string | null; subtitleTrackId?: string | null }): void {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;
     if (snapshot.position !== undefined) this.cursor = snapshot.position;
+    const { plan } = current;
+    if ((plan?.catchUp || plan?.live?.timeshift) && snapshot.state !== 'loading' && snapshot.state !== 'idle' && snapshot.state !== 'failed'
+      && snapshot.seekTarget == null && snapshot.position !== undefined && Number.isFinite(snapshot.position)
+      && snapshot.sourceGeneration === plan.sourceGeneration && snapshot.seekGeneration === plan.seekGeneration) {
+      this.liveCursor = { sessionId: plan.sessionId, sourceGeneration: plan.sourceGeneration,
+        seekGeneration: plan.seekGeneration, seconds: snapshot.position };
+    }
     // A report from the session's previous source (queued before the plan moved on) names that
     // source's tracks: the last choice made on the current one stands.
     if (!this.localTracks && (snapshot.state === 'playing' || snapshot.state === 'paused')
@@ -1339,6 +1485,8 @@ export class Playback {
     this.recoveryAttempt = 0;
     this.stall = undefined;
     this.cursor = 0;
+    this.liveCursor = undefined;
+    this.liveTransportIntent = undefined;
     this.localTracks = false;
     this.audio = undefined;
     this.subtitle = undefined;
@@ -1530,12 +1678,32 @@ function watchOf(target: PlaybackTarget): string {
     target.kind === 'programme' ? [target.channelId, target.from ?? '', target.range?.startAt, target.range?.durationSeconds] : target.kind === 'library-live' ? [target.libraryId, target.tab ?? ''] : []]);
 }
 
+/** An answer from the server itself (a 4xx refusal, a session that is gone, an error event), as opposed to a lost connection. */
+function serverAnswered(error: unknown): boolean {
+  return error instanceof VelaError && error.status < 500 && error.status !== 408 && error.status !== 429;
+}
+
 function delay(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => {
+    const abort = () => {
       clearTimeout(timer);
       reject(signal.reason);
-    }, { once: true });
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', abort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', abort, { once: true });
   });
+}
+
+/**
+ * Whether `plan` is from an earlier source or seek generation of the session than the one shown, or, in the same
+ * generations, from an earlier revision (a pause accepted since) when both carry one.
+ */
+function olderThanShown(plan: V.PlaybackPlan, shown: V.PlaybackPlan | null): boolean {
+  if (!shown || shown.sessionId !== plan.sessionId) return false;
+  if (plan.sourceGeneration !== shown.sourceGeneration) return plan.sourceGeneration < shown.sourceGeneration;
+  if (plan.seekGeneration !== shown.seekGeneration) return plan.seekGeneration < shown.seekGeneration;
+  return typeof plan.revision === 'number' && typeof shown.revision === 'number' && plan.revision < shown.revision;
 }

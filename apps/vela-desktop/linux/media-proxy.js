@@ -1,6 +1,7 @@
 'use strict';
 const http = require('node:http');
 const { randomBytes } = require('node:crypto');
+const { timeshiftLanding } = require('./logic');
 function inScope(address, grant) {
   try {
     const url = new URL(address, grant.origin), origin = new URL(grant.origin);
@@ -15,20 +16,22 @@ async function createProxy(grant) {
   const secret = randomBytes(24).toString('hex'), routes = new Map(), reverse = new Map(), requests = new Set();
   // The newest media playlist's EXT-X-TARGETDURATION: the live segment length, for the live latency.
   let base, closed = false, targetDuration = null;
-  const register = address => {
+  const register = (address, startup) => {
     const url = new URL(address, grant.origin).href;
     if (!inScope(url, grant)) throw new Error('Media outside access grant');
-    let token = reverse.get(url);
+    const key = startup ? `${startup.key}\n${url}` : url;
+    let token = reverse.get(key);
     if (!token) {
-      token = randomBytes(18).toString('hex'); routes.set(token, url); reverse.set(url, token);
-      if (routes.size > 16384) { const oldest = routes.keys().next().value; reverse.delete(routes.get(oldest)); routes.delete(oldest); }
+      token = randomBytes(18).toString('hex'); routes.set(token, { url, key, startup }); reverse.set(key, token);
+      if (routes.size > 16384) { const oldest = routes.keys().next().value; reverse.delete(routes.get(oldest).key); routes.delete(oldest); }
     }
     return `${base}/${secret}/${token}`;
   };
   const server = http.createServer(async (req, res) => {
     const parts = req.url.split('/');
-    const address = parts.length === 3 && parts[1] === secret && routes.get(parts[2]);
-    if (closed || !address || !['GET','HEAD'].includes(req.method)) { res.writeHead(404).end(); return; }
+    const route = parts.length === 3 && parts[1] === secret && routes.get(parts[2]);
+    if (closed || !route || !['GET','HEAD'].includes(req.method)) { res.writeHead(404).end(); return; }
+    const { url: address, startup } = route;
     const controller = new AbortController(); requests.add(controller);
     res.on('close', () => controller.abort());
     try {
@@ -48,13 +51,21 @@ async function createProxy(grant) {
       const out = {};
       for (const key of ['content-type','content-range','accept-ranges']) if (response.headers.has(key)) out[key] = response.headers.get(key);
       if (playlist && req.method !== 'HEAD' && response.ok) {
-        const text = await response.text();
+        let text = await response.text();
         if (text.length > 4*1024*1024 || !text.startsWith('#EXTM3U')) throw new Error('Invalid playlist');
         const target = Number(/^#EXT-X-TARGETDURATION:\s*(\d+(?:\.\d+)?)\s*$/m.exec(text)?.[1]);
         if (target > 0 && target <= 60) targetDuration = target;
+        if (startup) {
+          const landing = timeshiftLanding(text, response.headers, startup.live, startup.requested);
+          if (landing) {
+            startup.landing ??= landing;
+            text = text.replace(/^#EXT-X-START:.*\r?\n/gm, '')
+              .replace('#EXTM3U', `#EXTM3U\n#EXT-X-START:TIME-OFFSET=${landing.offset.toFixed(6)}`);
+          }
+        }
         const rewritten = text.split('\n').map(line => line.startsWith('#')
-          ? line.replace(/URI="([^"]+)"/g, (_, uri) => `URI="${register(new URL(uri, url).href)}"`)
-          : line.trim() ? register(new URL(line.trim(), url).href) : line).join('\n');
+          ? line.replace(/URI="([^"]+)"/g, (_, uri) => `URI="${register(new URL(uri, url).href, startup)}"`)
+          : line.trim() ? register(new URL(line.trim(), url).href, startup) : line).join('\n');
         res.writeHead(response.status, out).end(rewritten);
       } else {
         if (response.headers.has('content-length')) out['content-length'] = response.headers.get('content-length');

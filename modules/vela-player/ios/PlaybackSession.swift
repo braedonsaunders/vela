@@ -354,7 +354,7 @@ final class PlaybackSession {
         // Until the engine's clock arrives, the title position the item starts at (not zero).
         if !plan.isLive { state.position = plan.positionSeconds }
         pendingSeek = nil
-        pendingLiveStart = plan.live?.mode == "startOver" ? plan.positionSeconds : nil
+        pendingLiveStart = plan.isLive && (plan.live?.mode == "startOver" || plan.seekGeneration > 0) ? plan.positionSeconds : nil
         report.pathId = path.id
         report.backend = path.isOriginalFile ? "aether-original" : "aether-hls"
         if !ambient {
@@ -496,7 +496,7 @@ final class PlaybackSession {
             pendingSeek = nil
         }
         if name == "live-window", let target = pendingLiveStart, state.live?.start != nil, state.live?.edge != nil {
-            // Start over: the playlist begins at the programme's start, and the player joined at its edge.
+            // The player joined at the edge. Apply the programme start or the authorized recovery seek.
             pendingLiveStart = nil
             if pendingSeek == nil, abs(state.position - target) > 5 { seek(to: target) }
         }

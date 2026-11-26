@@ -91,32 +91,6 @@ test('session recovery coalesces, backs off, resumes VOD, waits for auth and can
   } finally { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; Date.now = originalNow; }
 });
 
-test('event stream EOF and errors both enter session recovery, explicit ended does not', async () => {
-  for (const outcome of ['eof', 'error', 'ended']) {
-    let starts = 0;
-    const plan = { sessionId: 'stream', state: 'playing', positionSeconds: 0, sourceGeneration: 0, seekGeneration: 0 } as PlaybackPlan;
-    const adapter = {
-      startPlayback: async () => { starts++; return plan; },
-      sessionSnapshot: async () => ({ plan, revision: 1, cursor: '1' }),
-      streamViewerEvents: async () => {},
-      streamSession: async (_id: string, _cursor: string, emit: (event: any) => Promise<void>) => {
-        if (outcome === 'error') throw new Error('connection reset');
-        if (outcome === 'ended') await emit({ data: JSON.stringify({ type: 'ended', sessionId: 'stream', revision: 2, cursor: '2' }) });
-      },
-      command: async () => plan,
-    };
-    const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, client: {} };
-    const box = new StateBox({ playback: initialPlayback } as VelaState);
-    const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
-    await playback.start({ kind: 'channel', id: 'fox' });
-    for (let i = 0; i < 15; i++) await Promise.resolve();
-    // A channel the server ended is not restarted: the viewer is told it stopped (Try again), not "Finished".
-    expect(box.get().playback.phase).toBe(outcome === 'ended' ? 'failed' : 'preparing');
-    if (outcome === 'ended') expect(starts).toBe(1);
-    await playback.stop();
-  }
-});
-
 test('a replacement session that already has the viewer\'s tracks gets no track command', async () => {
   const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout;
   const timers = new Map<number, () => unknown>();

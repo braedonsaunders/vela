@@ -412,9 +412,10 @@ export function belongs(snapshot: Snapshot | null, plan: PlaybackPlan | null): s
 }
 
 /** The command a view is handed: a track command names a track of the file of the session it was
- * sent on (`sentOn`), so a view mounted for a replacement session does not replay it there. */
+ * sent on (`sentOn`), so a view mounted for a replacement session does not replay it there, and a
+ * queued transport command belongs to the engine that received it. */
 export function viewCommand(command: Command | undefined, sentOn: string, sessionId: string): Command | undefined {
-  return command && (command.type === 'audio' || command.type === 'subtitle') && sentOn !== sessionId ? undefined : command;
+  return command && ['audio', 'subtitle', 'play', 'pause', 'seek', 'seekBy', 'catchUp'].includes(command.type) && sentOn !== sessionId ? undefined : command;
 }
 
 /** Server acceptance can precede the engine switching; only its fresh, ready snapshot settles the choice. */

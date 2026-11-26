@@ -11,10 +11,14 @@ test('a view mounted for a replacement session does not replay a track command f
   expect(viewCommand(french, 's1', 's2')).toBeUndefined();
 });
 
+test('a queued transport command stays with the engine that received it', () => {
+  const pause = { id: 2, type: 'pause' } as Command;
+  expect(viewCommand(pause, 's1', 's1')).toBe(pause);
+  expect(viewCommand(pause, 's1', 's2')).toBeUndefined();
+});
+
 test('other commands still reach a remounted view', () => {
   const mute = { id: 1, type: 'mute', muted: true } as Command;
   expect(viewCommand(mute, '', 's1')).toBe(mute);
-  const pause = { id: 2, type: 'pause' } as Command;
-  expect(viewCommand(pause, 's1', 's2')).toBe(pause);
   expect(viewCommand(undefined, 's1', 's2')).toBeUndefined();
 });

@@ -274,8 +274,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
   }
 
-  async appearance() {
-    return this.http.request<V.Appearance>('GET', '/appearance', undefined, { cacheable: true, auth: !!(await this.credentials.get()) });
+  async appearance(signal?: AbortSignal) {
+    return this.http.request<V.Appearance>('GET', '/appearance', undefined, { cacheable: true, auth: !!(await this.credentials.get()), signal });
   }
 
   async skinDocument(path: string) {
@@ -633,10 +633,10 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.sessionCommand(sessionId, command);
   }
 
-  sessionSnapshot(sessionId: string) {
+  sessionSnapshot(sessionId: string, signal?: AbortSignal) {
     // Playback recovery is authority-sensitive (including original_lost): never let a platform
     // HTTP cache hand the player the generation whose grant just failed.
-    return this.http.request<V.SessionSnapshot>('GET', `/sessions/${segment(sessionId)}`, undefined, FRESH);
+    return this.http.request<V.SessionSnapshot>('GET', `/sessions/${segment(sessionId)}`, undefined, { ...FRESH, signal });
   }
 
   /** A session's trickplay sheet (bearer and device, revalidated by ETag); the route width is the offer's. */
@@ -645,9 +645,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.bytes(`/sessions/${segment(sessionId)}/trickplay/${offer.width}/${index}.jpg`, etag, signal);
   }
 
-  streamSession(sessionId: string, cursor: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+  streamSession(sessionId: string, cursor: string, onEvent: EventHandler, signal?: AbortSignal, onActivity?: () => void): Promise<void> {
     const path = `/sessions/${segment(sessionId)}/events`;
-    return this.http.stream(path, { 'Last-Event-ID': cursor }, onEvent, signal);
+    return this.http.stream(path, { 'Last-Event-ID': cursor }, onEvent, signal, onActivity);
   }
 
   createAudioFallback(sessionId: string, request: V.AudioFallbackRequest, signal?: AbortSignal) {

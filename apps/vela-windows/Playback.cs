@@ -26,8 +26,9 @@ internal sealed class Playback : IDisposable
     // Live timeshift: when the plan arrived (a Start over edge grows from then), the behind-live verdict held
     // between snapshots, and a local live seek in flight (on the axis of the reported position).
     DateTime planReceivedAt, liveSeekAt;
-    bool liveBehind;
+    bool liveBehind, startupLiveSeek;
     double? liveSeekTarget;
+    LiveTimeline.Startup? liveStartup;
     static JsonElement Get(JsonElement e, string k) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(k, out var v) ? v : default;
     static string? Str(JsonElement e, string k) => Get(e,k).ValueKind == JsonValueKind.String ? Get(e,k).GetString() : null;
     static double Num(JsonElement e,string k) => Get(e,k).TryGetDoubleSafe();
@@ -84,7 +85,7 @@ internal sealed class Playback : IDisposable
         Stop(); proxy.Dispose(); proxy = new(); origin = null;
         if (accessOrigin != null) { origin = new Uri(accessOrigin); proxy.SetAccess(accessOrigin,prefix ?? "/",headers); }
     }
-    string Url(string url) => proxy.Register(new Uri(url, UriKind.RelativeOrAbsolute).IsAbsoluteUri ? url : new Uri(origin ?? throw new InvalidOperationException(),url).ToString()).ToString();
+    string Url(string url, LiveTimeline.Startup? startup = null) => proxy.Register(new Uri(url, UriKind.RelativeOrAbsolute).IsAbsoluteUri ? url : new Uri(origin ?? throw new InvalidOperationException(),url).ToString(), startup).ToString();
     public void Update(JsonElement props)
     {
         try
@@ -113,9 +114,12 @@ internal sealed class Playback : IDisposable
                 // range may differ from the original's, so it waits for the decoded stream.
                 if (Get(path, "original").ValueKind == JsonValueKind.True) MatchDisplay(OriginalFrameRate(path), OriginalHdr(path));
                 // The demuxer reads these when it opens: live's bounded timeshift buffer, Start over from its first segment.
-                foreach (var (name, value) in LiveTimeline.DemuxerOptions(plan)) mpv.TrySet(name, value);
+                var live = Get(plan, "live");
+                liveStartup = Str(path, "transport") == "hls" && Get(live, "timeshift").ValueKind == JsonValueKind.Object && !LiveTimeline.IsStartOver(plan)
+                    ? new(live, Num(plan, "seekGeneration") > 0 ? Num(plan, "positionSeconds") : null) : null;
+                foreach (var (name, value) in LiveTimeline.DemuxerOptions(plan, liveStartup != null)) mpv.TrySet(name, value);
                 liveBehind = false; liveSeekTarget = null;
-                mpv.Command("loadfile",Url(Str(path,"url") ?? throw new InvalidOperationException()),"replace");
+                mpv.Command("loadfile",Url(Str(path,"url") ?? throw new InvalidOperationException(), liveStartup),"replace");
             }
             if (seek != seekKey)
             {
@@ -277,12 +281,12 @@ internal sealed class Playback : IDisposable
         return LiveSeek(target) ? null : "The live seek failed";
     }
 
-    bool LiveSeek(double target)
+    bool LiveSeek(double target, bool startup = false)
     {
         pendingSeek = null;
         try { mpv.Command("seek", Format(Math.Max(0, target - offset)), "absolute+exact"); }
         catch (InvalidOperationException) { liveSeekTarget = null; return false; }
-        liveSeekTarget = target; liveSeekAt = DateTime.UtcNow;
+        liveSeekTarget = target; liveSeekAt = DateTime.UtcNow; startupLiveSeek = startup;
         return true;
     }
 
@@ -334,6 +338,26 @@ internal sealed class Playback : IDisposable
         try {
             string? time = mpv.Property("time-pos");
             if (time == null) { emit("snapshot", new { state = "loading" }); return; }
+            if (liveStartup?.Selected is { } startupLanding)
+            {
+                offset = startupLanding.SegmentStart;
+                if (!liveStartup.Placed)
+                {
+                    double relative = startupLanding.Position - startupLanding.SegmentStart;
+                    if (relative > 0 && Math.Abs(Read("time-pos") - relative) > 0.1)
+                    {
+                        var window = ReadLiveWindow();
+                        bool cached = window?.Start is double start && window.Edge is double edge && startupLanding.Position >= start && startupLanding.Position < edge;
+                        if (cached && LiveSeek(startupLanding.Position, startup: true))
+                        {
+                            liveStartup.Placed = true;
+                            return;
+                        }
+                        if ((DateTime.UtcNow - liveStartup.OpenedAt).TotalSeconds < 10) return;
+                    }
+                    liveStartup.Placed = true;
+                }
+            }
             if (pendingSeek is double target)
             {
                 mpv.Command("seek", Format(target), "absolute+exact"); pendingSeek = null;
@@ -356,7 +380,7 @@ internal sealed class Playback : IDisposable
             emit("snapshot",new { sessionId=Str(plan,"sessionId"),sourceGeneration=Num(plan,"sourceGeneration"),seekGeneration=Num(plan,"seekGeneration"),
                 state,position,duration=live != null ? (double?)null : Read("duration")+offset,live,seekTarget=liveSeekTarget,bufferAheadSeconds=ahead,volume=Read("volume")/100,muted=mpv.Property("mute")=="yes",
                 speed=Read("speed"),speeds=RateLocked() ? new[]{1.0} : new[]{.5,.75,1,1.25,1.5,2},droppedFrames=Read("frame-drop-count"),mpv=facts,output });
-            if (state!=phase || (DateTime.UtcNow-observed).TotalSeconds>=1) {
+            if ((!startupLiveSeek || liveSeekTarget == null) && (state!=phase || (DateTime.UtcNow-observed).TotalSeconds>=1)) {
                 observed=DateTime.UtcNow; phase=state; sequence++;
                 emit("observation",new {sessionId=Str(plan,"sessionId"),observation=new {idempotencyKey=$"{seek}:{sequence}",sourceGeneration=Num(plan,"sourceGeneration"),seekGeneration=Num(plan,"seekGeneration"),sequence,observedAt=observed.ToString("O"),positionSeconds=position,state,selectedPathId=Str(plan,"selectedPathId"),audioTrackId=Str(plan,"selectedAudioTrackId"),subtitleTrackId=Str(plan,"selectedSubtitleTrackId"),playableRanges=ahead>0 ? new[]{new {startSeconds=position,endSeconds=position+ahead}} : Array.Empty<object>(),throughputBps=Read("cache-speed")*8,droppedFrames=Read("frame-drop-count")}});
             }

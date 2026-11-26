@@ -26,6 +26,7 @@
   "catchUp.outsideArchive": "This programme is no longer in the channel’s archive.",
   "catchUp.unavailable": "The provider couldn’t play this programme just now. Try again in 30 seconds.",
   "catchUp.outsideWindow": "That point is outside the rewind window.",
+  "catchUp.recoveredLive": "Your position left the rewind window. You’re watching live.",
   "catchUp.evicted": "Your paused position has expired. Select Go live to keep watching.",
   "catchUp.tooOld": "Too old to replay: the channel’s archive no longer has it.",
   "catchUp.noArchive": "This channel doesn’t keep past programmes.",

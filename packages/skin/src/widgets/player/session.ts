@@ -162,11 +162,11 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const restarted = useRef('');
   const resumePaused = useRef(false);
   const startOver = useCallback(
-    (gone: string) => {
+    (gone: string, livePosition?: number) => {
       if (restarted.current === gone) return;
       restarted.current = gone;
       resumePaused.current = paused.current;
-      vela.playback.recover(gone);
+      vela.playback.recover(gone, undefined, livePosition);
     },
     [vela],
   );
@@ -384,7 +384,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
         const held = Number.isFinite(event.positionSeconds) ? Math.max(0, event.positionSeconds!) : position.current;
         position.current = held;
         void vela.playback.originalLost(event.sessionId, held, event.sourceGeneration).then(result => {
-          if (result === 'gone') startOver(event.sessionId);
+          if (result === 'gone') startOver(event.sessionId, held);
         });
         return;
       }

@@ -126,6 +126,7 @@ export class HostReader {
     return value;
   }
   private differs(a: SkinHost, b: SkinHost): boolean {
+    if (a.fontRevision !== b.fontRevision) return true;
     const hostA = a as unknown as Bag, hostB = b as unknown as Bag;
     for (const key of this.hostKeys) if (key !== 'env' && hostA[key] !== hostB[key]) return true;
     if (a.env === b.env) return false;

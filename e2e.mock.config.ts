@@ -36,6 +36,8 @@ function mockTarget(browser: 'chromium' | 'webkit', port: number) {
           VELA_E2E_SERVER: server ?? '',
           VELA_E2E_STATIC_ROOT: staticRoot ?? '',
           VELA_E2E_BUN: process.env.VELA_E2E_BUN ?? 'bun',
+          // Linux WebKit's GStreamer can deadlock while flushing the muxed live ladder.
+          VELA_MOCK_VIDEO_ONLY_LIVE: process.platform === 'linux' && browser === 'webkit' ? '1' : '0',
           VELA_MOCK_MEDIA_ROOT: process.env.VELA_MOCK_MEDIA_ROOT ?? join(homedir(), '.scratch/tmp/vela/media'),
           VELA_MOCK_MUSIC_ROOT: process.env.VELA_MOCK_MUSIC_ROOT ?? join(homedir(), '.scratch/tmp/vela/media-music'),
           VELA_MOCK_FORMATS_ROOT: process.env.VELA_MOCK_FORMATS_ROOT ?? join(homedir(), '.scratch/tmp/vela/formats'),
