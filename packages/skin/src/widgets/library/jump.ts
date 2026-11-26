@@ -7,7 +7,7 @@ import { RETURN_FOCUS_MS } from '../common/tv-keyboard';
 import { firstPosterTarget } from './jump-model';
 import type { LibraryPage } from './model';
 
-export { activeJumpBucket, firstPosterTarget } from './jump-model';
+export { activeJumpBucket, firstPosterTarget, JUMP_TILE_GAP, jumpGridColumns, jumpGridRows } from './jump-model';
 
 const STEP_MS = 100;
 const GIVE_UP_MS = 8000;

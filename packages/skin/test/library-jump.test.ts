@@ -1,8 +1,8 @@
-// Eligibility, URL persistence, active bucket resolution and post-jump focus targeting for letter jump.
+// Eligibility, URL persistence, active bucket resolution, grid column layout and post-jump focus targeting for letter jump.
 import { describe, expect, test } from 'bun:test';
 import type { LibraryJumpBucket, LibraryModel } from '@vela/core';
 import { filteredBy, flipped, jumpIndexEligible, paramsOf, queryOf, sortedBy } from '../../../apps/vela/src/browse/library-query';
-import { activeJumpBucket, firstPosterTarget } from '../src/widgets/library/jump-model';
+import { activeJumpBucket, firstPosterTarget, jumpGridColumns, jumpGridRows } from '../src/widgets/library/jump-model';
 import type { LibraryPage } from '../src/widgets/library/model';
 
 const model = (over: Partial<LibraryModel> = {}): LibraryModel => ({
@@ -98,12 +98,25 @@ describe('library-query start parameter persistence & clearing', () => {
   });
 });
 
-describe('activeJumpBucket and firstPosterTarget', () => {
+describe('activeJumpBucket, jumpGridColumns and firstPosterTarget', () => {
   const buckets: LibraryJumpBucket[] = [
     { key: '#', label: '#', count: 4, startOffset: 0 },
     { key: 'A', label: 'A', count: 20, startOffset: 4 },
     { key: 'W', label: 'W', count: 35, startOffset: 340 },
   ];
+
+  test('computes balanced column counts across phone, tablet, desktop and TV inner widths', () => {
+    expect(jumpGridColumns(360 - 34, false)).toBe(6);
+    expect(jumpGridColumns(390 - 34, false)).toBe(7);
+    expect(jumpGridColumns(430 - 34, false)).toBe(7);
+    expect(jumpGridColumns(416 - 34, false)).toBe(7);
+    expect(jumpGridColumns(560 - 34, true)).toBe(7);
+    expect(jumpGridColumns(0, false)).toBe(1);
+    expect(jumpGridRows(['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G'], 7)).toEqual([
+      ['#', 'A', 'B', 'C', 'D', 'E', 'F'],
+      ['G'],
+    ]);
+  });
 
   test('resolves active bucket for a jumped start offset', () => {
     expect(activeJumpBucket(buckets, undefined)).toBeUndefined();

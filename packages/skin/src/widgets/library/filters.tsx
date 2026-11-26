@@ -16,7 +16,7 @@ import { ContentLoader } from '../common/loading';
 import { useLook } from '../common/look';
 import { SheetModal } from '../common/sheet-modal';
 import { TextField } from '../common/text-field';
-import { activeJumpBucket } from './jump';
+import { activeJumpBucket, JUMP_TILE_GAP, jumpGridColumns, jumpGridRows } from './jump';
 import { Button, CENTRED, ToolbarField } from './toolbar-controls';
 import { activeFilters, clearFiltersArg, lockedFacet } from './toolbar-model';
 import { YearInput } from './year-input';
@@ -255,16 +255,15 @@ function JumpTile({ bucket, selected, preferred, onPress }: {
     accessibilityState={{ selected, checked: selected }}
     {...(Platform.OS === 'web' ? { 'aria-checked': selected } : {})}
     hasTVPreferredFocus={claim} onFocus={() => focus(true)} onBlur={() => focus(false)} onPress={onPress}
-    style={look.box({
-      'min-width': Platform.isTV ? '64px' : '46px',
+    style={[look.box({
       height: Platform.isTV ? '56px' : '42px',
-      padding: '0px 10px',
+      padding: '0px 4px',
       'border-radius': '$ui.radiusControl',
       'background-color': selected ? '$ui.accent' : focused ? '$ui.controlHover' : '$ui.control',
       border: `1px solid ${focused && selected ? '$ui.ink' : focused ? '$ui.accent' : selected ? '$ui.accent' : '$ui.glassEdge'}`,
       'align-items': 'center',
       'justify-content': 'center',
-    })}>
+    }), { flex: 1, minWidth: 0 }]}>
     <Text accessible={false} numberOfLines={1}
       style={[look.text({ color: selected ? '$ui.onAccent' : '$ui.ink', 'font-size': Platform.isTV ? '20px' : '$ui.controlFontSize', 'font-weight': '700' }), CENTRED]}>
       {bucket.label}
@@ -272,27 +271,42 @@ function JumpTile({ bucket, selected, preferred, onPress }: {
   </FocusPressable>;
 }
 
+const JUMP_PANEL_WIDTH = 416;
+
 /** First-character jump index in server title-sort order. Picking a letter jumps straight to its offset. */
 export function JumpPanel({ anchor, onClose, onJump }: { anchor?: Anchor; onClose(): void; onJump(startOffset: number): void }) {
   const host = useHost();
+  const placement = usePlacement(anchor);
   const page = host.env.library;
   const buckets = page?.jumpBuckets;
   if (!buckets?.length) return null;
   const active = activeJumpBucket(buckets, page?.jumpStart);
   const preferredKey = active?.key ?? buckets[0]?.key;
+  const vw = host.viewport.width;
+  const outerWidth = placement === 'sheet'
+    ? vw
+    : placement === 'centre' && Platform.isTV
+      ? Math.min(560, vw - 64)
+      : Math.min(JUMP_PANEL_WIDTH, vw - 32);
+  // Panel has 16px horizontal padding and a 1px border on each side.
+  const columns = jumpGridColumns(outerWidth - 34, Platform.isTV);
+  const rows = jumpGridRows(buckets, columns);
   const choose = (startOffset: number) => {
     const target = startOffset > 0 ? startOffset : 0;
     host.dispatch('libraryFilter', target > 0 ? `start|${target}` : 'start|');
     onJump(target);
     onClose();
   };
-  return <Panel label={msg('library.jumpTitle')} anchor={anchor} onClose={onClose} width={416}>
+  return <Panel label={msg('library.jumpTitle')} anchor={anchor} onClose={onClose} width={JUMP_PANEL_WIDTH}>
     <PanelHeader title={msg('library.jumpTitle')} onDone={onClose} />
-    <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 2 }}>
-      {buckets.map(bucket => <JumpTile key={bucket.key} bucket={bucket}
-        selected={active ? active.key === bucket.key : bucket.startOffset === 0}
-        preferred={bucket.key === preferredKey}
-        onPress={() => choose(bucket.startOffset)} />)}
+    <ScrollView style={{ flexShrink: 1, width: '100%' }} contentContainerStyle={{ gap: JUMP_TILE_GAP, paddingVertical: 2 }}>
+      {rows.map((row, rowIndex) => <View key={rowIndex} style={{ flexDirection: 'row', gap: JUMP_TILE_GAP, width: '100%' }}>
+        {row.map(bucket => <JumpTile key={bucket.key} bucket={bucket}
+          selected={active ? active.key === bucket.key : bucket.startOffset === 0}
+          preferred={bucket.key === preferredKey}
+          onPress={() => choose(bucket.startOffset)} />)}
+        {Array.from({ length: columns - row.length }, (_, index) => <View key={`spacer-${index}`} pointerEvents="none" style={{ flex: 1 }} />)}
+      </View>)}
     </ScrollView>
     {!!page?.jumpStart && <View style={{ flexDirection: 'row', justifyContent: 'flex-start' }}>
       <Button testID="library-jump-top" label={msg('library.jumpTop')} quiet onPress={() => choose(0)} />
