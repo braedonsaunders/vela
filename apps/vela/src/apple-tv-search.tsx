@@ -14,6 +14,7 @@ import { ScreenActive, SkinRoute, useReturnFocus } from '@vela/skin';
 import { PX } from '@vela/skin/src/css';
 import { HostContext, InheritedContext } from '@vela/skin/src/host';
 import { resolveUi } from '@vela/skin/src/resolve/ui';
+import { searchDoneFocus } from '@vela/skin/src/widgets/search/focus-policy';
 import { SearchBack } from '@vela/skin/src/widgets/search/search-back';
 import { NativeSearchView, liveQuery, resultsFocus } from '@vela/search-native';
 import { useSearchReturn } from './search-return';
@@ -57,7 +58,8 @@ export function AppleTvSearch() {
   const view = host?.env.search;
   useEffect(() => {
     if (submitted === null) return;
-    const next = view?.query === submitted && view.sections ? 'focus' : resultsFocus(submitted, view);
+    const grouped = view?.query === submitted && view.sections ? searchDoneFocus(submitted, view) : undefined;
+    const next = grouped ? (grouped.to === 'wait' ? 'wait' : 'focus') : resultsFocus(submitted, view);
     if (next === 'wait') return;
     setSubmitted(null);
     if (next === 'focus') setFocusRequest(request => request + 1);
