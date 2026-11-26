@@ -446,12 +446,13 @@ export function restartAt(position: number, presented: boolean): number | undefi
   return position > 0 || presented ? position : undefined;
 }
 
-/** Whether the position a report leaves was presented: a playing or paused report says so; a failed or ended
- * one keeps what the report before it said at the same place and generations; any other report (the player
- * loading, buffering, recovering or idle) or a new generation does not. */
+/** Whether the position a report leaves was presented: a playing or paused report says so; a recovering,
+ * failed or ended one keeps what the report before it said at the same place and generations (the player
+ * retrying its read there, then failing); any other report (the player loading, buffering or idle) or a new
+ * generation does not. */
 export function presentedAfter(presented: boolean, last: Snapshot | null, next: Snapshot): boolean {
   if (next.state === 'playing' || next.state === 'paused') return true;
-  return presented && (next.state === 'failed' || next.state === 'ended') && !!last && last.sessionId === next.sessionId &&
+  return presented && (next.state === 'recovering' || next.state === 'failed' || next.state === 'ended') && !!last && last.sessionId === next.sessionId &&
     last.sourceGeneration === next.sourceGeneration && last.seekGeneration === next.seekGeneration && last.position === next.position;
 }
 

@@ -26,7 +26,26 @@ test('a running player reporting zero without presenting it, or a new generation
   expect(presentedAfter(true, paused, report('loading', 0))).toBe(false);
   expect(presentedAfter(true, paused, report('buffering', 0))).toBe(false);
   expect(presentedAfter(true, paused, report('failed', 0, 3))).toBe(false);
+  expect(presentedAfter(true, paused, report('recovering', 0, 3))).toBe(false);
+  expect(presentedAfter(true, paused, { ...report('recovering', 0), sessionId: 's2' })).toBe(false);
   // A failure reported somewhere else is not the place the player presented.
   expect(presentedAfter(true, paused, report('failed', 0.5))).toBe(false);
   expect(presentedAfter(false, null, report('failed', 0))).toBe(false);
+  expect(presentedAfter(false, report('loading', 0), report('recovering', 0))).toBe(false);
+  // Playing on from the zero: the place it presents now.
+  const playing = report('playing', 4);
+  expect(restartAt(0, presentedAfter(true, playing, report('recovering', 0)))).toBeUndefined();
+});
+
+test('Try again starts again at a presented zero after the player retries its read there and fails', () => {
+  // Paused at 0 after Start Over; the session expires: the web player retries the read (recovering at 0,
+  // the same session and generations), then reports the failure at 0.
+  const sequence = [report('paused', 0), report('recovering', 0), report('recovering', 0), report('failed', 0)];
+  let presented = false;
+  let last: Snapshot | null = null;
+  for (const next of sequence) {
+    presented = presentedAfter(presented, last, next);
+    last = next;
+    expect(restartAt(0, presented)).toBe(0);
+  }
 });
