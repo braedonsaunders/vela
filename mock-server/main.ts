@@ -8,7 +8,7 @@ import { allTitles, artwork, channels as defaultChannels, detail, extras, featur
 import { faults, mediaRoot, fixtureDurationSeconds, serveMedia, originalFixture, originalFixtureName, probeOriginalFixture, formatsRoot } from './media';
 import { serveLive, liveFaults } from './live';
 import { trickplaySheet } from './trickplay';
-import { applyCommand, createSession, events, failover, observe, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
+import { applyCommand, createSession, events, failover, observe, originalLost, publish, requestedInit, sessions, sidecarFixture, snapshot, type Session } from './sessions';
 import { appearance, packAsset, serverEvents, setAppearance } from './appearance';
 import { audioSourceFor, isMediaLibrary, isVideoChild, mediaArtwork, mediaChildren, mediaDetail, mediaGroups, mediaLibraries, mediaLibraryEntries, mediaLibraryPeople, mediaPerson, mediaPersonArtwork, mediaPersonTitles, mediaTitle } from '../packages/protocol/fixtures/media';
 import { bookGenerator, createAudioSession, issueReadGrant, musicGenerator, readingState, readingWriteTime, serveAudioSession, serveReadTicket, setReadingState, withReading } from './media-kinds';
@@ -66,6 +66,17 @@ if (mediaEnabled) Object.assign(capabilities.features, {
 // Every library names how it opens (protocol README, Library experience): music, audiobooks and
 // podcasts listen, books read, photos are a gallery, Live TV is live, the rest watch.
 // VELA_MOCK_NO_EXPERIENCES=1 is a server without it (Vela chooses by media class).
+// VELA_MOCK_LIKED=<title id>,…: titles the viewer has already liked (parity captures of Liked Songs).
+for (const id of (process.env.VELA_MOCK_LIKED ?? '').split(',').filter(Boolean)) {
+  const title = mediaTitle(id);
+  if (title) title.watch = { ...(title.watch ?? { positionSeconds: 0, played: false, watchlisted: false }), favorite: true };
+}
+// VELA_MOCK_FAVORITES_LIST=1: Ether's liked lists by role (GET /favorites/titles), as Liked Songs reads them.
+if (mediaEnabled && process.env.VELA_MOCK_FAVORITES_LIST === '1') capabilities.features.favoritesList = { available: true };
+// VELA_MOCK_LYRICS=1: GET /titles/:id/lyrics, timed lines for the music tracks (a fictional verse
+// every five seconds, so a paused position lights a known line), plain text for none, instrumental
+// for the test signals.
+if (mediaEnabled && process.env.VELA_MOCK_LYRICS === '1') capabilities.features.lyrics = { available: true };
 const experiencesEnabled = mediaEnabled && process.env.VELA_MOCK_NO_EXPERIENCES !== '1';
 // Loudness levelling and AutoMix markers on music tracks; VELA_MOCK_NO_LOUDNESS=1 is an Ether without them.
 if (mediaEnabled && process.env.VELA_MOCK_NO_LOUDNESS !== '1') capabilities.features.loudness = { available: true, album: true, fades: true };
@@ -324,7 +335,7 @@ function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
  */
 let rowSnapshot = 1;
 const feedChanged = () => { rowSnapshot++; };
-const minted = (row: V.Row, key = row.id): V.Row => ({ ...row, id: `${row.id}~${rowSnapshot}`, key });
+const minted = (row: V.Row, key = row.id, snapshot = rowSnapshot): V.Row => ({ ...row, id: `${row.id}~${snapshot}`, key });
 /** The row a wire id names, by its base id; a superseded snapshot is refused. */
 function mintedRow(id: string, candidates: V.Row[]): V.Row {
   const at = id.lastIndexOf('~'), base = at < 0 ? id : id.slice(0, at), snapshot = at < 0 ? '' : id.slice(at + 1);
@@ -351,13 +362,13 @@ const labHomeRows: V.Row[] = [
 ];
 /** Home's page in order: progress rows, media rows, the catalogue's rows, and a plugin's surface
  * row where the page places it (after Top 10), as Ether lists them. */
-function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = []): V.Page<V.Row | V.SurfaceRow> {
+function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = [], snapshot = rowSnapshot): V.Page<V.Row | V.SurfaceRow> {
   const ordered: (V.Row | V.SurfaceRow)[] = [...progressRows(), ...mediaHomeRows(g), ...rows];
   const top = ordered.findIndex(row => row.id === 'row-top10');
   ordered.splice(top + 1, 0, ...surfaces);
   const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}:${surfaces.map(row => row.id).join(',')}`, labPreset ? 5 : 2);
   const firstItems = new URL(url); firstItems.search = '';
-  return { ...result, items: result.items.map(row => 'kind' in row ? row : minted(homeRow(g, row, firstItems))) };
+  return { ...result, items: result.items.map(row => 'kind' in row ? row : minted(homeRow(g, row, firstItems), row.id, snapshot)) };
 }
 function cached(req: Request, data: unknown, scope: string): Response {
   const body = JSON.stringify(data), etag = `"${mac(scope + body)}"`;
@@ -411,6 +422,11 @@ const playlists: MockPlaylist[] = [
     { entryId: 'entry-smart-1', titleId: titles[2]!.id },
   ] },
 ];
+// VELA_MOCK_PLAYLIST_TRACKS=<track id>,…: a music playlist, "Evening Drive" (parity captures of a playlist page).
+if (process.env.VELA_MOCK_PLAYLIST_TRACKS) playlists.push({ id: 'playlist-evening-drive', name: 'Evening Drive', summary: 'Windows down, the long way home.', smart: false,
+  updatedAt: new Date(Date.parse(process.env.VELA_MOCK_NOW ?? '') || Date.now()).toISOString(),
+  entries: process.env.VELA_MOCK_PLAYLIST_TRACKS.split(',').filter(Boolean).map((titleId, n) => ({ entryId: `entry-evening-drive-${n + 1}`, titleId })) });
+if (process.env.VELA_MOCK_NOW) for (const value of playlists) value.updatedAt = new Date(Date.parse(process.env.VELA_MOCK_NOW) || Date.now()).toISOString();
 function playlistArtwork(g: Grant, titleId: string): V.ArtworkRef {
   const media = findMediaTitle(titleId);
   if (media) return media.artwork[0] ?? mediaArtwork(media.id, 'square');
@@ -810,6 +826,24 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     return cached(req, { library, sort: sort as V.LibrarySort, direction: direction as V.SortDirection, ...page(items, paging, g, scope), total: items.length } satisfies V.LibraryContents, g.id);
   }
   if (method === 'POST' && path.endsWith('/approve')) { const p = [...(path.includes('/device/') ? devices : quick).values()].find(p => p.code === (body.userCode ?? body.code) && p.expires > Date.now()); if (!p) fail('not-found', 'grant_not_found', 'Pairing not found'); p.approved = true; return json({ accepted: true }); }
+  const lyricsMatch = /^\/titles\/([^/]+)\/lyrics$/.exec(path);
+  if (method === 'GET' && lyricsMatch && capabilities.features.lyrics?.available) {
+    const track = mediaTitle(decodeURIComponent(lyricsMatch[1]!));
+    if (!track || track.media?.role !== 'track') fail('not-found', 'lyrics_not_found', 'No lyrics for this title');
+    if (track!.genres.includes('Test Signal')) return json({ lines: [], instrumental: true, source: 'Mock' } satisfies V.TitleLyrics);
+    const words = ['the tide comes in', 'over the harbour wall', 'lanterns in the window', 'a kettle on the stove', 'paper boats are sailing',
+      'down the long field', 'we sing it once again', 'the morning train to wells'];
+    const lines = Array.from({ length: Math.ceil((track!.durationSeconds ?? 60) / 5) }, (_, n) => ({ startMs: n * 5000,
+      text: `${words[(n + track!.name.length) % words.length]![0]!.toUpperCase()}${words[(n + track!.name.length) % words.length]!.slice(1)}${n % 4 === 3 ? '' : ','}` }));
+    return json({ lines, instrumental: false, source: 'Mock' } satisfies V.TitleLyrics);
+  }
+  if (method === 'GET' && path === '/favorites/titles' && capabilities.features.favoritesList?.available) {
+    const role = url.searchParams.get('role') ?? '';
+    const liked = [...mediaGroups.tracks, ...mediaGroups.albums, ...mediaGroups.artists].filter(t => t.watch?.favorite && (!role || t.media?.role === role));
+    const likedAt = new Date(Date.parse(process.env.VELA_MOCK_NOW ?? '') || Date.now()).toISOString();
+    const items = liked.map(t => ({ id: t.id, kind: 'title' as const, title: present(g, t), likedAt, receiptToken: receipt(g, `favorites:${t.id}`) }));
+    return json({ ...page(items, url, g, `favorites:${role}:${mac(JSON.stringify(liked.map(t => t.id)))}`, 100), total: items.length } satisfies V.FavoriteTitlesPage);
+  }
   if (method === 'GET' && path === '/events') return serverEvents(req, () => !g.revoked && g.expires > Date.now());
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
@@ -818,8 +852,12 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const firstPage = new URL(url); firstPage.search = '';
     // Plugin screens and surfaces, only for a client that says its renderer (screens.ts).
     const { navigation, surfaces, homeRows: surfaceRows } = screensBootstrap(req, g.viewer.id);
-    const home = homeRows(g, firstPage, surfaceRows);
-    return cached(req, { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}:${req.headers.get('x-vela-screen-preview') ?? ''}`);
+    const stale = faults.bootstrapStaleReads > 0 && rowSnapshot > 1;
+    const snapshot = stale ? rowSnapshot - 1 : rowSnapshot;
+    if (stale) faults.bootstrapStaleReads--;
+    const home = homeRows(g, firstPage, surfaceRows, snapshot);
+    const bootstrap = { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap;
+    return stale ? json(bootstrap) : cached(req, bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}:${req.headers.get('x-vela-screen-preview') ?? ''}`);
   }
   if (method === 'GET' && path === '/rows') {
     const placement = url.searchParams.get('placement') ?? 'home';
@@ -1194,8 +1232,13 @@ async function dispatch(req: Request): Promise<Response> {
       return json(originalFixture);
     }
     if (url.pathname === '/__admin/sidecar') {
-      if (req.method === 'POST') { const data = await req.json(); if (typeof data.enabled === 'boolean') sidecarFixture.enabled = data.enabled;
-        if (typeof data.selected === 'boolean') sidecarFixture.selected = data.selected; if (typeof data.pathId === 'string') sidecarFixture.pathId = data.pathId; }
+      if (req.method === 'POST') {
+        const data = await req.json();
+        if (typeof data.enabled === 'boolean') sidecarFixture.enabled = data.enabled;
+        if (typeof data.selected === 'boolean') sidecarFixture.selected = data.selected;
+        if (typeof data.pathId === 'string') sidecarFixture.pathId = data.pathId;
+        if (typeof data.versionSwitch === 'boolean') sidecarFixture.versionSwitch = data.versionSwitch;
+      }
       return json(sidecarFixture);
     }
     // A mid-stream failover (Ether W380): each open session with versions moves to its next playable
@@ -1239,7 +1282,23 @@ async function dispatch(req: Request): Promise<Response> {
       const vtt = foundSubtitleVtt(s.plan.sessionId, decodeURIComponent(found[1]!));
       return vtt ? new Response(vtt, { headers: { 'Content-Type': 'text/vtt; charset=utf-8', 'Cache-Control': 'private, no-store' } }) : new Response('Not found', { status: 404 });
     }
-    const response = await (media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3]));
+    const selected = s.plan.paths.find(path => path.id === s.plan.selectedPathId);
+    const originalRead = req.method === 'GET' && selected?.original === true && selected.url?.endsWith(`/${media[3]}`);
+    if (originalRead && (s.plan.sourceFailure === 'version_unavailable' || faults.originalLost409 > 0)) {
+      // Some native browser media loaders reopen an original with a full GET.
+      // A follow-up range probe must still see the pinned original as unavailable.
+      if (s.plan.sourceFailure !== 'version_unavailable') {
+        faults.originalLost409--;
+        originalLost(s, faults.originalLostVersionUnavailable);
+      }
+      return new Response('Original file is gone', { status: 409, headers: { 'X-Ether-Playback-Error': 'original_lost', 'Cache-Control': 'no-store' } });
+    }
+    const truncateOriginal = originalRead && req.headers.has('range') && faults.originalLostTruncate > 0;
+    if (truncateOriginal) {
+      faults.originalLostTruncate--;
+      originalLost(s, faults.originalLostVersionUnavailable);
+    }
+    const response = await (media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3], truncateOriginal));
     if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
     return response;
   }
@@ -1295,7 +1354,7 @@ const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', 
   if (req.method !== 'OPTIONS' && new URL(req.url).pathname.startsWith('/vela/v0/') && !new URL(req.url).pathname.includes('/artwork/') && Number.isFinite(delay) && delay > 0) await Bun.sleep(Math.min(delay, 30000));
   let response: Response;
   try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
-  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, X-Vela-Screen-Renderer, X-Vela-Language, X-Vela-Screen-Preview, Idempotency-Key, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length, X-Ether-Live-Media-Sequence, X-Ether-Live-Window-Start'); return response;
+  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, X-Vela-Screen-Renderer, X-Vela-Language, X-Vela-Screen-Preview, Idempotency-Key, If-None-Match, Last-Event-ID, Range, Cache-Control, Pragma'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length, X-Ether-Live-Media-Sequence, X-Ether-Live-Window-Start'); return response;
 } });
 console.log(`Vela mock: ${server.url} — demo / vela`);
 

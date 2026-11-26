@@ -1,5 +1,5 @@
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { AppleTvSearch, appleTvSearch } from '../src/apple-tv-search';
 import { DocumentScreen } from '../src/screen';
 import { useVela } from '../src/vela';
@@ -17,6 +17,6 @@ function SharedSearch() {
   useEffect(() => {
     if (vela.store.getState().search.query !== query) vela.store.search.setQuery(query);
   }, [query, vela.store]);
-  useFocusEffect(useCallback(() => () => vela.store.search.clear(), [vela.store]));
+  useEffect(() => () => vela.store.search.clear(), [vela.store]);
   return <DocumentScreen route="home" entry="home" />;
 }

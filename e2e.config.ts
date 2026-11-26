@@ -1,6 +1,6 @@
 import { codex } from '@e2e-dev/acp';
-import { web } from '@e2e-dev/web';
 import type { E2EConfig } from 'e2e';
+import { mutedBrowser } from './tests/e2e/muted-browser';
 
 const server = process.env.VELA_E2E_SERVER;
 
@@ -13,6 +13,10 @@ if (upstream.protocol !== 'http:' || !upstream.hostname.startsWith('192.168.')) 
   throw new Error('VELA_E2E_SERVER must be the private-LAN HTTP Vela lab');
 }
 
+const plexTokenFile = process.env.VELA_E2E_PLEX_TOKEN_FILE ?? '';
+const plexSecretPath = '/__e2e/plex-token-22e6f332c6484e93a235';
+const sessionDir = process.env.VELA_E2E_SESSION_DIR ?? '';
+
 const appUrl = 'http://127.0.0.1:43251/vela/';
 const app = {
   url: appUrl,
@@ -22,38 +26,16 @@ const app = {
   command: {
     executable: process.execPath,
     args: ['tests/e2e/lab-proxy.ts', '{port}'],
-    env: { VELA_E2E_SERVER: server },
+    env: {
+      VELA_E2E_SERVER: server,
+      VELA_E2E_PLEX_TOKEN_FILE: plexTokenFile,
+      VELA_E2E_PLEX_SECRET_PATH: plexSecretPath,
+      VELA_E2E_SESSION_DIR: sessionDir,
+    },
     log: '.e2e/logs/lab-proxy.log',
     shutdownTimeout: 5_000,
   },
 };
-
-function mutedBrowser(browser: 'chromium' | 'webkit') {
-  return web({
-    browser,
-    viewport: { width: 1440, height: 900 },
-    reducedMotion: 'reduce',
-    headers: {
-      'X-Vela-Language': 'en',
-      'X-Vela-Screen-Renderer': '19',
-    },
-    initScripts: [() => {
-      const media = HTMLMediaElement.prototype;
-      const muted = Object.getOwnPropertyDescriptor(media, 'muted');
-      const volume = Object.getOwnPropertyDescriptor(media, 'volume');
-      Object.defineProperty(media, 'muted', {
-        configurable: true,
-        get() { return true; },
-        set() { muted?.set?.call(this, true); },
-      });
-      Object.defineProperty(media, 'volume', {
-        configurable: true,
-        get() { return 0; },
-        set() { volume?.set?.call(this, 0); },
-      });
-    }],
-  });
-}
 
 export default {
   projectId: 'vela-release-gates',

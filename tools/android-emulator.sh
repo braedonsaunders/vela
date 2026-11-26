@@ -16,7 +16,7 @@ source tools/android-env.sh
 log="$(dirname "$GRADLE_USER_HOME")/emulator-$avd.log"
 
 before=$(adb devices | awk '/^emulator-/ { print $1 }')
-nohup emulator -avd "$avd" -no-window -no-snapshot -no-boot-anim -gpu swangle_indirect >"$log" 2>&1 &
+nohup emulator -avd "$avd" -no-window -no-snapshot -no-boot-anim -no-audio -gpu swangle_indirect >"$log" 2>&1 &
 pid=$!
 
 serial=""

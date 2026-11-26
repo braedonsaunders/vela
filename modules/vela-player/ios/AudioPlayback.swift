@@ -391,7 +391,8 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
 
     // MARK: SystemMediaOwner
 
-    func systemMediaCommand(_ command: SystemMediaCommand) {
+    @discardableResult
+    func systemMediaCommand(_ command: SystemMediaCommand) -> Bool {
         var body: [String: Any] = ["id": loadID, "type": "remote"]
         switch command {
         case .play: body["command"] = "play"
@@ -401,8 +402,11 @@ final class AudioPlayback: NSObject, SystemMediaOwner {
         case .previous: body["command"] = "previous"
         case .skip(let seconds): body["command"] = "skip"; body["seconds"] = seconds
         case .seek(let position): body["command"] = "seek"; body["seconds"] = position
+        case .enableAudio, .enableSubtitle, .disableSubtitle:
+            return false
         }
         emit?(body)
+        return true
     }
 
     // MARK: Player state

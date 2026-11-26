@@ -95,10 +95,10 @@ function harness(account: string | null, serverToken = 'owner-account') {
     },
     /** What Auth's refresh would offer once plex.tv has answered. */
     async offered() {
-      const ask = () => (auth as unknown as { directPlexHome(c: unknown): Promise<boolean> }).directPlexHome(connection);
+      const ask = () => (auth as unknown as { plexHomePolicy(c: unknown): Promise<{ offered: boolean } | undefined> }).plexHomePolicy(connection);
       await ask();
       await new Promise(resolve => setTimeout(resolve, 0));
-      return ask();
+      return (await ask())?.offered ?? false;
     },
   };
 }

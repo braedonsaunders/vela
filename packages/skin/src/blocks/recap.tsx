@@ -1,7 +1,6 @@
 // Self-contained rich block for B6 Listening recap ("Rewind").
 // Exposes the recap charts, headline stats, period switcher, ranked top entries, and shareable
-// summary card modal over `@vela/core`'s `store.music.recap` engine, independent of `widgets/music`
-// page code so the Listen experience documents reuse it unchanged.
+// summary card modal over `@vela/core`'s `store.music.recap` engine.
 import { useEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import {

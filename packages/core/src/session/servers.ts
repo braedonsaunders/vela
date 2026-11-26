@@ -2,9 +2,15 @@ import type { SecretStore } from './index';
 import { randomId } from '../protocol/id';
 
 export type ServerKind = 'ether' | 'jellyfin' | 'emby' | 'plex';
-export interface ServerRecord { id: string; name: string; kind: ServerKind; origin: string; basePath: string }
+export interface ServerRecord { id: string; name: string; kind: ServerKind; origin: string; basePath: string; machineIdentifier?: string }
 interface Registry { selectedId: string; servers: ServerRecord[] }
 const registryKey = 'vela.servers';
+
+function validMachineIdentifier(value: unknown, kind: ServerKind): string | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== 'plex' || typeof value !== 'string' || !value || value.length > 128 || /\s/.test(value)) return null as unknown as string;
+  return value;
+}
 
 /** Addresses are explicit viewer choices; user-info, query and fragment never belong in a server record. */
 export function serverAddress(value: string, kind: ServerKind): { origin: string; basePath: string } {
@@ -44,9 +50,11 @@ export class ServerRegistry {
       // registry written by the standalone app. Keep those records for later.
       if (this.etherOrigin && item.kind === 'ether') { this.dormantEther.push(item); continue; }
       if (!/^[a-f0-9-]{36}$/.test(item.id) || !this.addable(item.kind) || typeof item.name !== 'string' || !item.name.trim() || item.name.length > 100) throw new Error('Invalid server record');
+      const machineIdentifier = validMachineIdentifier(item.machineIdentifier, item.kind);
+      if (machineIdentifier === null) throw new Error('Invalid server record');
       const address = serverAddress(item.origin + (item.basePath === '/' ? '' : item.basePath), item.kind);
       if (address.origin !== item.origin || address.basePath !== item.basePath || servers.some(s => s.id === item.id)) throw new Error('Invalid server record');
-      servers.push({ id: item.id, name: item.name, kind: item.kind, ...address });
+      servers.push({ id: item.id, name: item.name, kind: item.kind, ...address, ...(machineIdentifier ? { machineIdentifier } : {}) });
     }
     return { selectedId: servers.some(s => s.id === parsed.selectedId) ? parsed.selectedId : servers[0]?.id ?? '', servers };
   }
@@ -59,12 +67,13 @@ export class ServerRegistry {
     return record;
   }
   /** The record for this address, added once; a server reached again keeps its ID and session. */
-  add(kind: ServerKind, name: string, url: string): ServerRecord {
-    if (!this.addable(kind) || !name.trim() || name.length > 100) throw new Error('Invalid server');
+  add(kind: ServerKind, name: string, url: string, machineIdentifier?: string): ServerRecord {
+    const machine = validMachineIdentifier(machineIdentifier, kind);
+    if (!this.addable(kind) || !name.trim() || name.length > 100 || machine === null) throw new Error('Invalid server');
     const current = this.read(), address = serverAddress(url, kind);
     const known = current.servers.find(s => s.kind === kind && s.origin === address.origin && s.basePath === address.basePath);
     if (known) return known;
-    const record = { id: randomId(), name: name.trim(), kind, ...address };
+    const record: ServerRecord = { id: randomId(), name: name.trim(), kind, ...address, ...(machine ? { machineIdentifier: machine } : {}) };
     this.write({ ...current, servers: [...current.servers, record] });
     return record;
   }
@@ -74,12 +83,15 @@ export class ServerRegistry {
     this.write({ ...current, selectedId: id });
   }
   /** A record's proven address and name replace the ones it was added with; its ID and session stay. */
-  relocate(id: string, name: string, url: string): ServerRecord {
+  relocate(id: string, name: string, url: string, machineIdentifier?: string): ServerRecord {
     const current = this.read(), known = current.servers.find(s => s.id === id);
     if (!known || known.id === 'ether' || !name.trim() || name.length > 100) throw new Error('Server not found');
+    const machine = validMachineIdentifier(machineIdentifier, known.kind);
+    if (machine === null) throw new Error('Invalid server');
     const address = serverAddress(url, known.kind);
     if (current.servers.some(s => s.id !== id && s.kind === known.kind && s.origin === address.origin && s.basePath === address.basePath)) throw new Error('Server already added');
-    const record = { ...known, name: name.trim(), ...address };
+    const kept = machine ?? known.machineIdentifier;
+    const record: ServerRecord = { id: known.id, kind: known.kind, name: name.trim(), ...address, ...(kept ? { machineIdentifier: kept } : {}) };
     this.write({ ...current, servers: current.servers.map(s => s.id === id ? record : s) });
     return record;
   }

@@ -114,15 +114,20 @@ export class Servers {
     session.onReset(() => void this.refresh().catch(() => {}));
   }
 
+  private refreshRun = 0;
+
   /** Re-read every server's status. Other servers' sessions are checked with a bounded wait. */
   async refresh(): Promise<void> {
+    const run = ++this.refreshRun;
     if (!this.session.hasServer()) {
       this.patch({ list: [], selectedId: '' });
       return;
     }
     const selected = this.session.selected();
     const registry = this.session.servers.read();
+    this.patch({ selectedId: registry.selectedId });
     const rows = await Promise.all(registry.servers.map(record => this.row(record, selected, registry.selectedId)));
+    if (run !== this.refreshRun) return;
     this.patch({ list: rows, selectedId: registry.selectedId });
   }
 
@@ -233,7 +238,10 @@ export class Servers {
       const epoch = this.session.epoch;
       await endSession(connection, this.session);
       if (connection === this.session.selected() && epoch === this.session.epoch) this.session.resetSession();
-      else await this.refresh();
+      else {
+        this.session.serverSessionChanged?.(id);
+        await this.refresh();
+      }
       return { id, error: '' };
     } catch (error) {
       return { id: '', error: signInFailure(error, 'Sign out failed') };
@@ -341,24 +349,43 @@ export class Servers {
         return { id: record.id, error: '', ...(chosen.note ? { note: chosen.note } : {}) };
       }
       if (!chosen.tokens) throw new Error('Plex returned no server session');
-      // A Plex record added by a typed address (often the LAN one) becomes this server at its proven address.
+      // A Plex record at the proven address, with the same machine identifier, or added by a typed
+      // address (often the LAN one) becomes this server at its proven address without duplicating it.
       const registry = this.session.servers;
-      const list = registry.read().servers;
+      const snapshot = registry.read();
+      const list = snapshot.servers;
       const proven = list.find(s => s.kind === 'plex' && s.origin === chosen.origin);
+      const matched = !proven && chosen.machineIdentifier
+        ? list.find(s => s.kind === 'plex' && s.machineIdentifier === chosen.machineIdentifier)
+        : undefined;
       let typed: ServerRecord | undefined;
       for (const s of list) {
-        if (proven || typed || s.kind !== 'plex' || !chosen.origins.includes(s.origin)) continue;
+        if (proven || matched || typed || s.kind !== 'plex' || !chosen.origins.includes(s.origin)) continue;
         if (!(await this.session.tokens(this.session.connection(s.id)))) typed = s;
       }
-      let record = proven;
-      if (!record && typed) record = registry.relocate(typed.id, chosen.name, chosen.origin);
-      if (!record) record = registry.add('plex', chosen.name, chosen.origin);
+      let record = proven ?? matched;
+      let originChanged = false;
+      if (proven && chosen.machineIdentifier && proven.machineIdentifier !== chosen.machineIdentifier) {
+        record = registry.relocate(proven.id, chosen.name, chosen.origin, chosen.machineIdentifier);
+      } else if (!proven && matched) {
+        originChanged = matched.origin !== chosen.origin;
+        record = registry.relocate(matched.id, chosen.name, chosen.origin, chosen.machineIdentifier);
+      } else if (!record && typed) {
+        originChanged = typed.origin !== chosen.origin;
+        record = registry.relocate(typed.id, chosen.name, chosen.origin, chosen.machineIdentifier);
+      }
+      if (!record) record = registry.add('plex', chosen.name, chosen.origin, chosen.machineIdentifier);
       const credentials = this.session.connection(record.id).credentials;
       await credentials.set(chosen.tokens);
       // Kept so this device can switch Plex Home members later; it never reaches the server.
       if (credentials instanceof ServerCredentials) await credentials.setPlexAccount(chosen.accountToken ?? null);
       this.plexCancel();
+      const wasSelected = snapshot.selectedId === record.id;
       this.session.select(record.id);
+      if (wasSelected) {
+        if (originChanged) this.session.resetSelectedServer();
+        else this.session.resetSession();
+      }
       return { id: record.id, error: '' };
     } catch (error) {
       return { id: '', error: signInFailure(error, msg('server.plex.again')) };

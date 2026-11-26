@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Condition, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.21';
+const version = '1.2.22';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -140,7 +140,8 @@ const menuRow = (press: BoxNode['press'], label: string, symbol: string, testId:
   ] });
 const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:gate' }], style: { color: '$ink', position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'z-index': '40', display: 'flex', 'align-items': 'center', 'justify-content': 'center', padding: '16px' }, children: [
   { type: 'box', press: { action: 'reset' }, label: '{s:close}', motion: 'fade', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'background-color': 'rgba(27, 37, 80, 0.42)', 'backdrop-filter': 'blur(8px)' } },
-  { type: 'box', role: 'dialog', label: '{s:grownUps}', motion: 'popIn', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '18px', width: '100%', 'max-width': '440px', 'box-sizing': 'border-box', padding: '34px 30px 30px 30px',
+  { type: 'box', role: 'dialog', label: '{s:grownUps}', motion: 'popIn', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '18px', width: '100%', 'max-width': '440px',
+    'max-height': 'calc(100vh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom))', 'overflow-y': 'auto', 'box-sizing': 'border-box', padding: '34px 30px 30px 30px',
     'border-radius': '36px', 'background-color': '$card', 'box-shadow': '0px 10px 0px rgba(27, 37, 80, 0.12), 0px 40px 90px -20px rgba(27, 37, 80, 0.55)' }, small: { padding: '28px 20px 22px 20px' }, children: [
     { type: 'box', press: { action: 'close', arg: 'gate' }, label: '{s:close}', testId: 'kids-gate-close', when: [{ test: 'flag:g2', not: true }], style: { position: 'absolute', top: '14px', right: '14px', width: '44px', height: '44px', 'border-radius': '999px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$cream' }, children: [
       { type: 'icon', symbol: 'close', style: { width: '18px', height: '18px' } }] },

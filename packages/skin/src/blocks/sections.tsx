@@ -6,12 +6,13 @@
 // - Wraps each section in a staggered entrance motion (`SectionRise`: opacity + 18px translateY, delay
 //   `min(index, 3) * 70ms`, skipped when `still` is true).
 // - Calls `requestNeeds` when a section with `needs: string[]` is about to mount.
-// - Renders a hidden level-1 heading on the web (`aria-level={1}`) for screen readers.
+// - Gives standalone pages a hidden level-1 heading on the web.
 // - Wraps each section with focusable children in a TV `FocusBand` (`TVFocusGuideView autoFocus`)
 //   for per-section focus memory, and in `ScopedRecordNode` so a record push only re-renders the
 //   section reading that record.
-import { Component, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Platform, ScrollView, Text, View, type TextStyle } from 'react-native';
+import { Component, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import { Platform, ScrollView, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle } from 'react-native';
+import { pageScrollMemory } from '../screen/scroll-memory';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { InheritedContext, useHost } from '../host';
 import { fill, holds, type Template } from '../resolve';
@@ -19,6 +20,7 @@ import { inheritText } from '../text-inheritance';
 import type { Ctx, Env } from '../vocabulary';
 import { FocusBand, hasFocusableChild } from './focus';
 import { FIRST_SECTIONS, initialStreamedCount, nextStreamedCount, parsePoints } from './layout-math';
+import { sectionsContentPadding } from './sections-padding';
 import { useBlockLook, type BlockLook } from './look';
 import { ScopedRecordNode } from './record-scope';
 import { useScreenBlockRuntime, type BlockRNodeCommon, type SectionsBlockNode } from './types';
@@ -111,8 +113,9 @@ function SectionsPlaceholder({ look }: { look: BlockLook }) {
   );
 }
 
-function collectNodeNeeds(node: unknown): string[] {
+function collectNodeNeeds(node: unknown, shown?: (node: unknown) => boolean): string[] {
   if (!node || typeof node !== 'object') return [];
+  if (shown && !shown(node)) return [];
   const n = node as BlockRNodeCommon & { children?: unknown[]; item?: unknown };
   const out = new Set<string>();
   if (Array.isArray(n.needs)) {
@@ -120,7 +123,7 @@ function collectNodeNeeds(node: unknown): string[] {
   }
   if (Array.isArray(n.children)) {
     for (const child of n.children) {
-      for (const s of collectNodeNeeds(child)) out.add(s);
+      for (const s of collectNodeNeeds(child, shown)) out.add(s);
     }
   }
   return [...out];
@@ -141,10 +144,17 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
   const { px } = look;
 
   const isPage = runtime?.presentation === 'page';
-  const defaultGap = px(isPage ? 22 : 30);
+  // A page inside an experience's shell (renderer 20) lays out its own column: the shell keeps it
+  // clear of its bars, so no inset, no end space and no gap of the section's own.
+  const embedded = !!runtime?.scrollKey;
+  const defaultGap = embedded ? 0 : px(isPage ? 22 : 30);
   const gap = parsePoints(node.gap, px, defaultGap);
-  const topPad = isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
-  const bottomPad = px(isPage ? 48 : 64) + (isPage ? 0 : gap);
+  // An embedded page's own padding rows (from the style in force) pad its scroll content, so the end
+  // space counts in the scroll, as the music pages' contentContainerStyle did.
+  const content = embedded ? sectionsContentPadding(node, ctx, host.env, px) : {};
+  const topPad = embedded ? content.top ?? 0 : isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
+  const bottomPad = embedded ? content.bottom ?? 0 : px(isPage ? 48 : 64) + (isPage ? 0 : gap);
+  const sidePads = embedded ? { paddingLeft: content.left ?? 0, paddingRight: content.right ?? 0 } : {};
 
   const inheritedRows: Record<string, string> = {};
   for (const [k, v] of Object.entries(node.base.style ?? {})) {
@@ -162,18 +172,40 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
     if (!runtime?.requestNeeds) return;
     const upcoming = visibleChildren.slice(0, Math.min(visibleChildren.length, mountedCount + 1));
     const needed = new Set<string>();
-    for (const child of node.children) {
+    // An experience page reads only what its shown branches need (music Home never reads the spoken
+    // shelves); a plugin page keeps reading every child's, as Sports was tuned against.
+    for (const child of embedded ? [] : node.children) {
       for (const s of collectNodeNeeds(child)) needed.add(s);
     }
+    const shown = embedded ? (n: unknown) => sectionWhenHolds(n, ctx, host.env) : undefined;
     for (const child of upcoming) {
-      for (const s of collectNodeNeeds(child)) needed.add(s);
+      for (const s of collectNodeNeeds(child, shown)) needed.add(s);
     }
     if (needed.size > 0) runtime.requestNeeds([...needed]);
-  }, [runtime, visibleChildren.length, mountedCount, node.children]);
+  }, [runtime, visibleChildren.length, mountedCount, node.children, embedded, ctx, host.env]);
+
+  // A page in an experience's shell keeps its scroll by its key and is put back where it was once its
+  // content is tall enough (a drag first leaves it where the viewer takes it).
+  const scrollKey = runtime?.scrollKey;
+  const resume = useRef(scrollKey ? pageScrollMemory.resume(scrollKey) : 0);
+  const scroller = useRef<ComponentRef<typeof ScrollView>>(null);
+  const keep = (event: NativeSyntheticEvent<NativeScrollEvent>) => { if (scrollKey) pageScrollMemory.keep(scrollKey, event.nativeEvent.contentOffset.y); };
+  const memory = scrollKey ? {
+    ref: scroller,
+    onScrollBeginDrag: () => { resume.current = 0; },
+    onScrollEndDrag: keep,
+    onMomentumScrollEnd: keep,
+    onContentSizeChange: (_width: number, height: number) => {
+      if (resume.current > 0 && height > resume.current) { scroller.current?.scrollTo({ y: resume.current, animated: false }); resume.current = 0; }
+    },
+    scrollEventThrottle: 64,
+  } : {};
 
   if (!runtime) return null;
 
-  const title = runtime.pageTitle;
+  // Pages in an experience shell draw their own headings. A second, invisible heading
+  // with the document title would repeat the visible heading in the accessibility tree.
+  const title = embedded ? undefined : runtime.pageTitle;
   const shown = visibleChildren.slice(0, mountedCount);
   const testID = node.testId ? fill(node.testId as Template, ctx, host.env).trim() || undefined : undefined;
 
@@ -185,9 +217,11 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
         contentContainerStyle={{
           paddingTop: topPad,
           paddingBottom: bottomPad,
+          ...sidePads,
           gap,
         }}
         showsVerticalScrollIndicator={!Platform.isTV}
+        {...memory}
       >
         {Platform.OS === 'web' && title ? (
           <Text accessibilityRole="header" {...{ 'aria-level': 1 }} style={HIDDEN_H1}>

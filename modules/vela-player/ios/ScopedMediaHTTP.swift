@@ -9,12 +9,20 @@ struct ScopedMediaResponse {
     let totalSize: Int64?
 }
 
+func originalResponseTruncated(expectedLength: Int?, receivedLength: Int) -> Bool {
+    guard let expectedLength else { return false }
+    return receivedLength < expectedLength
+}
+
 /// Media bytes received through the scoped transport, as they arrive (the snapshot's loadProgress).
 final class ReceivedBytes: @unchecked Sendable {
     private let lock = NSLock()
     private var count: Int64 = 0
+    private var lost = false
     func add(_ bytes: Int) { lock.lock(); count += Int64(bytes); lock.unlock() }
+    func markOriginalLost() { lock.lock(); lost = true; lock.unlock() }
     var total: Int64 { lock.lock(); defer { lock.unlock() }; return count }
+    var originalLost: Bool { lock.lock(); defer { lock.unlock() }; return lost }
 }
 
 final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sendable {
@@ -31,6 +39,7 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
     private var droppedHeaders = false
     private var body = Data()
     private var totalSize: Int64?
+    private var expectedLength: Int?
     private var failure: Error?
 
     init(url: URL, access: VelaMediaAuth, offset: Int64, count: Int, received: ReceivedBytes? = nil) {
@@ -72,6 +81,10 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
         defer { lock.unlock() }
         if let failure { throw failure }
         if cancelled { throw URLError(.cancelled) }
+        if originalResponseTruncated(expectedLength: expectedLength, receivedLength: body.count) {
+            received?.markOriginalLost()
+            throw NSError(domain: "VelaOriginalLost", code: 1)
+        }
         return ScopedMediaResponse(data: body, totalSize: totalSize)
     }
 
@@ -112,6 +125,11 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
         }
         let range = http.value(forHTTPHeaderField: "Content-Range") ?? ""
         if let tail = range.split(separator: "/").last { totalSize = Int64(tail) }
+        if http.statusCode == 409 && http.value(forHTTPHeaderField: "X-Ether-Playback-Error") == "original_lost" {
+            received?.markOriginalLost()
+            reject(NSError(domain: "VelaOriginalLost", code: 1), completionHandler)
+            return
+        }
         if http.statusCode == 416, let totalSize, offset >= totalSize {
             completionHandler(.allow)
             return
@@ -126,8 +144,10 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
                 reject(URLError(.badServerResponse), completionHandler)
                 return
             }
+            if response.expectedContentLength >= 0 { expectedLength = Int(response.expectedContentLength) }
         } else if response.expectedContentLength >= 0 {
             totalSize = response.expectedContentLength
+            expectedLength = Int(response.expectedContentLength)
         }
         guard response.expectedContentLength <= Int64(count) else {
             reject(URLError(.dataLengthExceedsMaximum), completionHandler)
@@ -152,7 +172,10 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         lock.lock()
-        if failure == nil { failure = error }
+        if failure == nil, originalResponseTruncated(expectedLength: expectedLength, receivedLength: body.count) {
+            received?.markOriginalLost()
+            failure = NSError(domain: "VelaOriginalLost", code: 1)
+        } else if failure == nil { failure = error }
         lock.unlock()
         finished.signal()
     }

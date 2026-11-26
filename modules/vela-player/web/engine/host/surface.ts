@@ -5,11 +5,12 @@ export interface BrowserSurface {
 }
 
 /** Media owns pixels; chrome and all pointer targets stay in the app. */
-export function createBrowserSurface(element: HTMLElement): BrowserSurface {
+export function createBrowserSurface(element: HTMLElement, fill = false): BrowserSurface {
   const root = element.shadowRoot ?? element.attachShadow({ mode: 'open' });
   const video = document.createElement('video');
   video.style.cssText =
-    'display:block;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:none';
+    'display:block;width:100%;height:100%;background:#000;pointer-events:none';
+  video.style.objectFit = fill ? 'cover' : 'contain';
   const surface = document.createElement('div');
   surface.style.cssText =
     'position:relative;width:100%;height:100%;isolation:isolate;z-index:0;pointer-events:none';

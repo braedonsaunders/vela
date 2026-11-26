@@ -7,15 +7,19 @@ import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { systemBarStyle } from '../src/system-bar-style';
 import { AudioDock } from '../src/media/audio';
 import { SurfaceProvider, SurfaceToasts } from '../src/surfaces';
+import { VisualizerProvider } from '../src/visualizer/host';
 
 export default function Layout() {
   return (
     <VelaProvider>
       <SurfaceProvider>
-        <SystemBar />
-        <Screens />
-        <AudioDock />
-        <SurfaceToasts />
+        <VisualizerProvider>
+          <SystemBar />
+          <AudioDock>
+            <Screens />
+          </AudioDock>
+          <SurfaceToasts />
+        </VisualizerProvider>
       </SurfaceProvider>
     </VelaProvider>
   );
@@ -53,7 +57,7 @@ function Screens() {
       />
       {/* Playback must present above title/person modals. A card is pushed beneath their
           native controller on iOS and Android, hiding the playing film and its controls. */}
-      <Stack.Screen name="watch/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : Platform.OS === 'ios' || Platform.OS === 'android' ? 'fullScreenModal' : 'card', ...(Platform.OS === 'android' ? { statusBarHidden: true, navigationBarHidden: true } : {}), contentStyle: { paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0, backgroundColor: '#000' } }} />
+      <Stack.Screen name="watch/[id]" options={{ presentation: Platform.isTV ? 'containedModal' : Platform.OS === 'ios' || Platform.OS === 'android' ? 'fullScreenModal' : 'card', ...(!Platform.isTV && (Platform.OS === 'ios' || Platform.OS === 'android') ? { statusBarHidden: true } : {}), ...(Platform.OS === 'android' ? { navigationBarHidden: true } : {}), contentStyle: { paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0, backgroundColor: '#000' } }} />
       {/* The reader grows out of the book's cover over the page it opened from, so that page stays
           drawn beneath it (media/reader.tsx). Like playback it presents above the title modal, and
           it keeps clear of the system bars itself, so its paper runs beneath them. */}

@@ -41,6 +41,9 @@ final class PlaybackSession {
     private var recoveryLimit: Timer?
     private var plan: VelaPlan?
     private var activeSource = ""
+    /// The loaded item's clock against the title's (a server's VOD HLS may start partway into the title):
+    /// the engine is given and reports item seconds; everything else here is in title seconds.
+    private var timeline = MediaTimeline()
     /// The external subtitle added to this load's engine and selected.
     private var sidecar = SidecarSubtitle()
     private var lastCommand = -1
@@ -218,7 +221,7 @@ final class PlaybackSession {
         guard let path = next.selectedPath else {
             return
         }
-        let source = "\(next.sessionId):\(path.id):\(next.sourceGeneration)"
+        let source = next.sourceKey(path)
         // A server may increment the source generation for a track choice even though the
         // original file is unchanged. player can apply its streams without loading that file again.
         let sameFile = previous?.sessionId == next.sessionId && path.isOriginalFile &&
@@ -233,6 +236,7 @@ final class PlaybackSession {
                 seekConfirmed(next.positionSeconds)
             }
             applyTracks()
+            updateNowPlaying()
             return
         }
         guard path.readiness == "ready", let text = path.url, let url = resolve(text) else {
@@ -303,7 +307,8 @@ final class PlaybackSession {
             position: pendingSeek ?? state.position,
             playing: state.phase == .playing,
             // Now Playing extrapolates the position at the video's speed (live always plays at 1).
-            rate: plan?.isLive == true ? 1 : report.speed
+            rate: plan?.isLive == true ? 1 : report.speed,
+            languages: plan.map { NowPlayingLanguageOptions.languages(for: $0, state: state, report: report) }
         )
         host.updateNowPlaying(now, owner: self)
     }
@@ -337,6 +342,9 @@ final class PlaybackSession {
         authorizedGeneration = authorized == nil ? nil : VelaMediaAccessStore.activeGeneration
         recoveryPosition = nil
         state = PlayerState()
+        timeline = MediaTimeline(plan: plan, path: path)
+        // Until the engine's clock arrives, the title position the item starts at (not zero).
+        if !plan.isLive { state.position = plan.positionSeconds }
         pendingSeek = nil
         pendingLiveStart = plan.live?.mode == "startOver" ? plan.positionSeconds : nil
         report.pathId = path.id
@@ -387,7 +395,10 @@ final class PlaybackSession {
         let subtitle = plan.subtitleTrack(report.subtitleTrackId)
         if let index = plan.audioTrack(report.audioTrackId)?.streamIndex { client.set("aid", String(index)) }
         client.set("sid", subtitle?.isExternal == false ? subtitle?.streamIndex.map(String.init) ?? "no" : "no")
-        var options = ["start=\(plan.positionSeconds)"]
+        var options = ["start=\(timeline.mediaTime(plan.positionSeconds))"]
+        if timeline.origin > 0 {
+            print("[vela-player] item starts at title \(timeline.origin)s; resuming title \(plan.positionSeconds)s")
+        }
         if path.isOriginalFile {
             // Source stream indexes are FFmpeg's; player selects by its own ids, mapped once loaded (applyTracks).
             options.append(subtitle == nil || subtitle?.isExternal == true ? "sid=no" : "sid=auto")
@@ -464,7 +475,7 @@ final class PlaybackSession {
     // MARK: player
 
     private func propertyChanged(_ name: String, _ value: Any?) {
-        state.update(name, value)
+        state.update(name, timeline.titleProperty(name, value))
         keepAwake(!ambient && (state.phase == .playing || state.phase == .buffering || state.phase == .loading))
         if name == "track-list" {
             applyTracks()
@@ -490,13 +501,21 @@ final class PlaybackSession {
             state.loaded = true
             applyTracks()
             resumeAfterDisplaySwitch()
+            updateNowPlaying()
         case .endFile(let reason, _):
+            if reason == 0, playsOriginal, let duration = plan?.durationSeconds,
+               duration > 2, state.position < duration - 2 {
+                askForFreshPlan("original ended before its planned duration", originalLost: true, position: state.position)
+                break
+            }
             if reason == 4, !recoverPath() {
                 state.failure = "AetherEngine could not play any server path"
                 state.failureKind = "decoder"
             }
         case .refused(let status):
             askForFreshPlan("media request refused (\(status))")
+        case .originalLost(let position):
+            askForFreshPlan("original lost", originalLost: true, position: position)
         case .seekDone:
             pendingSeek = nil
             if !loggedOutput {
@@ -529,13 +548,19 @@ final class PlaybackSession {
     }
 
     /// Asks once per source for a fresh plan: the grant behind the media URL has expired or was revoked.
-    private func askForFreshPlan(_ reason: String) {
+    private func askForFreshPlan(_ reason: String, originalLost: Bool = false, position: Double? = nil) {
         guard let plan, refreshAsked != activeSource else {
             return
         }
         refreshAsked = activeSource
         print("[vela-player] session refresh: \(reason)")
-        onSessionRefresh(["sessionId": plan.sessionId])
+        var event: [String: Any] = ["sessionId": plan.sessionId]
+        if originalLost {
+            event["reason"] = "original_lost"
+            event["positionSeconds"] = position ?? state.position
+            event["sourceGeneration"] = plan.sourceGeneration
+        }
+        onSessionRefresh(event)
     }
 
     private func logOutput() {
@@ -640,7 +665,7 @@ final class PlaybackSession {
             target = max(0, min(seconds, end))
         }
         pendingSeek = target
-        player?.command(["seek", String(target), "absolute+keyframes"])
+        player?.command(["seek", String(timeline.mediaTime(target)), "absolute+keyframes"])
     }
 
     // MARK: Commands
@@ -873,7 +898,7 @@ final class PlaybackSession {
         guard host.attached else {
             return
         }
-        start(plan, path: path, url: url, source: "\(plan.sessionId):\(path.id):\(plan.sourceGeneration)")
+        start(plan, path: path, url: url, source: plan.sourceKey(path))
     }
 
     private func number(_ value: Any?) -> Double? {
@@ -883,23 +908,35 @@ final class PlaybackSession {
 
 extension PlaybackSession: SystemMediaOwner {
     /// The Siri Remote's or Control Center's command, through the same paths as the `command` prop.
-    func systemMediaCommand(_ command: SystemMediaCommand) {
+    @discardableResult
+    func systemMediaCommand(_ command: SystemMediaCommand) -> Bool {
+        let failure: String?
         switch command {
         case .play:
-            _ = perform(["type": "play"])
+            failure = perform(["type": "play"])
         case .pause:
-            _ = perform(["type": "pause"])
+            failure = perform(["type": "pause"])
         case .toggle:
-            _ = perform(["type": state.phase == .playing ? "pause" : "play"])
+            failure = perform(["type": state.phase == .playing ? "pause" : "play"])
         case .skip(let seconds):
-            _ = perform(["type": "seekBy", "seconds": seconds])
+            failure = perform(["type": "seekBy", "seconds": seconds])
         case .seek(let position):
-            _ = perform(["type": "seek", "seconds": position])
+            failure = perform(["type": "seek", "seconds": position])
+        case .enableAudio(let trackId):
+            failure = perform(["type": "audio", "trackId": trackId])
+        case .enableSubtitle(let trackId):
+            failure = perform(["type": "subtitle", "trackId": trackId])
+        case .disableSubtitle:
+            failure = perform(["type": "subtitle", "trackId": NSNull()])
         case .next, .previous:
             // A video takes no next or previous; its style never registers them.
-            break
+            return false
+        }
+        guard failure == nil else {
+            return false
         }
         report.publish(state, seekTarget: pendingSeek, force: true)
         updateNowPlaying()
+        return true
     }
 }

@@ -52,7 +52,7 @@ Each step reaches parity with today's pages before the code it replaces is delet
 | Area | Today |
 | --- | --- |
 | Watch pages (home, library, title, person, collection, search, live home) | Already skin documents (`routes.*`) over a fixed vocabulary of app data (`vocabulary.ts`), with compiled widgets for the hard parts |
-| Listen (the music app) | Hand-written React: `widgets/music/*` (shell, pages, bar, queue, lyrics, tracks), `widgets/media/player.tsx`. It follows the skin through `ui` tokens but cannot be rearranged. |
+| Listen (the music app) | Built-in shell and page documents in `packages/protocol/fixtures/experiences/listen` over the blocks in `packages/skin/src/blocks/listen`. |
 | Read | `widgets/media/reader*` (engine, layout, opening) and `app/read/[id].tsx` |
 | Gallery | No dedicated experience; photos open as ordinary library pages |
 | Live | The guide and multiview are native widgets and routes; Sports is moving to plugin documents |
@@ -118,23 +118,38 @@ Two document kinds share one resolver, one renderer, one `RENDERER_VERSION` and 
 ### Sources for Vela's own pages
 
 Built-in documents read sources, as plugin documents do. Core answers them locally through the
-active server adapter:
+active server adapter (`packages/core/src/screens/local.ts`; the list, arguments and value shapes are
+`packages/protocol/vela-sources.ts`). "Yes" means the source answers; "no" means it answers
+`unsupported`, so the document hides that part. Ether's music parts answer only where the server
+advertises them (in parentheses). The Jellyfin and Plex columns are proven by routed-fetch tests
+(`packages/core/test/local-sources-native.test.ts`) and match what today's music app shows there.
 
-| Source (`from`) | Answers with |
-| --- | --- |
-| `vela.title` (`id`) | The title record |
-| `vela.children` (`id`, `role`) | Children, paged |
-| `vela.rows` (`placement`, `titleId`, `libraryId`) | Rows |
-| `vela.library` (`id`, sort, filters) | The library listing |
-| `vela.favorites` (`role`, `class`) | Liked items |
-| `vela.playlists` | Playlists |
-| `vela.recent` | Recent contexts |
-| `vela.search` | Search results |
-| `vela.queue` | The live queue record |
-| `vela.nowPlaying` | The live record, updated every second when bound |
-| `vela.lyrics` (`id`) | Lyrics |
-| `vela.guide` | The guide window |
-| `vela.readingProgress` (`id`) | Reading progress |
+| Source (`from`) | Answers with | Ether | Jellyfin / Emby | Plex |
+| --- | --- | --- | --- | --- |
+| `vela.title` (`id`) | The title: its `item:` record and what a detail read adds | yes | yes | yes |
+| `vela.children` (`id`, `role`) | Children, paged | yes | yes | yes |
+| `vela.rows` (`placement`, `titleId`, `libraryId`, `tab`) | Rows: Home's, a title's related ones, a library's (its home tab by default) | yes | yes | yes |
+| `vela.library` (`id`, sort, filters, `tab`, `limit`) | The library listing, paged | yes | yes | yes |
+| `vela.favorites` (`role`, `class`, `library`) | Liked items | yes (role lists, else the Favorites playlist) | yes, with `library`: the library's favourite filter on the role's tab | no (Plex keeps no favourites) |
+| `vela.playlists`, `vela.playlist` (`id`) | The viewer's playlists; one playlist and its entries | yes (playlists) | no | no |
+| `vela.recent` | Recent play contexts | yes (play contexts) | no | no |
+| `vela.search` (`q`, `kind`, `library`) | The audio app's search: the list, the top match, the list by role | yes | yes | yes |
+| `vela.musicHome` (`library`) | Music Home: quick tiles, Vela's own recent shelves, the library's rows | yes | yes (rows and search only: no tiles without likes, playlists or recent) | yes (as Jellyfin) |
+| `vela.libraryInfo` (`id`), `vela.viewer` | What a library holds and the music features offered; the viewer | yes | yes | yes |
+| `vela.queue`, `vela.nowPlaying` | The live queue record; the live record, updated about once a second while bound | yes (on the device) | yes | yes |
+| `vela.lyrics` (`id`, `translate`) | Lyrics, with word timing, translation and romanisation when sent | yes (lyrics) | no | no |
+| `vela.guide` (`day`) | A day of the Live TV guide as `channel:` records | yes (Live TV) | yes (a tuner) | yes (a DVR) |
+| `vela.readingProgress` (`id`) | Reading progress | yes (reading) | yes (books) | no |
+| `vela.recap` (`period`, `at`, `library`) | A listening recap (Rewind) | yes (history recap) | no | no |
+| `vela.duplicates` (`libraryId`), `vela.recording` (`id`) | Duplicate recordings; a recording's releases | yes (duplicates) | no | no |
+| `vela.import` | The playlist import in progress (`import:` record) | yes (playlist import) | no (the record stays idle; the action refuses) | no |
+| `vela.visualizer` | The viewer's visualizer setting on this device | yes (on the device) | yes | yes |
+
+Actions answer the same way: `vela.play`, `vela.playNext`, `vela.addToQueue` and `vela.startRadio`
+play through the audio store on every server (radio adds the server's continuation where it has
+one). `vela.like` is the server's favourite: Ether and Jellyfin keep it, Plex refuses it.
+`vela.lyrics` `translate` is not sent yet: no adapter and no wire route takes a language, so lyrics
+come in the language the server has.
 
 These are the same `{$record}` model with the same revisions: `item:`, `channel:`, plus local
 `queue:` and `nowPlaying:` records that never leave the device. The source list is versioned with
@@ -171,6 +186,22 @@ these sources, so existing skin documents keep working unchanged.
   with the same rules. Slots carry the same bounds as surfaces: box, focus, clipping, at most N
   per slot, and an owner-set order.
 
+### The language as built (renderer 20)
+
+[skin-schema.md § Renderer 20](skin-schema.md#renderer-20) is the reference. In short:
+
+- Built-in pages: `owner: "vela"`, `experience`; address `vela:<experience>/<page>`, screen
+  `vela.<experience>`; bundled from `packages/protocol/fixtures/experiences/<experience>/`.
+  A shell is the page `shell`, with `forms: {small, wide, tv, fold}`.
+- Skin overrides: `experiences.<id>.{pages, templates, parts, shell}`, merged at resolve time.
+- Variants: `platforms` (node style overlay; page whole tree) and `forms` (page whole tree).
+- Rich blocks: `{type, props, parts, partTemplates, fallback}` against
+  `packages/protocol/rich-blocks.ts`; `fallback` is generic on every block.
+- Slots: `{type: "slot", slot: "plugin:<id>", context}` in pages; surfaces with presentation
+  `slot` and `slot: <id>`; the list is `$defs.Slots`. Slot contexts: a title's slots give
+  `title` (`item:`) and `titleKind` (picks by `when.titleKind`, never sent); the player
+  overlays give the player context.
+
 ## 3. Author tools
 
 - **Live preview:**
@@ -188,7 +219,7 @@ these sources, so existing skin documents keep working unchanged.
     budgets.
   - It produces a JSON report for Studio and CI, plus readable output.
   - Ether runs the same checks at install against the vendored schema.
-- **Versioned schema:** `vela-document.v1.json` (today `plugin-screen.v1.json`) is generated from
+- **Versioned schema:** `vela-document.v1.json` (formerly `plugin-screen.v1.json`; renderer 20) is generated from
   the TypeScript types, with a digest beside `RENDERER_VERSION`. Changes within version 1 are
   additive; anything else is a new major version. Docs are generated from the schema's comments.
 - **TV performance budgets:**
@@ -210,16 +241,19 @@ then deletes the code it replaces in the same release. There are no long-lived d
 
 1. **Sports** (in progress). It proves the renderer, sources, records, live updates, surfaces,
    parity tooling and the hard cut.
-2. **Listen.** The music app becomes the `listen` experience:
+2. **Listen** (complete). The `listen` experience uses
    - shell documents for desktop, phone and TV;
    - page documents for home, artist, album, playlist, liked, search, Now Playing and queue;
    - the native blocks `player`, `nowPlaying`, `queue`, `lyrics`, `trackTable`, `eq`, `rail` and
      `bar`;
    - slots for album, artist and Now Playing panels.
 
-   Data comes from `vela.*` sources over the music API that thr_9ahkvmww6a's plan adds to
-   Ether. The plan's Ether model work is unchanged; only the Vela drawing becomes documents.
-   `widgets/music/*` is deleted at parity.
+   `ListenSection` draws the library through `ExperienceView`. The audio dock opens the Now Playing and
+   visualizer documents. Data comes from `vela.*` sources over the music API. The parity tools compare
+   new document captures with the archived baselines recorded from `experiences/pre-listen`.
+
+   On Apple TV and Android TV, Now Playing focuses Play when the transport is ready. The parity
+   notes record this focus choice against the legacy captures.
 3. **Read.** Library pages and a `reader` block with styleable chrome. The reader engine stays
    native.
 4. **Gallery.** A `timeline` grid, a `photoViewer` block, and albums and people pages.
@@ -261,10 +295,8 @@ Watch, or rides along with step 1's surfaces if the owner wants it earlier.
 
 - **Artist extras** (bio, upcoming concerts) come as an `ether.music` surface in
   `listen.artist.panel` once slot surfaces exist. No music-specific fields go into core.
-- **Sequencing:** the music section-B work happening now in `widgets/music` puts its engines in
-  core stores and in the rich blocks. These engines are AutoMix and crossfade, EQ, levelling,
-  word-timed lyrics, recap charts and the import flow. That way they carry over to documents
-  unchanged, and only the drawing is replaced at Listen parity.
+- **Music engines** live in core stores and the rich blocks. They cover AutoMix and crossfade, EQ,
+  levelling, word-timed lyrics, recap charts and playlist import.
 - **Jellyfin and Plex:** `unsupported` per part. Nothing changes on Ether.
 
 ### Agreed with Ether's plugin-screens lead (2026-11-24)
@@ -340,3 +372,46 @@ The owner approved this design on 2026-11-24:
    - Apple TV 4K is the high end.
    - Measured budgets run on an Android TV emulator profile matched to that floor: 2 GB RAM, a
      quad-core A55-class CPU throttled to match, and 1080p output.
+
+## Build plan: shared groundwork and Listen (approved 2026-11-24)
+
+The owner approved this plan. Building starts once three things are done:
+
+1. 0.2.63 is on production.
+2. The native downloads are out.
+3. The iPhone Duo branch is merged (thr_s8fgkaujwe: the music wide shell, Now Playing side by side by width, and the fold module).
+
+Listen builds on those layouts. The rules are the same as for Sports:
+
+- Parity comes first (at most 1% of pixels differ, nothing moves more than 2 px, and every remaining difference is reviewed).
+- The same release removes the hand-written music shell.
+- Everything is built on an integration branch, `experiences/main`, kept green and rebased on main.
+
+### Workers
+
+| Worker | Provider | Scope | Owns |
+| --- | --- | --- | --- |
+| G1, local sources | Claude | `vela.*` sources and records answered by core through the active adapter (Ether, Jellyfin, Plex), with `unsupported` per part, plus local actions (`vela.like`, `playNext`, `addToQueue`, `startRadio`, `playlistImport` and save, `duplicatePreference`) | `packages/core/src/screens/local*`, adapter glue |
+| G2, document system | Claude | Built-in documents (bundled; `owner: "vela"`), skin `experiences` overrides merged over them, `platforms` variants, the rich-block parts API, slot surfaces (`presentation: "slot"` and `$defs.Slots` in the generated schema, with the Sports aliases kept), and the schema renamed to `vela-document.v1.json` | `packages/skin/src/resolve*`, `screen/*`, `packages/protocol` |
+| G3, author tools | Gemini (commits and pushes after every working step; the lead checks its branch at least hourly, and moves the scope to a Claude worker at the first stall) | `bun tools/skin.ts serve <document>` plus a preview mode for skins and built-in pages (the device frames: phone, tablet, desktop, TV), the validator's JSON report, and the TV perf harness (`tools/perf`) as a gate for built-in documents | `tools/*` |
+| L1, Listen blocks | Claude | The rich blocks `player`, `nowPlaying`, `queue`, `lyrics`, `trackTable`, `eq`, `rail` and `bar`, wrapping today's engines and the section-B blocks (`blocks/sound`, `recap`, `import`, `duplicates`) unchanged, with their parts lists | `packages/skin/src/blocks/listen/*` |
+| L2, Listen documents and parity | Claude | The `listen` shell documents (wide, phone, TV, fold) and the page documents (home, artist, album, playlist, liked, search, Now Playing, queue, import, Rewind, duplicates), plus parity against the archived baselines | `packages/protocol/fixtures/experiences/listen/*`, `tools/parity` |
+
+### Order
+
+1. **Contract:** G2 lands the document envelope changes and the slot list, and G1 lands the source list, before anything else builds on them.
+2. **Legacy baselines:** L2 captures them from the merged iPhone Duo build, before any change.
+3. **Blocks and documents:** L1 and L2 iterate against G1's sources.
+4. **Author tools:** G3 runs in parallel throughout.
+5. **Parity:** on every platform.
+6. **Release:** the hard cut, then the lab gate and the production gate, as for Sports.
+
+### Ether
+
+Ether needs no new design:
+
+- the slot list is vendored from the schema;
+- the music API and the Mornye contract are already agreed;
+- the music plugin's row purposes and layouts are already live.
+
+It re-vendors the renamed schema.

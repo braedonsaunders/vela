@@ -36,6 +36,7 @@ export function createHostContext(
       controller: controller,
       current: undefined,
       pendingSwitch: undefined,
+      droppedSwitch: undefined,
       pendingSeek: undefined,
     },
     media: {

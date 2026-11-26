@@ -379,6 +379,9 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
    * chosen). Absent when nothing plays or the server does not say; a mid-stream failover to
    * another release publishes a plan of a higher revision. */
   playingVersionId?: ID | null; playingLabel?: string;
+  /** Why the selected release cannot produce another source. `version_unavailable` keeps an
+   * explicit version pick pinned; clients offer the version picker at the held position. */
+  sourceFailure?: 'version_unavailable';
   livePolicy?: { latencyProfile: 'auto' | 'low' | 'stable'; targetLatencySeconds: number };
   /** A live channel, or a start-over plan (`mode: 'startOver'`, a growing programme from its start: window
    * start 0, a growing edge). Positions and the window share the plan's timeline. */

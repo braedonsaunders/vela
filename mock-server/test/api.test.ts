@@ -202,7 +202,10 @@ describe('mock server: catalogue and live', () => {
     expect(old.key).toBe(old.id.slice(0, old.id.lastIndexOf('~')));
     expect((await get<V.Row>(`/rows/${encodeURIComponent(old.id)}`)).id).toBe(old.id);
     const title = feed(before).flatMap(row => row.items).find(item => item.kind === 'title')!;
+    expect((await fetch(`${mock.url}/__admin/faults`, { method: 'POST', body: JSON.stringify({ bootstrapStaleReads: 1 }) })).status).toBe(200);
     expect((await post(`/titles/${title.title.id}/watch`, { idempotencyKey: key(), played: true }, authed(tokens))).status).toBe(200);
+    const staleBootstrap = feed(await get<V.Bootstrap>('/bootstrap'));
+    expect(staleBootstrap.find(row => row.key === old.key)?.id).toBe(old.id);
     const after = feed(await get<V.Bootstrap>('/bootstrap'));
     const fresh = after.find(row => row.key === old.key)!;
     expect(fresh.id).not.toBe(old.id);
@@ -378,6 +381,50 @@ describe('mock server: catalogue and live', () => {
     // Choosing the top release's own row plays exactly it.
     const forced = await start(top!.id);
     expect(forced).toMatchObject({ selectedVersionId: top!.id, playingVersionId: top!.id });
+  });
+
+  test.skipIf(!mediaGenerated)('original-loss faults publish a fenced replacement for 409 and truncation, or pin an unavailable version', async () => {
+    await fetch(`${mock.url}/__admin/sidecar`, { method: 'POST', body: JSON.stringify({ enabled: true, pathId: 'direct' }) });
+    const versions = await get<V.TitleVersions>('/titles/title-1-3/versions');
+    const start = () => post('/playback', { titleId: versions.titleId, versionId: versions.versions[0]!.id, idempotencyKey: key(),
+      client: { device, protocolVersions: [0], containers: ['mp4'], videoCodecs: ['h264'], audioCodecs: ['aac'], subtitleFormats: ['vtt'], hls: true, mse: true } }, authed(tokens)).then(response => response.json() as Promise<V.PlaybackPlan>);
+    const arm = (fault: object) => fetch(`${mock.url}/__admin/faults`, { method: 'POST', body: JSON.stringify(fault) });
+    try {
+      const refusedPlan = await start();
+      const refusedPath = refusedPlan.paths.find(path => path.id === refusedPlan.selectedPathId)!;
+      await arm({ originalLost409: 1, originalLostVersionUnavailable: false });
+      const refused = await fetch(new URL(refusedPath.url!, mock.url), { headers: { Range: 'bytes=0-31' } });
+      expect(refused.status).toBe(409);
+      expect(refused.headers.get('X-Ether-Playback-Error')).toBe('original_lost');
+      const moved = (await get<V.SessionSnapshot>(`/sessions/${refusedPlan.sessionId}`)).plan;
+      expect(moved.sourceGeneration).toBe(refusedPlan.sourceGeneration + 1);
+      expect(moved.revision).toBeGreaterThan(refusedPlan.revision);
+      expect(moved.playingVersionId).not.toBe(refusedPlan.playingVersionId);
+      expect(moved.paths.find(path => path.id === moved.selectedPathId)?.url).not.toBe(refusedPath.url);
+
+      const truncatedPlan = await start();
+      const truncatedPath = truncatedPlan.paths.find(path => path.id === truncatedPlan.selectedPathId)!;
+      await arm({ originalLostTruncate: 1, originalLostVersionUnavailable: false });
+      const truncated = await fetch(new URL(truncatedPath.url!, mock.url), { headers: { Range: 'bytes=0-65535' } });
+      expect(truncated.status).toBe(206);
+      expect((await truncated.arrayBuffer()).byteLength).toBe(32_768);
+      expect((await get<V.SessionSnapshot>(`/sessions/${truncatedPlan.sessionId}`)).plan.sourceGeneration).toBe(truncatedPlan.sourceGeneration + 1);
+
+      const pinned = await start();
+      const pinnedPath = pinned.paths.find(path => path.id === pinned.selectedPathId)!;
+      await arm({ originalLost409: 1, originalLostVersionUnavailable: true });
+      const pinnedUrl = new URL(pinnedPath.url!, mock.url);
+      expect((await fetch(pinnedUrl)).status).toBe(409);
+      const probe = await fetch(pinnedUrl, { headers: { Range: 'bytes=0-31' } });
+      expect(probe.status).toBe(409);
+      expect(probe.headers.get('X-Ether-Playback-Error')).toBe('original_lost');
+      expect((await get<V.SessionSnapshot>(`/sessions/${pinned.sessionId}`)).plan).toMatchObject({
+        sourceGeneration: pinned.sourceGeneration, sourceFailure: 'version_unavailable', positionSeconds: pinned.positionSeconds,
+      });
+    } finally {
+      await arm({ originalLost409: 0, originalLostTruncate: 0, originalLostVersionUnavailable: false });
+      await fetch(`${mock.url}/__admin/sidecar`, { method: 'POST', body: JSON.stringify({ enabled: false }) });
+    }
   });
 
   test('bootstrap-only delay leaves independent library reads responsive', async () => {
