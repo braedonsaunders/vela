@@ -532,8 +532,8 @@ export class Playback {
                 lost = true;
                 throw new Error('Session ended while its events were down');
               }
-              // A snapshot read, or a plan replayed from it, before a command the server has since accepted (a seek)
-              // would roll it back. An end is not held back.
+              // A snapshot read, or a plan replayed from it, before a command the server has since accepted (a seek
+              // or a pause) would roll it back. An end is not held back.
               if (plan.state !== 'ended' && olderThanShown(plan, this.box.get().playback.plan)) return;
               show(plan);
             };
@@ -1426,9 +1426,13 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-/** Whether `plan` is from an earlier source or seek generation of the session than the one shown. */
+/**
+ * Whether `plan` is from an earlier source or seek generation of the session than the one shown, or, in the same
+ * generations, from an earlier revision (a pause accepted since) when both carry one.
+ */
 function olderThanShown(plan: V.PlaybackPlan, shown: V.PlaybackPlan | null): boolean {
   if (!shown || shown.sessionId !== plan.sessionId) return false;
-  return plan.sourceGeneration < shown.sourceGeneration ||
-    (plan.sourceGeneration === shown.sourceGeneration && plan.seekGeneration < shown.seekGeneration);
+  if (plan.sourceGeneration !== shown.sourceGeneration) return plan.sourceGeneration < shown.sourceGeneration;
+  if (plan.seekGeneration !== shown.seekGeneration) return plan.seekGeneration < shown.seekGeneration;
+  return typeof plan.revision === 'number' && typeof shown.revision === 'number' && plan.revision < shown.revision;
 }

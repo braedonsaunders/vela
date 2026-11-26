@@ -600,17 +600,42 @@ test('a reconnection snapshot or replayed plan older than a seek accepted meanwh
   } finally { h.restore(); }
 });
 
+test('a reconnection snapshot at an earlier revision of the same generations is not shown over a pause accepted meanwhile', async () => {
+  const h = await harness(async (_emit, attempt) => { if (attempt > 1) await new Promise(() => {}); });
+  try {
+    // The stream dropped at once; the reconnection after 1 s reads a snapshot at revision 1 (playing) the server answers late.
+    h.server.plan = h.plan('s1', { revision: 1 });
+    const release = h.holdSnapshots();
+    await h.advance(1500);
+    expect(h.connections()).toBe(1);
+    // A pause is accepted at revision 2, with the same source and seek generations.
+    h.answerCommands(id => h.plan(id, { state: 'paused', revision: 2 }));
+    await h.playback.command('s1', { kind: 'pause', sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'pause' } as never);
+    expect(h.box.get().playback.plan?.state).toBe('paused');
+    // The old answer arrives before the stream replays anything.
+    release();
+    await h.settle();
+    expect(h.connections()).toBe(2);
+    expect(h.box.get().playback.plan?.state).toBe('paused');
+    expect(h.box.get().playback.plan?.revision).toBe(2);
+    await h.playback.stop();
+  } finally { h.restore(); }
+});
+
 test('completed reconnection delays leave no abort listeners on the watch', async () => {
-  const listeners = new Map<EventTarget, number>();
-  const add = EventTarget.prototype.addEventListener, remove = EventTarget.prototype.removeEventListener;
-  EventTarget.prototype.addEventListener = function (this: EventTarget, type: string, ...rest: unknown[]) {
+  // Counted by wrapping the signal's own methods: AbortSignal.prototype may carry them itself, so they need not reach EventTarget's.
+  const listeners = new Map<AbortSignal, number>();
+  const add = AbortSignal.prototype.addEventListener, remove = AbortSignal.prototype.removeEventListener;
+  const ownAdd = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'addEventListener');
+  const ownRemove = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'removeEventListener');
+  AbortSignal.prototype.addEventListener = function (this: AbortSignal, type: string, ...rest: unknown[]) {
     if (type === 'abort') listeners.set(this, (listeners.get(this) ?? 0) + 1);
     return (add as (...args: unknown[]) => void).call(this, type, ...rest);
-  } as never;
-  EventTarget.prototype.removeEventListener = function (this: EventTarget, type: string, ...rest: unknown[]) {
+  } as typeof add;
+  AbortSignal.prototype.removeEventListener = function (this: AbortSignal, type: string, ...rest: unknown[]) {
     if (type === 'abort') listeners.set(this, (listeners.get(this) ?? 0) - 1);
     return (remove as (...args: unknown[]) => void).call(this, type, ...rest);
-  } as never;
+  } as typeof remove;
   try {
     // Four connections end at once; the fifth stays up.
     const h = await harness(async (_emit, attempt) => { if (attempt === 5) await new Promise(() => {}); });
@@ -623,8 +648,10 @@ test('completed reconnection delays leave no abort listeners on the watch', asyn
       await h.playback.stop();
     } finally { h.restore(); }
   } finally {
-    EventTarget.prototype.addEventListener = add;
-    EventTarget.prototype.removeEventListener = remove;
+    if (ownAdd) Object.defineProperty(AbortSignal.prototype, 'addEventListener', ownAdd);
+    else delete (AbortSignal.prototype as Partial<AbortSignal>).addEventListener;
+    if (ownRemove) Object.defineProperty(AbortSignal.prototype, 'removeEventListener', ownRemove);
+    else delete (AbortSignal.prototype as Partial<AbortSignal>).removeEventListener;
   }
 });
 
