@@ -72,13 +72,13 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} style={[m.text({ 'font-size': '15px', 'font-weight': '650' }), titlePart]}>{item.name}</Text>
             <Text numberOfLines={1} style={[m.text({ 'font-size': '13px', color: '$ui.inkSecondary' }), bylinePart]}>
-              {preview !== null ? `${clock(preview)} / ${clock(audio.durationSeconds)}` : audio.phase === 'failed' ? msg('media.player.failed') : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
+              {preview !== null ? `${clock(preview)} / ${clock(audio.durationSeconds)}` : audio.phase === 'failed' ? (audio.unreleased ? audio.error : msg('media.player.failed')) : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
             </Text>
           </View>
         </Pressable>
         {book && !m.small ? <RoundButton icon="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={40} testID="mini-back15" /> : null}
         {!book && !m.small ? <RoundButton icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} size={40} testID="mini-previous" iconSize={16} /> : null}
-        <PlayButton playing={playing} size={46} onPress={() => store.audio.toggle()} testID="mini-toggle" />
+        {audio.unreleased ? null : <PlayButton playing={playing} size={46} onPress={() => store.audio.toggle()} testID="mini-toggle" />}
         {book ? <RoundButton icon="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={40} testID="mini-forward30" />
           : <RoundButton icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} size={40} testID="mini-next" iconSize={16} />}
         {!m.small ? <RoundButton icon="close" label={msg('media.player.stop')} onPress={() => void store.audio.stop()} size={36} testID="mini-stop" iconSize={14} /> : null}
@@ -359,7 +359,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
         </View>
       </View>
       <Scrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={s => store.audio.seek(s)} chapters={book ? audio.chapters : []} />
-      {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : msg('media.player.failed')}</Text></Arrive> : null}
+      {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : audio.unreleased ? audio.error : msg('media.player.failed')}</Text></Arrive> : null}
       <View style={{ zIndex: 3 }}>
         <Guide {...guided} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           {book
@@ -367,10 +367,10 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
             : <RoundButton icon="shuffle" label={msg('media.player.shuffle')} onPress={() => store.audio.toggleShuffle()} active={audio.queue.shuffle} testID="now-playing-shuffle" />}
           {book ? <RoundButton icon="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={54} testID="now-playing-back15" />
             : <RoundButton icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} size={54} testID="now-playing-previous" iconSize={22} />}
-          <PlayButton playing={playing} size={76} onPress={() => store.audio.toggle()}
+          {audio.unreleased ? <View style={{ width: 76 }} /> : <PlayButton playing={playing} size={76} onPress={() => store.audio.toggle()}
             testID={NOW_PLAYING_PLAY} nativeID={NOW_PLAYING_PLAY} preferred={preferPlay}
             focusRef={playRef} onLayout={Platform.isTV ? () => setLaidOut(true) : undefined}
-            onFocus={Platform.isTV && open ? () => setEntered(true) : undefined} />
+            onFocus={Platform.isTV && open ? () => setEntered(true) : undefined} />}
           {book ? <RoundButton icon="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={54} testID="now-playing-forward30" />
             : <RoundButton icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} size={54} testID="now-playing-next" iconSize={22} />}
           {book

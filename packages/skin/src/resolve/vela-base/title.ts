@@ -573,7 +573,7 @@ export const episodeRow: Node = {
         },
         {
           type: 'text',
-          text: '{card.facts}',
+          text: '{episode.facts}',
           style: { color: '$ui.inkQuiet', 'font-size': '12px', 'font-variant-numeric': 'tabular-nums' },
         },
         {
@@ -592,7 +592,7 @@ export const episodeRow: Node = {
     },
     {
       type: 'box',
-      when: [{ test: 'env.small', not: true }],
+      when: [{ test: 'env.small', not: true }, { test: 'episode.unreleased', not: true }],
       press: { action: 'play', arg: '{card.id}' },
       label: '{episode.playLabel}',
       style: {

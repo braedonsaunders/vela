@@ -35,6 +35,7 @@ export type { EpisodeRef } from './adapter/series';
 export { coldVersion, hasColdVersion, withSessionVersions, type SessionVersions } from './store/session-versions';
 export { playingRelease, withPlaying } from './store/playing-release';
 export { commandOrigin, type CommandOrigin } from './store/command-failure';
+export { isUnreleased, releaseLabel, unreleasedMessage } from './release-date';
 export { startRefusal, startRetry, type StartRefusal } from './store/start-retry';
 export type { VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse, HistoryRecapPeriod, PlaylistImportFormat, ImportSource, PlaylistImportUnmatched } from './wire';
 export type { LiveState, LiveTvAccess } from './store/live';

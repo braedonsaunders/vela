@@ -92,6 +92,20 @@ describe('media kinds', () => {
     expect(titlesOf(await get(`/people/${person}/titles?libraryId=books`)).every(title => title.media?.class === 'book')).toBe(true);
   });
 
+  test('unreleased albums and tracks expose their dates and refuse playback permanently', async () => {
+    const albumId = 'album-unreleased-signals';
+    expect((await get<V.TitleDetail>(`/titles/${albumId}`)).title.airDate).toBe('2099-12-11');
+    const tracks = (await get<V.ChildrenPage>(`/titles/${albumId}/children`)).items;
+    expect(tracks.map(track => track.airDate)).toEqual(['2099-12-11', '2099-12-11']);
+    for (const titleId of [albumId, ...tracks.map(track => track.id)]) {
+      const response = await post('/playback', { titleId, client, idempotencyKey: key() });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { class: 'source', code: 'title_unreleased', message: 'title unreleased', retry: { allowed: false } },
+      });
+    }
+  });
+
   test("a client that does not declare the original's codec gets Ether's live transcode, not the file", async () => {
     const aacOnly = { ...client, containers: ['mp4'], audioCodecs: ['aac', 'ac3', 'eac3'] };
     const transcoded = await (await post('/playback', { titleId: 'track-paper-boats-1-06', client: aacOnly, idempotencyKey: key() })).json() as V.PlaybackPlan;

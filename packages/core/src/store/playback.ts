@@ -32,7 +32,7 @@ import type { VelaState } from './index';
 
 export type PlaybackTarget =
   /** `audio`: the app's audio engine plays it (music, audiobooks, podcasts), so the request declares what that engine plays. */
-  | { kind: 'title'; id: string; showId?: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext; audio?: true;
+  | { kind: 'title'; id: string; showId?: string; airDate?: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext; audio?: true;
     /** The title's media class when the caller knows it (the audio queue does): a class that never
      * enters Continue (music) is not followed by a read of Home's progress shelves. Not sent. */
     media?: V.MediaClass }
@@ -452,7 +452,8 @@ export class Playback {
     if (this.recovering && this.established && !finalRefusal(error) && !serverRefused(error)) { this.scheduleRecovery(intent); return; }
     if (this.recovering) this.established = false;
     this.recovering = false;
-    const refusal = startRefusal(error, 'Playback failed');
+    const target = intent.target;
+    const refusal = startRefusal(error, 'Playback failed', target.kind === 'title' ? target.airDate : undefined);
     const seconds = startRetry(error, attempt);
     this.patch({
       phase: 'failed',

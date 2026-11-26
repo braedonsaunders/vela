@@ -1102,6 +1102,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (body.audioTrackId !== undefined || body.subtitleTrackId != null) fail('policy', 'feature_unavailable', 'Initial track selection is unavailable; use native HLS audio and sidecar subtitles');
     if (!body.client || [body.titleId, body.channelId, body.extraId].filter(Boolean).length !== 1) fail('request', 'invalid_target', 'Exactly one playback target required');
     const mediaTarget = body.titleId ? findMediaTitle(body.titleId) : undefined;
+    if (mediaTarget?.airDate === '2099-12-11') fail('source', 'title_unreleased', 'title unreleased', {}, 409);
     // A video child (a concert) plays through the ordinary video path, whatever its library holds.
     const videoChild = mediaTarget && levelsEnabled && isVideoChild(mediaTarget) ? mediaTarget : undefined;
     const listening = videoChild ? undefined : mediaTarget;

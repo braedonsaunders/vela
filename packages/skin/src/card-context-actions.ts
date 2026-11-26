@@ -1,4 +1,4 @@
-import { msg, type Card, type TitleActions } from '@vela/core';
+import { isUnreleased, msg, type Card, type TitleActions } from '@vela/core';
 import type { Action } from '../../protocol/skin';
 
 export interface CardPress {
@@ -91,7 +91,7 @@ function musicActions(card: Card, primary: CardPress, management: TitleActions |
   const actions: CardContextAction[] = [];
   const audio = (id: string, label: string, op: 'play' | 'next' | 'queue', icon: CardContextAction['icon']): CardContextAction =>
     ({ id, label, icon, group: 'play', command: { kind: 'audio', op } });
-  if (MUSIC_QUEUEABLE.has(role)) {
+  if (MUSIC_QUEUEABLE.has(role) && !isUnreleased(card.airDate)) {
     actions.push(audio('play', msg('cardMenu.play'), 'play', 'play'));
     actions.push(audio('play-next', msg('cardMenu.playNext'), 'next', 'play-next'));
     actions.push(audio('add-queue', msg('cardMenu.addToQueue'), 'queue', 'queue'));
@@ -131,11 +131,11 @@ export function cardContextActions(card: Card, primary: CardPress, management?: 
     if (context.multiview && primary.arg) actions.push(dispatch('multiview', msg('multiview.add'), 'multiview', primary.arg, 'multiview', 'play'));
   } else if (primary.action === 'playExtra') {
     actions.push(dispatch('play', msg('cardMenu.play'), primary.action, primary.arg, 'play', 'play'));
-  } else if (playable) {
+  } else if (playable && !isUnreleased(card.airDate)) {
     const playArg = primary.action === 'play' ? primary.arg : card.id;
     actions.push(dispatch('play', resumable ? resumeLabel(card) : msg('cardMenu.play'), 'play', playArg, 'play', 'play'));
     if (resumable) actions.push(dispatch('restart', msg('ui.restart'), 'play', restartArg(playArg), 'restart', 'play'));
-  } else {
+  } else if (!playable) {
     actions.push(dispatch('open', TITLE_KINDS.has(card.kind) ? msg('cardMenu.openDetails') : msg('cardMenu.open'), primary.action, primary.arg, 'info', 'details'));
   }
 
