@@ -1,3 +1,4 @@
+import type { Downloads } from './downloads';
 // Playback: the plan for a title, extra or channel; following the session while it plays (the
 // server's event stream, or snapshot reads for a server without one); the player's session
 // commands and observations; and stopping. Media credentials never enter state: the trusted host
@@ -26,7 +27,7 @@ import { episodeAfter, type EpisodeRef } from '../adapter/series';
 import { matchSeriesTracks } from '../series-tracks';
 import type { SeriesTracks } from './series-tracks';
 import type { Session } from './session';
-import type { StateBox } from './state';
+import { message, type StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
@@ -193,6 +194,7 @@ export class Playback {
     private readonly watched: (watched: Watched) => void,
     private readonly reconcile: (watched: Watched, media?: V.MediaClass) => void,
     private readonly seriesTracks?: SeriesTracks,
+    private readonly downloads?: Downloads,
   ) {
     this.trickplay.subscribe(() => this.trickplayChanged());
     session.onReset(() => {
@@ -224,6 +226,30 @@ export class Playback {
     this.patch({ ...initialPlayback, phase: 'starting', target });
     await stopping;
     if (this.run !== run) return;
+    if (target.kind === 'title' && !target.audio && this.downloads) {
+      try {
+        const plan = await this.downloads.planFor(target.id, {
+          positionSeconds: target.positionSeconds,
+          versionId: target.versionId,
+          sourceId: target.mediaSourceId,
+        });
+        if (this.run !== run) return;
+        if (plan) {
+          await this.downloads.detailFor(target.id);
+          if (this.run !== run) return;
+          this.cursor = plan.positionSeconds;
+          this.patch({ phase: 'playing', plan, sessionId: plan.sessionId });
+          return;
+        }
+      } catch (error) {
+        if (this.run === run) this.patch({ phase: 'failed', error: message(error, 'Could not open download') });
+        return;
+      }
+    }
+    if (this.box.get().auth?.phase === 'offline') {
+      this.patch({ phase: 'failed', error: 'This title is unavailable offline' });
+      return;
+    }
     await this.request({ run, target, key: `play-${target.kind}-${target.id}-${randomId()}` }, 0, 0);
   }
 
@@ -599,6 +625,10 @@ export class Playback {
   recover(sessionId: string, reason = 'failed'): void {
     const run = this.run;
     const current = this.box.get().playback;
+    if (sessionId.startsWith('local-') && current.sessionId === sessionId) {
+      this.patch({ phase: 'failed', error: 'Could not play this download' });
+      return;
+    }
     // Only an established session is recovered: a start that never reached one (no session id)
     // already ended in its own failed or retrying state.
     if (!run || !this.established || !sessionId || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
@@ -683,6 +713,7 @@ export class Playback {
   };
 
   get subtitleSearchAvailable(): boolean {
+    if (this.box.get().playback.sessionId.startsWith('local-')) return false;
     try { return hasSubtitleSearch(this.session.selected().adapter); } catch { return false; }
   }
 
@@ -743,6 +774,23 @@ export class Playback {
    */
   async command(sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<void> {
     const current = this.box.get().playback;
+    if (sessionId.startsWith('local-')) {
+      const plan = current.sessionId === sessionId ? current.plan : null;
+      if (!plan) return;
+      if (command.kind === 'stop') await this.stop();
+      if (command.kind === 'pause') await this.checkpointDownload()?.catch(() => {});
+      if (command.kind === 'tracks') {
+        const { audioTrackId, subtitleTrackId } = command;
+        this.patch({ plan: {
+          ...plan,
+          revision: plan.revision + 1,
+          ...(plan.audioTracks.some(t => t.id === audioTrackId) ? { selectedAudioTrackId: audioTrackId } : {}),
+          ...(subtitleTrackId === null || plan.subtitleTracks.some(t => t.id === subtitleTrackId) ? { selectedSubtitleTrackId: subtitleTrackId } : {}),
+        } });
+      }
+      // File seeks and pause/resume happen in the native player.
+      return;
+    }
     if (current.sessionId === sessionId && current.error) this.patch({ error: '' });
     // The engine recovering on its own (a path switch, a fallback) is not progress (stall.ts).
     const watch = origin === 'engine' || command.kind === 'prepare-fallback' ? this.stall : undefined;
@@ -824,6 +872,7 @@ export class Playback {
   /** Read the session's authoritative plan again (the player found its grant expired or a reply stale).
    * False when the session is gone (the server ended it, or it cannot be read): the caller starts over. */
   async refresh(sessionId: string): Promise<boolean> {
+    if (sessionId.startsWith('local-')) return this.box.get().playback.sessionId === sessionId;
     try {
       const connection = await this.session.ready();
       const snapshot = await connection.adapter.sessionSnapshot(sessionId);
@@ -850,6 +899,10 @@ export class Playback {
    * reopens in the existing session; an explicit version remains pinned and lets the chrome offer
    * another version at the held position. */
   async originalLost(sessionId: string, positionSeconds: number, failedSourceGeneration?: number): Promise<OriginalLostResult> {
+    if (sessionId.startsWith('local-')) {
+      this.recover(sessionId);
+      return 'superseded';
+    }
     const run = this.run;
     const epoch = this.session.epoch;
     const current = this.box.get().playback;
@@ -915,6 +968,16 @@ export class Playback {
 
   /** The player's progress report. */
   async observe(sessionId: string, observation: V.PlayerObservation): Promise<V.Ack> {
+    if (sessionId.startsWith('local-')) {
+      const { playback } = this.box.get();
+      if (playback.sessionId === sessionId && !observation.error && observation.state !== 'buffering') {
+        const ended = observation.state === 'ended';
+        this.cursor = observation.positionSeconds;
+        this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
+        await this.checkpointDownload(observation.observedAt);
+      }
+      return { accepted: true };
+    }
     const ended = observation.state === 'ended';
     this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
     // Known as in flight at once, so a stop issued right after (an advance, Stop) waits for it.
@@ -1015,14 +1078,33 @@ export class Playback {
     }
   }
 
+  /** Persist the latest local position before the app is suspended or the view closes. */
+  checkpointDownload(observedAt?: string): Promise<void> | undefined {
+    const { sessionId, plan } = this.box.get().playback;
+    if (!sessionId.startsWith('local-') || !plan?.titleId || this.lastPosition?.sessionId !== sessionId) return;
+    return this.downloads?.recordProgress({
+      titleId: plan.titleId,
+      positionSeconds: this.cursor,
+      durationSeconds: plan.durationSeconds,
+      completed: this.lastPosition.ended,
+      observedAt,
+    });
+  }
+
   /** Stop playing: the server releases the session at the plan's generations. */
   async stop(): Promise<void> {
     const { target, phase } = this.box.get().playback;
     const plan = this.box.get().playback.plan ?? this.abandoned;
     const last = plan && this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
+    const checkpoint = this.checkpointDownload()?.catch(() => {});
     this.end();
     this.watch = undefined;
     this.box.update('playback', () => initialPlayback);
+    if (plan?.sessionId.startsWith('local-')) {
+      await checkpoint;
+      void this.downloads?.replayProgress();
+      return;
+    }
     if (plan?.state === 'ended') this.held.delete(plan.sessionId);
     if (!plan || plan.state === 'ended') return;
     await this.finish(plan, target, phase, last, this.reporting);
@@ -1164,7 +1246,7 @@ export class Playback {
    */
   trickplayFrame(sessionId: string, seconds: number): TrickplayFrame | null {
     const { plan } = this.box.get().playback;
-    if (!plan || plan.sessionId !== sessionId || plan.live || plan.channelId) return null;
+    if (!plan || sessionId.startsWith('local-') || plan.sessionId !== sessionId || plan.live || plan.channelId) return null;
     const offer = plan.trickplay ?? this.readTrickplayOffer(sessionId, plan.sourceGeneration);
     if (!offer) return null;
     return this.trickplay.frame(sessionId, plan.sourceGeneration, offer, seconds, async (index, etag, signal) => {

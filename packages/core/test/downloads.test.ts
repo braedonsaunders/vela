@@ -19,6 +19,7 @@ import {
   type DownloadTransferProgress,
   type DownloadTransferRequest,
 } from '../src/store/downloads';
+import { initialPlayback, Playback } from '../src/store/playback';
 import { initialAuth } from '../src/store/auth';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
@@ -274,7 +275,16 @@ describe('Downloads slice isolation, lifecycle & replacement', () => {
       posterUrl: 'https://plex.example:32400/library/metadata/101/thumb/1',
     };
     const resetListeners: ((kind: 'session' | 'server', refused?: boolean) => void)[] = [];
+    const replayed: import('../src/adapter/capabilities').OfflineProgressEntry[] = [];
+    let rejectReplay = false;
+    let serverWatch = sampleTitle().watch;
     const adapter = {
+      detail: async () => ({ title: { ...sampleTitle(), watch: serverWatch } }),
+      replayWatchProgress: async (_id: string, entry: import('../src/adapter/capabilities').OfflineProgressEntry) => {
+        if (rejectReplay) throw new Error('Network is down');
+        replayed.push(entry);
+        return { accepted: true };
+      },
       downloadsAvailable: async () => true,
       resolveDownload: async () => resolution,
     };
@@ -296,6 +306,7 @@ describe('Downloads slice isolation, lifecycle & replacement', () => {
       auth: { ...initialAuth, phase: 'signed-in', serverId: 'srv-plex', viewer: 'Viewer 1', viewerId: 'viewer-1' },
       downloads: { ...initialDownloads },
       titles: {},
+      playback: initialPlayback,
     } as unknown as VelaState);
     const downloads = new Downloads(box, session, { downloads: port } as any);
     return {
@@ -303,6 +314,10 @@ describe('Downloads slice isolation, lifecycle & replacement', () => {
       box,
       downloads,
       resolution,
+      session,
+      replayed,
+      setServerWatch(watch: V.WatchState | undefined) { serverWatch = watch; },
+      failReplay(fail: boolean) { rejectReplay = fail; },
       switchViewer(viewerId: string, serverId = activeServerId) {
         activeServerId = serverId;
         activeViewer = tokens(`token-${viewerId}`, viewerId);
@@ -313,6 +328,49 @@ describe('Downloads slice isolation, lifecycle & replacement', () => {
       },
     };
   }
+
+  test('offline playback opens the original and persists progress without a server session', async () => {
+    const h = createHarness();
+    h.box.update('auth', auth => ({ ...auth, phase: 'offline' }));
+    h.port.snapshot.items = [sampleRecord()];
+    const playback = new Playback(h.box, h.session, () => {}, () => {}, undefined, h.downloads);
+    await playback.start({ kind: 'title', id: '101' });
+    const plan = h.box.get().playback.plan!;
+    expect(plan.paths[0]?.url).toEndWith('/101/media.mkv');
+    expect(plan.positionSeconds).toBe(180);
+    expect(h.box.get().titles['101']?.value?.title[0]?.name).toBe('Heat');
+    await playback.observe(plan.sessionId, {
+      state: 'paused', positionSeconds: 228, observedAt: '2026-03-04T11:13:00.000Z',
+      idempotencyKey: 'observe', sequence: 1, playableRanges: [], selectedPathId: 'original',
+      sourceGeneration: 0, seekGeneration: 0,
+    });
+    await playback.stop();
+    expect(h.port.snapshot.outbox).toMatchObject([{ titleId: '101', positionSeconds: 228, completed: false }]);
+    expect(h.replayed).toEqual([]);
+
+    h.failReplay(true);
+    h.box.update('auth', auth => ({ ...auth, phase: 'signed-in' }));
+    await h.downloads.replayProgress();
+    expect(h.port.snapshot.outbox).toHaveLength(1);
+    h.failReplay(false);
+    await h.downloads.replayProgress();
+    expect(h.replayed).toMatchObject([{ titleId: '101', positionSeconds: 228 }]);
+    expect(h.port.snapshot.outbox).toEqual([]);
+  });
+
+  test('newer server activity wins over an offline checkpoint', async () => {
+    const h = createHarness();
+    h.box.update('auth', auth => ({ ...auth, phase: 'offline' }));
+    h.port.snapshot.items = [sampleRecord()];
+    await h.downloads.hydrate();
+    await h.downloads.recordProgress({ titleId: '101', positionSeconds: 228, observedAt: '2026-03-04T11:13:00.000Z' });
+    h.setServerWatch({ ...sampleTitle().watch!, lastViewedAt: '2026-03-04T11:14:00.000Z', positionSeconds: 405 });
+    h.box.update('auth', auth => ({ ...auth, phase: 'signed-in' }));
+    await h.downloads.replayProgress();
+    expect(h.replayed).toEqual([]);
+    expect(h.port.snapshot.outbox).toEqual([]);
+    expect(h.downloads.item('101')?.title.watch?.positionSeconds).toBe(405);
+  });
 
   test('viewer isolation hides other Plex Home members downloads while counting total disk usage', async () => {
     const h = createHarness();
@@ -404,6 +462,7 @@ describe('Downloads slice isolation, lifecycle & replacement', () => {
         { serverId: 'srv-plex', viewerId: 'viewer-2', titleId: '202', positionSeconds: 400, durationSeconds: 6120, completed: false, observedAt: '2026-03-02T12:00:00.000Z', idempotencyKey: 'k2' },
       ],
     };
+    h.box.update('auth', auth => ({ ...auth, phase: 'offline' }));
     await h.downloads.hydrate();
 
     // A 401 refused session on srv-plex for viewer-1 removes only viewer-1's downloads and outbox:

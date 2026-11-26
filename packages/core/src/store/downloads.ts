@@ -2,7 +2,7 @@
 // index and progress outbox, space admission (any optional cap plus a 2 GB free-space reserve),
 // viewer and server isolation, and the locally built PlaybackPlan for offline playback.
 import type * as V from '../wire';
-import { hasMediaDownloads, type DownloadResolution, type DownloadSidecar, type OfflineProgressEntry } from '../adapter/capabilities';
+import { hasMediaDownloads, hasOfflineProgress, type DownloadResolution, type DownloadSidecar, type OfflineProgressEntry } from '../adapter/capabilities';
 import { detailModel } from '../discovery/models';
 import type { DetailModel } from '../models';
 import { randomId } from '../protocol/id';
@@ -447,8 +447,18 @@ export function allowsOfflineRoute(
   return false;
 }
 
+export function offlineProgressSuperseded(entry: OfflineProgressEntry, watch: V.WatchState | undefined): boolean {
+  if (entry.completed && watch?.played) return true;
+  if (watch?.lastViewedAt) return Date.parse(watch.lastViewedAt) >= Date.parse(entry.observedAt);
+  return !entry.baseline || (watch?.positionSeconds ?? 0) !== entry.baseline.positionSeconds ||
+    (watch?.played ?? false) !== entry.baseline.played;
+}
+
 export class Downloads {
   private readonly port: DownloadsPort | undefined;
+  private writing = Promise.resolve();
+  private replaying: Promise<void> | undefined;
+  private lastAuthPhase: AuthPhase | undefined;
   private hydrating: Promise<void> | undefined;
   private unsubscribePort: (() => void) | undefined;
   /** The last non-empty `(serverId, viewerId)` seen in `auth`, so a refused token can clean up its viewer. */
@@ -463,7 +473,7 @@ export class Downloads {
     if (this.port) {
       this.box.update('downloads', state => ({ ...state, supported: true }));
       this.unsubscribePort = this.port.subscribe?.(event => {
-        void this.applyTransferEvent(event);
+        void this.applyTransferEvent(event).catch(() => {});
       });
     }
     this.box.subscribe(() => this.syncActiveViewer());
@@ -471,7 +481,7 @@ export class Downloads {
       if (refused && this.activeViewer) {
         const { serverId, viewerId } = this.activeViewer;
         this.activeViewer = undefined;
-        void this.removeViewer(serverId, viewerId);
+        void this.removeViewer(serverId, viewerId).catch(() => {});
       } else {
         this.syncVisible();
       }
@@ -484,6 +494,9 @@ export class Downloads {
 
   private syncActiveViewer(): void {
     const { serverId, viewerId, phase } = this.box.get().auth;
+    const enteredOnline = phase === 'signed-in' && this.lastAuthPhase !== phase;
+    this.lastAuthPhase = phase;
+    if (enteredOnline && this.state.outbox.length) void this.replayProgress();
     if (serverId && viewerId && (phase === 'signed-in' || phase === 'offline')) {
       const changed = this.activeViewer?.serverId !== serverId || this.activeViewer?.viewerId !== viewerId;
       this.activeViewer = { serverId, viewerId };
@@ -517,7 +530,8 @@ export class Downloads {
   /** Hydrate the index, outbox and free space from the native downloads host once at startup. */
   hydrate(): Promise<void> {
     if (!this.port) return Promise.resolve();
-    return this.hydrating ??= this.readFromPort().finally(() => {
+    if (this.state.hydrated) return Promise.resolve();
+    return this.hydrating ??= this.readFromPort().then(() => { void this.replayProgress(); }).finally(() => {
       this.hydrating = undefined;
     });
   }
@@ -581,12 +595,19 @@ export class Downloads {
   }
 
   /** Build a local `PlaybackPlan` for `titleId` if it is downloaded for the active viewer. */
-  async planFor(titleId: string, options?: { positionSeconds?: number; sessionId?: string }): Promise<V.PlaybackPlan | null> {
+  async planFor(titleId: string, options?: { positionSeconds?: number; sessionId?: string; versionId?: string; sourceId?: string }): Promise<V.PlaybackPlan | null> {
     if (!this.port) return null;
+    await this.hydrate();
+    const phase = this.box.get().auth.phase;
     const record = this.item(titleId);
-    if (!isPlayableDownload(record)) return null;
+    if ((phase !== 'offline' && phase !== 'signed-in') || !isPlayableDownload(record)) return null;
+    const verified = record.status === 'completed' ? record : record.previousCompleted;
+    if (phase === 'signed-in' && ((options?.versionId && verified?.versionId !== options.versionId) ||
+        (options?.sourceId && verified?.sourceId !== options.sourceId))) return null;
     const base = await this.port.baseDirectoryUrl();
-    return localPlaybackPlan(record, base, options);
+    const current = this.item(titleId);
+    if (!isPlayableDownload(current) || record.serverId !== current.serverId || record.viewerId !== current.viewerId) return null;
+    return localPlaybackPlan(current, base, options);
   }
 
   /** Build a `DetailModel` for `titleId` from the local index, seeding `state.titles[titleId]` when offline. */
@@ -595,7 +616,7 @@ export class Downloads {
     if (!record) return null;
     const base = this.port ? await Promise.resolve(this.port.baseDirectoryUrl()).catch(() => undefined) : undefined;
     const detail = downloadedDetailModel(record, base, artWidth);
-    if (!this.box.get().titles[titleId]?.value) {
+    if (this.item(titleId) === record && !this.box.get().titles[titleId]?.value) {
       this.box.update('titles', titles => ({ ...titles, [titleId]: ready(detail) }));
     }
     return detail;
@@ -877,6 +898,7 @@ export class Downloads {
     const { serverId, viewerId } = this.box.get().auth;
     if (!serverId || !viewerId) return;
     const record = this.item(params.titleId);
+    if (!record || !Number.isFinite(params.positionSeconds)) return;
     const duration = params.durationSeconds ?? record?.title.durationSeconds ?? 0;
     const position = Math.max(0, params.positionSeconds);
     const observedAt = params.observedAt ?? new Date().toISOString();
@@ -884,6 +906,8 @@ export class Downloads {
       entry.serverId === serverId && entry.viewerId === viewerId && entry.titleId === params.titleId);
     // Once a title has reached its natural end offline, never un-watch it in the coalesced outbox entry.
     const completed = (params.completed === true) || (existingOutbox?.completed === true);
+    if (existingOutbox && (Date.parse(existingOutbox.observedAt) > Date.parse(observedAt) ||
+        (existingOutbox.positionSeconds === position && existingOutbox.completed === completed))) return;
     const nextEntry: OfflineProgressEntry = {
       serverId,
       viewerId,
@@ -892,7 +916,7 @@ export class Downloads {
       durationSeconds: duration,
       completed,
       observedAt,
-      idempotencyKey: existingOutbox?.idempotencyKey ?? `offline-watch-${params.titleId}-${randomId()}`,
+      idempotencyKey: `offline-watch-${params.titleId}-${randomId()}`,
       baseline: existingOutbox?.baseline ?? record?.baselineWatch,
     };
     const outbox = [
@@ -920,6 +944,57 @@ export class Downloads {
     await this.commitSnapshot(allItems, outbox);
   }
 
+  /** Replay only entries belonging to the authenticated viewer, retaining failed writes for retry. */
+  replayProgress(): Promise<void> {
+    const { auth, playback } = this.box.get();
+    if (!this.port || auth.phase !== 'signed-in' || !this.state.outbox.length || playback?.sessionId.startsWith('local-')) return Promise.resolve();
+    return this.replaying ??= this.flushProgress().catch(() => {}).finally(() => { this.replaying = undefined; });
+  }
+
+  private async flushProgress(): Promise<void> {
+    const { serverId, viewerId } = this.box.get().auth;
+    const epoch = this.session.epoch;
+    const connection = await this.session.ready();
+    const api = connection.adapter;
+    if (!hasOfflineProgress(api) || connection.record.id !== serverId ||
+        (await this.session.tokens(connection))?.viewer.id !== viewerId) return;
+    const stillOnline = () => {
+      const auth = this.box.get().auth;
+      return this.session.epoch === epoch && auth.phase === 'signed-in' && auth.serverId === serverId && auth.viewerId === viewerId;
+    };
+    await this.writing;
+    for (const entry of this.state.outbox) {
+      if (!stillOnline()) return;
+      if (entry.serverId !== serverId || entry.viewerId !== viewerId) continue;
+      try {
+        const watch = (await api.detail(entry.titleId, true)).title.watch;
+        if (!stillOnline()) return;
+        if (!this.state.outbox.includes(entry)) continue;
+        const skip = offlineProgressSuperseded(entry, watch);
+        if (!skip) await api.replayWatchProgress(entry.titleId, entry);
+        if (!stillOnline()) return;
+        const baseline = skip ? watch : {
+          positionSeconds: entry.completed ? 0 : entry.positionSeconds,
+          played: entry.completed || watch?.played === true,
+          lastViewedAt: entry.observedAt,
+        };
+        const allItems = this.state.allItems.map(item => {
+          if (item.serverId !== serverId || item.viewerId !== viewerId || item.titleId !== entry.titleId) return item;
+          const title = skip && baseline && this.state.outbox.includes(entry)
+            ? { ...item.title, watch: { favorite: false, watchlisted: false, ...item.title.watch, ...baseline } }
+            : item.title;
+          return { ...item, title, baselineWatch: baseline };
+        });
+        const outbox = this.state.outbox.filter(pending => pending !== entry).map(pending =>
+          pending.serverId === serverId && pending.viewerId === viewerId && pending.titleId === entry.titleId
+            ? { ...pending, baseline } : pending);
+        await this.commitSnapshot(allItems, outbox);
+      } catch {
+        if (!stillOnline()) return;
+      }
+    }
+  }
+
   private async upsertRecord(record: DownloadRecord, freeBytes?: number | null, error?: string): Promise<void> {
     const allItems = [
       ...this.state.allItems.filter(item =>
@@ -945,6 +1020,8 @@ export class Downloads {
       ...(freeBytes !== undefined ? { freeBytes } : {}),
       ...(error !== undefined ? { error } : {}),
     }));
-    await this.port?.writeSnapshot({ items: allItems, outbox }).catch(() => {});
+    const write = this.writing.then(() => this.port?.writeSnapshot({ items: allItems, outbox }));
+    this.writing = write.catch(() => {});
+    await write;
   }
 }

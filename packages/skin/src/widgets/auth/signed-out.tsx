@@ -49,11 +49,12 @@ export interface SignedOutProps {
   servers: ServersView;
   serverActions: ServerActions;
   /** A server pack's stage art (image paths), when the server offers one. */
+  onDownloads?(): void;
   art?: { backdrop: string; wordmark: string; name?: string };
 }
 
-export function SignedOut({ host, auth, actions, servers, serverActions, art }: SignedOutProps) {
+export function SignedOut({ host, auth, actions, servers, serverActions, art, onDownloads }: SignedOutProps) {
   return <HostContext.Provider value={host}><Stage branding={art}>
-    <Connect serverId={auth.serverId} servers={servers} actions={serverActions} auth={auth} authActions={actions} brandingName={art?.name} standaloneSignIn />
+    <Connect serverId={auth.serverId} servers={servers} actions={serverActions} auth={auth} authActions={actions} brandingName={art?.name} standaloneSignIn onDownloads={onDownloads} />
   </Stage></HostContext.Provider>;
 }

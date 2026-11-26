@@ -20,6 +20,7 @@ export interface ConnectProps {
   actions: ServerActions;
   serverId?: string;
   onClose?(): void;
+  onDownloads?(): void;
   auth?: SessionAuth;
   authActions?: AuthActions;
   /** Owner-facing identity for the selected server. Its technical record name remains internal. */
@@ -30,7 +31,7 @@ export interface ConnectProps {
   plexLink?: boolean;
 }
 
-export function Connect({ servers, actions, onClose, auth, authActions, serverId = '', brandingName, standaloneSignIn = false, plexLink = false }: ConnectProps) {
+export function Connect({ servers, actions, onClose, onDownloads, auth, authActions, serverId = '', brandingName, standaloneSignIn = false, plexLink = false }: ConnectProps) {
   const layout = useAuthLayout();
   useEffect(() => () => authActions?.cancelPlex(), [authActions]);
   const [flow, send] = useReducer(authFlow, servers.list.length, (count): AuthFlow => serverId
@@ -109,13 +110,13 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
       </ScrollView>
     </> : step.page === 'add' ? <AddressStep servers={[]} busy={busy} probe={url => actions.probe(url)} onAdd={add} onSelect={select} onRemove={id => void run(() => actions.remove(id))} onPlex={() => { send({type: 'plex'}); void run(() => actions.plexStart()); }} error="" />
     : step.page === 'server-plex' ? <PlexStep link={auth?.plex ?? null} busy={busy} starting={busy && !auth?.plex} error={auth?.error ?? ''} onStart={() => void run(() => authActions!.startPlex())} onChoose={() => {}} onChooseProfile={(id, pin) => void run(() => authActions!.choosePlexProfile(id, pin))} onCancel={back} />
+    : step.page === 'signin' && target === auth?.serverId && auth?.phase === 'offline' ? <Reconnecting name={name} auth={auth} busy={busy} onDownloads={onDownloads} onRetry={() => void run(() => authActions?.retry?.() ?? Promise.resolve())} onSignInAgain={authActions?.signInAgain ? () => void run(() => authActions.signInAgain!()) : undefined} />
     : step.page === 'plex' || kind === 'plex' ? <PlexStep link={servers.plex} busy={busy} starting={busy && !servers.plex} error="" onStart={() => void run(() => actions.plexStart())} onChoose={id => void run(async () => { const result = await actions.plexChoose(id); if (!result.error && result.id) { setNote(result.note ?? ''); setAdded({id: result.id, name: 'server', kind: result.note ? 'ether' : 'plex'}); send({type: 'server', serverId: result.id}); } return result; })} onChooseProfile={(id, pin) => void run(() => actions.plexChooseProfile(id, pin))} onCancel={back} />
     : step.page === 'code' ? <View style={{ gap: layout?.gap ?? 18, alignItems: 'center' }}>
       {quick?.code ? <CodeTiles code={quick.code} testID="connect-code" /> : <Waiting>Requesting a code…</Waiting>}
       {quick?.status === 'expired' || quick?.status === 'denied' ? <Alert>{quick.status === 'expired' ? 'Code expired. Go back to request another.' : 'Code rejected. Try again.'}</Alert> : <Waiting>On a signed-in device, open your Ether server console, then Quick Connect.</Waiting>}
       {quick?.expiresLabel ? <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }}>{`Code expires at ${quick.expiresLabel}.`}</Words> : null}
     </View> : auth?.phase === 'starting' || auth?.phase === 'redeeming' ? <Waiting>{auth.phase === 'redeeming' ? `Signing in to ${name}…` : `Connecting to ${name}…`}</Waiting>
-    : auth?.phase === 'offline' ? <Reconnecting name={name} auth={auth} busy={busy} onRetry={() => void run(() => authActions?.retry?.() ?? Promise.resolve())} onSignInAgain={authActions?.signInAgain ? () => void run(() => authActions.signInAgain!()) : undefined} />
     : target === auth?.serverId && auth.plexAvailable && !auth.passwordAvailable && !auth.quickAvailable ? serverPlex
     : <Credentials secondary={serverPlex} busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.landscape || layout?.minimal}
       onSignIn={(username, password) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, password) : actions.jellyfinSignIn(target, username, password))}

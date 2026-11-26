@@ -171,6 +171,7 @@ export function createVela(options: VelaOptions): Vela {
       if (reconcilesHome(media)) void home.reconcile(watched);
     },
     seriesTracks,
+    downloads,
   );
   const appearance = new Appearance(box, session, options.rendererVersion, options.page?.origin);
   const audio = new Audio(box, session, playback);

@@ -34,7 +34,7 @@ import type {
   Versions,
   WebCodeSignIn,
 } from '../capabilities';
-import type { TitleActions } from '../capabilities';
+import type { OfflineProgressEntry, TitleActions } from '../capabilities';
 import type { SubtitleSearch } from '../media-actions';
 import { VelaError } from '../errors';
 import { EtherTransport } from './transport';
@@ -278,6 +278,16 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   setTitleWatch(id: string, request: V.WatchRequest): Promise<V.Ack> {
     return this.http.request<V.Ack>('POST', `/titles/${segment(id)}/watch`, request);
+  }
+
+  replayWatchProgress(id: string, entry: OfflineProgressEntry): Promise<V.Ack> {
+    return this.http.request<V.Ack>('POST', `/titles/${segment(id)}/watch`, {
+      positionSeconds: entry.positionSeconds,
+      observedAt: entry.observedAt,
+      offline: true,
+      idempotencyKey: entry.idempotencyKey,
+      ...(entry.completed ? { played: true } : {}),
+    });
   }
 
   /** The viewer-level server event stream; its first event is the current appearance. */

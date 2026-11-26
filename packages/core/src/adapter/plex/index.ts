@@ -3,7 +3,7 @@ import { deviceLanguages, iso6391, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguag
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { DownloadResolution, DownloadSidecar, LibraryRecommendations, LiveTv, MediaDownloads, PathSwitching, ResolveDownloadOptions, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
+import type { DownloadResolution, DownloadSidecar, LibraryRecommendations, LiveTv, MediaDownloads, OfflineProgressEntry, PathSwitching, ResolveDownloadOptions, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
 import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { fetchTextBounded } from '../../protocol/timeout';
@@ -969,6 +969,21 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     }
     return null;
   }
+  async replayWatchProgress(id: string, entry: OfflineProgressEntry): Promise<V.Ack> {
+    await this.request('/:/timeline', {
+      ratingKey: id,
+      key: `/library/metadata/${id}`,
+      identifier: 'com.plexapp.plugins.library',
+      state: 'stopped',
+      time: Math.round(entry.positionSeconds * 1000),
+      duration: Math.round(entry.durationSeconds * 1000),
+      offline: 1,
+      updated: Math.floor(Date.parse(entry.observedAt) / 1000),
+    }, 'POST');
+    if (entry.completed) await this.setTitleWatch(id, { played: true, idempotencyKey: entry.idempotencyKey });
+    return { accepted: true };
+  }
+
   private async timeline(s: PlexSession, state: string) {
     if (s.plan.channelId) return;
     await this.request('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`, time: Math.round(s.plan.positionSeconds * 1000),
