@@ -41,9 +41,6 @@ export interface HeroFocusCarry<T> {
   turn(direction: -1 | 1, now?: number): void;
   /** Once the redraw is done: the hero button to take the focus that was lost, if any. */
   take(x?: (target: T) => number | undefined, now?: number): T | undefined;
-  /** Whether this is the outer hero action in the given horizontal direction: by where the buttons
-   * stand on screen when `x` gives each one's left edge, else by rank. */
-  atEdge(target: T, direction: -1 | 1, x?: (target: T) => number | undefined): boolean;
 }
 
 export function heroFocusCarry<T>(): HeroFocusCarry<T> {
@@ -107,19 +104,6 @@ export function heroFocusCarry<T>(): HeroFocusCarry<T> {
       }
       return best;
     },
-    atEdge(target, direction, x) {
-      const at = x?.(target);
-      if (at !== undefined) {
-        // Rank is the order focus is handed on in (Play, More info, Restart), not the order the
-        // buttons stand in: Restart stands between Play and More info.
-        return [...buttons.keys()].every(other => {
-          const there = other === target ? undefined : x!(other);
-          return there === undefined || (direction < 0 ? there > at : there < at);
-        });
-      }
-      const ordered = [...buttons].sort((a, b) => a[1] - b[1]);
-      return (direction < 0 ? ordered[0]?.[0] : ordered.at(-1)?.[0]) === target;
-    },
   };
 }
 
@@ -137,19 +121,45 @@ export function androidHeroKeyDirection(event: AndroidHeroKey): -1 | 1 | undefin
   if (event.eventType === 'right') return 1;
 }
 
-
-/** Android navigation uses the native focus search before the key can move focus. */
-export function androidHeroPageDirection(event: AndroidHeroKey): -1 | 1 | undefined {
-  return event.withinHero === false ? androidHeroKeyDirection(event) : undefined;
+export type HeroDirection = -1 | 1;
+export interface HeroInput {
+  direction: HeroDirection;
+  swipe?: true;
 }
 
-/** Replay distinct presses that arrived while a page turn was rendering against the new buttons. */
-export function androidHeroAfterTurn(count: number, edge: -1 | 1, keys: readonly (-1 | 1)[]) {
+/** A directional press pages only if focus cannot move to another hero action. */
+function heroPageDirection(direction: HeroDirection | undefined, withinHero: boolean | undefined) {
+  return withinHero === false ? direction : undefined;
+}
+
+/** Android asks the native focus engine which control the press would reach. */
+export function androidHeroPageDirection(event: AndroidHeroKey) {
+  return heroPageDirection(androidHeroKeyDirection(event), event.withinHero);
+}
+
+/** tvOS recognizes clicks on release and swipes as distinct gestures. */
+export function appleHeroInput(event: { eventType?: string; eventKeyAction?: number }): HeroInput | undefined {
+  if (event.eventType === 'swipeLeft') return { direction: 1, swipe: true };
+  if (event.eventType === 'swipeRight') return { direction: -1, swipe: true };
+  if (event.eventKeyAction !== 1) return;
+  if (event.eventType === 'left') return { direction: -1 };
+  if (event.eventType === 'right') return { direction: 1 };
+}
+
+export function heroHorizontalMove(focus: number, count: number, input: HeroInput) {
+  if (focus < 0 || focus >= count) return { focus };
+  const next = focus + input.direction;
+  const turn = heroPageDirection(input.direction, !input.swipe && next >= 0 && next < count);
+  return turn === undefined ? { focus: next } : { focus, turn };
+}
+
+/** Replay distinct inputs that arrived while a page turn was rendering against the new buttons. */
+export function heroAfterTurn(count: number, edge: HeroDirection, inputs: readonly HeroInput[]) {
   let focus = edge < 0 ? 0 : count - 1;
-  for (const [index, direction] of keys.entries()) {
-    const next = focus + direction;
-    if (next < 0 || next >= count) return { focus, turn: direction, remaining: keys.slice(index + 1) };
-    focus = next;
+  for (const [index, input] of inputs.entries()) {
+    const move = heroHorizontalMove(focus, count, input);
+    if (move.turn !== undefined) return { ...move, remaining: inputs.slice(index + 1) };
+    focus = move.focus;
   }
   return { focus };
 }
