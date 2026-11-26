@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { deflateSync } from 'node:zlib';
 import { decodePng, encodePng, type Image } from '../png';
 import { diffImages, findShift, groupRegions, inMask, maskCoverage, movingMask, needsMaskReview, verdict } from '../diff';
-import { readerHasContent, settledFrames } from '../settle';
+import { captureHasContent, readerHasContent, settledFrames } from '../settle';
 
 /** A w×h image of one colour, with optional filled rectangles drawn on it. */
 function canvas(width: number, height: number, ground: number[], rects: { x: number; y: number; w: number; h: number; c: number[] }[] = []): Image {
@@ -144,12 +144,15 @@ describe('diffImages', () => {
 });
 
 test('reader settling skips a stable opening splash and verifies a third matching frame', async () => {
+  const sleeping = canvas(100, 100, BLACK);
   const splash = canvas(100, 100, WHITE, [{ x: 42, y: 49, w: 16, h: 2, c: BLACK }]);
   const firstPage = canvas(100, 100, WHITE, [{ x: 10, y: 20, w: 60, h: 12, c: BLACK }]);
   const nextPage = canvas(100, 100, WHITE, [{ x: 12, y: 24, w: 60, h: 12, c: BLACK }]);
+  expect(captureHasContent(sleeping)).toBe(false);
+  expect(captureHasContent(firstPage)).toBe(true);
   expect(readerHasContent(splash)).toBe(false);
   expect(readerHasContent(firstPage)).toBe(true);
-  const frames = [splash, splash, splash, firstPage, firstPage, nextPage, nextPage, nextPage].map(encodePng);
+  const frames = [sleeping, sleeping, sleeping, splash, splash, splash, firstPage, firstPage, nextPage, nextPage, nextPage].map(encodePng);
   const capture = await settledFrames(() => frames.shift()!, async () => {}, { reader: true, attempts: frames.length });
   expect(frames).toHaveLength(0);
   expect(capture.primary).toEqual(encodePng(nextPage));

@@ -44,7 +44,7 @@ const read = experience === 'read';
 const phone = platform === 'ios' || platform === 'ios-fold';
 if (read && phone && !values.embedded) throw new Error('Duo Read captures need --embedded and the app with its embedded reader assets');
 if (values.embedded && (!read || platform === 'androidtv' || !values.app)) throw new Error('--embedded requires Read on an Apple simulator and --app');
-const display = values.display ?? (read && platform === 'ios-fold' ? '3' : undefined);
+const display = values.display ?? (read && phone ? platform === 'ios-fold' ? '3' : '1' : undefined);
 
 /** Metro for one start route and listening state; returns a stop function (only its own PID). */
 async function metroFor(route: string, audio: string): Promise<() => void> {
@@ -125,13 +125,13 @@ if (platform === 'androidtv' && !read) {
 } else if (platform !== 'androidtv') {
   simctl('keychain', udid, 'reset');
   if (values.app) { try { simctl('uninstall', udid, APP); } catch {} simctl('install', udid, values.app); }
-  if (platform === 'ios-fold') {
+  if (phone && read) {
+    axe('hinge', 'set', platform === 'ios-fold' ? '180' : '0');
+    simctl('io', udid, 'screenConfig', `--display=${display}`, 'power', 'on');
+    await Bun.sleep(3000);
+  } else if (platform === 'ios-fold') {
     axe('hinge', 'set', '180');
-    if (read) {
-      simctl('io', udid, 'screenConfig', `--display=${display}`, 'power', 'on');
-      await Bun.sleep(3000);
-    }
-  } else if (read && phone) axe('hinge', 'set', '0');
+  }
 }
 
 /** A view on this platform: TV and phone views without web-only steps, and the platform's own list. */
@@ -209,8 +209,14 @@ async function captureRead(): Promise<void> {
         try {
           if (phone && (view.name === 'reader-contents' || view.name === 'reader-appearance')) {
             await settledFrames(take, () => Bun.sleep(700), { reader });
-            axe('tap', '-x', viewport === 'ios-fold' ? '470' : '200', '-y', '310');
-            axe('tap', '--id', view.name === 'reader-contents' ? 'reader-contents' : 'reader-type');
+            const button = view.name === 'reader-contents' ? 'reader-contents' : 'reader-type';
+            try {
+              axe('tap', '--id', button);
+            } catch (error) {
+              if (!String(error).includes('No accessibility element matched')) throw error;
+              axe('tap', '-x', viewport === 'ios-fold' ? '470' : '200', '-y', '310');
+              axe('tap', '--id', button);
+            }
             await Bun.sleep(2000);
           }
           const stable = await settledFrames(take, () => Bun.sleep(reader ? 1700 : 700), { reader });

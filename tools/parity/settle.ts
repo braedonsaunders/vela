@@ -1,5 +1,19 @@
 import { decodePng, type Image } from './png';
 
+/** A sleeping display is a stable solid frame. Look for visible contrast before settling it. */
+export function captureHasContent({ width, height, data }: Image): boolean {
+  const stride = Math.max(1, Math.floor(Math.min(width, height) / 200));
+  let darkest = 255, lightest = 0;
+  for (let y = 0; y < height; y += stride) for (let x = 0; x < width; x += stride) {
+    const i = (y * width + x) * 4;
+    const luminance = (data[i]! + data[i + 1]! + data[i + 2]!) / 3;
+    darkest = Math.min(darkest, luminance);
+    lightest = Math.max(lightest, luminance);
+    if (lightest - darkest >= 30) return true;
+  }
+  return false;
+}
+
 /** The frozen Read fixtures use light paper. The opening title alone puts very little ink in the
  * page interior. Leave out the toolbars and the device edges when checking for rendered content. */
 export function readerHasContent({ width, height, data }: Image): boolean {
@@ -29,17 +43,13 @@ export async function settledFrames(
   let matches = 0;
   for (let attempt = 0; attempt < attempts; attempt++) {
     const current = shoot();
-    let image = reader ? decodePng(current) : undefined;
-    if (image && !readerHasContent(image)) {
+    const image = decodePng(current);
+    if (!captureHasContent(image) || (reader && !readerHasContent(image))) {
       previous = previousImage = undefined;
       matches = 0;
     } else {
-      const same = previous && (Buffer.from(previous).equals(current) || (() => {
-        previousImage ??= decodePng(previous);
-        image ??= decodePng(current);
-        return previousImage.width === image.width && previousImage.height === image.height
-          && Buffer.from(previousImage.data).equals(image.data);
-      })());
+      const same = previousImage && previousImage.width === image.width && previousImage.height === image.height
+        && Buffer.from(previousImage.data).equals(image.data);
       matches = same ? matches + 1 : 0;
       if (matches >= 2) return { primary: current, confirmed: previous! };
       previous = current;
