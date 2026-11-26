@@ -151,7 +151,8 @@ export function snapshotHost(context: HostContext): Snapshot {
       context.session.current?.live || (context.media.runtime && !context.media.runtime.setSpeed)
         ? []
         : [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
-    pendingSubtitleTrackId: context.tracks.pendingTracks?.subtitle ?? context.tracks.overlay?.pending ?? null,
+    pendingSubtitleTrackId: context.tracks.pendingTracks?.subtitle ?? context.tracks.overlay?.pending ??
+      (subtitleId === null ? context.tracks.subtitle : null),
     chapters: context.session.current?.chapters ?? [],
     subtitleError: context.tracks.overlay?.error ?? null,
     subtitleStyle: context.tracks.subtitleStyle,

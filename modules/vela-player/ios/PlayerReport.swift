@@ -110,10 +110,13 @@ final class PlayerReport {
 
     /// A newer plan: the server's track choices, unless the viewer made their own on the device.
     func adopt(_ plan: VelaPlan, newSession: Bool) {
+        let versionChanged = self.plan?.selectedVersionId != plan.selectedVersionId
         self.plan = plan
-        if newSession {
+        if newSession || versionChanged {
             audioClientOnly = false
             subtitleClientOnly = false
+        }
+        if newSession {
             sequence = 0
             liveBehind = false
         }

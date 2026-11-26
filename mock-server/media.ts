@@ -79,6 +79,11 @@ export async function serveMedia(req: Request, resource: string, truncateOrigina
   }
   if (req.headers.has('range') && rangeFailureSetting > 0 && Date.now() < rangeFailureUntil)
     return new Response('Injected temporary range failure', { status: 503 });
+  if (resource === 'version-subtitles.vtt') {
+    return new Response(req.method === 'HEAD' ? null : 'WEBVTT\n\n00:00:00.000 --> 00:03:00.000\nVela cached edition subtitle.\n', {
+      headers: { 'Content-Type': 'text/vtt', 'Cache-Control': 'no-store' },
+    });
+  }
   if (resource.startsWith('audio/')) return serveAudioFixture(req, resource.slice(6));
   const original = /^original\/(.+)$/.exec(resource)?.[1];
   if (original !== undefined && !originalFixtureName.test(original)) return new Response('Not found', { status: 404 });

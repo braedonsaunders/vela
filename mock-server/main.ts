@@ -1232,8 +1232,13 @@ async function dispatch(req: Request): Promise<Response> {
       return json(originalFixture);
     }
     if (url.pathname === '/__admin/sidecar') {
-      if (req.method === 'POST') { const data = await req.json(); if (typeof data.enabled === 'boolean') sidecarFixture.enabled = data.enabled;
-        if (typeof data.selected === 'boolean') sidecarFixture.selected = data.selected; if (typeof data.pathId === 'string') sidecarFixture.pathId = data.pathId; }
+      if (req.method === 'POST') {
+        const data = await req.json();
+        if (typeof data.enabled === 'boolean') sidecarFixture.enabled = data.enabled;
+        if (typeof data.selected === 'boolean') sidecarFixture.selected = data.selected;
+        if (typeof data.pathId === 'string') sidecarFixture.pathId = data.pathId;
+        if (typeof data.versionSwitch === 'boolean') sidecarFixture.versionSwitch = data.versionSwitch;
+      }
       return json(sidecarFixture);
     }
     // A mid-stream failover (Ether W380): each open session with versions moves to its next playable
