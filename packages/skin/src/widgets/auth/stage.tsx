@@ -11,6 +11,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, Text } fr
 import Animated from 'react-native-reanimated';
 import { useHost } from '../../host';
 import type { Css } from '../../translate';
+import { luminance } from '../../screen/colour';
 import { useLook } from '../common/look';
 
 const AURORAS: { motion: string; rows: Css }[] = [
@@ -76,7 +77,7 @@ export function Stage({ children, branding }: { children: ReactNode; branding?: 
     return () => viewport.removeEventListener('resize', resize);
   }, []);
   const layout = authLayout(host.viewport, availableHeight, Platform.isTV, Platform.OS !== 'web' || (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches));
-  const mark = host.image(branding?.wordmark || 'assets/brand/vela-stacked.svg');
+  const mark = host.image(branding?.wordmark || (luminance(look.ui.page) > 0.5 ? 'assets/brand/vela-stacked-paper.svg' : 'assets/brand/vela-stacked.svg'));
   const card = look.layer(CARD);
   return (
     <KeyboardAvoidingView
@@ -123,7 +124,7 @@ export function Stage({ children, branding }: { children: ReactNode; branding?: 
         keyboardShouldPersistTaps="handled"
       >
         {branding?.name && !branding.wordmark ? <Text style={{color: look.ui.ink, fontSize: 28, fontWeight: '700'}}>{branding.name}</Text> : mark && layout.logoHeight ? <Image source={mark} contentFit="contain" style={{ width: branding?.wordmark ? 220 : layout.logoHeight * 60 / 104, height: layout.logoHeight }} accessibilityElementsHidden /> : null}
-        <Animated.View testID="auth-card" style={[card.style, { maxHeight: !layout.compact || availableHeight < host.viewport.height - 100 ? undefined : layout.cardHeight, flexShrink: 1 }, layout.tight && { padding: layout.padding }, layout.compact && { maxWidth: '100%', width: '100%' }, look.motion('velaEnter0')]}>
+        <Animated.View testID="auth-card" style={[card.style, { maxHeight: !layout.compact || availableHeight < host.viewport.height - 100 ? undefined : layout.cardHeight }, layout.tight && { padding: layout.padding }, layout.compact && { maxWidth: '100%', width: '100%' }, look.motion('velaEnter0')]}>
           {card.blur && Platform.OS !== 'web' ? (
             <BlurView
               intensity={Math.min(100, Math.round(card.blur * 2.5))}

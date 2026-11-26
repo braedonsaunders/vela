@@ -99,13 +99,13 @@ jobs:
         working-directory: mock-server
 
       - name: Install pinned browsers
-        run: npx --no-install @e2e-dev/web install chromium webkit --with-deps
+        run: npx --no-install e2e-web install chromium webkit --with-deps
 
       - name: Export Vela web
         env:
           # Deterministic suites use browser-native mock media. The proxy serves this test-only
           # payload identity's empty capability declaration; release payloads are built elsewhere.
-          EXPO_PUBLIC_VELA_PLAYER_ASSETS: 0000000000000000000000000000000000000000000000000000000000000000
+          EXPO_PUBLIC_VELA_PLAYER_ASSETS: '0000000000000000000000000000000000000000000000000000000000000000'
         run: bun run export:web
         working-directory: apps/vela
 

@@ -119,6 +119,8 @@ export function listenPath(view: ListenView): string {
 export const LISTEN_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [
   { viewports: /^tvos$/, views: ['now-playing', 'now-playing-lyrics', 'now-playing-sound'],
     reason: 'Apple TV first focus: the document focuses Play (Now Playing\'s declared preferred TV focus); legacy\'s focus on Close was a timing accident of the dock\'s focus trap (lead decision)' },
+  { viewports: /^ios-fold$/, views: ['rewind'],
+    reason: "The only difference is the iPhone Duo's system status-bar clock (the simulator's own time); a rerun leaving the clock out passes (G1's clock diagnostic)" },
 ];
 
 export function listenReviewed(view: { name: string; review?: string }, viewport: string): string | undefined {

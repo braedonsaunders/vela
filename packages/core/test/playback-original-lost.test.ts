@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, jest, mock, test } from 'bun:test';
 import { Playback, initialPlayback } from '../src/store/playback';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
@@ -15,11 +15,11 @@ const plan = (generation: number, extra: Partial<PlaybackPlan> = {}) => ({
   ...extra,
 } as unknown as PlaybackPlan);
 
-function harness(next: PlaybackPlan) {
+function harness(next: PlaybackPlan, readPlan = async (_id: string) => next) {
   let current = plan(1);
   const adapter = {
-    startPlayback: async () => current,
-    sessionSnapshot: async () => ({ plan: next }),
+    startPlayback: mock(async () => current),
+    sessionSnapshot: async (id: string) => ({ plan: await readPlan(id) }),
     reportObservation: async () => ({ accepted: true }),
     command: async () => current,
   };
@@ -27,7 +27,7 @@ function harness(next: PlaybackPlan) {
     negotiate: async () => {}, key: () => 'key', client: {} };
   const box = new StateBox({ playback: initialPlayback } as VelaState);
   const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
-  return { box, playback, start: async () => { await playback.start({ kind: 'title', id: 'film' }); current = next; } };
+  return { box, playback, adapter, start: async () => { await playback.start({ kind: 'title', id: 'film' }); current = next; } };
 }
 
 test('original loss reopens the newer source generation at the plan position', async () => {
@@ -49,4 +49,44 @@ test('a pinned lost original holds position and offers versions without ending',
   expect(h.box.get().playback.plan?.sourceFailure).toBe('version_unavailable');
   expect(h.box.get().playback.phase).toBe('playing');
   await h.playback.stop();
+});
+
+test('an original-loss read cannot reopen a session while its replacement is preparing', async () => {
+  const reading = Promise.withResolvers<void>();
+  const stale = Promise.withResolvers<PlaybackPlan>();
+  const replacement = plan(1, { sessionId: 'replacement' });
+  let reads = 0;
+  const h = harness(replacement, async id => {
+    if (id === 'replacement') return replacement;
+    if (++reads === 1) return plan(1);
+    reading.resolve();
+    return stale.promise;
+  });
+  jest.useFakeTimers();
+  try {
+    await h.start();
+    const lost = h.playback.originalLost('watch', 46.5, 1);
+    await reading.promise;
+    h.playback.recover('watch');
+    expect(h.box.get().playback.phase).toBe('preparing');
+
+    stale.resolve(plan(2));
+    const result = await lost;
+    expect(h.box.get().playback).toMatchObject({ phase: 'preparing', sessionId: 'watch', plan: null });
+    expect(result).toBe('superseded');
+
+    h.playback.recover('watch');
+    const playing = Promise.withResolvers<void>();
+    const unsubscribe = h.box.subscribe(() => {
+      if (h.box.get().playback.sessionId === 'replacement') playing.resolve();
+    });
+    jest.advanceTimersByTime(10_000);
+    await playing.promise;
+    unsubscribe();
+    expect(h.box.get().playback).toMatchObject({ phase: 'playing', sessionId: 'replacement' });
+    expect(h.adapter.startPlayback).toHaveBeenCalledTimes(2);
+  } finally {
+    await h.playback.stop();
+    jest.useRealTimers();
+  }
 });

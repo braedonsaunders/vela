@@ -1278,13 +1278,17 @@ async function dispatch(req: Request): Promise<Response> {
       return vtt ? new Response(vtt, { headers: { 'Content-Type': 'text/vtt; charset=utf-8', 'Cache-Control': 'private, no-store' } }) : new Response('Not found', { status: 404 });
     }
     const selected = s.plan.paths.find(path => path.id === s.plan.selectedPathId);
-    const originalRange = req.method === 'GET' && req.headers.has('range') && selected?.original === true && selected.url?.endsWith(`/${media[3]}`);
-    if (originalRange && faults.originalLost409 > 0) {
-      faults.originalLost409--;
-      originalLost(s, faults.originalLostVersionUnavailable);
+    const originalRead = req.method === 'GET' && selected?.original === true && selected.url?.endsWith(`/${media[3]}`);
+    if (originalRead && (s.plan.sourceFailure === 'version_unavailable' || faults.originalLost409 > 0)) {
+      // Some native browser media loaders reopen an original with a full GET.
+      // A follow-up range probe must still see the pinned original as unavailable.
+      if (s.plan.sourceFailure !== 'version_unavailable') {
+        faults.originalLost409--;
+        originalLost(s, faults.originalLostVersionUnavailable);
+      }
       return new Response('Original file is gone', { status: 409, headers: { 'X-Ether-Playback-Error': 'original_lost', 'Cache-Control': 'no-store' } });
     }
-    const truncateOriginal = originalRange && faults.originalLostTruncate > 0;
+    const truncateOriginal = originalRead && req.headers.has('range') && faults.originalLostTruncate > 0;
     if (truncateOriginal) {
       faults.originalLostTruncate--;
       originalLost(s, faults.originalLostVersionUnavailable);
@@ -1345,7 +1349,7 @@ const server = Bun.serve({ hostname: process.env.VELA_MOCK_HOST ?? '127.0.0.1', 
   if (req.method !== 'OPTIONS' && new URL(req.url).pathname.startsWith('/vela/v0/') && !new URL(req.url).pathname.includes('/artwork/') && Number.isFinite(delay) && delay > 0) await Bun.sleep(Math.min(delay, 30000));
   let response: Response;
   try { response = await dispatch(req); } catch (e) { if (e instanceof Response) response = e; else { console.error(e); response = Response.json({ error: { class: 'transient', code: 'internal', message: 'Internal mock error', retry: { allowed: false } } }, { status: 500 }); } }
-  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, X-Vela-Screen-Renderer, X-Vela-Language, X-Vela-Screen-Preview, Idempotency-Key, If-None-Match, Last-Event-ID, Range'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length, X-Ether-Live-Media-Sequence, X-Ether-Live-Window-Start'); return response;
+  response.headers.set('Access-Control-Allow-Origin', origin); response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Vela-Device-Id, X-Vela-Screen-Renderer, X-Vela-Language, X-Vela-Screen-Preview, Idempotency-Key, If-None-Match, Last-Event-ID, Range, Cache-Control, Pragma'); response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'); response.headers.set('Access-Control-Expose-Headers', 'ETag, Retry-After, Content-Range, Content-Length, X-Ether-Live-Media-Sequence, X-Ether-Live-Window-Start'); return response;
 } });
 console.log(`Vela mock: ${server.url} — demo / vela`);
 

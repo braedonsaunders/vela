@@ -1,5 +1,14 @@
-import { expect } from 'e2e';
-import { describe, test } from '@e2e-dev/web';
+import { expect, type Locator } from 'e2e';
+import { describe, test, type Browser } from '@e2e-dev/web';
+
+async function revealRowLink(browser: Browser, link: Locator) {
+  await browser.mouse.move(720, 700);
+  await expect.poll(async () => {
+    if (await link.isVisible()) return true;
+    await browser.mouse.wheel(0, 1_600);
+    return false;
+  }, { timeout: 30_000 }).toBe(true);
+}
 
 describe('See all deterministic release gate', { session: 'mock-see-all' }, () => {
   test('a 409 row id recovers after one stale cached bootstrap', async ({ app, browser, screen }) => {
@@ -21,15 +30,7 @@ describe('See all deterministic release gate', { session: 'mock-see-all' }, () =
 
     await expect(screen.getByRole('link', 'Home')).toBeVisible({ timeout: 30_000 });
     const oldLink = screen.getByRole('link', /^See all /).first();
-    for (let page = 0; page < 6 && !await oldLink.isVisible(); page++) {
-      await browser.evaluate(() => {
-        for (const element of [document.scrollingElement, ...document.querySelectorAll<HTMLElement>('*')]) {
-          if (element && element.scrollHeight > element.clientHeight) element.scrollTop = element.scrollHeight;
-        }
-        return null;
-      });
-      await browser.evaluate(() => new Promise<null>(resolve => setTimeout(() => resolve(null), 500)));
-    }
+    await revealRowLink(browser, oldLink);
     await expect(oldLink).toBeVisible({ timeout: 30_000 });
     const oldHref = await oldLink.getAttribute('href');
     const label = await oldLink.getAttribute('aria-label');
@@ -51,32 +52,18 @@ describe('See all deterministic release gate', { session: 'mock-see-all' }, () =
     await screen.getByTestId('detail-close').tap();
     await expect(screen.getByTestId('nav-Home')).toBeVisible({ timeout: 30_000 });
     const recoveredLink = screen.getByRole('link', label!).first();
-    for (let page = 0; page < 6 && !await recoveredLink.isVisible(); page++) {
-      await browser.evaluate(() => {
-        for (const element of [document.scrollingElement, ...document.querySelectorAll<HTMLElement>('*')]) {
-          if (element && element.scrollHeight > element.clientHeight) element.scrollTop = element.scrollHeight;
-        }
-        return null;
-      });
-      await browser.evaluate(() => new Promise<null>(resolve => setTimeout(() => resolve(null), 500)));
-    }
+    await revealRowLink(browser, recoveredLink);
     await expect(recoveredLink).toHaveAttribute('href', oldHref!);
     await recoveredLink.tap();
     await expect(screen.getByRole('heading', label!.slice('See all '.length))).toBeVisible({ timeout: 45_000 });
     await expect(screen.getByRole('link', /^Open /).first()).toBeVisible();
-    for (let page = 0; page < 8 && rowConflicts === 0; page++) {
-      await browser.evaluate(() => {
-        for (const element of [document.scrollingElement, ...document.querySelectorAll<HTMLElement>('*')]) {
-          if (!element || element.scrollHeight <= element.clientHeight) continue;
-          element.scrollTop = element.scrollHeight;
-          element.dispatchEvent(new Event('scroll', { bubbles: true }));
-        }
-        return null;
-      });
-      await browser.evaluate(() => new Promise<null>(resolve => setTimeout(() => resolve(null), 500)));
-    }
-    expect(rowConflicts).toBe(1);
-    expect(await browser.evaluate(async () => (await (await fetch('/__admin/faults')).json() as { bootstrapStaleReads: number }))).toMatchObject({ bootstrapStaleReads: 0 });
+    await browser.mouse.move(720, 700);
+    await expect.poll(async () => {
+      if (rowConflicts === 0) await browser.mouse.wheel(0, 1_600);
+      return rowConflicts;
+    }, { timeout: 30_000 }).toBe(1);
+    await expect.poll(() => browser.evaluate(async () => (await (await fetch('/__admin/faults')).json() as { bootstrapStaleReads: number }).bootstrapStaleReads),
+      { timeout: 30_000 }).toBe(0);
 
     await app.open(watchHref!);
     await screen.getByRole('button', 'Mark unwatched').tap();
