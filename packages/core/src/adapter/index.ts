@@ -32,8 +32,8 @@ export interface ServerAdapter {
   reportObservation(sessionId: string, observation: V.PlayerObservation): Promise<V.Ack>;
   /** Transport control. Track, path and fallback commands are capabilities (`./commands`). */
   command(sessionId: string, command: TransportCommand): Promise<V.PlaybackPlan>;
-  /** The session's authoritative state, read on demand. */
-  sessionSnapshot(sessionId: string): Promise<V.SessionSnapshot>;
+  /** The session's authoritative state, read on demand. `signal` ends the read (an adapter may ignore it). */
+  sessionSnapshot(sessionId: string, signal?: AbortSignal): Promise<V.SessionSnapshot>;
 }
 
 /**

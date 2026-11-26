@@ -21,7 +21,7 @@ export async function followSession(
   onLiveEvent?: (liveEvent: LiveEventRef | null) => void,
   onActivity?: () => void,
 ): Promise<void> {
-  let snapshot: SessionSnapshot = await api.sessionSnapshot(sessionId);
+  let snapshot: SessionSnapshot = await api.sessionSnapshot(sessionId, signal);
   let revision = snapshot.revision;
   signal?.throwIfAborted();
   onPlan(present(withPlaying(snapshot.plan, snapshot)));
@@ -53,7 +53,7 @@ export async function followSession(
         // The server's own answer, carried by the stream it answered (200) on.
         throw new VelaError(value.error, 200);
       default:
-        snapshot = await api.sessionSnapshot(sessionId);
+        snapshot = await api.sessionSnapshot(sessionId, signal);
         break;
     }
     revision = snapshot.revision;

@@ -17,7 +17,7 @@ type Request = (request: number, signal: AbortSignal | undefined, activity: (() 
  * An Ether-like server whose events stream behaves as `connect` says, under a deterministic
  * clock (no wall-clock sleeps). Media keeps playing on the player throughout unless a test says otherwise.
  */
-async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title', id: 'movie' }) {
+async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title', id: 'movie' }, first: Request | null = null) {
   const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout, originalNow = Date.now;
   const timers = new Map<number, { at: number; fire: () => unknown }>();
   let sequence = 0, clock = 1_000_000;
@@ -28,13 +28,20 @@ async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title
   const restore = () => { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; Date.now = originalNow; };
   const starts: unknown[] = [], stops: string[] = [], cursors: string[] = [];
   let snapshotFailure: (() => Error) | null = null, snapshotWait = 0, snapshotHang = false, streamHang = false, connections = 0;
-  let request: Request | null = null;
+  let request: Request | null = first, held: (() => void)[] | null = null, answer: ((id: string) => PlaybackPlan) | null = null;
+  const snapshotSignals: (AbortSignal | undefined)[] = [];
   const plan = (id: string, extra: Partial<PlaybackPlan> = {}) => ({ sessionId: id, state: 'playing', positionSeconds: 0, audioTracks: [], subtitleTracks: [], sourceGeneration: 1, seekGeneration: 1, ...extra } as PlaybackPlan);
   const server: { plan: PlaybackPlan; cursor: number; liveEvent?: LiveEventRef } = { plan: plan('s1'), cursor: 1 };
   const adapter = {
     startPlayback: async (request: unknown) => { starts.push(request); return plan(`s${starts.length}`); },
-    sessionSnapshot: async (id: string) => {
+    sessionSnapshot: async (id: string, signal?: AbortSignal) => {
+      if (id === 's1') snapshotSignals.push(signal);
       if (snapshotHang && id === 's1') return new Promise(() => {});
+      if (held && id === 's1') {
+        // Answered later with what the server held when it was asked.
+        const answer = { plan: server.plan, revision: server.cursor, cursor: String(server.cursor), publishedRanges: [] };
+        return new Promise(resolve => held!.push(() => resolve(answer)));
+      }
       if (snapshotFailure && id === 's1') {
         const failure = snapshotFailure;
         if (snapshotWait) await new Promise(resolve => setTimeout(resolve, snapshotWait));
@@ -56,7 +63,7 @@ async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title
       return connect(async frame => { activity?.(); const { id: at } = frame as { id?: string }; if (!at || Number(at) > Number(cursor)) await emit(frame); }, ++connections, () => activity?.());
     },
     reportObservation: async () => ({}),
-    command: async (id: string, c: { kind: string }) => { if (c.kind === 'stop') stops.push(id); return plan(id); },
+    command: async (id: string, c: { kind: string }) => { if (c.kind === 'stop') stops.push(id); return answer?.(id) ?? plan(id); },
   };
   const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
   const box = new StateBox({ playback: initialPlayback, auth: { phase: 'signed-in' } } as VelaState);
@@ -91,12 +98,15 @@ async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title
   play();
   await settle();
   return {
-    box, playback, media, starts, stops, cursors, server, advance, settle, restore, plan, timers,
+    box, playback, media, starts, stops, cursors, server, advance, settle, restore, plan, timers, snapshotSignals,
     connections: () => connections,
     failSnapshots: (failure: (() => Error) | null, afterMs = 0) => { snapshotFailure = failure; snapshotWait = afterMs; },
     hangSnapshots: (hang: boolean) => { snapshotHang = hang; },
     hangStreams: (hang: boolean) => { streamHang = hang; },
     requests: (take: Request) => { request = take; },
+    /** Snapshot reads wait until `release` answers them, each with the state it was asked in. */
+    holdSnapshots: () => { held = []; return () => { const waiting = held ?? []; held = null; for (const release of waiting) release(); }; },
+    answerCommands: (take: (id: string) => PlaybackPlan) => { answer = take; },
   };
 }
 
@@ -526,4 +536,126 @@ test('an attempt given up on that opens late does not cut short the next one', a
     expect(h.cursors).toHaveLength(6);
     await h.playback.stop();
   } finally { h.restore(); }
+});
+
+test('the very first events request that never answers is given up on and retried, so a paused film is not left waiting', async () => {
+  let first: AbortSignal | undefined;
+  // The first snapshot answers; the first stream request's response headers never come.
+  const h = await harness(async () => { await new Promise(() => {}); }, { kind: 'title', id: 'movie' }, (request, signal) => {
+    if (request !== 1) return undefined;
+    first = signal;
+    return new Promise<void>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }));
+  });
+  try {
+    h.media.paused = true;
+    expect(h.cursors).toHaveLength(1);
+    // Given up 10 s after it started, then followed again after the first 1 s backoff.
+    await h.advance(12_000);
+    expect(first?.aborted).toBe(true);
+    expect(h.cursors).toHaveLength(2);
+    expect(h.box.get().playback.phase).toBe('playing');
+    await h.advance(60_000);
+    expect(h.cursors).toHaveLength(2);
+    expect(h.starts).toHaveLength(1);
+    expect(h.stops).toEqual([]);
+    await h.playback.stop();
+  } finally { h.restore(); }
+});
+
+test('a reconnection snapshot or replayed plan older than a seek accepted meanwhile is not shown over it', async () => {
+  let replay: () => void = () => {}, own: () => void = () => {};
+  const h = await harness(async (emit, attempt) => {
+    if (attempt === 1) return;
+    // Ether replays the plans after the snapshot's cursor: one from before the seek, then the seek's own.
+    await new Promise<void>(resolve => { replay = resolve; });
+    await emit(planFrame(2, { positionSeconds: 100 }));
+    await new Promise<void>(resolve => { own = resolve; });
+    await emit(planFrame(3, { positionSeconds: 1200, seekGeneration: 2 }));
+    await new Promise(() => {});
+  });
+  try {
+    // The stream dropped at once; the reconnection after 1 s reads a snapshot the server answers late, at generation 1.
+    const release = h.holdSnapshots();
+    await h.advance(1500);
+    expect(h.connections()).toBe(1);
+    h.answerCommands(id => h.plan(id, { positionSeconds: 1200, seekGeneration: 2 }));
+    h.server.plan = h.plan('s1', { positionSeconds: 1200, seekGeneration: 2 });
+    await h.playback.command('s1', { kind: 'seek', positionSeconds: 1200, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek' } as never);
+    expect(h.box.get().playback.plan?.seekGeneration).toBe(2);
+    // The old answer arrives; the stream it opens stays quiet.
+    release();
+    await h.settle();
+    expect(h.connections()).toBe(2);
+    expect(h.box.get().playback.plan?.seekGeneration).toBe(2);
+    expect(h.box.get().playback.plan?.positionSeconds).toBe(1200);
+    replay();
+    await h.settle();
+    expect(h.box.get().playback.plan?.seekGeneration).toBe(2);
+    expect(h.box.get().playback.plan?.positionSeconds).toBe(1200);
+    own();
+    await h.settle();
+    expect(h.box.get().playback.plan?.seekGeneration).toBe(2);
+    expect(h.box.get().playback.plan?.positionSeconds).toBe(1200);
+    await h.playback.stop();
+  } finally { h.restore(); }
+});
+
+test('completed reconnection delays leave no abort listeners on the watch', async () => {
+  const listeners = new Map<EventTarget, number>();
+  const add = EventTarget.prototype.addEventListener, remove = EventTarget.prototype.removeEventListener;
+  EventTarget.prototype.addEventListener = function (this: EventTarget, type: string, ...rest: unknown[]) {
+    if (type === 'abort') listeners.set(this, (listeners.get(this) ?? 0) + 1);
+    return (add as (...args: unknown[]) => void).call(this, type, ...rest);
+  } as never;
+  EventTarget.prototype.removeEventListener = function (this: EventTarget, type: string, ...rest: unknown[]) {
+    if (type === 'abort') listeners.set(this, (listeners.get(this) ?? 0) - 1);
+    return (remove as (...args: unknown[]) => void).call(this, type, ...rest);
+  } as never;
+  try {
+    // Four connections end at once; the fifth stays up.
+    const h = await harness(async (_emit, attempt) => { if (attempt === 5) await new Promise(() => {}); });
+    try {
+      await h.advance(12_000);
+      expect(h.connections()).toBe(5);
+      const watch = (h.playback as unknown as { follow: AbortController }).follow.signal;
+      // Only the open connection's own listener is left after the 1, 2, 4 and 4 s delays.
+      expect(listeners.get(watch)).toBe(1);
+      await h.playback.stop();
+    } finally { h.restore(); }
+  } finally {
+    EventTarget.prototype.addEventListener = add;
+    EventTarget.prototype.removeEventListener = remove;
+  }
+});
+
+test('a reconnection snapshot read that never answers is ended with its attempt', async () => {
+  const h = await harness(async () => {});
+  try {
+    h.hangSnapshots(true);
+    // The reconnection after 1 s is given up 10 s later; its snapshot request ends with it.
+    await h.advance(11_500);
+    const reconnect = h.snapshotSignals[1];
+    expect(reconnect).toBeDefined();
+    expect(reconnect?.aborted).toBe(true);
+    await h.playback.stop();
+  } finally { h.restore(); }
+});
+
+test('the Ether session snapshot read is ended by its caller\'s signal', async () => {
+  let request: AbortSignal | undefined, asked = false;
+  globalThis.fetch = Object.assign(async (_input: unknown, init?: RequestInit) => {
+    asked = true;
+    request = init?.signal ?? undefined;
+    return new Promise<Response>((_, reject) => request?.addEventListener('abort', () => reject(request?.reason), { once: true }));
+  }, { preconnect: () => {} }) as typeof fetch;
+  try {
+    const attempt = new AbortController();
+    const api = new EtherAdapter('https://ether.example', new FakeCredentials(), '');
+    const read = (api.sessionSnapshot as (id: string, signal?: AbortSignal) => Promise<unknown>).call(api, 's1', attempt.signal);
+    read.catch(() => {});
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(asked).toBe(true);
+    attempt.abort();
+    expect(request?.aborted).toBe(true);
+  } finally { restoreFetch(); }
 });

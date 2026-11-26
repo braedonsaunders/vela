@@ -125,7 +125,7 @@ const POLL_SECONDS = 5;
  */
 const REFOLLOW_SECONDS = [1, 2, 4, 4, 4];
 const REFOLLOW_HELD_SECONDS = 30;
-/** A reconnection whose snapshot read and stream have not both answered within this many seconds counts as failed. */
+/** A connection whose snapshot read and stream have not both answered within this many seconds counts as failed. */
 const REFOLLOW_OPEN_SECONDS = 10;
 /** A plan offered with placeholder versions is read once more this long after it starts. */
 const COLD_VERSIONS_SECONDS = 4;
@@ -532,6 +532,9 @@ export class Playback {
                 lost = true;
                 throw new Error('Session ended while its events were down');
               }
+              // A snapshot read, or a plan replayed from it, before a command the server has since accepted (a seek)
+              // would roll it back. An end is not held back.
+              if (plan.state !== 'ended' && olderThanShown(plan, this.box.get().playback.plan)) return;
               show(plan);
             };
             const follow = followSession(adapter, present, sessionId, onPlan, attempt.signal, liveEvent => {
@@ -545,12 +548,12 @@ export class Playback {
               connected = Date.now();
               clearTimeout(deadline);
             });
-            // A reconnection whose snapshot read or stream never answers would otherwise leave a paused viewer waiting for ever.
-            const timeout = resumed ? new Promise<never>((_, reject) => {
+            // A connection whose snapshot read or stream never answers, the first one included, would otherwise leave a paused viewer waiting for ever.
+            const timeout = new Promise<never>((_, reject) => {
               deadline = setTimeout(() => reject(new Error('Session events did not answer')), REFOLLOW_OPEN_SECONDS * 1000);
-            }) : undefined;
+            });
             try {
-              await (timeout ? Promise.race([follow, timeout]) : follow);
+              await Promise.race([follow, timeout]);
             } finally {
               clearTimeout(deadline);
               controller.signal.removeEventListener('abort', abort);
@@ -1411,10 +1414,21 @@ function serverAnswered(error: unknown): boolean {
 
 function delay(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => {
+    const abort = () => {
       clearTimeout(timer);
       reject(signal.reason);
-    }, { once: true });
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', abort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', abort, { once: true });
   });
+}
+
+/** Whether `plan` is from an earlier source or seek generation of the session than the one shown. */
+function olderThanShown(plan: V.PlaybackPlan, shown: V.PlaybackPlan | null): boolean {
+  if (!shown || shown.sessionId !== plan.sessionId) return false;
+  return plan.sourceGeneration < shown.sourceGeneration ||
+    (plan.sourceGeneration === shown.sourceGeneration && plan.seekGeneration < shown.seekGeneration);
 }
