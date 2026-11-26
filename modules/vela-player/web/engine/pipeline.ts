@@ -7,7 +7,7 @@ import { parsePlaylist, playlistChanged, type Playlist } from './hls';
 import { cancelled, delay } from './session';
 import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 import { livePlaylistReloadDelayMs } from './core/source/reload';
-import { gapJump, timeRanges } from './gap-jump';
+import { gapJump, liveSeekLanding, timeRanges } from './gap-jump';
 import { fragmentStart, initFacts } from './init-codecs';
 import type { MediaFetch } from './media-auth';
 
@@ -375,11 +375,11 @@ export class SegmentPipeline {
           seekingTo = seek;
           // An already buffered position can move immediately. The same producer then fills
           // the first gap after it, keeping the SourceBuffers and the last presented picture.
-          const buffered = timeRanges(this.video.buffered).find(range => range.start <= seek && seek < range.end);
-          if (buffered) {
-            this.video.currentTime = seek;
+          const landing = liveSeekLanding(seek, timeRanges(this.video.buffered));
+          if (landing) {
+            this.video.currentTime = landing.position;
             seekingTo = null;
-            sequence = list.segments.find(segment => segment.start + segment.duration > buffered.end + 0.05)?.sequence
+            sequence = list.segments.find(segment => segment.start + segment.duration > landing.bufferedEnd + 0.05)?.sequence
               ?? list.segments.at(-1)!.sequence + 1;
           }
         }
@@ -561,8 +561,14 @@ export class SegmentPipeline {
         this.published(list);
       }
       if (seekingTo !== null) {
-        this.video.currentTime = seekingTo;
+        const landing = liveSeekLanding(seekingTo, timeRanges(this.video.buffered));
+        if (!landing) {
+          sequence++;
+          continue;
+        }
+        this.video.currentTime = landing.position;
         seekingTo = null;
+        first = false;
       }
       if (first) {
         this.video.currentTime = live ? Math.max(next.start, position) : position;

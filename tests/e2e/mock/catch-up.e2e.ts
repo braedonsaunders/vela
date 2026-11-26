@@ -13,11 +13,20 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       return { ...flags, programmes };
     });
     const commands: string[] = [];
+    const starts: string[] = [];
+    const seekPositions: number[] = [];
+    const playbackRoute = /\/vela\/v0\/playback$/;
+    await browser.route(playbackRoute, route => {
+      const body = JSON.parse(route.request.postData ?? '{}') as { from?: string };
+      if (body.from) starts.push(body.from);
+      return route.continue();
+    });
     let pausedReports = 0;
     const sessionRoute = /\/vela\/v0\/sessions\/[^/]+\/(commands|observations)$/;
     await browser.route(sessionRoute, route => {
-      const body = JSON.parse(route.request.postData ?? '{}') as { kind?: string; state?: string };
+      const body = JSON.parse(route.request.postData ?? '{}') as { kind?: string; state?: string; positionSeconds?: number };
       if (body.kind) commands.push(body.kind);
+      if (body.kind === 'seek' && body.positionSeconds !== undefined) seekPositions.push(body.positionSeconds);
       if (body.state === 'paused') pausedReports++;
       return route.continue();
     });
@@ -79,6 +88,8 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       const seeks = commands.filter(kind => kind === 'seek').length;
       await screen.getByTestId('player-scrub').press('PageDown');
       await expect.poll(() => commands.filter(kind => kind === 'seek').length).toBe(seeks + 1);
+      const requested = seekPositions.at(-1) ?? NaN;
+      expect(Math.abs(positionBeforeRewind - requested - 60)).toBeLessThan(2);
       await expect(screen.getByTestId('player-live-delay')).toHaveText(/ · -\d+:[0-5]\d$/, { timeout: 35_000 });
       await expect(toggle).toHaveAttribute('aria-label', 'Play');
       await expect(screen.getByTestId('player-live-status')).toHaveText(/^\d+:\d+ behind live$/);
@@ -92,10 +103,10 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       try {
         await expect.poll(async () => {
           const video = await progress();
-          return video.hasFrame && video.paused && !video.seeking && video.rewind > 30;
+          return video.hasFrame && video.paused && !video.seeking && Math.abs(video.position - requested) < 0.5;
         }, { timeout: 15_000 }).toBe(true);
       } catch (error) {
-        console.info('Rewind picture state', { before: positionBeforeRewind, ...(await progress()) });
+        console.info('Rewind picture state', { before: positionBeforeRewind, requested, ...(await progress()) });
         await app.screenshot('paused-live-rewind-diagnostic');
         throw error;
       }
@@ -105,10 +116,20 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       await expect(screen.getByTestId('player-status')).toBeHidden();
       await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });
       expect(commands.filter(kind => kind === 'goLive')).toHaveLength(2);
+
+      const fromPlayer = screen.getByTestId('player-start-over');
+      await expect(fromPlayer).toBeVisible();
+      const previousStarts = starts.length;
+      await fromPlayer.tap();
+      await expect.poll(() => starts.slice(previousStarts)).toEqual(['start']);
+      await waitForVideoReady(browser, screen);
+      await expect(timeline).toHaveText(/Start over/);
+      await expect(goLive).toBeVisible();
     } finally {
       try { await closeWatch(); }
       finally {
         await browser.unroute(sessionRoute);
+        await browser.unroute(playbackRoute);
         await browser.evaluate(async () => {
           await fetch('/__admin/faults', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catchUpFixture: false }),

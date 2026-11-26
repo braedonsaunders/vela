@@ -42,7 +42,7 @@ function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?
 }
 
 export default function Watch() {
-  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId, startAt, durationSeconds } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string; showId?: string; startAt?: string; durationSeconds?: string }>();
+  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId, startAt, durationSeconds, playbackRequest } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string; showId?: string; startAt?: string; durationSeconds?: string; playbackRequest?: string }>();
   const { host, openTitle, store } = useVela();
   const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from, showId, startAt, durationSeconds), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId, startAt, durationSeconds]);
   const live = useLiveContext();
@@ -61,7 +61,7 @@ export default function Watch() {
   // Android's picture-in-picture window keeps the watch on screen while the app is in the background.
   const { width, height } = useWindowDimensions();
   const webPicture = Platform.OS === 'web' && phoneControlLayout(width, height, playerUsesHandheldGeometry(), false).compact;
-  const session = usePlaybackSession(target, owned, pictureInPicture, webPicture);
+  const session = usePlaybackSession(target, owned, pictureInPicture, webPicture, playbackRequest);
   const skin = host('watch', id);
   const sessionId = session.view.plan?.sessionId ?? '';
   const channels = liveView.guide?.channels;

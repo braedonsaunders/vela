@@ -41,7 +41,7 @@ const PICTURE_CHOICE = (Platform.OS === 'ios' || Platform.OS === 'android') && !
 
 /** `shownAway`: whether the player's picture stays on screen while the app is in the background (Android's
  * picture-in-picture window), read as the app leaves the foreground; the watch then goes on. */
-export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner, shownAway?: () => boolean, webPicture = false): PlaybackSession {
+export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner, shownAway?: () => boolean, webPicture = false, playbackRequest?: string): PlaybackSession {
   const pictureChoice = PICTURE_CHOICE || webPicture;
   const vela = useVela();
   const playback = useVelaState(state => state.playback);
@@ -109,7 +109,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     if (!id || external) return;
     begin();
     return () => void vela.playback.stop();
-  }, [vela, id, begin, external]);
+  }, [vela, id, begin, external, playbackRequest]);
 
   // A backgrounded app may be suspended and ended there without running JavaScript (the Apple TV's TV
   // button): the session is stopped as the app leaves the foreground, and started again where it was when
