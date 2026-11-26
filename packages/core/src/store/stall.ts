@@ -19,13 +19,14 @@ export const QUIET_SECONDS = [10, 20, 40] as const;
  * 113 s to play, and a slow start that is still loading must be allowed to finish.
  */
 export const PATIENCE_SECONDS = 180;
-/** Playing on this far (in title seconds) proves the session healthy: its attempts start over. */
-export const PLAYED_SECONDS = 10;
+/** Playing on this far (in media seconds) proves the session healthy: its attempts start over. */
+export const PLAYED_SECONDS = 60;
 
 /** What an engine snapshot says about progress (the player API's Snapshot fields that matter). */
 export interface StallSample {
   state?: string;
   position?: number;
+  seekTarget?: number | null;
   bufferAheadSeconds?: number | null;
   playable?: readonly { start: number; end: number }[] | null;
   throughputBps?: number | null;
@@ -50,6 +51,7 @@ export interface StallPlan {
 interface Marks {
   state: string;
   position: number | undefined;
+  seeking: boolean;
   buffered: number;
   ahead: number;
   throughput: number | null;
@@ -134,6 +136,7 @@ export function heardEngine(watch: StallWatch, sample: StallSample, now: number)
   const marks: Marks = {
     state,
     position: sample.position ?? last?.position,
+    seeking: sample.seekTarget != null,
     buffered: buffered.mark,
     ahead: ahead.mark,
     throughput: sample.throughputBps ?? null,
@@ -150,15 +153,18 @@ export function heardEngine(watch: StallWatch, sample: StallSample, now: number)
   const positionChanged = marks.position !== undefined && last.position !== undefined && Math.abs(marks.position - last.position) > EPSILON;
   // The engine's own path switch or fallback moves the generations, and its new source may start a
   // moment off the old position: neither is a position the viewer asked for, nor progress.
-  if (marks.generations !== last.generations && marks.generations === watch.engineGenerations) return next;
+  if (marks.generations !== last.generations && marks.generations === watch.engineGenerations) return { ...next, playedFrom: null };
   const newIntent = marks.generations !== last.generations;
   // Playing forward: real progress. Any other move (a seek honoured, a new generation) is a new
   // position the viewer asked for, and its own wait starts now.
   const playing = state === 'playing' && last.state === 'playing' && positionChanged && marks.position! > last.position!;
   if (playing) {
-    const from = watch.playedFrom ?? last.position!;
-    if (marks.position! - from >= PLAYED_SECONDS) return { ...next, attempt: 0, heard: now, moved: now, playedFrom: marks.position! };
-    return { ...next, heard: now, moved: now, playedFrom: from };
+    const elapsed = (now - watch.moved) / 1000;
+    // A clock jump can be reported without a new generation. Allow playback-rate and sampling
+    // headroom, but require a series of advancing samples before forgiving a restart.
+    const continuous = !newIntent && !marks.seeking && !last.seeking && elapsed < QUIET_SECONDS[0]
+      && marks.position! - last.position! <= 2 + 4 * elapsed;
+    return { ...next, ...restartBudgetAfterProgress(watch, last.position!, marks.position!, continuous), heard: now, moved: now };
   }
   if (positionChanged || newIntent) return { ...next, heard: now, moved: now, playedFrom: null };
   // An engine that says it is waiting is believed while its buffer grows, bytes keep arriving or
@@ -171,8 +177,19 @@ export function heardEngine(watch: StallWatch, sample: StallSample, now: number)
   // A move between playing and waiting is news; one between waiting states (an engine reconnecting,
   // reloading or re-preparing its source over and over) is not.
   const changedState = state !== last.state && !(WAITING.has(state) && WAITING.has(last.state));
-  if (loading || changedState) return { ...next, heard: now };
+  if (loading || changedState) return { ...next, heard: now, playedFrom: null };
+  if (marks.seeking) return { ...next, playedFrom: null };
   return next;
+}
+
+/** Forgive earlier restarts once this replacement has played a sustained stretch. */
+function restartBudgetAfterProgress(watch: StallWatch, previous: number, position: number, continuous: boolean): Pick<StallWatch, 'attempt' | 'playedFrom'> {
+  if (!watch.attempt || !continuous) {
+    return { attempt: watch.attempt, playedFrom: null };
+  }
+  const playedFrom = watch.playedFrom ?? previous;
+  if (position - playedFrom >= PLAYED_SECONDS) return { attempt: 0, playedFrom: null };
+  return { attempt: watch.attempt, playedFrom };
 }
 
 /** The engine is sending a session command of its own (a recovery path switch, a fallback it

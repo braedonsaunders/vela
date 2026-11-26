@@ -430,6 +430,7 @@ const kindChip = (): BoxNode => {
     ...chip,
     press: { action: 'searchKind', arg: '{opt.id}' },
     style: { ...chip.style, ...controlMotion },
+    children: [{ type: 'text', text: '{opt.label}', style: { 'white-space': 'nowrap' } }],
     focus: searchControlFocus,
     states: chip.states?.map(state => ({ ...state, style: { ...state.style, ...controlMotion }, focus: lift })),
   };
@@ -449,7 +450,7 @@ export const searchControls: Node = {
   style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '10px', ...gutter },
   small: { ...gutterSmall },
   children: [
-    { ...chipGroup('Filter search', [{ type: 'repeat', over: 'search.kinds', item: kindChip() }], [{ test: 'search.kindCount', is: 'gt', value: '0' }]), style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '4px', padding: '4px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', 'max-width': '100%', 'flex-shrink': '1' } },
+    { ...chipGroup('Filter search', [{ type: 'repeat', over: 'search.kinds', item: kindChip() }], [{ test: 'search.kindCount', is: 'gt', value: '0' }]), style: { display: 'flex', 'flex-direction': 'row', 'flex-wrap': 'wrap', gap: '4px', padding: '4px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', 'max-width': '100%', 'flex-shrink': '1' }, small: { 'flex-wrap': 'nowrap', 'overflow-x': 'scroll' } },
     searchSelect([{ test: 'search.libraryCount', is: 'gt', value: '1' }],
       { options: 'search.libraries', action: 'searchLibrary', label: 'Search library', testId: 'search-library' }, { ...glassSelect, 'min-width': '140px', 'max-width': '100%', 'flex-shrink': '1' }),
     searchSelect([{ test: 'search.sortCount', is: 'gt', value: '0' }],

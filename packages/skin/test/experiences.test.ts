@@ -468,3 +468,17 @@ describe('an experience page root\'s content padding', () => {
     expect(sectionsContentPadding(tv, root({}), { ...env, form: 'tv' } as Env, px)).toEqual({ top: undefined, bottom: 48, left: undefined, right: 32 });
   });
 });
+
+test('Read passes the shared library content through both inline slots on each form', () => {
+  const forms = [
+    at(), at({ width: 390, height: 844, platform: 'ios' }),
+    at({ width: 951, height: 669, platform: 'ios', fold: true }),
+    at({ width: 1920, height: 1080, tv: true, platform: 'tv' }),
+  ];
+  for (const viewport of forms) for (const name of ['shell', 'home']) {
+    const doc = builtinDocument(builtinHref('read', name));
+    expect(doc).toBeDefined();
+    const { tree } = resolveScreenDocument(doc!, viewport);
+    expect(tree).toMatchObject({ kind: 'slot', slot: 'children', base: { style: { flex: '1' } } });
+  }
+});

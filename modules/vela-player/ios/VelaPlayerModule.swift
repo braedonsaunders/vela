@@ -13,6 +13,10 @@ public final class VelaDownloadsAppDelegateSubscriber: ExpoAppDelegateSubscriber
         OfflineDownloads.shared.handleEventsForBackgroundURLSession(identifier: identifier, completionHandler: completionHandler)
     }
 }
+#else
+// expo-module.config.json registers this subscriber for every Apple platform; tvOS has no
+// offline downloads, so it subscribes to nothing there.
+public final class VelaDownloadsAppDelegateSubscriber: ExpoAppDelegateSubscriber {}
 #endif
 
 // Opt-in UI timing for device benchmarks. No display link exists in normal builds.

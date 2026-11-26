@@ -25,6 +25,8 @@ export interface ExperienceViewProps {
   host: SkinHost;
   active: boolean;
   actions: ScreenAppActions;
+  /** Inline experience over content whose hosting route already supplies the header and scroll. */
+  content?: ReactNode;
   /** Drawn when the experience has no shell (or the page none and no home): the app's fallback. */
   missing?: ReactNode;
   /** The shell document's local state for app code: `shell.current?.toggle('queue', { clear: ['sound'] })`. */
@@ -39,7 +41,7 @@ export function drawnPlace(experience: string, place: ExperiencePlace): Experien
   return builtinDocument(builtinHref(experience, place.page)) ? place : HOME_PLACE;
 }
 
-export function ExperienceView({ experience, libraryId, place: asked, go, host, active, actions, missing = null, shell }: ExperienceViewProps) {
+export function ExperienceView({ experience, libraryId, place: asked, go, host, active, actions, content, missing = null, shell }: ExperienceViewProps) {
   const screen = builtinScreenId(experience);
   const place = drawnPlace(experience, asked);
   const key = placeKey(place);
@@ -60,8 +62,10 @@ export function ExperienceView({ experience, libraryId, place: asked, go, host, 
   const pageParams = useMemo(() => ({ ...place.params, library: libraryId }), [key, libraryId]);
   const shellTarget = useMemo(() => ({ kind: 'screen' as const, id: screen, page: 'shell' }), [screen]);
   const pageTarget = useMemo(() => ({ kind: 'screen' as const, id: screen, page: place.page }), [screen, place.page]);
+  const inline = content !== undefined;
+  const pageHost = useMemo(() => inline ? { ...host, children: content } : host, [content, host, inline]);
   const page = (
-    <ScreenView key={key} target={pageTarget} href={builtinHref(experience, place.page)} params={pageParams} host={host} active={active}
+    <ScreenView key={key} target={pageTarget} href={builtinHref(experience, place.page)} params={pageParams} host={pageHost} active={active} route={!inline}
       actions={pageActions} scrollKey={`${experience}:${libraryId}:${key}`} />
   );
   // The shell draws the page where its document puts the `children` slot.
@@ -71,9 +75,11 @@ export function ExperienceView({ experience, libraryId, place: asked, go, host, 
   const m = useMediaLook();
   const inset = host.doc.document.traits?.headerInset ?? headerInsetOf(host.doc.document.slots?.shell);
   if (!hasExperience(experience)) return <>{missing}</>;
+  const shellView = <ScreenView target={shellTarget} href={builtinHref(experience, 'shell')} params={shellParams} host={shellHost} active={active} actions={pageActions} route={false} handle={shell} />;
+  if (inline) return shellView;
   return (
     <View pointerEvents="box-none" style={[{ flex: 1 }, m.box({ 'padding-top': m.small ? inset.small : inset.wide })]} testID="experience-shell">
-      <ScreenView target={shellTarget} href={builtinHref(experience, 'shell')} params={shellParams} host={shellHost} active={active} actions={pageActions} route={false} handle={shell} />
+      {shellView}
     </View>
   );
 }

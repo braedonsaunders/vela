@@ -32,6 +32,7 @@ const mock = spawn(bun, ['run', 'mock-server/main.ts'], {
     DEV_ORIGIN: `http://127.0.0.1:${port}`,
     VELA_MOCK_SILENT_MEDIA: '1',
     VELA_MOCK_SPORTS_FREEZE: '1',
+    VELA_MOCK_READ_FREEZE: '1',
     ...(process.env.VELA_MOCK_MEDIA_ROOT ? { VELA_MOCK_MEDIA_ROOT: process.env.VELA_MOCK_MEDIA_ROOT } : {}),
     ...(process.env.VELA_MOCK_MUSIC_ROOT ? { VELA_MOCK_MUSIC_ROOT: process.env.VELA_MOCK_MUSIC_ROOT } : {}),
     ...(process.env.VELA_MOCK_FORMATS_ROOT ? { VELA_MOCK_FORMATS_ROOT: process.env.VELA_MOCK_FORMATS_ROOT } : {}),

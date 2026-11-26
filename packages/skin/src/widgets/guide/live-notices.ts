@@ -21,10 +21,10 @@ const DELIVERY: Partial<Record<LiveSnapshot['delivery'], string>> = {
 
 /** What the viewer should be told about the channel's delivery, most pressing first; empty while
  * it plays normally at its usual distance from the edge. */
-export function liveNotices(live: LiveSnapshot | null): string[] {
+export function liveNotices(live: LiveSnapshot | null, jumpingToLive = false): string[] {
   if (!live) return [];
   const notices: string[] = [];
-  if (live.reconnecting) notices.push(msg('live.reconnecting'));
+  if (live.reconnecting && !jumpingToLive) notices.push(msg('live.reconnecting'));
   const delivery = DELIVERY[live.delivery];
   if (delivery) notices.push(msg(delivery));
   const behind = liveBehind(live);

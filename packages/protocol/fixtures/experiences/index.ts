@@ -16,6 +16,11 @@ import doc_listen_search from './listen/search.json';
 import doc_listen_shell from './listen/shell.json';
 import doc_listen_title from './listen/title.json';
 import doc_listen_visualizer from './listen/visualizer.json';
+import doc_read_book from './read/book.json';
+import doc_read_home from './read/home.json';
+import doc_read_reader from './read/reader.json';
+import doc_read_series from './read/series.json';
+import doc_read_shell from './read/shell.json';
 
 export const BUILTIN_DOCUMENTS: readonly ScreenDocument[] = [
   doc_listen_albums as unknown as ScreenDocument,
@@ -32,4 +37,9 @@ export const BUILTIN_DOCUMENTS: readonly ScreenDocument[] = [
   doc_listen_shell as unknown as ScreenDocument,
   doc_listen_title as unknown as ScreenDocument,
   doc_listen_visualizer as unknown as ScreenDocument,
+  doc_read_book as unknown as ScreenDocument,
+  doc_read_home as unknown as ScreenDocument,
+  doc_read_reader as unknown as ScreenDocument,
+  doc_read_series as unknown as ScreenDocument,
+  doc_read_shell as unknown as ScreenDocument,
 ];

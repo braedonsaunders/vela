@@ -1,7 +1,27 @@
-// The reader's page decisions (widgets/media/reader-layout.ts): where a book opens, its layout at a
+// The reader's page decisions (blocks/read/reader-layout.ts): where a book opens, its layout at a
 // window size, tap zones and the position line.
 import { expect, test } from 'bun:test';
-import { coverSection, isTap, readerLayout, readerPosition, safeFraction, startTarget, swipeTurn, tapZone } from '../src/widgets/media/reader-layout';
+import { coverSection, headingOrphaned, isTap, readerHeadingRules, readerLayout, readerPosition, safeFraction, startTarget, swipeTurn, tapZone } from '../src/blocks/read/reader-layout';
+
+test('paginated EPUB headings keep the following text in both single pages and spreads', () => {
+  const rules = readerHeadingRules('paginated');
+  const [selectors, declarations] = rules.trim().split('{');
+  expect(selectors!.split(',').map(selector => selector.trim())).toEqual(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', '[role="heading"]']);
+  expect(declarations).toMatch(/(?:^|\s)-webkit-column-break-after: avoid !important;/);
+  expect(declarations).toMatch(/(?:^|\s)break-after: avoid !important;/);
+  expect(declarations).toContain('break-inside: avoid !important;');
+  expect(readerHeadingRules('scrolled')).toBe('');
+});
+
+test('detects a heading left on the previous page or column', () => {
+  // The first line after AFTERWARDS is one single-page column to the right on WebKit.
+  expect(headingOrphaned(472, 669, 19.65, 314.72)).toBe(true);
+  expect(headingOrphaned(787, 669, 19.65, 314.72)).toBe(false);
+  expect(headingOrphaned(300, 720, 44, 660)).toBe(true);
+  expect(headingOrphaned(850, 720, 44, 660)).toBe(false);
+  expect(headingOrphaned(140, -50, 20, 320)).toBe(true);
+  expect(headingOrphaned(140, -50, 20, 0)).toBe(false);
+});
 
 // The Way of Kings as calibre packs it: the cover page first, named only by the EPUB 2 guide.
 const calibre = [{ id: 'titlepage.xhtml' }, { id: 'The_Way_of_Kings_split_000.html' }, { id: 'The_Way_of_Kings_split_001.html' }];

@@ -8,8 +8,8 @@
 import { useRef } from 'react';
 import { Platform } from 'react-native';
 import { fetch as download } from 'expo/fetch';
-import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings } from '@vela/skin/src/widgets/media/reader-engine';
-import { readerChunk } from '@vela/skin/src/widgets/media/reader-bytes';
+import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings } from '@vela/skin/src/blocks/read/reader-engine';
+import { readerChunk } from '@vela/skin/src/blocks/read/reader-bytes';
 import type { ReaderSurfaceHandle, SurfaceSource } from './reader-surface';
 
 type Input = Parameters<Parameters<ReaderEngine['onInput']>[0]>[0];

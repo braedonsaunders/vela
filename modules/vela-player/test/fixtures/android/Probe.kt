@@ -14,6 +14,23 @@ private fun plan(selected: String = "original", session: String = "one", fallbac
 ))!!
 
 fun main() {
+  val clock = TimeshiftClock(edgeSeconds = 1200.0, edgeAtMs = 1_800_000_000_000, plannedStartSeconds = 1080.0)
+  val loadedStart = clock.edgeAtMs - 100_000
+  check(clock.windowStartSeconds(loadedStart) == 1100.0)
+  check(clock.broadcastSeconds(loadedStart + 42_500.0) == 1142.5)
+  check(clock.placement(1142.5, loadedStart, 104.0) == TimeshiftPlacement.Seek(42.5))
+  check(clock.placement(1100.0, loadedStart, 104.0) == TimeshiftPlacement.Seek(0.0))
+  check(clock.placement(1099.5, loadedStart, 104.0) == TimeshiftPlacement.Evicted)
+  check(clock.placement(1200.0, loadedStart, 104.0) == TimeshiftPlacement.Seek(100.0))
+  check(clock.placement(1196.0, loadedStart, 90.0) == TimeshiftPlacement.Live)
+  check(clock.placement(1085.0, null, 120.0) == TimeshiftPlacement.Seek(5.0))
+  val liveClockPlan = mapOf("sessionId" to "clock", "revision" to 1, "sourceGeneration" to 1,
+    "seekGeneration" to 1, "selectedPathId" to "live")
+  val clockFields = mapOf("timeshift" to mapOf("maxMinutes" to 2), "liveEdgeSeconds" to 1200, "windowStartSeconds" to 1080,
+    "edgeAt" to java.time.Instant.ofEpochMilli(clock.edgeAtMs).toString())
+  check(PlaybackPlan.from(liveClockPlan + ("live" to clockFields))?.timeshiftClock == clock)
+  check(PlaybackPlan.from(liveClockPlan + ("live" to (clockFields + ("mode" to "startOver"))))?.timeshiftClock == null)
+
   for (preview in listOf(false, true)) for (live in listOf(false, true)) {
     val policy = playbackBuffering(preview, live)
     check(policy.maximumMs >= policy.minimumMs)

@@ -2,6 +2,8 @@
 // the `plan` prop (React Native passes JSON numbers as Double).
 package app.ether.vela.player
 
+import java.time.Instant
+
 internal class PlaybackPlan(
   val sessionId: String,
   val revision: Int,
@@ -21,6 +23,8 @@ internal class PlaybackPlan(
   /** `live.mode`: adaptive, low-delay or startOver (a growing programme played from its start). */
   val liveMode: String? = null,
   val selectedVersionId: String? = null,
+  val timeshiftClock: TimeshiftClock? = null,
+  val timeshiftRecoveryAtMs: Double? = null,
 ) {
   /** Start over: a live (EVENT) playlist that begins at the programme's start; it is joined at the plan position. */
   val startOver: Boolean
@@ -49,11 +53,12 @@ internal class PlaybackPlan(
   companion object {
     /** A plan, or null when a required field is missing. */
     fun from(value: Map<String, Any?>): PlaybackPlan? {
+      val live = value.map("live")
       return PlaybackPlan(
-        live = value.text("channelId") != null || value.map("live") != null,
-        // Only the mode is read from `live`; its window, edgeAt, behindLiveSeconds and timeshift (and the
-        // plan's catchUp block) are the server's view, and the player measures its own window.
-        liveMode = value.map("live")?.text("mode"),
+        live = value.text("channelId") != null || live != null,
+        liveMode = live?.text("mode"),
+        timeshiftClock = live?.timeshiftClock(),
+        timeshiftRecoveryAtMs = value.number("timeshiftRecoveryAtMs")?.takeIf { it.isFinite() },
         sessionId = value.text("sessionId") ?: return null,
         revision = value.int("revision") ?: return null,
         sourceGeneration = value.int("sourceGeneration") ?: return null,
@@ -219,6 +224,15 @@ internal class PlanChapter(val id: String, val name: String, val startSeconds: D
       )
     }
   }
+}
+
+private fun Map<String, Any?>.timeshiftClock(): TimeshiftClock? {
+  if (map("timeshift") == null || text("mode") == "startOver") return null
+  val edge = number("liveEdgeSeconds")?.takeIf { it.isFinite() } ?: return null
+  val start = number("windowStartSeconds")?.takeIf { it.isFinite() } ?: return null
+  val at = text("edgeAt") ?: return null
+  val atMs = runCatching { Instant.parse(at).toEpochMilli() }.getOrNull() ?: return null
+  return TimeshiftClock(edge, atMs, start)
 }
 
 // Reading JSON-shaped maps.

@@ -422,13 +422,12 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
         />
       </View>
       {!idle.visible && !failed ? <LiveNotice look={look} watch={live} lift={surfaces.lift} /> : null}
-      {state.versionMessage && !failed ? (
-        // A version switch reports here, not only inside the quality menu, which has closed by
-        // the time the server answers: a refused switch must never look like a click that did nothing.
-        <View pointerEvents="none" accessibilityLiveRegion="polite" testID="player-version-notice"
+      {(state.liveRecoveryNotice || state.versionMessage) && !failed ? (
+        <View pointerEvents="none" accessibilityLiveRegion="polite"
+          testID={state.liveRecoveryNotice ? 'player-live-recovery-notice' : 'player-version-notice'}
           style={{ position: 'absolute', top: top + look.size(64), alignSelf: 'center', maxWidth: '80%',
             paddingVertical: look.size(8), paddingHorizontal: look.size(14), borderRadius: look.radiusControl, backgroundColor: look.scrim }}>
-          <Text style={look.text(14, 500, look.ink)}>{state.versionMessage}</Text>
+          <Text style={look.text(14, 500, look.ink)}>{state.liveRecoveryNotice || state.versionMessage}</Text>
         </View>
       ) : null}
       {info && !failed ? <InfoCard look={look} view={view} top={top} onLayout={event => {

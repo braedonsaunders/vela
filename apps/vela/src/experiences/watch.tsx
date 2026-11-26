@@ -8,6 +8,11 @@ import { libraryHostBuilder } from '../browse/page-host';
 import { DocumentScreen } from '../screen';
 
 export function WatchLibrary({ id, params }: { id: string; params: LibraryParams }) {
+  const page = useLibraryRoutePage(id, params);
+  return <DocumentScreen route="library" entry={id} page={page} sharedShell />;
+}
+
+export function useLibraryRoutePage(id: string, params: LibraryParams) {
   const { sort, dir, kind, genre, year, played, fav, collectionId, query: search, facets, start } = params;
   const query = useMemo(
     () => queryOf({ sort, dir, kind, genre, year, played, fav, collectionId, query: search, facets, start }),
@@ -15,6 +20,5 @@ export function WatchLibrary({ id, params }: { id: string; params: LibraryParams
   );
   const library = useLibraryPage(id, query, params.view, params.facetTitle);
   const [build] = useState(libraryHostBuilder);
-  const page = useCallback((host: SkinHost) => build(host, id, query, library), [build, id, query, library]);
-  return <DocumentScreen route="library" entry={id} page={page} sharedShell />;
+  return useCallback((host: SkinHost) => build(host, id, query, library), [build, id, query, library]);
 }

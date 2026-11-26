@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import { useLiveContext } from './live';
-import { remoteDirection } from './navigation';
+import { androidGuidePress, remoteDirection } from './navigation';
 import type { Focusable } from '../../escape';
 import { useRemote, pressed } from '../player/remote';
 import { holdBack } from '../../menu-key';
@@ -53,7 +53,6 @@ export function GuideFocusScope({ children, enter, onHold, leave, escape, top, r
     }
   };
   useEffect(() => () => holdGridBack(false), []);
-  const androidDown = useRef(new Set<string>());
   const repeating = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const stopRepeat = () => { clearInterval(repeating.current); repeating.current = undefined; holding.current(false); };
   useEffect(() => stopRepeat, []);
@@ -117,10 +116,14 @@ export function GuideFocusScope({ children, enter, onHold, leave, escape, top, r
     if (!enabled.current || nativeGuide) return;
     const key = remoteDirection(event.eventType);
     if (!key) return;
-    const android = Platform.OS === 'android';
-    if (android && Number(event.eventKeyAction) === 1 && androidDown.current.delete(key)) { stopRepeat(); return; }
-    if (/^long/i.test(event.eventType) || android && Number(event.eventKeyAction) === 0) {
-      if (android) androidDown.current.add(key);
+    if (Platform.OS === 'android') {
+      const press = androidGuidePress(event);
+      if (press === 'release') stopRepeat();
+      if (press === 'repeat') holding.current(true);
+      if (press === 'start' || press === 'repeat') state.key(key);
+      return;
+    }
+    if (/^long/i.test(event.eventType)) {
       if (Number(event.eventKeyAction) === 0) {
         if (!repeating.current) {
           holding.current(true);

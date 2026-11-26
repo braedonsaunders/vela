@@ -286,8 +286,10 @@ export class LocalSources {
         const detail = loaded?.value;
         const card = detail?.title[0];
         if (!detail || !card) return { error: loadableError(loaded) };
+        const seriesId = card.media?.parents.find(parent => parent.role === 'series')?.id;
         const value: TitleValue = {
           item: ref(itemKey(card.id)),
+          ...(seriesId ? { seriesId } : {}),
           canPlay: detail.canPlay,
           resumeSeconds: detail.resumeSeconds,
           mediaFacts: detail.mediaFacts,
@@ -301,7 +303,8 @@ export class LocalSources {
         if (!hasTitleChildren(adapter as never)) return unsupported();
         const id = itemId(args.id!);
         const role = args.role || undefined;
-        const want = LIST_PAGE * (1 + extraPages);
+        const limit = Math.min(MAX_CHILDREN, Math.max(1, intArg(args.limit) ?? LIST_PAGE));
+        const want = limit * (1 + extraPages);
         // A server without child levels lists every child: the role is chosen here.
         const byRole = role && stores.media.features().childRoles ? role : undefined;
         await stores.media.children(id, fresh, byRole, role && !byRole ? MAX_CHILDREN : want);
@@ -730,11 +733,12 @@ export class LocalSources {
         const source = textArg(args.source);
         const spec = page.specs[source];
         if (!spec || !LocalSources.isLocal(spec) || !isVelaSource(spec.from)) throw refusal('invalid_request', 'Not a list on this page');
-        const identity = sourceIdentity(spec.from, sourceArgs(spec, page.scope));
+        const scope: LocalScope = { ...page.scope, sources: page.values, record: key => this.records.get(key)?.value };
+        const identity = sourceIdentity(spec.from, sourceArgs(spec, scope));
         const value = page.values[source] as Partial<ListValue> | undefined;
         if (value && (value as ListValue).more === false) return { answer: {} };
         this.extra.set(identity, (this.extra.get(identity) ?? 0) + 1);
-        const answer = await this.read(spec, page.scope);
+        const answer = await this.read(spec, scope);
         if ('error' in answer) throw refusal(answer.error);
         return { answer: { sources: { [source]: answer.value } }, records: answer.records };
       }

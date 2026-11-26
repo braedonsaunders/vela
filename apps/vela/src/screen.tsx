@@ -8,6 +8,7 @@ import { useCallback, useContext, useDeferredValue, useEffect, useMemo, useLayou
 import { Animated, Platform, Text, View } from 'react-native';
 import { ScreenActive, SkinRoot, SkinRoute, SkinLibraryViews, SkipToContent, focusElement, useReturnFocus, type RouteName, type SkinHost } from '@vela/skin';
 import type { RNode } from '@vela/skin/src/resolve';
+import { viewerPressedSince } from '@vela/skin/src/route-focus';
 import { useSideInsets, useVela } from './vela';
 import { FocusBoundary } from './focus-boundary';
 import { documentIsVisible } from './visible-route';
@@ -23,11 +24,16 @@ interface Props {
   library?: string;
   page?: (host: SkinHost) => SkinHost;
   sharedShell?: boolean;
+  /** An experience can host the shared library content inside its document. */
+  wrap?: (content: ReactNode, host: SkinHost, active: boolean) => ReactNode;
+  libraryOpeningFocus?: boolean;
+  /** Frame controls a TV route prefers when opened. The first visible control wins. */
+  initialTVFocus?: readonly string[];
   /** A tree drawn in place of the document's own for the route (a media title's page). */
   node?: RNode;
 }
 
-export function DocumentScreen({ route, entry, library, page, sharedShell = false, node }: Props) {
+export function DocumentScreen({ route, entry, library, page, sharedShell = false, node, wrap, libraryOpeningFocus, initialTVFocus }: Props) {
   const vela = useVela();
   const sides = useSideInsets();
   const app = vela.host(route, entry, library);
@@ -90,6 +96,18 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
     frame = requestAnimationFrame(focus);
     return () => cancelAnimationFrame(frame);
   }, [route, isCurrent, host?.env.load, entry]);
+  const focusedEntry = useRef('');
+  useEffect(() => {
+    if (!Platform.isTV || !initialTVFocus?.length || !isCurrent || host?.env.load !== 'ready' || focusedEntry.current === entry) return;
+    const opened = Date.now();
+    let attempts = 0;
+    const timer = setInterval(() => {
+      if (!viewerPressedSince(opened) && !initialTVFocus.some(id => focusElement(id)) && ++attempts < 20) return;
+      focusedEntry.current = entry;
+      clearInterval(timer);
+    }, 100);
+    return () => clearInterval(timer);
+  }, [entry, host?.env.load, initialTVFocus, isCurrent]);
   if (vela.docError) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
@@ -101,10 +119,10 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
   if (!host || !contentHost || !tree || !drawn) return <View style={{ flex: 1 }} />;
   // Search draws in home's view, after home's nodes, while a query is open (docs/skin-schema.md).
   const search = route === 'home' && contentHost.env.query !== '' ? vela.doc?.routes.search : undefined;
-  const content = route === 'library' ? <LibraryScenes host={contentHost} node={tree} /> : <SkinRoute host={contentHost} node={tree} after={search} />;
+  const content = route === 'library' ? <LibraryScenes host={contentHost} node={tree} openingFocus={libraryOpeningFocus} /> : <SkinRoute host={contentHost} node={tree} after={search} />;
   const shell = route === 'title' || route === 'person' || sharedShell ? undefined : vela.doc?.shell;
   const mainId = `vela-main-${route}-${library ?? 'all'}`.replace(/[^a-z0-9_-]/gi, '-');
-  const main = <View nativeID={mainId} accessibilityRole={Platform.OS === 'web' ? 'main' as never : undefined} {...(Platform.OS === 'web' ? { tabIndex: -1 } : {})} style={{ flex: 1 }}>{content}</View>;
+  const main = <View nativeID={mainId} accessibilityRole={Platform.OS === 'web' ? 'main' as never : undefined} {...(Platform.OS === 'web' ? { tabIndex: -1 } : {})} style={{ flex: 1 }}>{wrap ? wrap(content, contentHost, isCurrent) : content}</View>;
   // The transparent navigator modal fills the viewport, including the section shell's header.
   // Keep the scrim outside the skin's scrolling/frame geometry on web and native hosts alike.
   if (route === 'title' || route === 'person') return (
@@ -115,7 +133,7 @@ export function DocumentScreen({ route, entry, library, page, sharedShell = fals
         {/* On TV the title page is presented in the app's root view, so it stays in the tree under
             the player: while covered it must take no focus (no interaction, which the focus engine
             honours), or the remote's arrows move focus into it and never reach the player. */}
-        <FocusBoundary active={isCurrent} enterWhenReady={host.env.load === 'ready'} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)', paddingLeft: sides.paddingLeft, paddingRight: sides.paddingRight }} accessibilityViewIsModal>
+        <FocusBoundary active={isCurrent} enterWhenReady={host.env.load === 'ready' && !initialTVFocus?.length} style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.75)', paddingLeft: sides.paddingLeft, paddingRight: sides.paddingRight }} accessibilityViewIsModal>
           {content}
         </FocusBoundary>
       </ModalView>
@@ -149,7 +167,7 @@ function ModalView({ still, children }: { still: boolean; children: ReactNode })
 }
 
 /** A library view slides like a section: the previous answer leaves as the new one enters. */
-function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
+function LibraryScenes({ host, node, openingFocus }: { host: SkinHost; node: RNode; openingFocus?: boolean }) {
   const request = host.env.library?.viewRequest ?? '';
   const view = host.env.library?.view ?? 'library';
   const order: string[] = host.env.library?.model?.tabs?.map(tab => tab.kind) ?? ['recommended', 'library', 'collections', 'genres'];
@@ -229,7 +247,7 @@ function LibraryScenes({ host, node }: { host: SkinHost; node: RNode }) {
     // than being drawn again from nothing alongside the view coming in.
     return <SectionScene key={`scene:${isCurrent ? request : outgoing.current?.request}`} current={isCurrent}
       animated={active} direction={transition.current.direction} offset={isCurrent ? incomingOffset : outgoingOffset}>
-      <SkinRoute host={sceneHost} node={node} hideLibraryViews={!!fixedNav.current && active} />
+      <SkinRoute host={sceneHost} node={node} openingFocus={openingFocus} hideLibraryViews={!!fixedNav.current && active} />
     </SectionScene>;
   };
   return <View ref={frame as never} style={{ flex: 1, overflow: 'hidden' }}>

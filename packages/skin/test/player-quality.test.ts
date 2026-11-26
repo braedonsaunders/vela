@@ -189,3 +189,37 @@ test('release labels lead with their resolution', () => {
   expect(labelResolution('Auto · now 1080p WEB-DL')).toBe('');
   expect(labelResolution('Director’s Cut · 1080p')).toBe('');
 });
+
+test('subtitle labels translate languages and source formats and merge matching identities', () => {
+  const source = plan();
+  source.subtitleTracks = [{ id: 'english', kind: 'subtitle', language: 'en', name: 'en', codec: 'subrip' }];
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, subtitleTracks: [
+    { id: 'english', label: 'en · APPLICATION/X-MEDIA3-CUES', language: 'en', codec: 'application/x-media3-cues' },
+    { id: 'commentary', label: 'Commentary', language: 'en', codec: 'text/x-ssa' },
+    { id: 'french', language: 'fr', codec: 'application/pgs' },
+    { id: 'spanish', language: 'es', codec: 'text/vtt' },
+    { id: 'german', language: 'de', codec: 'application/x-media3-cues' },
+  ], throughputHistory: [], capabilities: {} } as unknown as Snapshot;
+  expect(present(source, snapshot).subtitles).toEqual([
+    { id: 'english', name: 'English', detail: 'SRT' },
+    { id: 'commentary', name: 'Commentary', detail: 'English · ASS' },
+    { id: 'french', name: 'French', detail: 'PGS' },
+    { id: 'spanish', name: 'Spanish', detail: 'WebVTT' },
+    { id: 'german', name: 'German', detail: '' },
+  ]);
+});
+
+test('a Plex subtitle titled with its language code and format is named by its language', () => {
+  const source = plan();
+  source.subtitleTracks = [
+    { id: 'en-pgs', kind: 'subtitle', language: 'en', name: 'en PGS', codec: 'pgs' },
+    { id: 'fr-pgs', kind: 'subtitle', language: 'fr', name: 'fr PGS', codec: 'pgs' },
+    { id: 'en-sdh', kind: 'subtitle', language: 'en', name: 'English SDH SRT', codec: 'srt' },
+  ] as never;
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, subtitleTracks: [], throughputHistory: [], capabilities: {} } as unknown as Snapshot;
+  expect(present(source, snapshot).subtitles).toEqual([
+    { id: 'en-pgs', name: 'English', detail: 'PGS' },
+    { id: 'fr-pgs', name: 'French', detail: 'PGS' },
+    { id: 'en-sdh', name: 'English SDH SRT', detail: '' },
+  ]);
+});

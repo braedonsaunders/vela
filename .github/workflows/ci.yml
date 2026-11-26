@@ -117,9 +117,11 @@ jobs:
           VELA_MOCK_SILENT_MEDIA: 1
           VELA_MOCK_MEDIA_ROOT: ${{ runner.temp }}/vela-media
           VELA_MOCK_MUSIC_ROOT: ${{ runner.temp }}/vela-music
+          VELA_MOCK_BOOKS_ROOT: ${{ runner.temp }}/vela-books
         run: |
           bun mock-server/scripts/make-media.ts
           bun mock-server/scripts/make-gapless-media.ts
+          bun mock-server/scripts/make-book-media.ts
 
       - name: Run e2e with committed recordings only
         env:
@@ -127,4 +129,5 @@ jobs:
           VELA_E2E_STATIC_ROOT: apps/vela/dist
           VELA_MOCK_MEDIA_ROOT: ${{ runner.temp }}/vela-media
           VELA_MOCK_MUSIC_ROOT: ${{ runner.temp }}/vela-music
+          VELA_MOCK_BOOKS_ROOT: ${{ runner.temp }}/vela-books
         run: VELA_E2E_BUN="$(command -v bun)" npx --no-install e2e run --strict-cache --config e2e.mock.config.ts --target mock-chromium,mock-webkit --workers 1 --retries 0
