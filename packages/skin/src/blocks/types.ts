@@ -57,7 +57,7 @@ export interface ScreenBlockRuntime {
   requestNeeds?(sources: readonly string[]): void;
   /** Looks up an `item:` record or converts it to a `Card` for `titleCard`. */
   resolveItemCard?(itemKey: string, ctx: Ctx): Card | undefined;
-  /** Optional screen title for the hidden web `<h1>` inside `sections`, and presentation mode (`section` | `page`). */
+  /** Optional title for the hidden web `<h1>` of standalone `sections` pages. */
   pageTitle?: string;
   /** The document's focus.initial, filled (a TV's first focus, named by an element id). */
   focusInitial?: string;
