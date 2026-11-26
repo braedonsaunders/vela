@@ -10,16 +10,22 @@
 // queued track's file through the Mac's speakers if it ever plays: the parity hook pauses it before
 // it loads, the media are silent, and Debug start-route builds start muted (quiet-playback.ts).
 // ios-fold unfolds the iPhone Duo first (axe hinge set 180) and shoots its inner display.
+// For Read, add --experience read and --variant legacy|document. Use --embedded --app <Vela.app>
+// on the Duo with the matching production JS and Expo DOM reader assets embedded together.
+// Boot the muted device under the platform's lock and start the frozen Read mock first.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { captureName } from './views';
 import { LISTEN_NOW, LISTEN_VIEWS, listenPath, type ListenView } from './listen-views';
+import { READ_NOW, READ_VIEWS, readReviewed } from './read-views';
 
 const { values } = parseArgs({ options: {
   udid: { type: 'string' }, platform: { type: 'string', default: 'tvos' }, out: { type: 'string' },
   mock: { type: 'string', default: 'http://127.0.0.1:7951' }, views: { type: 'string' }, settle: { type: 'string', default: '9000' },
   'metro-port': { type: 'string', default: '8952' }, display: { type: 'string' }, app: { type: 'string' },
+  experience: { type: 'string', default: 'listen' }, variant: { type: 'string', default: 'document' },
+  embedded: { type: 'boolean', default: false },
 } });
 if (!values.udid || !values.out) throw new Error('--udid and --out are required');
 const platform = values.platform!, udid = values.udid;
@@ -30,6 +36,14 @@ const env = { ...process.env, DEVELOPER_DIR: process.env.DEVELOPER_DIR ?? '/Appl
 const root = resolve(import.meta.dir, '../..');
 const port = values['metro-port']!;
 const viewport = platform === 'ios' ? 'ios-phone' : platform;
+const experience = values.experience!;
+if (experience !== 'listen' && experience !== 'read') throw new Error('--experience must be listen or read');
+if (values.variant !== 'legacy' && values.variant !== 'document') throw new Error('--variant must be legacy or document');
+const read = experience === 'read';
+const phone = platform === 'ios' || platform === 'ios-fold';
+if (read && phone && !values.embedded) throw new Error('Duo Read captures need --embedded and the app with its embedded reader assets');
+if (values.embedded && (!read || !phone || !values.app)) throw new Error('--embedded requires Read on iOS and --app');
+const display = values.display ?? (read && platform === 'ios-fold' ? '3' : undefined);
 
 /** Metro for one start route and listening state; returns a stop function (only its own PID). */
 async function metroFor(route: string, audio: string): Promise<() => void> {
@@ -70,9 +84,12 @@ const apple: Device = {
   // simctl cannot write into ~/.scratch (TCC), so shoot to /tmp and copy.
   shoot(file) {
     const temporary = `/tmp/l2-parity-${process.pid}.png`;
-    simctl('io', udid, 'screenshot', '--type=png', ...(values.display ? [`--display=${values.display}`] : []), temporary);
-    copyFileSync(temporary, file);
-    rmSync(temporary);
+    try {
+      simctl('io', udid, 'screenshot', '--type=png', ...(display ? [`--display=${display}`] : []), temporary);
+      copyFileSync(temporary, file);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
   },
   async keys(codes) { for (const code of codes) { axe('key', String(code)); await Bun.sleep(900); } },
 };
@@ -98,15 +115,21 @@ const android: Device = {
   },
 };
 const device = platform === 'androidtv' ? android : apple;
-if (platform === 'androidtv') {
+if (platform === 'androidtv' && !read) {
   adb('shell', 'pm', 'clear', APP);
   adb('shell', 'monkey', '-p', APP, '-c', 'android.intent.category.LEANBACK_LAUNCHER', '1');
   await Bun.sleep(20_000);
   adb('shell', 'am', 'force-stop', APP);
-} else {
+} else if (platform !== 'androidtv') {
   simctl('keychain', udid, 'reset');
   if (values.app) { try { simctl('uninstall', udid, APP); } catch {} simctl('install', udid, values.app); }
-  if (platform === 'ios-fold') axe('hinge', 'set', '180');
+  if (platform === 'ios-fold') {
+    axe('hinge', 'set', '180');
+    if (read) {
+      simctl('io', udid, 'screenConfig', `--display=${display}`, 'power', 'on');
+      await Bun.sleep(3000);
+    }
+  } else if (read && phone) axe('hinge', 'set', '0');
 }
 
 /** A view on this platform: TV and phone views without web-only steps, and the platform's own list. */
@@ -116,9 +139,11 @@ function runs(view: ListenView): boolean {
   if (view.steps?.length && !(view.keys && device.keys)) return false;
   return true;
 }
-const views = LISTEN_VIEWS.filter(view => runs(view) && (!values.views || values.views.split(',').includes(view.name)));
+const asked = (name: string) => !values.views || values.views.split(',').includes(name);
+const views = LISTEN_VIEWS.filter(view => runs(view) && asked(view.name));
 const captures: object[] = [];
-for (const view of views) {
+if (read) await captureRead();
+else for (const view of views) {
   const file = captureName(viewport, view.name), frame = join('frames', file.replace(/\.png$/, '.b.png'));
   const route = listenPath(view);
   const audio = new URLSearchParams(route.split('?')[1] ?? '').get('parityAudio') ?? '';
@@ -147,4 +172,51 @@ for (const view of views) {
 const manifest = join(out, 'manifest.json');
 const earlier = existsSync(manifest) ? (JSON.parse(readFileSync(manifest, 'utf8')) as { captures: { view: string }[] }).captures : [];
 const merged = [...earlier.filter(c => !captures.some(n => (n as { view: string }).view === c.view)), ...captures];
-writeFileSync(manifest, JSON.stringify({ variant: 'document', experience: 'listen', platform, now: LISTEN_NOW, capturedAt: new Date().toISOString(), udid, captures: merged }, null, 2));
+writeFileSync(manifest, JSON.stringify({ variant: values.variant, experience, platform,
+  now: read ? READ_NOW : LISTEN_NOW, capturedAt: new Date().toISOString(), udid, captures: merged }, null, 2));
+
+async function captureRead(): Promise<void> {
+  const stop = values.embedded ? undefined : await metroFor('/library/books', '');
+  const go = (path: string) => platform === 'androidtv'
+    ? adb('shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', `'vela://${path}'`, '-p', APP)
+    : simctl('openurl', udid, `vela://${path}`);
+  try {
+    if (phone) simctl('status_bar', udid, 'override', '--time', '9:41', '--dataNetwork', 'wifi', '--wifiMode', 'active',
+      '--wifiBars', '3', '--cellularMode', 'active', '--cellularBars', '4', '--batteryState', 'discharging', '--batteryLevel', '100');
+    if (values.embedded) simctl('launch', udid, APP);
+    else device.relaunch();
+    await Bun.sleep(settle + (values.embedded ? 4000 : 25_000));
+    for (const view of READ_VIEWS.filter(view => asked(view.name) && (!view.only || view.only.includes(viewport)))) {
+      const file = captureName(viewport, view.name), frame = join('frames', file.replace(/\.png$/, '.b.png'));
+      const capture: Record<string, unknown> = { viewport, view: view.name, file, frame, url: view.path, description: view.description,
+        review: readReviewed(view, viewport), ok: false };
+      try {
+        if (phone && (view.path.startsWith('/title/') || view.path.startsWith('/read/'))) {
+          go('/library/books');
+          await Bun.sleep(2000);
+        }
+        const media = view.name === 'series' ? '&media=series' : view.name === 'book' || view.name === 'standalone' ? '&media=book' : '';
+        go(view.path + (phone ? media : ''));
+        await Bun.sleep(settle);
+        if (phone && (view.name === 'reader-contents' || view.name === 'reader-appearance')) {
+          axe('tap', '-x', viewport === 'ios-fold' ? '470' : '200', '-y', '310');
+          axe('tap', '--id', view.name === 'reader-contents' ? 'reader-contents' : 'reader-type');
+          await Bun.sleep(2000);
+        }
+        device.shoot(join(out, file));
+        await Bun.sleep(700);
+        device.shoot(join(out, frame));
+        capture.ok = true;
+        console.log(`ok   ${viewport} ${view.name}`);
+      } catch (error) {
+        capture.error = String((error as Error).message ?? error);
+        process.exitCode = 1;
+        console.log(`FAIL ${viewport} ${view.name}: ${capture.error}`);
+      }
+      captures.push(capture);
+    }
+  } finally {
+    stop?.();
+    if (phone) simctl('status_bar', udid, 'clear');
+  }
+}

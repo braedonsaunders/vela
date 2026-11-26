@@ -2,6 +2,7 @@
 //
 //   bun tools/parity/capture-listen-web.ts --out <dir> --app http://localhost:8951
 //     [--views home,album] [--viewports web-1440,web-390]
+//   For Read, pass --experience read [--variant legacy] and start the mock with READ_MOCK_ENV.
 //
 // The mock must run with LISTEN_MOCK_ENV (listen-views.ts) and silent media, and Metro must build a
 // mock app (EXPO_PUBLIC_VELA_MOCK=1) so the parity hook sets the listening state. Run a fresh mock
@@ -14,16 +15,24 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { captureName, target } from './views';
 import { LISTEN_NOW, LISTEN_VIEWS, LISTEN_WEB_VIEWPORTS, listenPath, listenReviewed, type Step } from './listen-views';
+import { READ_NOW, READ_VIEWS, READ_WEB_VIEWPORTS, readReviewed } from './read-views';
 
 const { values } = parseArgs({ options: {
   out: { type: 'string' }, app: { type: 'string', default: 'http://localhost:8951' },
-  views: { type: 'string' }, viewports: { type: 'string' },
+  views: { type: 'string' }, viewports: { type: 'string' }, experience: { type: 'string' }, variant: { type: 'string' },
 } });
 if (!values.out) throw new Error('--out <dir> is required');
 const out = resolve(values.out);
 mkdirSync(join(out, 'frames'), { recursive: true });
 const pick = <T extends { name: string }>(all: T[], list?: string) => list ? all.filter(item => list.split(',').includes(item.name)) : all;
-const views = pick(LISTEN_VIEWS, values.views), viewports = pick(LISTEN_WEB_VIEWPORTS, values.viewports);
+const experience = values.experience ?? 'listen';
+const read = experience === 'read';
+if (!read && experience !== 'listen') throw new Error('--experience must be listen or read');
+const variant = values.variant ?? 'document';
+if (variant !== 'legacy' && variant !== 'document') throw new Error('--variant must be legacy or document');
+const now = read ? READ_NOW : LISTEN_NOW;
+const views = pick(read ? READ_VIEWS : LISTEN_VIEWS.map(view => ({ ...view, path: listenPath(view) })), values.views);
+const viewports = pick(read ? READ_WEB_VIEWPORTS : LISTEN_WEB_VIEWPORTS, values.viewports);
 
 const scratch = join(out, '.playwright');
 mkdirSync(scratch, { recursive: true });
@@ -39,18 +48,22 @@ const sessions = new Map<boolean, string>();
 function session(touch: boolean): string {
   let name = sessions.get(touch);
   if (name) return name;
-  name = `l2-listen-${touch ? 'touch' : 'desk'}-${process.pid}`;
+  name = `parity-${experience}-${touch ? 'touch' : 'desk'}-${process.pid}`;
   const config = join(scratch, `${name}.json`);
   writeFileSync(config, JSON.stringify({ browser: { browserName: 'chromium',
     launchOptions: { channel: 'chrome', headless: true, args: ['--mute-audio', '--autoplay-policy=no-user-gesture-required'] },
     contextOptions: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, hasTouch: touch, isMobile: touch, reducedMotion: 'no-preference' } } }));
   cli(name, ['open', `--config=${config}`]);
-  cli(name, ['run-code', `async page => { await page.clock.install({ time: new Date(${JSON.stringify(LISTEN_NOW)}) }); }`]);
+  sessions.set(touch, name);
+  const date = `new Date(${JSON.stringify(now)})`;
+  cli(name, ['run-code', read
+    ? `async page => { await page.clock.setFixedTime(${date}); }`
+    : `async page => { await page.clock.install({ time: ${date} }); }`]);
+  if (read) return name;
   // Warm up: the first queue a fresh mock sees records progress on the server (Jump back in), so
   // every capture after it sees the same history; the first view must not differ from the rest.
   cli(name, ['run-code', `async page => { await page.goto(${JSON.stringify(`${values.app}${listenPath({ name: 'warm', description: '', place: '', ready: '' })}`)});
     await page.locator('[data-testid^="music-main"]').first().waitFor({ state: 'visible', timeout: 90000 }); await page.waitForTimeout(4000); }`]);
-  sessions.set(touch, name);
   return name;
 }
 
@@ -85,12 +98,21 @@ try {
     for (const view of views) {
       if (view.only && !view.only.includes(viewport.name)) continue;
       const file = captureName(viewport.name, view.name), frame = join('frames', file.replace(/\.png$/, '.b.png'));
-      const url = `${values.app}${listenPath(view)}`;
-      const scroll = view.scrollTo ? target(view.scrollTo) : undefined;
+      const url = `${values.app}${view.path}`;
+      const scroll = 'scrollTo' in view && typeof view.scrollTo === 'string' ? target(view.scrollTo) : undefined;
+      const page = view.path.startsWith('/read/') ? 'reader' : view.path.startsWith('/title/series-') ? 'series'
+        : view.path.startsWith('/title/') ? 'book' : 'home';
+      // A mock Metro build exposes its store. Check the intended document rendered before comparing
+      // it with the legacy baseline, even where both paths give the same pixels.
+      const verifyDocument = read && variant === 'document' ? `await page.waitForFunction(() => {
+          const pages = globalThis.__velaStore?.getState().screens.pages;
+          return !!pages && Object.values(pages).some(entry => entry.href === ${JSON.stringify(`vela:read/${page}`)} && entry.load === 'ready');
+        }, null, { timeout: 10000 });` : '';
       const code = `async page => {
         await page.setViewportSize({ width: ${viewport.width}, height: ${viewport.height} });
         await page.goto(${JSON.stringify(url)});
         ${waitFor(view.ready)}
+        ${verifyDocument}
         await page.locator('[data-testid="vela-launch"]').waitFor({ state: 'detached', timeout: 45000 }).catch(() => {});
         await page.evaluate(() => document.fonts.ready);
         await page.waitForTimeout(2500);
@@ -104,7 +126,7 @@ try {
         await page.screenshot({ path: ${JSON.stringify(join(out, frame))} });
         return { url: page.url() };
       }`;
-      const capture: Capture = { viewport: viewport.name, view: view.name, file, frame, url, description: view.description, review: listenReviewed(view, viewport.name), ok: false };
+      const capture: Capture = { viewport: viewport.name, view: view.name, file, frame, url, description: view.description, review: (read ? readReviewed : listenReviewed)(view, viewport.name), ok: false };
       try {
         const answer = result(cli(name, ['run-code', code])) as { url: string } | undefined;
         capture.url = answer?.url ?? url;
@@ -123,5 +145,5 @@ try {
   const manifest = join(out, 'manifest.json');
   const earlier = existsSync(manifest) ? (JSON.parse(readFileSync(manifest, 'utf8')) as { captures: Capture[] }).captures : [];
   const merged = [...earlier.filter(c => !captures.some(n => n.viewport === c.viewport && n.view === c.view)), ...captures];
-  writeFileSync(manifest, JSON.stringify({ variant: 'document', experience: 'listen', platform: 'web', now: LISTEN_NOW, capturedAt: new Date().toISOString(), app: values.app, captures: merged }, null, 2));
+  writeFileSync(manifest, JSON.stringify({ variant, experience, platform: 'web', now, capturedAt: new Date().toISOString(), app: values.app, captures: merged }, null, 2));
 }
