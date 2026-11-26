@@ -45,6 +45,13 @@ describe('Live TV catch-up release gate', () => {
       if (body.state === 'paused') pausedReports++;
       return route.continue();
     });
+    const follows = new Map<string, number>();
+    const eventsRoute = /\/vela\/v0\/sessions\/[^/]+\/events(?:\?|$)/;
+    await browser.route(eventsRoute, route => {
+      const id = new URL(route.request.url).pathname.split('/').at(-2)!;
+      follows.set(id, (follows.get(id) ?? 0) + 1);
+      return route.continue();
+    });
     const openProgramme = async (programme: { id: string; start: string }) => {
       const at = new Date(Date.parse(programme.start) + 5 * 60_000).toISOString();
       await app.open('/vela/live?' + new URLSearchParams({ ch: 'channel-1', prog: programme.id, at }));
@@ -88,10 +95,11 @@ describe('Live TV catch-up release gate', () => {
       await expect.poll(() => observedSession).not.toBe('');
       const previous = observedSession;
       const startsBefore = recoveryStarts.length;
-      await expect.poll(() => browser.evaluate(async id => {
-        const response = await fetch(`/__admin/sessions/${id}/drop-events`, { method: 'POST' });
-        return (await response.json()).dropped;
-      }, previous)).toBe(1);
+      const expired = await browser.evaluate(async id => {
+        const response = await fetch(`/__admin/sessions/${id}/expire`, { method: 'POST' });
+        return (await response.json()).expired;
+      }, previous);
+      expect(expired).toBe(true);
       if (notice) await expect(screen.getByText(notice, { exact: true })).toBeVisible();
       try {
         await expect.poll(() => observedSession, { timeout: 25_000 }).not.toBe(previous);
@@ -134,6 +142,25 @@ describe('Live TV catch-up release gate', () => {
       await screen.getByTestId('player-scrub').press('PageUp');
       await expect.poll(async () => (await videoState(browser)).position).toBeGreaterThan(55);
       const archivePosition = (await videoState(browser)).position;
+      await expect.poll(() => Math.abs(observedPosition - archivePosition)).toBeLessThan(1);
+      const archiveSession = observedSession;
+      await expect.poll(() => follows.get(archiveSession) ?? 0).toBeGreaterThan(0);
+      const archiveFollows = follows.get(archiveSession)!;
+      const archiveStarts = recoveryStarts.length;
+      await expect.poll(() => browser.evaluate(async id => {
+        const response = await fetch(`/__admin/sessions/${id}/drop-events`, { method: 'POST' });
+        return (await response.json()).dropped;
+      }, archiveSession)).toBe(1);
+      await expect.poll(() => follows.get(archiveSession)).toBe(archiveFollows + 1);
+      const reportsAfterRefollow = pausedReports;
+      await expect.poll(() => pausedReports).toBeGreaterThan(reportsAfterRefollow);
+      expect(observedSession).toBe(archiveSession);
+      expect(Math.abs(observedPosition - archivePosition)).toBeLessThan(1);
+      const held = await videoState(browser);
+      expect(held.paused).toBe(true);
+      expect(Math.abs(held.position - archivePosition)).toBeLessThan(1);
+      expect(recoveryStarts).toHaveLength(archiveStarts);
+
       const archiveSeek = await recoverWatch(true);
       expect(Math.abs(archiveSeek.position! - archivePosition)).toBeLessThan(3);
       expect(archiveSeek.start.channelId).toBe('channel-1');
@@ -254,6 +281,7 @@ describe('Live TV catch-up release gate', () => {
     } finally {
       try { await closeWatch(); }
       finally {
+        await browser.unroute(eventsRoute);
         await browser.unroute(sessionRoute);
         await browser.unroute(playbackRoute);
         await setRewindSegments(0);
