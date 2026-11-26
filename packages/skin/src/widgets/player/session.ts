@@ -10,7 +10,7 @@ import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
-import { belongs, qualityReached } from './present';
+import { belongs, qualityReached, viewCommand } from './present';
 import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
@@ -50,7 +50,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const [failure, setFailure] = useState<Failure | null>(null);
   const [refused, setRefused] = useState('');
   // A quiet (lab or development) build starts muted: the view takes this as its first command.
-  const [command, setCommand] = useState<Command | undefined>(() => (quietPlayback() ? { id: 1, type: 'mute', muted: true } as Command : undefined));
+  // The latest command and the session it was sent on, set together so no render pairs one with the other's successor.
+  const [sent, setSent] = useState<{ command: Command | undefined; on: string }>(() => ({ command: quietPlayback() ? { id: 1, type: 'mute', muted: true } as Command : undefined, on: '' }));
   const nextId = useRef(quietPlayback() ? 1 : 0);
   const pendingQuality = useRef(0);
   const [pendingQualityId, setPendingQualityId] = useState<string>();
@@ -184,7 +185,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     } else if (input.type === 'subtitle' && sessionIdRef.current) {
       pendingSubtitle.current = { commandId: nextId.current, sessionId: sessionIdRef.current, trackId: input.trackId };
     }
-    setCommand({ ...input, id: nextId.current } as Command);
+    setSent({ command: { ...input, id: nextId.current } as Command, on: sessionIdRef.current });
   }, []);
 
   // The sleep timer (core sleep.ts, as spoken audio has it): an ordinary pause after some minutes, or at
@@ -292,7 +293,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
 
   const view: VelaPlayerProps = {
     plan: plan ?? undefined,
-    command,
+    command: viewCommand(sent.command, sent.on, sessionId),
     videoFill: pictureChoice && settings.picture === 'fill',
     onSnapshot: next => {
       setSnapshot(next);

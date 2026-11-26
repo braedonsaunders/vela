@@ -24,7 +24,7 @@ import { withPlaying } from './playing-release';
 import { serverEnd } from './server-end';
 import { carriedTrack, trackChoice, type TrackChoice } from './track-match';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
-import { matchSeriesTracks } from '../series-tracks';
+import { matchSeriesTracks, playableLocally } from '../series-tracks';
 import type { SeriesTracks } from './series-tracks';
 import type { Session } from './session';
 import type { StateBox } from './state';
@@ -371,7 +371,8 @@ export class Playback {
           // Some servers leave track selection to the engines. Their plan still describes the
           // available tracks, so carry the viewer's choices, as matched on the new file, into the new engine session; not when
           // the server took Off on its own, which leaves selection with it.
-          if (this.run === run && off) plan = connection.plan(off);
+          // Taken after the viewer left, Off still moved the session on: it is stopped where it is now.
+          if (off) plan = connection.plan(off);
           else if (this.run === run) {
             this.localTracks = true;
             plan = this.withLocalTracks(plan);
@@ -402,13 +403,16 @@ export class Playback {
         const matched = matchSeriesTracks(plan, preference, { explicitAudio: !!target.audioTrackId, client });
         const audioDiff = matched.audioTrackId !== undefined && matched.audioTrackId !== plan.selectedAudioTrackId;
         const subtitleDiff = matched.subtitleTrackId !== undefined && matched.subtitleTrackId !== (plan.selectedSubtitleTrackId ?? null);
-        if (audioDiff || subtitleDiff) {
-          this.localTracks = true;
+        // A remembered Off is the viewer's even when the episode starts without subtitles: a replacement keeps it.
+        // Only a choice that changes the start makes the tracks local; an Off equal to it is just remembered.
+        const subtitleOff = matched.subtitleTrackId === null;
+        if (audioDiff || subtitleDiff || subtitleOff) {
+          if (audioDiff || subtitleDiff) this.localTracks = true;
           if (audioDiff) {
             this.audio = matched.audioTrackId;
             this.audioChoice = trackChoice(plan, plan.audioTracks, this.audio);
           }
-          if (subtitleDiff) {
+          if (subtitleDiff || subtitleOff) {
             this.subtitle = matched.subtitleTrackId;
             this.subtitleChoice = trackChoice(plan, plan.subtitleTracks, this.subtitle ?? undefined);
             this.subtitleOff = this.subtitle === null;
@@ -558,10 +562,14 @@ export class Playback {
 
   private withLocalTracks(plan: V.PlaybackPlan): V.PlaybackPlan {
     if (!this.localTracks) return plan;
+    // Only what the engine can switch to on this plan: a muxed transcode keeps the server's tracks.
     const { audio, subtitle } = this.carried(plan);
+    let client: V.ClientCapabilities | undefined;
+    try { client = this.session.client; } catch { /* Capabilities optional for matching. */ }
+    const local = playableLocally(plan, { audioTrackId: audio, subtitleTrackId: subtitle }, client);
     return { ...plan,
-      ...(audio !== undefined ? { selectedAudioTrackId: audio } : {}),
-      ...(subtitle !== undefined ? { selectedSubtitleTrackId: subtitle } : {}),
+      ...(local.audioTrackId !== undefined ? { selectedAudioTrackId: local.audioTrackId } : {}),
+      ...(local.subtitleTrackId !== undefined ? { selectedSubtitleTrackId: local.subtitleTrackId } : {}),
     };
   }
 

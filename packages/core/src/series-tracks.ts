@@ -177,28 +177,38 @@ export function matchSeriesTracks(
   options?: { explicitAudio?: boolean; client?: V.ClientCapabilities },
 ): SeriesTrackMatch {
   if (!preference) return {};
+  return playableLocally(plan, {
+    ...(!options?.explicitAudio && preference.audio ? { audioTrackId: matchTrack(plan.audioTracks, preference.audio, 'audio')?.id } : {}),
+    ...(preference.subtitle === null ? { subtitleTrackId: null }
+      : preference.subtitle ? { subtitleTrackId: matchTrack(plan.subtitleTracks, preference.subtitle, 'subtitle')?.id } : {}),
+  }, options?.client);
+}
+
+/**
+ * The tracks of `plan` in `ids` (a subtitle id or null for Off) that the engine can apply to it on
+ * its own; the others are left out, so the plan's own selection stands for them.
+ */
+export function playableLocally(plan: V.PlaybackPlan, ids: SeriesTrackMatch, client?: V.ClientCapabilities): SeriesTrackMatch {
   const path = plan.paths.find(p => p.id === plan.selectedPathId) ?? plan.paths[0];
   const direct = path?.kind === 'direct' || path?.original === true;
   const result: SeriesTrackMatch = {};
 
-  if (!options?.explicitAudio && preference.audio) {
-    const matched = matchTrack(plan.audioTracks, preference.audio, 'audio');
-    if (matched && canPlayAudioLocally(matched, path, options?.client)) {
-      result.audioTrackId = matched.id;
-    }
+  const audio = ids.audioTrackId !== undefined ? plan.audioTracks.find(t => t.id === ids.audioTrackId) : undefined;
+  if (audio && canPlayAudioLocally(audio, path, client)) {
+    result.audioTrackId = audio.id;
   }
 
-  if (preference.subtitle !== undefined) {
+  if (ids.subtitleTrackId !== undefined) {
     const currentSub = plan.selectedSubtitleTrackId
       ? plan.subtitleTracks.find(t => t.id === plan.selectedSubtitleTrackId)
       : undefined;
     const currentlyBurned = !direct && currentSub?.delivery?.kind === 'burn-in';
 
-    if (preference.subtitle === null) {
+    if (ids.subtitleTrackId === null) {
       // Explicit Off: apply locally unless the server already burned subtitles into a transcode.
       if (!currentlyBurned) result.subtitleTrackId = null;
     } else {
-      const matched = matchTrack(plan.subtitleTracks, preference.subtitle, 'subtitle');
+      const matched = plan.subtitleTracks.find(t => t.id === ids.subtitleTrackId);
       if (matched) {
         const delivery = matched.delivery?.kind;
         const canApply = delivery === 'burn-in'

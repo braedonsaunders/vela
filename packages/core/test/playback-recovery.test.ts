@@ -23,7 +23,8 @@ test('session recovery coalesces, backs off, resumes VOD, waits for auth and can
   try {
     const requests: any[] = [], stops: string[] = [], tracks: any[] = [];
     let offline = false;
-    const plan = (id: string) => ({ sessionId: id, state: 'playing', positionSeconds: 0, audioTracks: [{id:'fr'}], subtitleTracks: [{id:'en'}], sourceGeneration: 0, seekGeneration: 0 } as PlaybackPlan);
+    const plan = (id: string) => ({ sessionId: id, state: 'playing', positionSeconds: 0, audioTracks: [{id:'fr'}], subtitleTracks: [{id:'en'}], sourceGeneration: 0, seekGeneration: 0,
+      paths: [{ id: 'p', kind: 'direct' }], selectedPathId: 'p' } as PlaybackPlan);
     const adapter = {
       startPlayback: async (r: any) => { requests.push(r); if (offline) throw new Error('connection refused'); return plan(`s${requests.length}`); },
       sessionSnapshot: async (id: string) => ({ plan: plan(id) }),

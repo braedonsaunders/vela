@@ -4,7 +4,8 @@
 // language (any code for it: 'en', 'eng') and its forced and hearing-impaired flags, and only when
 // exactly one track fits.
 // Without a file identity on either plan the id is reused when the track it names there is the
-// same language (or both have none) with the same flags; otherwise the choice goes by what the track was.
+// same language (or both have none) with the same flags; otherwise the choice goes by what the track was,
+// and a track its own plan did not list is not carried.
 import type * as V from '../wire';
 import { sameLanguage } from '../subtitle-languages';
 
@@ -25,8 +26,8 @@ export function carriedTrack(id: string, choice: TrackChoice | undefined, plan: 
   const same = tracks.find(track => track.id === id);
   if (before && now && before === now) return same ? id : undefined;
   // Unknown identity: the id is kept when its track there is what was chosen (both of no language
-  // counts), or when nothing is known of the chosen track.
-  if ((!before || !now) && same && (!was || fits(same, was) || (!languageOf(same) && !languageOf(was) && alike(same, was)))) return id;
+  // counts); with nothing known of the chosen track there is nothing to compare, and it is not kept.
+  if ((!before || !now) && same && was && (fits(same, was) || (!languageOf(same) && !languageOf(was) && alike(same, was)))) return id;
   if (!was || !languageOf(was)) return undefined;
   const found = tracks.filter(track => fits(track, was));
   return found.length === 1 ? found[0]!.id : undefined;

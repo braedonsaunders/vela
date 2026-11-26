@@ -4,7 +4,7 @@
 // empty rather than estimated.
 import { msg, number, playingRelease, second } from '@vela/core';
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../modules/vela-player/web/engine/video-info';
-import type { PlaybackPlan, Snapshot } from '@vela/player-api';
+import type { Command, PlaybackPlan, Snapshot } from '@vela/player-api';
 import { formatLines, type FormatLines } from './format';
 
 type Path = PlaybackPlan['paths'][number];
@@ -409,6 +409,12 @@ export function belongs(snapshot: Snapshot | null, plan: PlaybackPlan | null): s
     snapshot.sourceGeneration === plan.sourceGeneration &&
     snapshot.seekGeneration === plan.seekGeneration
   );
+}
+
+/** The command a view is handed: a track command names a track of the file of the session it was
+ * sent on (`sentOn`), so a view mounted for a replacement session does not replay it there. */
+export function viewCommand(command: Command | undefined, sentOn: string, sessionId: string): Command | undefined {
+  return command && (command.type === 'audio' || command.type === 'subtitle') && sentOn !== sessionId ? undefined : command;
 }
 
 /** Server acceptance can precede the engine switching; only its fresh, ready snapshot settles the choice. */
