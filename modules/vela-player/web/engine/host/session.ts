@@ -36,6 +36,12 @@ export async function loadSession(context: HostContext, session: PlaybackSession
       adaptCoreQuality(context);
       publishHostState(context);
     }, 1000);
+  const versionChanged = session.selectedVersionId !== context.session.current?.selectedVersionId;
+  if (versionChanged) {
+    context.session.pendingSeek = undefined;
+    context.session.pendingSwitch = undefined;
+    context.session.droppedSwitch = undefined;
+  }
   const waiting = context.session.pendingSeek;
   if (
     waiting?.queued &&
@@ -60,7 +66,7 @@ export async function loadSession(context: HostContext, session: PlaybackSession
   )
     context.recovery.localDecoderRetries.clear();
   const retained = session.sources.find((source) => source.id === session.selectedSourceId);
-  if (retained && canRetainOriginal(context, session, retained)) {
+  if (!versionChanged && retained && canRetainOriginal(context, session, retained)) {
     await seekRetainedOriginal(context, session, retained);
     return;
   }
@@ -89,7 +95,7 @@ export async function loadSession(context: HostContext, session: PlaybackSession
     };
   const previousServerState =
     session.id === context.session.current?.id ? context.session.current.serverState : undefined;
-  if (session.id !== context.session.current?.id || session.selectedSourceId !== context.media.source?.id) {
+  if (versionChanged || session.id !== context.session.current?.id || session.selectedSourceId !== context.media.source?.id) {
     context.quality.manual = null;
     context.quality.automatic.reset();
   }
@@ -97,11 +103,15 @@ export async function loadSession(context: HostContext, session: PlaybackSession
     context.recovery.history.clear();
     context.recovery.browserFallbacks.clear();
     context.recovery.segmentFallbacks.clear();
+  }
+  if (versionChanged || session.id !== context.session.current?.id) {
     context.tracks.subtitleFailures.clear();
     context.tracks.subtitleFailureNotes = [];
     context.tracks.subtitlePreference = undefined;
     context.tracks.deferredPath = null;
     context.tracks.audioPreference = undefined;
+  }
+  if (session.id !== context.session.current?.id) {
     context.playback.localIntent = undefined;
     context.live.latency.reset(session.livePolicy);
     context.live.networkRetries = 0;

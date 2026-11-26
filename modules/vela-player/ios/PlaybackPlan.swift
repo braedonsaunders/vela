@@ -12,6 +12,7 @@ struct VelaPlan: Decodable {
     let positionSeconds: Double
     let durationSeconds: Double?
     let paths: [VelaPlanPath]
+    let selectedVersionId: String?
     let selectedPathId: String
     let audioTracks: [VelaPlanTrack]
     let subtitleTracks: [VelaPlanTrack]
