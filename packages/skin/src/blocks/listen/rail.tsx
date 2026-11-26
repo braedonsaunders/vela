@@ -2,6 +2,7 @@
 // heading with its collapse control, new playlist and the library tools; filters; and the
 // playlists, liked albums and artists (music) or the books and shows under way (spoken word).
 // Collapsed it is an icon rail. Embedded (Your Library on a phone or a TV) it is a plain list.
+import { joinMeta } from '../../meta-line';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { Platform, ScrollView, Text, View } from 'react-native';
 import { durationLabel, msg, number, type Card, type PlaylistModel } from '@vela/core';
@@ -213,7 +214,7 @@ function SpokenSidebar({ rail, onToggle, embedded = false }: { rail: boolean; on
   const subtitle = (card: Card) => {
     const under = progress.get(card.id);
     const left = under && under.durationSeconds ? msg('media.ui.left', { time: durationLabel(Math.max(0, under.durationSeconds - under.progressSeconds)) }) : '';
-    return [card.media?.byline ?? '', left || (card.played ? msg('media.ui.finished') : '')].filter(Boolean).join(' · ');
+    return joinMeta([card.media?.byline ?? '', left || (card.played ? msg('media.ui.finished') : '')]);
   };
   return (
     <View style={{ flex: 1 }} testID="music-library" accessibilityLabel={msg('music.yourLibrary')} {...({ role: 'navigation' } as object)}>

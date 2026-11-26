@@ -2,6 +2,7 @@
 // over the binding context (the repeated item a node sits in) and the environment (the app's
 // view state). The semantics are those of the Contract renderer's table (tools/renderer.ts),
 // key for key. A template calls only the accessors it names.
+import { joinMeta } from './meta-line';
 import { identityKeys } from './identity-keys';
 import { pagerBinding, pagerState } from './pager-book';
 import { drawnAs, duration, isUnreleased, msg, releaseLabel, videoRoleLabel } from '@vela/core';
@@ -141,7 +142,7 @@ function cardName(x: Card): string {
   const progress = x.played ? t('ui.watched') : x.progressSeconds > 0 && x.durationSeconds > 0 ? t('ui.progressComplete', { progress: x.progressLabel }) : '';
   return t('ui.openTitleYearProgress', { title: x.name, year: x.year > 0 ? t('ui.year', { year: x.yearLabel }) : '', progress });
 }
-const factsLine = (x: Card) => [x.facts, ...x.genres.slice(0, 3)].filter(f => f !== '').join(' · ');
+const factsLine = (x: Card) => joinMeta([x.facts, ...x.genres.slice(0, 3)]);
 const kindId = (x: Card) => `${x.id}|${x.kind}|${x.receipt}`;
 
 /** A title's kind as the page names it. A media class (music, books, audiobooks) names it by its
@@ -219,8 +220,8 @@ function detail(read: (d: DetailModel, e: Env) => string, none = ''): Accessor {
   return (_, e) => (e.detail ? read(e.detail, e) : none);
 }
 
-const CARD_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'yearLabel', 'rating', 'progressLabel', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
-const DETAIL_FIELDS = ['id', 'kind', 'name', 'summary', 'facts', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
+const CARD_FIELDS = ['id', 'kind', 'name', 'summary', 'yearLabel', 'rating', 'progressLabel', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
+const DETAIL_FIELDS = ['id', 'kind', 'name', 'summary', 'poster', 'backdrop', 'logo', 'accent', 'receipt'] as const;
 
 export const VOCABULARY: Record<string, Accessor> = {
   'personPage.name': (_, e) => e.personPage?.name ?? '',
@@ -242,7 +243,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'context.select': c => c.contextPart?.select ?? '',
   'card.hasContext': from('card', x => yes(x.contextParts.length > 0)),
   /** The context parts as one line (series · season · episode), for a card too narrow for the links. */
-  'card.contextLine': from('card', x => x.contextParts.map(part => part.label).join(' · ')),
+  'card.contextLine': from('card', x => joinMeta(x.contextParts.map(part => part.label))),
   ...Object.fromEntries(CARD_FIELDS.flatMap(f => [[`card.${f}`, from('card', x => String(x[f]))], [`hero.${f}`, from('hero', x => String(x[f]))]])),
   'card.name': c => c.seasonLabel ?? c.card?.name ?? '',
   'card.played': from('card', x => yes(watchedMark(x))),
@@ -257,6 +258,8 @@ export const VOCABULARY: Record<string, Accessor> = {
   'card.label': from('card', cardName),
   'card.kindId': from('card', kindId),
   'hero.kindId': from('hero', kindId),
+  'card.facts': from('card', x => joinMeta([x.facts])),
+  'hero.facts': from('hero', x => joinMeta([x.facts])),
   'card.factsLine': from('card', factsLine),
   'hero.factsLine': from('hero', factsLine),
   'card.seed': from('card', x => String(x.id.length)),
@@ -270,7 +273,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'card.genresComma': from('card', x => x.genres.join(', ')),
   'hero.label': from('hero', cardName),
   'hero.genresLine': from('hero', x => x.genres.slice(0, 3).join(', ')),
-  'hero.metaLine': from('hero', x => [x.yearLabel, ...x.genres.slice(0, 3), x.rating].filter(f => f !== '').join(' · ')),
+  'hero.metaLine': from('hero', x => joinMeta([x.yearLabel, ...x.genres.slice(0, 3), x.rating])),
 
   'row.id': c => c.row?.id ?? '',
   'row.name': c => c.row?.name ?? '',
@@ -343,7 +346,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'episode.numberTitle': c => (c.card ? (c.card.episodeNumber > 0 ? t('ui.numberTitle', { number: c.card.episodeNumberLabel, title: c.card.name }) : c.card.name) : ''),
   'episode.upNextLabel': c => (c.card ? t(c.card.progressSeconds > 0 ? 'ui.continueWatching' : 'ui.upNext') : ''),
   'episode.unreleased': from('card', x => yes(isUnreleased(x.airDate))),
-  'episode.facts': from('card', x => releaseLabel(x.airDate) || x.facts),
+  'episode.facts': from('card', x => releaseLabel(x.airDate) || joinMeta([x.facts])),
   'episode.playLabel': c => (c.card ? t(c.card.progressSeconds > 0 ? 'ui.resumeEpisode' : 'ui.playEpisode') : ''),
 
   'env.viewer': (_, e) => e.viewer,
@@ -398,7 +401,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   // kindId and the action widgets continue to use the series title itself.
   'detail.id': detail(d => detailPlaybackCard(d)?.id ?? d.title[0]?.id ?? ''),
   'detail.showName': title(x => x.showName),
-  'detail.episodeContext': title(x => x.episodeContext),
+  'detail.episodeContext': title(x => joinMeta([x.episodeContext])),
   'detail.yearLabel': title(x => x.yearLabel),
   'detail.year': title(x => String(x.year)),
   'detail.rating': title(x => x.rating),
@@ -414,10 +417,11 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.seed': title(x => String(x.id.length)),
   'detail.kindLabel': title(kindLabel),
   'detail.kindId': title(kindId),
+  'detail.facts': title(x => joinMeta([x.facts])),
   'detail.factsLine': title((card, detail) => {
     const next = detail.nextUp?.[0] ?? detail.episodes.find(episode => !episode.played);
     const release = releaseLabel(card.airDate) || (!detail.canPlay ? releaseLabel(next?.airDate) : '');
-    return [release, factsLine(card)].filter(Boolean).join(' · ');
+    return joinMeta([release, factsLine(card)]);
   }),
   'detail.resumePct': detail(d => {
     const card = detailPlaybackCard(d);
@@ -433,10 +437,10 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.extrasPending': detail(d => yes(d.pending.includes('extras') && d.extras.length === 0), 'false'),
   'detail.trailerPending': detail(d => yes(d.pending.includes('trailer') && d.trailerId === ''), 'false'),
   'detail.crewLineComma': detail(d => d.crew.join(', ')),
-  'detail.crewLine': detail(d => d.crew.join(' · ')),
+  'detail.crewLine': detail(d => joinMeta(d.crew)),
   'detail.trailerId': detail(d => d.trailerId),
   'detail.trailerReady': detail(d => yes(d.trailerId !== '' && d.trailerReady), 'false'),
-  'detail.castLine': detail(d => d.cast.join(' · ')),
+  'detail.castLine': detail(d => joinMeta(d.cast)),
   'detail.canPlay': detail(d => yes(!!detailPlaybackCard(d)), 'false'),
   'detail.playLabel': detail(d => {
     const card = detailPlaybackCard(d);

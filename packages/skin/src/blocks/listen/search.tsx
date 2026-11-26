@@ -2,6 +2,7 @@
 // types (the store's musicSearch, kept to this library), grouped by what the library holds
 // (search-results.ts), and this library's recent searches while the field is empty. Wide, phone
 // and TV draw the same page; on a TV the field opens Vela's keyboard (Android TV) or the system's.
+import { joinMeta } from '../../meta-line';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Platform, Pressable as PlainPressable, Text, View, type TextStyle } from 'react-native';
 import { msg, number, plural, releaseLabel, searchList, type Card } from '@vela/core';
@@ -299,7 +300,7 @@ function ResultGroups({ results, query }: { results: ListeningResults; query: st
 
 function tileLine(card: Card, listening: MusicApp['listening']): string | undefined {
   if (card.kind === 'playlist') return msg('music.playlist');
-  if (card.media?.role === 'album') return [card.yearLabel, card.media.byline].filter(Boolean).join(' · ');
+  if (card.media?.role === 'album') return joinMeta([card.yearLabel, card.media.byline]);
   if (listening === 'audiobook') return card.media?.byline || undefined;
   return undefined;
 }
@@ -334,7 +335,7 @@ function TopResult({ card }: { card: Card }) {
   const size = tv ? 128 : m.small ? 88 : 104;
   const what = card.kind === 'playlist' ? msg('music.playlist') : msg(roleLabel(card));
   const release = releaseLabel(card.airDate);
-  const line = [release || what, round ? '' : card.media?.byline].filter(Boolean).join(' · ');
+  const line = joinMeta([release || what, round ? '' : card.media?.byline]);
   const open = () => (leaf ? app.playCard(card) : app.go(placeOf(card)));
   // Touch keeps the play button in reach; a pointer raises it on hover, as a tile's does.
   const touch = !tv && (!web || m.width < 980);

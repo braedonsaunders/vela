@@ -3,6 +3,7 @@
 // episodes. Read handles books and series. Gallery handles photos. A track opens its album, a part its audiobook and
 // a podcast episode its show. The app draws one of
 // these in place of the document's title page; each takes the document's `ui` look.
+import { joinMeta } from '../../meta-line';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Text, View } from 'react-native';
 import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, msg, number, plural, podcastOrder, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
@@ -72,7 +73,7 @@ function AlbumPage({ card, detail: _detail }: { card: Card; detail: DetailModel 
   return (
     <View>
       <Hero cover={<Cover uri={card.poster} shape="square" size={heroCover(m)} title={card.name} byline={card.media?.byline} accent={card.accent} lift={1.6} />}>
-        <Eyebrow>{[msg('media.ui.album'), card.yearLabel].filter(Boolean).join(' · ')}</Eyebrow>
+        <Eyebrow>{joinMeta([msg('media.ui.album'), card.yearLabel])}</Eyebrow>
         <Title>{card.name}</Title>
         {card.media?.byline ? <TextLink label={card.media.byline} onPress={openByline(card, actions)} testID="media-byline"
           style={m.text({ 'font-size': '19px', 'font-weight': '600', color: '$ui.ink' })} /> : null}
@@ -181,7 +182,7 @@ function ArtistPage({ card }: { card: Card }) {
   const { size, gap } = tilesPerRow(m, m.small ? 140 : 200);
   const albumGrid = albums.length ? (
     <TileGrid gap={gap}>
-      {albums.map(album => <CoverTile key={album.id} card={album} size={size} subtitle={[album.yearLabel, album.media?.childCount ? msg(`media.count.tracks.${album.media.childCount === 1 ? 'one' : 'other'}`, { count: number(album.media.childCount) }) : ''].filter(Boolean).join(' · ')}
+      {albums.map(album => <CoverTile key={album.id} card={album} size={size} subtitle={joinMeta([album.yearLabel, album.media?.childCount ? msg(`media.count.tracks.${album.media.childCount === 1 ? 'one' : 'other'}`, { count: number(album.media.childCount) }) : ''])}
         onPress={() => actions.openTitle(album)} testID={`media-album-${album.id}`} />)}
     </TileGrid>
   ) : split && section === 'album' && albumsLoad?.load === 'failed' ? <ChildrenFailed id={card.id} role="album" /> : null;
@@ -191,7 +192,7 @@ function ArtistPage({ card }: { card: Card }) {
       <Hero cover={<Cover uri={card.poster} shape="round" size={portrait} title={card.name} accent={card.accent} lift={1.4} />}>
         <Eyebrow>{msg('media.ui.artist')}</Eyebrow>
         <Title>{card.name}</Title>
-        <Facts items={[card.facts, card.genres.slice(0, 2).join(', ')]} />
+        <Facts items={[joinMeta([card.facts]), card.genres.slice(0, 2).join(', ')]} />
         {/* While waiting the counts already say whether there is music to play: no button comes and goes. */}
         {(waiting ? !!counts?.album : hasAlbums) ? <Buttons>
           <PillButton primary icon="play" label={msg('media.ui.play')} onPress={() => void playAll(false)} disabled={!albums.length} testID="media-play" nativeID="media-primary" />
@@ -246,7 +247,7 @@ function VideoGrid({ id, role, load }: { id: string; role: string; load: Loadabl
   );
   return (
     <TileGrid gap={gap}>
-      {items.map(item => <VideoTile key={item.id} card={item} size={size} wide={wide} subtitle={[item.yearLabel, item.durationLabel].filter(Boolean).join(' · ')}
+      {items.map(item => <VideoTile key={item.id} card={item} size={size} wide={wide} subtitle={joinMeta([item.yearLabel, item.durationLabel])}
         onPress={() => actions.openTitle(item)} testID={`media-video-${item.id}`} />)}
     </TileGrid>
   );
@@ -303,7 +304,7 @@ function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
   return (
     <View>
       <Hero cover={<Cover uri={card.poster} shape="square" size={heroCover(m)} title={card.name} byline={media?.byline} accent={card.accent} lift={1.6} />}>
-        <Eyebrow>{[msg('media.ui.audiobook'), card.yearLabel].filter(Boolean).join(' · ')}</Eyebrow>
+        <Eyebrow>{joinMeta([msg('media.ui.audiobook'), card.yearLabel])}</Eyebrow>
         <Title>{card.name}</Title>
         {media?.byline ? <TextLink label={msg('media.ui.by', { name: media.byline })} onPress={openByline(card, actions)} testID="media-byline"
           style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', 'font-style': 'italic', color: '$ui.ink' })} /> : null}
@@ -313,7 +314,7 @@ function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
         {resumable && total ? (
           <View style={{ gap: 8, maxWidth: 420, marginTop: 4 }} testID="media-listen-progress">
             <Progress fraction={position / total} height={5} />
-            <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{[msg('media.ui.left', { time: durationLabel(Math.max(0, total - position)) }), chapter?.name].filter(Boolean).join(' · ')}</Text>
+            <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{joinMeta([msg('media.ui.left', { time: durationLabel(Math.max(0, total - position)) }), chapter?.name])}</Text>
           </View>
         ) : null}
         <Buttons>
@@ -365,7 +366,7 @@ function PodcastPage({ card, marked }: { card: Card; marked: string }) {
   return (
     <View>
       <Hero cover={<Cover uri={card.poster} shape="square" size={heroCover(m)} title={card.name} byline={card.media?.byline} accent={card.accent} lift={1.6} />}>
-        <Eyebrow>{show ? msg('media.ui.podcast') : [msg('media.ui.episode'), dayLabel(card)].filter(Boolean).join(' · ')}</Eyebrow>
+        <Eyebrow>{show ? msg('media.ui.podcast') : joinMeta([msg('media.ui.episode'), dayLabel(card)])}</Eyebrow>
         <Title>{card.name}</Title>
         {card.media?.byline ? <TextLink label={card.media.byline} onPress={openByline(card, actions)} testID="media-byline"
           style={m.text({ 'font-size': '19px', 'font-weight': '600', color: '$ui.ink' })} /> : null}
@@ -393,7 +394,7 @@ function PodcastPage({ card, marked }: { card: Card; marked: string }) {
             const playingThis = actions.nowPlaying?.id === episode.id;
             const remaining = resumable(episode) && episode.durationSeconds ? msg('media.ui.left', { time: durationLabel(Math.max(0, episode.durationSeconds - episode.progressSeconds)) }) : '';
             return <ListRow key={episode.id} number={number(episode.media?.index || episodes.length - i)} title={episode.name}
-              subtitle={[dayLabel(episode), remaining].filter(Boolean).join(' · ') || undefined}
+              subtitle={joinMeta([dayLabel(episode), remaining]) || undefined}
               trailing={episode.durationSeconds ? durationLabel(episode.durationSeconds) : ''}
               current={playingThis || episode.id === marked} playing={playingThis && actions.nowPlaying?.playing} dim={episode.played}
               onPress={() => play(episode)} testID={`media-episode-${episode.id}`} />;

@@ -2,6 +2,7 @@
 // are by several artists): the library's album view searched for the query, 50 a page, the next
 // page read as the grid's end comes into reach. The server gives no total, so none is shown.
 // Wide, phone and TV draw the same grid; on a TV focus moves through it with the D-pad.
+import { joinMeta } from '../../meta-line';
 import { Text, View } from 'react-native';
 import { msg } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
@@ -39,7 +40,7 @@ export function MusicAlbums({ query }: { query: string }) {
         <FocusGroup style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: m.small ? -8 : -12 }}>
           {albums.items.map((card, index) => (
             <MusicTile key={card.id} card={card} size={size} preferred={index === 0} testID={`music-albums-${card.id}`}
-              subtitle={[card.yearLabel, card.media?.byline].filter(Boolean).join(' · ') || undefined} />
+              subtitle={joinMeta([card.yearLabel, card.media?.byline]) || undefined} />
           ))}
         </FocusGroup>
       </FocusScope.Provider>

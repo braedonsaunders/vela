@@ -1,6 +1,7 @@
 // Self-contained rich block for B6 Listening recap ("Rewind").
 // Exposes the recap charts, headline stats, period switcher, ranked top entries, and shareable
 // summary card modal over `@vela/core`'s `store.music.recap` engine.
+import { joinMeta } from '../meta-line';
 import { useEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import {
@@ -386,7 +387,7 @@ function RecapRankedRow({
   const lit = state.hover || state.focus;
   const card = entry.card;
   const stats = msg('music.rewind.playsMinutes', { plays: number(entry.plays), minutes: number(entry.minutes) });
-  const subtitle = [card.media?.byline || card.media?.parent?.name, stats].filter(Boolean).join(' · ');
+  const subtitle = joinMeta([card.media?.byline || card.media?.parent?.name, stats]);
   return (
     <Pressable
       {...handlers}
