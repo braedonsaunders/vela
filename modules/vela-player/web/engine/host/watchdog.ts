@@ -3,6 +3,7 @@ import type { HostContext } from './state';
 import { emitHostEvent } from './events';
 import { failPlayback, recoverPlayback, readRetries } from './recovery';
 import { readPosition, readFrameMetrics } from './position';
+import { switchWait } from './switch-wait';
 export function checkWaiting(context: HostContext) {
   if (context.tracks.pendingTracks && performance.now() - context.tracks.pendingTracks.startedAt > 15000) {
     if (context.tracks.pendingTracks.subtitle !== undefined)
@@ -22,7 +23,18 @@ export function checkWaiting(context: HostContext) {
     failPlayback(context, { kind: 'network', message: 'Seek authorization timed out', recoverable: true });
     return;
   }
-  if (context.session.pendingSwitch && performance.now() - context.session.pendingSwitch.startedAt > 15000) {
+  const pending = context.session.pendingSwitch;
+  const wait = pending ? switchWait(performance.now() - pending.startedAt, mediaPlays(context)) : 'wait';
+  if (wait === 'drop') {
+    // The server never answered, but the media plays on: the switch is given up, not the playback.
+    // A late answer is still handed off where the media then is.
+    context.session.droppedSwitch = pending;
+    context.session.pendingSwitch = undefined;
+    emitHostEvent(context, {
+      type: 'error',
+      failure: { kind: 'action', message: 'The server did not switch in time; playback continues', recoverable: true },
+    });
+  } else if (wait === 'fail') {
     context.session.pendingSwitch = undefined;
     failPlayback(context, {
       kind: 'network',
@@ -55,6 +67,13 @@ export function checkWaiting(context: HostContext) {
       ),
       context.session.controller.token(),
     );
+}
+/** The current source's media is still open and playing (or paused, or refilling): a pending switch
+ * the engine asked for did not interrupt it. A recovery or a switch waiting on a track change has
+ * released it. */
+function mediaPlays(context: HostContext): boolean {
+  if (!context.media.source || !['playing', 'paused', 'buffering'].includes(context.playback.status)) return false;
+  return !!context.media.runtime || !!context.media.pipeline || context.surface.video.hasAttribute('src');
 }
 export function recordPlaybackProgress(context: HostContext, now = performance.now()) {
   if (context.session.pendingSeek) return false;

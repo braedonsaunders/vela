@@ -23,6 +23,7 @@ export function retireMediaAuthorization(context: HostContext) {
   context.media.source = undefined;
   context.session.pendingSeek = undefined;
   context.session.pendingSwitch = undefined;
+  context.session.droppedSwitch = undefined;
   context.tracks.pendingTracks = undefined;
   context.playback.failure = null;
   context.playback.status = 'idle';
@@ -35,6 +36,12 @@ export async function loadSession(context: HostContext, session: PlaybackSession
       adaptCoreQuality(context);
       publishHostState(context);
     }, 1000);
+  const versionChanged = session.selectedVersionId !== context.session.current?.selectedVersionId;
+  if (versionChanged) {
+    context.session.pendingSeek = undefined;
+    context.session.pendingSwitch = undefined;
+    context.session.droppedSwitch = undefined;
+  }
   const waiting = context.session.pendingSeek;
   if (
     waiting?.queued &&
@@ -59,11 +66,11 @@ export async function loadSession(context: HostContext, session: PlaybackSession
   )
     context.recovery.localDecoderRetries.clear();
   const retained = session.sources.find((source) => source.id === session.selectedSourceId);
-  if (retained && canRetainOriginal(context, session, retained)) {
+  if (!versionChanged && retained && canRetainOriginal(context, session, retained)) {
     await seekRetainedOriginal(context, session, retained);
     return;
   }
-  const pending = context.session.pendingSwitch;
+  const pending = context.session.pendingSwitch ?? context.session.droppedSwitch;
   const handoff =
     pending &&
     pending.sessionId === session.id &&
@@ -78,6 +85,7 @@ export async function loadSession(context: HostContext, session: PlaybackSession
   const position = handoff ? Math.max(pending.position, readPosition(context)) : (session.position ?? 0);
   const recovery = !!handoff && pending.recovery;
   context.session.pendingSwitch = undefined;
+  context.session.droppedSwitch = undefined;
   if (session.id !== context.session.current?.id) context.session.pendingSeek = undefined;
   else if (context.session.pendingSeek && session.seekGeneration !== context.session.controller.seek)
     context.session.pendingSeek = {
@@ -87,7 +95,7 @@ export async function loadSession(context: HostContext, session: PlaybackSession
     };
   const previousServerState =
     session.id === context.session.current?.id ? context.session.current.serverState : undefined;
-  if (session.id !== context.session.current?.id || session.selectedSourceId !== context.media.source?.id) {
+  if (versionChanged || session.id !== context.session.current?.id || session.selectedSourceId !== context.media.source?.id) {
     context.quality.manual = null;
     context.quality.automatic.reset();
   }
@@ -95,11 +103,15 @@ export async function loadSession(context: HostContext, session: PlaybackSession
     context.recovery.history.clear();
     context.recovery.browserFallbacks.clear();
     context.recovery.segmentFallbacks.clear();
+  }
+  if (versionChanged || session.id !== context.session.current?.id) {
     context.tracks.subtitleFailures.clear();
     context.tracks.subtitleFailureNotes = [];
     context.tracks.subtitlePreference = undefined;
     context.tracks.deferredPath = null;
     context.tracks.audioPreference = undefined;
+  }
+  if (session.id !== context.session.current?.id) {
     context.playback.localIntent = undefined;
     context.live.latency.reset(session.livePolicy);
     context.live.networkRetries = 0;

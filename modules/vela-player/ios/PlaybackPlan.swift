@@ -10,7 +10,9 @@ struct VelaPlan: Decodable {
     let sourceGeneration: Int
     let seekGeneration: Int
     let positionSeconds: Double
+    let durationSeconds: Double?
     let paths: [VelaPlanPath]
+    let selectedVersionId: String?
     let selectedPathId: String
     let audioTracks: [VelaPlanTrack]
     let subtitleTracks: [VelaPlanTrack]
@@ -47,6 +49,16 @@ struct VelaPlan: Decodable {
         }?.id
     }
 
+    /// The loaded item's identity: a plan with the same key plays on in the item already loaded. A server's
+    /// VOD HLS is replaced when a seek restarts its encoder, under the same URL and source generation: only
+    /// the seek generation (and the playlist's timeline origin) move, so they are part of its identity and
+    /// the new item loads once. An original file and a live window keep their item across seeks.
+    func sourceKey(_ path: VelaPlanPath) -> String {
+        let key = "\(sessionId):\(path.id):\(sourceGeneration)"
+        guard MediaTimeline.applies(to: self, path: path) else { return key }
+        return key + ":\(seekGeneration):\(MediaTimeline(plan: self, path: path).origin)"
+    }
+
     /// A plan from the view's `plan` prop (the JSON object React Native passes).
     static func decode(_ object: [String: Any]) -> VelaPlan? {
         guard let data = try? JSONSerialization.data(withJSONObject: object) else {
@@ -76,6 +88,54 @@ struct VelaPlanPath: Decodable {
     /// An original file the server serves by byte range: the native engine's input.
     var isOriginalFile: Bool {
         original == true && transport == "file"
+    }
+}
+
+/// Title seconds at the protocol boundary, item seconds at the player. A server's VOD HLS may start partway
+/// into the title (`timelineOriginSeconds`): its playlist time zero is that title second, and the engine's
+/// clock, duration and buffered end are on the playlist's axis. Plans, commands, snapshots and observations
+/// are all on the title's. A live window has its own clock and an original file is the title itself: origin 0.
+/// The same mapping as Android's (PlaybackPlan.kt MediaTimeline) and the web's (host/position.ts nativeOrigin).
+struct MediaTimeline: Equatable {
+    let origin: Double
+
+    init(origin: Double = 0) {
+        self.origin = origin.isFinite && origin > 0 ? origin : 0
+    }
+
+    init(plan: VelaPlan, path: VelaPlanPath? = nil) {
+        let path = path ?? plan.selectedPath
+        guard let path, Self.applies(to: plan, path: path) else {
+            self.init()
+            return
+        }
+        self.init(origin: path.timelineOriginSeconds ?? 0)
+    }
+
+    /// Whether the plan's path plays on a playlist clock that a timeline origin rebases: a server's VOD HLS.
+    static func applies(to plan: VelaPlan, path: VelaPlanPath) -> Bool {
+        !plan.isLive && !path.isOriginalFile && path.transport == "hls"
+    }
+
+    /// The item's time for a title position: where the engine starts or seeks.
+    func mediaTime(_ title: Double) -> Double {
+        guard title.isFinite else { return title }
+        return max(0, title - origin)
+    }
+
+    /// The title's time for the item's: what is shown and reported.
+    func titleTime(_ media: Double) -> Double {
+        guard media.isFinite else { return media }
+        return origin + max(0, media)
+    }
+
+    /// An engine property's value on the title's axis: its clock (`time-pos`), the item's duration (the
+    /// playlist runs to the title's end, so it ends at the title's duration) and the buffered end.
+    func titleProperty(_ name: String, _ value: Any?) -> Any? {
+        guard origin > 0, ["time-pos", "duration", "demuxer-cache-time"].contains(name), let seconds = value as? Double else {
+            return value
+        }
+        return titleTime(seconds)
     }
 }
 

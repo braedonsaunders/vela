@@ -19,6 +19,22 @@ import Foundation
                 return
             }
             if args.count > 3 {
+                if args[3] == "original-lost" {
+                    let received = ReceivedBytes()
+                    let request = ScopedMediaRequest(url: URL(string: args[2])!, access: access, offset: 0, count: 1024, received: received)
+                    do { _ = try request.run() } catch { }
+                    guard received.originalLost else { exit(2) }
+                    print("original_lost")
+                    return
+                }
+                if args[3] == "truncated-check" {
+                    guard originalResponseTruncated(expectedLength: 13, receivedLength: 5),
+                          !originalResponseTruncated(expectedLength: 13, receivedLength: 13),
+                          !originalResponseTruncated(expectedLength: nil, receivedLength: 5)
+                    else { exit(2) }
+                    print("truncated_check_ok")
+                    return
+                }
                 let reader = ScopedMediaByteReader(url: URL(string: args[2])!, access: access)
                 if args[3] == "attachment" {
                     let source = URL(string: args[2])!

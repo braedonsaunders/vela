@@ -6,7 +6,7 @@ import { episodePage } from '../../../episode-page';
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.16';
+const id = 'latenight', version = '1.0.17';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -125,8 +125,11 @@ const menuRow = (label: string, icon: string, press: { action: 'openPicker' | 's
 
 // The profile menu, drawn as a VCR setup menu on the classic blue.
 const menu: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'pop', role: 'dialog', label: '{s:menu}', escape: 'menu', returnFocus: 'latenight-profile',
-  style: { position: 'absolute', top: 'calc(12px + 74px)', right: 'calc(12px + max(30px, 3.6vw))', 'z-index': '30', width: '290px', 'box-sizing': 'border-box', padding: '18px 22px 16px', display: 'flex', 'flex-direction': 'column', gap: '10px 10px', 'border-radius': '4px', border: '2px solid $ink', 'background-color': '$vcr-menu', 'box-shadow': '8px 8px 0px $shadow, 0px 30px 80px $shadow' },
-  wide: { top: 'calc(18px + 74px)', right: 'calc(18px + max(30px, 3.6vw))' }, small: { top: '62px', right: '10px', width: 'calc(100% - 20px)', 'max-width': '320px' }, children: [
+  style: { position: 'absolute', top: 'calc(12px + 74px)', right: 'calc(12px + max(30px, 3.6vw))',
+    'max-height': 'calc(100vh - 106px - env(safe-area-inset-bottom))', 'overflow-y': 'auto',
+    'z-index': '30', width: '290px', 'box-sizing': 'border-box', padding: '18px 22px 16px', display: 'flex', 'flex-direction': 'column', gap: '10px 10px', 'border-radius': '4px', border: '2px solid $ink', 'background-color': '$vcr-menu', 'box-shadow': '8px 8px 0px $shadow, 0px 30px 80px $shadow' },
+  wide: { top: 'calc(18px + 74px)', right: 'calc(18px + max(30px, 3.6vw))', 'max-height': 'calc(100vh - 118px - env(safe-area-inset-bottom))' },
+  small: { top: '62px', right: '10px', width: 'calc(100% - 20px)', 'max-width': '320px', 'max-height': 'calc(100vh - 70px - env(safe-area-inset-bottom))' }, children: [
     { type: 'text', text: '{s:menuTitle}', style: { ...osdText('20px', '$ink'), 'text-shadow': 'none', 'letter-spacing': '0.16em', opacity: '0.75' } },
     { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '12px 12px', 'align-items': 'center' }, children: [
       { type: 'text', text: '{env.viewerInitial}', style: { width: '40px', height: '40px', 'border-radius': '3px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', ...osdText('28px', '$ink-on-label'), 'text-shadow': 'none', 'background-image': 'linear-gradient(180deg, $tape-red 0%, $tape-red 33%, $tape-orange 33%, $tape-orange 66%, $tape-yellow 66%, $tape-yellow 100%)' } },

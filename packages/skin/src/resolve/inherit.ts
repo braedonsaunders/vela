@@ -1,4 +1,4 @@
-import { searchControls, searchPaging } from './vela-base/search';
+import { groupedSearch, searchControls, searchPaging, searchScope } from './vela-base/search';
 // Route-level inheritance (docs/skin-schema.md, renderer 15): every document draws on top of the
 // Vela base (base.ts), the built-in routes and slots in the document's own `ui` look. A slot or
 // route the document defines replaces the base's; templates, motion, keyframes, fonts, tokens and
@@ -247,7 +247,18 @@ export function withBase(doc: SkinDocument, base: SkinDocument): InheritedDocume
   const home = ownHome ?? homeOf(base);
   const routes = { ...base.routes, ...doc.routes };
   delete routes.home;
-  if (routes.search) routes.search = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '18px' }, children: [searchControls, routes.search, searchPaging] };
+  if (routes.search) routes.search = {
+    type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '18px' },
+    children: [
+      searchScope,
+      groupedSearch,
+      {
+        type: 'box', when: [{ test: 'search.allServers', not: true }],
+        style: { display: 'flex', 'flex-direction': 'column', gap: '18px' },
+        children: [searchControls, routes.search, searchPaging],
+      },
+    ],
+  };
   if (routes.title) routes.title = sharedCast(routes.title);
   if (!doc.routes?.library) routes.library = hasFlowHeader(doc.slots?.shell)
     ? libraryBelowHeader

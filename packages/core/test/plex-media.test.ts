@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { stopSessionsOnPageHide } from '../src/store/unload';
+
 import { libraryExperience } from '../src/library-presentation';
 import { PlexAdapter } from '../src/adapter/plex';
 import { partAt, plexProjection } from '../src/adapter/plex/media';
@@ -1239,4 +1241,52 @@ describe('Plex progress beside commands on a slow server', () => {
     expect(settled.map(r => r.status === 'fulfilled' ? r.value : r.reason instanceof VelaError && r.reason.status)).toEqual([{ accepted: true }, 500]);
     expect(posts()).toEqual(['playing 17', 'stopped 19']);
   });
+});
+
+test.each(['pagehide before response', 'pagehide during cleanup', 'queued progress'] as const)('Plex sends one terminal timeline with %s', async race => {
+  const timelineSent = Promise.withResolvers<void>();
+  const timelineResponse = Promise.withResolvers<Response>();
+  const cleanupSent = Promise.withResolvers<void>();
+  const cleanupResponse = Promise.withResolvers<Response>();
+  let cleanupAttempts = 0;
+  const seen = routeFetch({
+    'GET /library/metadata/9': { MediaContainer: { Metadata: [track] } },
+    'POST /:/timeline': () => {
+      timelineSent.resolve();
+      return race === 'pagehide before response' ? timelineResponse.promise : new Response(null, { status: 204 });
+    },
+    'GET /music/:/transcode/universal/stop': () => {
+      if (++cleanupAttempts > 1) return new Response(null, { status: 204 });
+      cleanupSent.resolve();
+      return cleanupResponse.promise;
+    },
+  });
+  const adapter = plex();
+  const { sessionId, sourceGeneration, seekGeneration } = await adapter.startPlayback({ titleId: '9', client, idempotencyKey: 'start' } as never);
+  const at = { sourceGeneration, seekGeneration };
+  const stopped = adapter.command(sessionId, { ...at, kind: 'stop', idempotencyKey: 'stop' }).catch(error => error);
+  await (race === 'pagehide before response' ? timelineSent.promise : cleanupSent.promise);
+
+  const page = new EventTarget();
+  stopSessionsOnPageHide(page, {
+    stopOnUnload(send) {
+      const requests = adapter.unloadStop(sessionId, at);
+      requests.forEach(send);
+      return requests.length;
+    },
+  });
+  const queued = race === 'queued progress' ? adapter.reportObservation(sessionId, {
+    ...at, sequence: 1, state: 'playing', positionSeconds: 19, observedAt: '2026-01-01T00:00:00Z',
+    idempotencyKey: 'progress', playableRanges: [], selectedPathId: 'plex-file',
+  }) : undefined;
+  if (race !== 'queued progress') page.dispatchEvent(new Event('pagehide'));
+  timelineResponse.resolve(new Response(null, { status: 204 }));
+  cleanupResponse.resolve(new Response(null, { status: 500 }));
+  const [stopResult] = await Promise.all([stopped, queued]);
+  if (race === 'queued progress') {
+    expect(stopResult).toMatchObject({ status: 500 });
+    expect(await adapter.command(sessionId, { ...at, kind: 'stop', idempotencyKey: 'retry' })).toMatchObject({ state: 'ended' });
+  }
+  expect(cleanupAttempts).toBe(race === 'pagehide before response' ? 1 : 2);
+  expect(seen.filter(({ url }) => url.pathname === '/:/timeline').map(({ url }) => url.searchParams.get('state'))).toEqual(['stopped']);
 });

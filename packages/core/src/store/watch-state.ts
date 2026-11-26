@@ -90,6 +90,10 @@ export function optimisticWatchState(state: VelaState, id: string, change: Chang
     ...(state.music ? { music: { ...state.music, liked: likedAfter(state.music.liked, id, change) } } : {}),
     search: {
       ...state.search,
+      sections: state.search.sections?.map(section => section.id === state.auth.serverId ? {
+        ...section, results: section.results.map(result => result.viewer === state.auth.viewerId && result.card.id === id
+          ? { ...result, card: changeCardWatch(result.card, id, change) } : result),
+      } : section),
       fast: { ...state.search.fast, items: cards(state.search.fast.items, id, change) },
       descriptive: { ...state.search.descriptive, items: cards(state.search.descriptive.items, id, change) },
       ai: { ...state.search.ai, items: cards(state.search.ai.items, id, change) },

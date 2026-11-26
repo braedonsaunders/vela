@@ -71,9 +71,14 @@ export { AUDIO_RATES, chapterEnd, preloadLead, type AudioEngine, type AudioEngin
 export { AWAKE, holdsNext, sleepDue, sleepFrom, sleepLeftMs, type Sleep } from './sleep';
 export { DEFAULT_STREAMING, STREAMING_LIMITS, STREAMING_QUALITIES, streamingSettings, type StreamingQuality, type StreamingSettings } from './streaming';
 export { storedPlayerSettings, type PictureFit, type PlayerSettingsState, type StoredPlayerSettings } from './store/player-settings';
+export { matchSeriesTracks, matchTrack, MAX_SERIES_TRACKS, parseSeriesTrackKey, pruneSeriesTracks, removeServerSeriesTracks, seriesTrackKey, storedSeriesTracks, trackChoiceOf, trackCodecFamily, type SeriesTrackChoice, type SeriesTrackMap, type SeriesTrackMatch, type SeriesTrackPreference } from './series-tracks';
+export type { SeriesTracksState } from './store/series-tracks';
 export { autoplayNext, current as currentInQueue, queuedNext, sourceNext, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
-export { albumOrder, audioCardsOf } from './audio/cards';
+export { albumOrder, audioCardsOf, listenFrom, playStart, resumePoint } from './audio/cards';
+export { audioKey, isLiked, likedTitleIds, nextRate, playingItem, runAudioKey, setTitleLiked, type AudioKeyCommand, type AudioKeyInput } from './audio/keys';
 export { formatFirstPlayLabel, formatRecapSummary, recapChartBuckets, recapKey, recapLabels, recapStatCards, type DuplicateGroupModel, type DuplicateGroupsList, type HistoryRecapModel, type LikedList, type Lyrics as MusicLyrics, type PlaylistImportMatchModel, type PlaylistImportModel, type PlaylistImportUnmatchedModel, type RecapChartBucket, type RecapEntryModel, type RecapLabels, type RecentContext, type RecordingReleasesModel } from './store/music';
 export { biquad, biquadResponseDb, chainResponseDb, crossfadeGains, eqChain, EQ_Q, type Biquad, type EqChain, type EqFilter, type FilterType } from './audio/eq';
 export { albumInOrder, DEFAULT_SOUND, EQ_BANDS_HZ, EQ_PRESETS, EQ_RANGE_DB, LEVELLING_MODES, levellingGain, loudnessOf, PREAMP_RANGE_DB, presetOf, soundSettings, transitionBetween, TRANSITION_LENGTHS, withBand, withPreset, type LevellingMode, type Levelling, type SoundSettings, type Transition, type TransitionLength } from './audio/sound';
 export { childCountsLine, childCountsOf, childrenKey, childSectionLabel, childSections, childSectionsWait, recommendationTabWaits, settledPluginLevels, videoRoleLabel, pluginLevelsOf, recommendationTab, tabCard, type PluginLevels } from './plugin-levels';
+
+export { resultKey, searchServers, type SearchSection, type SearchResult } from './store/multi-search';

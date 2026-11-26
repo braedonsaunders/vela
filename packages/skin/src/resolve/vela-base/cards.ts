@@ -138,6 +138,39 @@ export const playedBadge: Node = {
 // A scrim over the art behind the progress bar: dark in every document, unlike a fade to the page.
 const progressFoot = 'linear-gradient(0deg, $ui.scrim 0%, color-mix(in srgb, $ui.scrim 0%, transparent) 100%)';
 
+const cardMetadata: BoxNode = {
+  type: 'box',
+  style: {
+    display: 'flex',
+    'flex-direction': 'column',
+    gap: '4px',
+    padding: '0px 2px',
+    opacity: '0.86',
+    transition: 'opacity 180ms linear',
+  },
+  groupHover: { opacity: '1' },
+  children: [
+    {
+      type: 'text',
+      text: '{card.name}',
+      style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1', color: '$ui.ink' },
+      small: { 'font-size': '13px', 'line-clamp': '2' },
+    },
+    { type: 'use', template: 'velaCardContext' },
+    {
+      type: 'text',
+      text: '{card.facts}',
+      style: {
+        'font-size': '12px',
+        color: '$ui.inkQuiet',
+        'line-clamp': '1',
+        'font-variant-numeric': 'tabular-nums',
+      },
+      small: { 'line-clamp': '2' },
+    },
+  ],
+};
+
 export const card: Node = {
   type: 'box',
   group: true,
@@ -282,38 +315,7 @@ export const card: Node = {
         },
       ],
     },
-    {
-      type: 'box',
-      style: {
-        display: 'flex',
-        'flex-direction': 'column',
-        gap: '4px',
-        padding: '0px 2px',
-        opacity: '0.86',
-        transition: 'opacity 180ms linear',
-      },
-      groupHover: { opacity: '1' },
-      children: [
-        {
-          type: 'text',
-          text: '{card.name}',
-          style: { 'font-size': '14px', 'font-weight': '600', 'line-clamp': '1', color: '$ui.ink' },
-          small: { 'font-size': '13px', 'line-clamp': '2' },
-        },
-        { type: 'use', template: 'velaCardContext' },
-        {
-          type: 'text',
-          text: '{card.facts}',
-          style: {
-            'font-size': '12px',
-            color: '$ui.inkQuiet',
-            'line-clamp': '1',
-            'font-variant-numeric': 'tabular-nums',
-          },
-          small: { 'line-clamp': '2' },
-        },
-      ],
-    },
+    cardMetadata,
     cardPreview,
   ],
 };
@@ -513,6 +515,33 @@ export const gridCard: Node = {
   style: { ...(card as BoxNode).style, width: '100%' },
   small: { width: '100%' },
 } as Node;
+
+/** Search cards keep the entire press scoped to the result, including episode context. */
+const searchMetadata: BoxNode = {
+  ...cardMetadata,
+  children: cardMetadata.children?.map(child => {
+    if (child.type === 'use') return {
+      type: 'text',
+      when: [{ test: 'search.episodeContext' }],
+      text: '{search.episodeContext}',
+      style: { 'font-size': '12px', 'line-clamp': '2', color: '$ui.inkSecondary' },
+    };
+    if (child.type === 'text' && child.text === '{card.name}') return {
+      ...child,
+      style: { ...child.style, 'line-clamp': '2', 'line-height': '17px', 'min-height': '34px' },
+      small: { ...child.small, 'line-clamp': '2', 'line-height': '16px', 'min-height': '32px' },
+    };
+    if (child.type === 'text' && child.text === '{card.facts}') return {
+      ...child, text: '{search.cardFacts}', small: { 'line-clamp': '1' },
+    };
+    return child;
+  }),
+};
+
+export const searchGridCard: BoxNode = {
+  ...(gridCard as BoxNode),
+  children: (gridCard as BoxNode).children?.map(child => child === cardMetadata ? searchMetadata : child),
+};
 
 // Recommendations rows' layouts on library pages (row.layout, docs: Recommendations wire): `hero`
 // draws large landscape art in place, `wide` landscape cards, `tiles` square tiles; any other

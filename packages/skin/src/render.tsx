@@ -13,7 +13,7 @@ import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
 import { isHeroControl, isHeroSegment } from './hero-pager';
 import { holdHero } from './hero-hold';
-import { heroButtonRank, heroFocusCarry } from './hero-focus';
+import { heroButtonRank, heroEdgeKeyGate, heroFocusCarry } from './hero-focus';
 // The skin document renderer: one recursive component per node kind over a resolved document
 // (resolve.ts). A node's style is its state's layer with the hover, focus, group and pressed
 // overlays in force, translated per the style matrix (translate.ts); text rows inherit down the
@@ -25,7 +25,7 @@ import { Image } from 'expo-image';
 import type { ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Children, Fragment, memo, cloneElement, startTransition, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
-import { Animated as RNAnimated, Dimensions, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated as RNAnimated, DeviceEventEmitter, Dimensions, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import type { Viewport } from './css';
@@ -58,6 +58,7 @@ import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocab
 import { itemKey, items } from './screen/items';
 import { deref as derefValue, screenImageSrc } from './screen/scope';
 import { BlockView } from './screen/block-view';
+import { RichBlock } from './blocks/listen/rich';
 import { useScopedReads } from './screen/scoped-reads';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
@@ -108,6 +109,8 @@ export const Unfocusable = createContext(false);
 export interface SurfaceSlotViews {
   row?: ComponentType<{ id: string; surface: string }>;
   titlePanels?: ComponentType<{ id: string; kind: string }>;
+  /** Renderer 20: a published plugin slot in a built-in page (`plugin:<slot id>`), with its context filled. */
+  slot?: ComponentType<{ slot: string; context: Record<string, string>; limit?: number }>;
 }
 export const SurfaceSlots = createContext<SurfaceSlotViews | null>(null);
 /** Visible content inside a labelled press target is presentation; the overlay button names it. */
@@ -549,6 +552,8 @@ function SkinNodeView({ node, ctx: given, route, after, hero, changed }: { node:
     case 'sections': case 'shelf': case 'grid': case 'marquee': case 'tabs': case 'table':
     case 'lineGraph': case 'player': case 'paramInput': case 'titleCard':
       return <BlockView node={node} ctx={ctx} />;
+    // Rich blocks (docs/experiences.md): native engines with named parts (blocks/listen).
+    case 'rich': return <RichBlock node={node} ctx={ctx} />;
   }
 }
 
@@ -755,12 +760,26 @@ const NativeStickyHeader = forwardRef<{ setNextHeaderY(y: number): void }, Stick
 
 /** The one focus the hero's buttons hand on (there is one focus, and one hero on show). */
 const heroFocus = heroFocusCarry<Focusable>();
+/** Android TV: hardware left/right key-down vs key-up focus gate (MainActivity velaAndroidTVKey). */
+const heroKeyGate = heroEdgeKeyGate();
+let androidHeroKeysSubscribed = false;
 
-/** Android TV: a press that turns the hero page must find focus already on the outermost button.
- * The press reaches the app as its key comes up, after the key going down moved focus, and the
- * focus report can arrive before or after it; so the press is judged once its focus report is in
- * (HERO_EDGE_WAIT_MS), and a button that took focus within HERO_EDGE_SETTLED_MS of the press is
- * where this press brought focus, not where it started (a longer hold is a long press). */
+function subscribeAndroidHeroKeys(): void {
+  if (androidHeroKeysSubscribed || Platform.OS !== 'android' || !Platform.isTV) return;
+  if (typeof DeviceEventEmitter?.addListener !== 'function') return;
+  androidHeroKeysSubscribed = true;
+  DeviceEventEmitter.addListener('velaAndroidTVKey', (event: { eventType?: string; eventKeyAction?: number; focus?: string }) => {
+    const direction = event?.eventType === 'left' ? -1 : event?.eventType === 'right' ? 1 : 0;
+    if (!direction) return;
+    if (event.eventKeyAction === 0) heroKeyGate.key(direction as -1 | 1, true, event.focus);
+    else if (event.eventKeyAction === 1) heroKeyGate.key(direction as -1 | 1, false, event.focus);
+  });
+}
+
+/** Android TV: a press that turns the hero page must find focus already on the outermost button
+ * and stay there from key-down to key-up (tracked via MainActivity's velaAndroidTVKey focus
+ * snapshots, with HERO_EDGE_SETTLED_MS fallback when unavailable). HERO_EDGE_WAIT_MS gives any
+ * late focus report time to settle before checking screen positions. */
 const HERO_EDGE_WAIT_MS = 120;
 const HERO_EDGE_SETTLED_MS = 300;
 /** A press reaches every focused control that listens; it turns the page once. */
@@ -780,7 +799,7 @@ function heroEdgePress(event: object, target: Focusable, direction: -1 | 1, turn
   const pressedAt = Date.now();
   setTimeout(() => {
     const held = heroFocus.current();
-    if (!held || pressedAt - held.since < HERO_EDGE_SETTLED_MS) return;
+    if (!held || !heroKeyGate.stayed(direction, pressedAt, held.since, HERO_EDGE_SETTLED_MS)) return;
     const buttons = heroFocus.targets();
     const xs = new Map<Focusable, number>();
     let waiting = buttons.length;
@@ -842,7 +861,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     host.setFlag('keep-page-scrolled', on);
   };
   useEffect(() => () => { if (route && scrolled.current) host.setFlag('keep-page-scrolled', false); }, []);
-  const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY) : null), [route]);
+  const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY, viewport.height) : null), [route, viewport.height]);
   const inHero = useContext(HeroInteraction) || !!hero;
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
@@ -879,7 +898,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       heroEdgePress(event, buttonRef.current, direction as -1 | 1, () => {
         const count = env.home?.hero.length ?? 0;
         const target = count > 1 ? (env.heroIndex + direction + count) % count : null;
-        if (target !== null) host.dispatch('pickHero', String(target));
+        if (target !== null) {
+          heroFocus.turn(direction as -1 | 1);
+          host.dispatch('pickHero', String(target));
+        }
       });
       return;
     }
@@ -1131,7 +1153,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     // The button registers under the box's id, so Escape's returnFocus can land on it.
     const press = node.press;
     const heroButton = Platform.isTV && heroAction;
-    const registerButton = focusTarget(a11y.nativeID);
+    const registerButton = focusTarget(a11y.nativeID, reveal ?? undefined);
     const bindButton = (target: Focusable | null) => {
       // React Native Web's merged refs discard callback return values and detach with null.
       // Native React can call the returned cleanup instead. Both paths must release registrations.
@@ -1139,7 +1161,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       if (!target) return;
       buttonRef.current = target;
       const heroRank = heroButton ? heroButtonRank(press!.action, fill(press!.arg, ctx, env)) : -1;
-      if (heroRank >= 0) heroFocus.add(target, heroRank);
+      if (heroRank >= 0) { subscribeAndroidHeroKeys(); heroFocus.add(target, heroRank); }
       const unregister = registerButton(target);
       const untrack = press ? trackButton(target, `${press.action}:${fill(press.arg, ctx, env)}`) : undefined;
       const contextTarget = web && cardPrimary ? target as unknown as HTMLElement : undefined;
@@ -1230,7 +1252,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onFocus={event => {
           const visible = isFocusVisible(event.currentTarget);
           set('focus', visible);
-          if (heroButton && buttonRef.current) heroFocus.focused(buttonRef.current, true);
+          if (heroButton && buttonRef.current) { heroFocus.focused(buttonRef.current, true); heroKeyGate.focused(); }
           if (inHero || (heroControl && visible)) holdHero(host.setFlag, true, Platform.isTV);
           routeFocus?.focused();
           if (buttonRef.current) episodeNav?.focused(buttonRef.current);
@@ -1254,7 +1276,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onBlur={() => set('focus', false)}
         accessible accessibilityRole="summary" accessibilityLabel={a11y.accessibilityLabel ?? sectionText(node, ctx, env)} testID={a11y.testID} />
     ) : null;
-    const guide = node.press ? undefined : tvGuide(node, env, band);
+    const guide = node.press ? undefined : tvGuide(node, env, band, ctx);
     // A reading stop takes focus without doing anything, so the remote can scroll to it.
     const stopProps = stop && web ? {
       focusable: true,
@@ -1352,10 +1374,13 @@ const stackedActions: ViewStyle = { flexDirection: 'column', alignItems: 'stretc
  * around the sign-in card kept the first D-pad press from reaching its fields. An escape scope
  * (a menu, a drawer) is one too, and while open it keeps focus inside: moving off its edges stays
  * on its items rather than reaching the page behind. */
-function tvGuide(node: Extract<RNode, { kind: 'box' }>, env: Env, band: boolean) {
+function tvGuide(node: Extract<RNode, { kind: 'box' }>, env: Env, band: boolean, ctx: Ctx) {
   if (!Platform.isTV) return undefined;
   const scope = !!node.escape?.length;
-  const region = node.role === 'navigation' || (band && Platform.OS === 'ios' && focusableWithin(node));
+  // Coming down from the centred scope should enter a search group at its first card on
+  // Android TV, even when the group's sparse grid ends well to the left of the scope.
+  const searchGrid = Platform.OS === 'android' && !!ctx.searchSection && fill(node.id, ctx, env).startsWith('vela-search-server-grid-');
+  const region = searchGrid || node.role === 'navigation' || (band && Platform.OS === 'ios' && focusableWithin(node));
   if (!scope && !region) return undefined;
   // Flags are read only by a scope: a flag change redraws scopes, not every region.
   const trap = scope && selectEnv(env, 'flags', `scope:${node.escape!.join(',')}`, flags => scopeOpen(node.escape!, flags));
@@ -1759,9 +1784,14 @@ function TextNode({ node, ctx }: { node: Extract<RNode, { kind: 'text' }>; ctx: 
       </Frame>
     );
   }
+  // Renderer 20: inline runs, each a nested text with its own rows over the line's.
+  const spans = node.spans?.filter(span => holds(span.when, ctx, env)).map((span, i) => {
+    const rows = filled(span.style, ctx, env, false);
+    return <Text key={i} style={textStyle({ ...text.rows, ...rows }, measure(viewport, text.fontSize)).style}>{fill(span.text, ctx, env)}</Text>;
+  });
   return (
     <Line style={[drawn.style, style as TextStyle, centredBox(own, text.rows, style), tightLine(drawn.style, style, text.fontSize)]} {...lines} {...a11yProps(node, ctx, env)} {...presentation}>
-      {value}
+      {value}{spans}
     </Line>
   );
 }
@@ -1863,8 +1893,20 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const { style, text, fx } = useLeafStyle(node, ctx);
   const inner = node.inner ? translatedBox(split(filled(node.inner, ctx, host.env, false)).own, host.viewport, text.fontSize).style : undefined;
   const Frame = frameFor(node);
+  const surfaceSlots = useContext(SurfaceSlots);
   // Apple TV searches on the system's search screen (the shell's Search opens it): no field here.
   if (fx.hidden || (node.slot === 'searchField' && SYSTEM_SEARCH)) return null;
+  if (node.slot !== 'children' && node.slot !== 'searchField') {
+    // A plugin slot draws the surfaces filling it (the app's view), or nothing.
+    const Surfaces = surfaceSlots?.slot;
+    if (!Surfaces) return null;
+    const context = Object.fromEntries(Object.entries(node.context ?? {}).map(([name, value]) => [name, fill(value, ctx, host.env)]));
+    return (
+      <Inherited.Provider value={text}>
+        <Frame style={style as ViewStyle}><View style={inner as ViewStyle}><Surfaces slot={node.slot.slice('plugin:'.length)} context={context} limit={node.limit} /></View></Frame>
+      </Inherited.Provider>
+    );
+  }
   const content = node.slot === 'children' ? host.children : <SearchField params={{}} ctx={ctx} />;
   const box = <View style={inner as ViewStyle}>{content}</View>;
   // The search field is centred and narrower than the page; the TV focus engine only moves to

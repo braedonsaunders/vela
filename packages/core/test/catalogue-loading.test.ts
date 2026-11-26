@@ -181,3 +181,27 @@ test('a server-counted total reaches the library model; a missing or invalid one
   }
 });
 
+
+test('a title view can restart an aborted detail read immediately', async () => {
+  const box = new StateBox({ titles: {} } as VelaState);
+  const first = deferred<never>();
+  const replacement = deferred<never>();
+  let calls = 0;
+  const session = {
+    epoch: 0, onReset() {},
+    async ready() { return { adapter: { detail: () => ++calls === 1 ? first.promise : replacement.promise } }; },
+  };
+  const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
+  const closeFirst = catalogue.view('movie');
+  await Promise.resolve();
+  closeFirst();
+  const closeReplacement = catalogue.view('movie');
+  await Promise.resolve();
+  expect(calls).toBe(2);
+  first.reject(new Error('Late response'));
+  await Promise.resolve();
+  expect(box.get().titles.movie?.load).toBe('loading');
+  closeReplacement();
+  replacement.reject(new Error('Cancelled'));
+  expect(box.get().titles.movie).toBeUndefined();
+});

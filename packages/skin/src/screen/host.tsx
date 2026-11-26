@@ -5,7 +5,7 @@
 // here (SkinHost.screenPress) and become the fixed actions; what leaves the screen (opening a
 // page or a route, playback, links, confirmations, toasts) is the app's (ScreenAppActions).
 // Section routes, pages and W5's surface hosts all draw through ScreenView.
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { useScreenDocument, useScreenPage, useVela, useVelaState } from '@vela/core/react';
 import { msg, screenDocumentHref, type ScreenTarget } from '@vela/core';
@@ -16,7 +16,8 @@ import { tvPixelScale } from '../tv-pixel-scale';
 import type { ScreenPress, SkinHost } from '../host';
 import { fill, type RNode } from '../resolve';
 import { focusElement } from '../escape';
-import { resolveScreenDocument, type ResolvedScreen } from '../resolve/screen';
+import { formFactor, resolveScreenDocument, type ResolvedScreen } from '../resolve/screen';
+import { devicePlatform, foldOpen } from './platform';
 import { resolveUi } from '../resolve/ui';
 import { SkinNodeFor, SkinRoot, SkinRoute } from '../render';
 import { ScreenBlockRuntimeProvider, createScreenBlockRuntime, samePageWithoutRev, useBlockLook, type ScreenBlockRuntime } from '../blocks';
@@ -65,6 +66,20 @@ export interface ScreenViewProps {
   /** Surfaces: nothing is drawn until the first read answers, and nothing when it fails or the
    *  document is refused (a surface that cannot draw is left out, never a skeleton or an error). */
   quiet?: boolean;
+  /** Renderer 20, a page in an experience's shell: its key, under which its `sections` keep their scroll. */
+  scrollKey?: string;
+  /** Renderer 20: given the document's local state for app code (a keyboard shortcut opening the
+   * shell's queue panel), as a press of `toggle` or `open`/`close` would change it. */
+  handle?: MutableRefObject<ScreenStateHandle | null>;
+}
+
+/** The document's local state (`{state.*}`), driven from app code. */
+export interface ScreenStateHandle {
+  /** Flip a flag; `clear` flags close when it opens (Q: the queue, closing Sound). */
+  toggle(flag: string, options?: { clear?: string[] }): void;
+  set(flag: string, on: boolean): void;
+  /** Whether a flag is up now. */
+  isOn(flag: string): boolean;
 }
 
 const BOOL = /^(true|false)$/;
@@ -84,6 +99,9 @@ function without(args: Record<string, string>, ...names: string[]): Record<strin
 function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolved?: ResolvedScreen; problem: string } {
   const { width, height } = host.viewport;
   const ui = host.doc.document.ui;
+  // A built-in page takes the active skin's overrides of its experience (and its tokens and strings).
+  const skin = host.doc.document;
+  const fold = foldOpen(host.viewport);
   // The last document of this page that resolved: a newer one that cannot be drawn (a Studio draft
   // with an error) leaves it on screen instead of the failure.
   const lastGood = useRef<{ id: string; resolved: ResolvedScreen } | null>(null);
@@ -92,7 +110,8 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
     const id = `${doc.screen}/${doc.page}`;
     try {
       const scale = host.viewport.pxScale ?? (Platform.isTV && Platform.OS === 'android' ? tvPixelScale(width, height) : PX);
-      const resolved = resolveScreenDocument(doc, { width, tv: Platform.isTV, scale, ...(host.viewport.pxStep ? { step: host.viewport.pxStep } : {}) }, 'en', resolveUi(ui));
+      const resolved = resolveScreenDocument(doc, { width, height, tv: Platform.isTV, platform: devicePlatform(), fold, scale, ...(host.viewport.pxStep ? { step: host.viewport.pxStep } : {}) },
+        'en', resolveUi(ui), { skin });
       if (resolved.warnings.length) console.warn(`${id}: ${resolved.warnings.join('; ')}`);
       lastGood.current = { id, resolved };
       return { resolved, problem: '' };
@@ -104,10 +123,10 @@ function useResolved(doc: ScreenDocument | undefined, host: SkinHost): { resolve
       }
       return { problem };
     }
-  }, [doc, width, height, ui, host.viewport.pxScale, host.viewport.pxStep]);
+  }, [doc, width, height, ui, skin, fold, host.viewport.pxScale, host.viewport.pxStep]);
 }
 
-export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false }: ScreenViewProps) {
+export function ScreenView({ target, href, params = {}, context, host, active, actions, route = true, refused, local, quiet = false, scrollKey, handle }: ScreenViewProps) {
   const vela = useVela();
   const document = useScreenDocument(href);
   const previewExpired = useVelaState(state => state.screens.preview?.expired === true);
@@ -137,6 +156,20 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
   // A section's loading and failure nodes start below a shell bar that floats over the page.
   const look = useBlockLook();
   const [state, setState] = useState<Record<string, string>>({});
+  const stateNow = useRef(state);
+  stateNow.current = state;
+  useEffect(() => {
+    if (!handle) return;
+    handle.current = {
+      toggle: (flag, options) => setState(s => {
+        const on = s[flag] !== 'true';
+        return { ...s, ...(on ? Object.fromEntries((options?.clear ?? []).map(name => [name, ''])) : {}), [flag]: on ? 'true' : '' };
+      }),
+      set: (flag, on) => setState(s => ({ ...s, [flag]: on ? 'true' : '' })),
+      isOn: flag => stateNow.current[flag] === 'true',
+    };
+    return () => { handle.current = null; };
+  }, [handle]);
   // A plugin action's answer may carry a line to show (at most 200 characters), for a few seconds.
   const [toast, setToast] = useState('');
   useEffect(() => {
@@ -234,18 +267,29 @@ export function ScreenView({ target, href, params = {}, context, host, active, a
 
   const screenHost = useMemo<SkinHost>(() => ({
     ...host,
-    env: { ...host.env, canMultiview: !!actions.multiview, canPlay: true, isTV: Platform.isTV },
+    env: { ...host.env, canMultiview: !!actions.multiview, canPlay: true, isTV: Platform.isTV, platform: devicePlatform(),
+      form: formFactor({ width: host.viewport.width, height: host.viewport.height, tv: Platform.isTV, fold: foldOpen(host.viewport) }),
+      fold: foldOpen(host.viewport) ? host.viewport.fold!.posture as 'book' | 'tabletop' : '' },
     screenPress: press,
   }), [host, actions.multiview, press]);
-  const title = resolved && ctx ? fill(resolved.title, ctx, screenHost.env) : '';
+  // env.canVisualize is the app's to say (host.env.canVisualize): false where it does not say.
+  // A page in an experience's shell scrolls by its root `sections`; any other root gets a second scroller.
+  useEffect(() => {
+    if (scrollKey && resolved && resolved.tree.kind !== 'sections') console.warn(`${href}: an experience page's root is a sections block (this one is ${resolved.tree.kind}); its column will not scroll as one`);
+  }, [scrollKey, resolved, href]);
+    const title = resolved && ctx ? fill(resolved.title, ctx, screenHost.env) : '';
+  const firstFocus = resolved?.focusInitial && ctx && Platform.isTV ? fill(resolved.focusInitial, ctx, screenHost.env) : '';
   const runtime = useMemo<ScreenBlockRuntime>(() => createScreenBlockRuntime(
     (node, at) => <SkinNodeFor node={node as RNode} ctx={at} />,
     {
       requestNeeds: sources => { if (pageKey) void vela.screens.need(pageKey, sources); },
       pageTitle: title,
       presentation: doc?.presentation === 'page' ? 'page' : 'section',
+      ...(scrollKey ? { scrollKey } : {}),
+      // Blocks that hold the named element make it the preferred focus from their first frame.
+      ...(firstFocus ? { focusInitial: firstFocus } : {}),
     },
-  ), [pageKey, vela, title, doc?.presentation]);
+  ), [pageKey, vela, title, doc?.presentation, scrollKey, firstFocus]);
 
   // The element the document names first (focus.initial) takes focus once the page draws; without
   // it (a final game has no Watch button) route focus gives the first control or reading stop.

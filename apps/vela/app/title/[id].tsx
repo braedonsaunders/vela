@@ -16,12 +16,13 @@ export default function Title() {
   // known from the card that opened it, or from the title once read (its card kind: a podcast's
   // show is 'podcast', never video's 'show').
   const kind = useVelaState(state => state.titles[id ?? '']?.value?.title[0]?.kind);
+  const revision = useVelaState(state => state.auth.revision);
   const mediaPage = isMediaPageRole(kind ?? media ?? '');
   const { openTitle } = useVela();
   const openedInApp = isTitleNavigation(id);
   // tvOS Menu also reaches the native stack. Close an open description/menu first.
   usePreventRemove(useBackHeld(), backFromNavigation);
-  useEffect(() => (id ? openTitle(id) : undefined), [id, openTitle]);
+  useEffect(() => (id ? openTitle(id) : undefined), [id, openTitle, revision]);
   useEffect(() => () => clearTitleNavigation(id), [id]);
   const back = useCallback(() => closeModal(() => {
     if (openedInApp && router.canGoBack()) router.back();

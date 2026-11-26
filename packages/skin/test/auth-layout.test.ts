@@ -55,4 +55,12 @@ describe('pointer and form-factor boundaries', () => {
     expect(short.logoHeight).toBeLessThan(tall.logoHeight);
     expect(short.gap).toBeLessThan(tall.gap);
   });
+  test('a short pointer window keeps the fields stacked and fits the alternative sign-in buttons beside each other', () => {
+    const short = authLayout(viewport(669, 360));
+    expect(short.landscape).toBe(false);
+    expect(short.logoHeight).toBe(0);
+    expect(short.inlineAlternatives).toBe(true);
+    expect(authLayout(viewport(430, 360)).inlineAlternatives).toBe(false);
+    expect(authLayout(viewport(669, 360), 360, false, true).inlineAlternatives).toBe(false);
+  });
 });

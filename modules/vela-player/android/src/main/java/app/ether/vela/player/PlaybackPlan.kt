@@ -8,6 +8,7 @@ internal class PlaybackPlan(
   val sourceGeneration: Int,
   val seekGeneration: Int,
   val positionSeconds: Double,
+  val durationSeconds: Double?,
   val paths: List<PlanPath>,
   val selectedPathId: String,
   val audioTracks: List<PlanTrack>,
@@ -19,6 +20,7 @@ internal class PlaybackPlan(
   val live: Boolean = false,
   /** `live.mode`: adaptive, low-delay or startOver (a growing programme played from its start). */
   val liveMode: String? = null,
+  val selectedVersionId: String? = null,
 ) {
   /** Start over: a live (EVENT) playlist that begins at the programme's start; it is joined at the plan position. */
   val startOver: Boolean
@@ -35,6 +37,15 @@ internal class PlaybackPlan(
   fun renderableSidecarIds(): Set<String> =
     subtitleTracks.filter { it.canRenderExternal && it.externalUrl != null }.mapTo(mutableSetOf()) { it.id }
 
+  /** The prepared item's identity: a plan with the same key plays on in the item already prepared. A server's
+   * VOD HLS is replaced when a seek restarts its encoder, under the same URL and source generation: only the
+   * seek generation (and the playlist's timeline origin) move, so they are part of its identity and the new
+   * item is prepared once. An original file and a live window keep their item across seeks. */
+  fun sourceKey(path: PlanPath): String {
+    val key = "$sessionId:${path.id}:$sourceGeneration"
+    return if (MediaTimeline.applies(this, path)) "$key:$seekGeneration:${MediaTimeline.of(this, path).origin}" else key
+  }
+
   companion object {
     /** A plan, or null when a required field is missing. */
     fun from(value: Map<String, Any?>): PlaybackPlan? {
@@ -48,7 +59,9 @@ internal class PlaybackPlan(
         sourceGeneration = value.int("sourceGeneration") ?: return null,
         seekGeneration = value.int("seekGeneration") ?: return null,
         positionSeconds = value.number("positionSeconds") ?: 0.0,
+        durationSeconds = value.number("durationSeconds"),
         paths = value.objects("paths").mapNotNull(PlanPath::from),
+        selectedVersionId = value.text("selectedVersionId"),
         selectedPathId = value.text("selectedPathId") ?: return null,
         audioTracks = value.objects("audioTracks").mapNotNull(PlanTrack::from),
         subtitleTracks = value.objects("subtitleTracks").mapNotNull(PlanTrack::from),
@@ -103,6 +116,15 @@ internal class MediaTimeline(origin: Double = 0.0) {
   val origin = origin.takeIf { it.isFinite() && it >= 0 } ?: 0.0
   fun mediaTime(titleSeconds: Double) = (titleSeconds - origin).coerceAtLeast(0.0)
   fun titleTime(mediaSeconds: Double) = origin + mediaSeconds.coerceAtLeast(0.0)
+
+  companion object {
+    /** Whether the path plays on a playlist clock its timeline origin rebases: a server's VOD HLS. Live windows
+     * have their own clock, and an original file is the title itself. */
+    fun applies(plan: PlaybackPlan, path: PlanPath) = !plan.live && !path.isOriginalFile && path.transport == "hls"
+
+    fun of(plan: PlaybackPlan?, path: PlanPath? = plan?.selectedPath) =
+      if (plan != null && path != null && applies(plan, path)) MediaTimeline(path.timelineOriginSeconds) else MediaTimeline()
+  }
 }
 
 internal class PlanTrack(

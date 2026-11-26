@@ -40,6 +40,7 @@ beforeAll(async () => {
     if (url.pathname === '/grant/stall') return new Promise<Response>(() => {});
     if (url.pathname === '/grant/transient' && transientReads++ === 0) return new Response(null, { status: 503 });
     if (url.pathname === '/grant/forbidden') return new Response(null, { status: 403 });
+    if (url.pathname === '/grant/original-lost') return new Response(null, { status: 409, headers: { 'X-Ether-Playback-Error': 'original_lost' } });
     const body = url.pathname === '/grant/oversized' ? 'x'.repeat(2048) : 'media payload';
     return new Response(body, { status: 206, headers: { 'Content-Range': `bytes 0-${body.length - 1}/${body.length}` } });
   } });
@@ -120,6 +121,11 @@ appleTest('reader retries a temporary HTTP range failure at the same offset', as
 appleTest('reader does not retry forbidden ranges', async () => {
   expect((await request('/grant/forbidden', 'reader')).status).not.toBe(0);
   expect(seen.length).toBe(1);
+});
+
+appleTest('original-lost marker and truncated originals are classified for plan refresh', async () => {
+  expect(await request('/grant/original-lost', 'original-lost')).toEqual({ output: 'original_lost\n', status: 0 });
+  expect(await request('/grant/target', 'truncated-check')).toEqual({ output: 'truncated_check_ok\n', status: 0 });
 });
 
 appleTest('stopping a startup redirect lookup cancels its in-flight HTTP request', async () => {

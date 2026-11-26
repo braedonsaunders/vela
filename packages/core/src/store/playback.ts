@@ -23,13 +23,15 @@ import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './sessi
 import { withPlaying } from './playing-release';
 import { serverEnd } from './server-end';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
+import { matchSeriesTracks } from '../series-tracks';
+import type { SeriesTracks } from './series-tracks';
 import type { Session } from './session';
 import type { StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
   /** `audio`: the app's audio engine plays it (music, audiobooks, podcasts), so the request declares what that engine plays. */
-  | { kind: 'title'; id: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext; audio?: true;
+  | { kind: 'title'; id: string; showId?: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext; audio?: true;
     /** The title's media class when the caller knows it (the audio queue does): a class that never
      * enters Continue (music) is not followed by a read of Home's progress shelves. Not sent. */
     media?: V.MediaClass }
@@ -49,6 +51,7 @@ function evictedWindowStart(error: unknown): number | null {
 }
 
 export type PlaybackPhase = 'idle' | 'starting' | 'preparing' | 'playing' | 'ended' | 'failed';
+export type OriginalLostResult = 'reopened' | 'version_unavailable' | 'gone' | 'superseded';
 
 export interface PlaybackState {
   phase: PlaybackPhase;
@@ -136,10 +139,10 @@ export class Playback {
   private readonly stoppedSessions: string[] = [];
   /**
    * Sessions this client opened and has not finished stopping, each with the adapter that opened it
-   * and its latest plan: what a page being unloaded stops (`stopOnUnload`). One leaves once its stop
-   * was answered (or failed), or the server ended it. An attached session is its owner's, never held.
+   * and its latest plan: what a page being unloaded stops (`stopOnUnload`). A failed stop stays
+   * eligible for cleanup. An attached session is its owner's, never held.
    */
-  private readonly held = new Map<string, { adapter: ServerAdapter; plan: V.PlaybackPlan }>();
+  private readonly held = new Map<string, { adapter: ServerAdapter; plan: V.PlaybackPlan; epoch: number; owner?: { connection: Connection; viewer: string } }>();
   /** Progress of the current session (stall.ts): when it is stalled, and how many restarts it has had. */
   private stall: StallWatch | undefined;
   /**
@@ -154,6 +157,8 @@ export class Playback {
   private localTracks = false;
   private audio: string | undefined;
   private subtitle: string | null | undefined;
+  /** Series-track context for the active title session: server, viewer, title and series ID. */
+  private sessionContext: { sessionId: string; serverId: string; viewerId: string; titleId: string; showId?: string; connection: Connection } | undefined;
   private externalId: string | undefined;
   private follow: AbortController | undefined;
   /** Read the followed session's snapshot now (servers without an event stream), not at the next poll. */
@@ -187,13 +192,18 @@ export class Playback {
     private readonly session: Session,
     private readonly watched: (watched: Watched) => void,
     private readonly reconcile: (watched: Watched, media?: V.MediaClass) => void,
+    private readonly seriesTracks?: SeriesTracks,
   ) {
     this.trickplay.subscribe(() => this.trickplayChanged());
-    session.onReset(() => {
-      this.end();
-      this.watch = undefined;
+    session.onReset(kind => {
+      const plan = this.box.get().playback.plan ?? this.abandoned;
+      if (kind === 'server' && !this.externalId && plan && this.held.has(plan.sessionId)) void this.stop();
+      else {
+        this.end();
+        this.watch = undefined;
+        this.box.update('playback', () => initialPlayback);
+      }
       this.media = undefined;
-      this.box.update('playback', () => initialPlayback);
     });
   }
 
@@ -252,12 +262,24 @@ export class Playback {
     const { run, target } = intent;
     const epoch = this.session.epoch;
     let connection: Connection;
+    let viewerId = '';
+    let initialShowId: string | undefined;
+    let showIdLookup: Promise<string | undefined> | undefined;
     let reply: V.PlaybackPlan | V.PlaybackPreparing;
     try {
       connection = await this.session.ready();
       const api = connection.adapter;
       await this.session.negotiate(api);
       if (this.run !== run) return;
+      viewerId = (await this.session.tokens?.(connection))?.viewer.id ?? '';
+      if (this.run !== run) return;
+      if (this.seriesTracks && target.kind === 'title' && !target.audio) {
+        initialShowId = target.showId || this.cachedShowId(target.id);
+        const serverId = connection.record?.id ?? '';
+        if (!this.recovering && !initialShowId && serverId && viewerId && this.seriesTracks.hasForViewer(serverId, viewerId)) {
+          showIdLookup = api.detail(target.id).then(detail => (detail.title.kind === 'episode' ? detail.title.showId : undefined)).catch(() => undefined);
+        }
+      }
       const position = target.kind === 'title' || target.kind === 'programme' ? target.positionSeconds : undefined;
       if (target.kind === 'library-live') {
         if (!this.session.features?.libraryLive?.available || !hasLibraryLive(api)) throw new Error('Library live is unavailable');
@@ -295,7 +317,10 @@ export class Playback {
         return;
       }
       this.patch({ phase: 'preparing', retryAfterSeconds: seconds });
-      this.timer = setTimeout(() => void this.request(intent, attempt, preparation + 1), seconds * 1000);
+      this.timer = setTimeout(() => {
+        this.timer = undefined;
+        void this.request(intent, attempt, preparation + 1);
+      }, seconds * 1000);
       return;
     }
     let plan = connection.plan(reply as V.PlaybackPlan);
@@ -303,7 +328,7 @@ export class Playback {
       this.startedDead(intent, plan, attempt, preparation);
       return;
     }
-    this.hold(connection.adapter, plan);
+    this.hold(connection.adapter, plan, viewerId ? { connection, viewer: viewerId } : undefined);
     // A replacement session that already carries the viewer's tracks needs no command, and a live
     // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
     // refuse track commands. Only choices that name a track in the new plan are carried.
@@ -313,25 +338,60 @@ export class Playback {
     const differs = (audio !== undefined && audio !== plan.selectedAudioTrackId)
       || (subtitle !== undefined && subtitle !== (plan.selectedSubtitleTrackId ?? null));
     if (this.recovering && !live && differs) {
-      try {
-        plan = connection.plan(await this.send(connection, plan.sessionId, {
-          kind: 'tracks', audioTrackId: audio, subtitleTrackId: subtitle,
-          sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
-          idempotencyKey: this.session.key(),
-        }));
-      } catch {
-        // Some servers leave track selection to the engines. Their plan still describes the
-        // available tracks, so carry the viewer's choices into the new engine session.
-        this.localTracks = true;
+      if (this.localTracks) {
+        // Tracks chosen locally (remembered series choices, or a server that leaves track selection
+        // to the engine) stay local across recovery too — never written back to the server.
         plan = this.withLocalTracks(plan);
+      } else {
+        try {
+          plan = connection.plan(await this.send(connection.adapter, plan.sessionId, {
+            kind: 'tracks', audioTrackId: audio, subtitleTrackId: subtitle,
+            sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+            idempotencyKey: this.session.key(),
+          }));
+        } catch {
+          // Some servers leave track selection to the engines. Their plan still describes the
+          // available tracks, so carry the viewer's choices into the new engine session.
+          this.localTracks = true;
+          plan = this.withLocalTracks(plan);
+        }
+        if (this.run !== run) {
+          this.stopped(plan.sessionId);
+          const sessionId = plan.sessionId;
+          void connection.adapter.command(sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
+            seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` }).catch(() => {}).finally(() => this.held.delete(sessionId));
+          return;
+        }
       }
-      if (this.run !== run) {
+    } else if (this.seriesTracks && !this.recovering && target.kind === 'title' && !target.audio) {
+      const showId = initialShowId ?? (showIdLookup ? await showIdLookup : undefined);
+      if (this.run !== run || epoch !== this.session.epoch) {
         this.stopped(plan.sessionId);
         const sessionId = plan.sessionId;
         void connection.adapter.command(sessionId, { kind: 'stop', sourceGeneration: plan.sourceGeneration,
           seekGeneration: plan.seekGeneration, idempotencyKey: `cancel-${intent.key}` }).catch(() => {}).finally(() => this.held.delete(sessionId));
         return;
       }
+      this.sessionContext = { sessionId: plan.sessionId, serverId: connection.record.id, viewerId, titleId: target.id, showId, connection };
+      const preference = showId && viewerId ? this.seriesTracks?.get(connection.record.id, viewerId, showId) : undefined;
+      if (preference) {
+        let client: V.ClientCapabilities | undefined;
+        try { client = this.session.client; } catch { /* Capabilities optional for matching. */ }
+        const matched = matchSeriesTracks(plan, preference, { explicitAudio: !!target.audioTrackId, client });
+        const audioDiff = matched.audioTrackId !== undefined && matched.audioTrackId !== plan.selectedAudioTrackId;
+        const subtitleDiff = matched.subtitleTrackId !== undefined && matched.subtitleTrackId !== (plan.selectedSubtitleTrackId ?? null);
+        if (audioDiff || subtitleDiff) {
+          this.localTracks = true;
+          if (audioDiff) this.audio = matched.audioTrackId;
+          if (subtitleDiff) this.subtitle = matched.subtitleTrackId;
+          plan = this.withLocalTracks(plan);
+        }
+      }
+    }
+    if (this.seriesTracks && this.recovering && target.kind === 'title' && !target.audio) {
+      this.sessionContext = this.sessionContext
+        ? { ...this.sessionContext, sessionId: plan.sessionId, connection }
+        : { sessionId: plan.sessionId, serverId: connection.record.id, viewerId, titleId: target.id, showId: initialShowId, connection };
     }
     this.abandoned = null;
     this.recovering = false;
@@ -376,7 +436,10 @@ export class Playback {
       retryAfterSeconds: seconds,
       retryAttempt: seconds > 0 ? attempt + 1 : 0,
     });
-    if (seconds > 0) this.timer = setTimeout(() => void this.request(intent, attempt + 1, preparation), seconds * 1000);
+    if (seconds > 0) this.timer = setTimeout(() => {
+      this.timer = undefined;
+      void this.request(intent, attempt + 1, preparation);
+    }, seconds * 1000);
   }
 
   /** A start answered with a session that has already ended, or that this client stopped. */
@@ -468,8 +531,69 @@ export class Playback {
     if (!this.localTracks) return plan;
     return { ...plan,
       ...(this.audio && plan.audioTracks.some(track => track.id === this.audio) ? { selectedAudioTrackId: this.audio } : {}),
-      ...(this.subtitle === null || plan.subtitleTracks.some(track => track.id === this.subtitle) ? { selectedSubtitleTrackId: this.subtitle ?? null } : {}),
+      ...(this.subtitle === null || (this.subtitle !== undefined && plan.subtitleTracks.some(track => track.id === this.subtitle)) ? { selectedSubtitleTrackId: this.subtitle ?? null } : {}),
     };
+  }
+
+  /**
+   * Remember a viewer's deliberate audio or subtitle choice for the playing episode's series.
+   * Called only after the player confirms the viewer's switch took effect; never writes to the server.
+   */
+  rememberTrack(sessionId: string, kind: 'audio' | 'subtitle', trackId: string | null): void {
+    const current = this.box.get().playback;
+    if (!sessionId || current.sessionId !== sessionId || current.plan?.sessionId !== sessionId) return;
+    if (kind === 'audio' && trackId) this.audio = trackId;
+    if (kind === 'subtitle') this.subtitle = trackId;
+    if (!this.seriesTracks || this.sessionContext?.sessionId !== sessionId) return;
+    const { serverId, viewerId, titleId, connection } = this.sessionContext;
+    if (!viewerId) return;
+    const track = kind === 'audio'
+      ? (trackId ? current.plan.audioTracks.find(t => t.id === trackId) : undefined)
+      : (trackId === null ? null : current.plan.subtitleTracks.find(t => t.id === trackId));
+    if (track === undefined) return;
+    const save = (showId: string) => {
+      if (kind === 'audio') this.seriesTracks!.rememberAudio(serverId, viewerId, showId, track as V.Track);
+      else this.seriesTracks!.rememberSubtitle(serverId, viewerId, showId, track as V.Track | null);
+    };
+    const showId = this.sessionContext.showId || this.cachedShowId(titleId);
+    if (showId) {
+      this.sessionContext.showId = showId;
+      save(showId);
+      return;
+    }
+    void connection.adapter.detail(titleId).then(detail => {
+      if (detail.title.kind === 'episode' && detail.title.showId) {
+        if (this.sessionContext?.sessionId === sessionId) this.sessionContext.showId = detail.title.showId;
+        save(detail.title.showId);
+      }
+    }).catch(() => undefined);
+  }
+
+  /** Find an episode's showId from already-loaded state before making any network call. */
+  private cachedShowId(titleId: string): string | undefined {
+    const state = this.box.get();
+    const titles = state.titles ?? {};
+    const own = titles[titleId]?.value?.title[0];
+    if (own?.kind === 'episode' && own.showId) return own.showId;
+    for (const entry of Object.values(titles)) {
+      const detail = entry?.value;
+      if (!detail) continue;
+      const hit = detail.episodes.find(c => c.id === titleId && c.showId)
+        ?? detail.nextUp?.find(c => c.id === titleId && c.showId);
+      if (hit?.showId) return hit.showId;
+    }
+    const home = state.home?.value;
+    if (home) {
+      const hero = home.hero.find(c => c.id === titleId && c.showId);
+      if (hero?.showId) return hero.showId;
+      for (const row of home.rows) {
+        const card = row.items.find(c => c.id === titleId && c.showId);
+        if (card?.showId) return card.showId;
+      }
+    }
+    const searchHit = state.search?.fast?.items?.find(c => c.id === titleId && c.showId)
+      ?? state.search?.descriptive?.items?.find(c => c.id === titleId && c.showId);
+    return searchHit?.showId || undefined;
   }
 
   /**
@@ -478,10 +602,11 @@ export class Playback {
    * had its last restart without playing again is not restarted: the viewer is told instead.
    */
   recover(sessionId: string, reason = 'failed'): void {
+    const run = this.run;
     const current = this.box.get().playback;
     // Only an established session is recovered: a start that never reached one (no session id)
     // already ended in its own failed or retrying state.
-    if (!this.run || !this.established || !sessionId || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
+    if (!run || !this.established || !sessionId || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
     const attempt = this.stall?.attempt ?? this.watch?.restarts ?? 0;
     if (stallVerdict({ attempt }) === 'give-up') {
       console.warn(`Vela playback: session ${sessionId} ${reason} after ${attempt} restart(s); giving up`);
@@ -500,18 +625,17 @@ export class Playback {
     const target = current.target.kind === 'title'
       ? { ...current.target, positionSeconds: this.cursor, audioTrackId: this.audio ?? current.plan?.selectedAudioTrackId }
       : current.target;
+    this.abandoned = current.plan;
     this.patch({ phase: 'preparing', plan: null, error: '', errorClass: '', retryAfterSeconds: 1, versions: null });
-    const old = current.plan;
-    this.abandoned = old;
-    const intent = { run: this.run, target, key: `recover-${randomId()}` };
-    this.scheduleRecovery(intent, old);
+    this.scheduleRecovery({ run, target, key: `recover-${randomId()}` });
   }
 
   private scheduleRecovery(intent: Intent, old: V.PlaybackPlan | null = this.abandoned): void {
+    if (this.run !== intent.run || !this.recovering || this.timer !== undefined) return;
     const seconds = [1, 2, 4, 8, 15][Math.min(this.recoveryAttempt++, 4)]!;
-    this.patch({ retryAfterSeconds: seconds });
     this.timer = setTimeout(async () => {
-      if (this.run !== intent.run) return;
+      this.timer = undefined;
+      if (this.run !== intent.run || !this.recovering) return;
       if (this.box.get().auth?.phase === 'offline') {
         this.scheduleRecovery(intent, old);
         return;
@@ -521,7 +645,7 @@ export class Playback {
         try {
           const connection = await this.session.ready();
           if (this.run !== intent.run) return;
-          await this.send(connection, old.sessionId, { kind: 'stop', sourceGeneration: old.sourceGeneration,
+          await this.send(connection.adapter, old.sessionId, { kind: 'stop', sourceGeneration: old.sourceGeneration,
             seekGeneration: old.seekGeneration, idempotencyKey: `recover-stop-${old.sessionId}` });
           this.held.delete(old.sessionId);
         } catch { /* Missing sessions are already released; retry cleanup after connectivity returns. */ }
@@ -529,6 +653,7 @@ export class Playback {
       if (this.run !== intent.run) return;
       await this.request(intent, 0, 0);
     }, seconds * 1000);
+    this.patch({ retryAfterSeconds: seconds });
   }
 
   /**
@@ -548,11 +673,10 @@ export class Playback {
     },
     command: async (sessionId: string, command: V.SessionCommand): Promise<V.PlaybackPlan> => {
       const connection = await this.session.ready();
-      try {
-        const plan = connection.plan(await this.send(connection, sessionId, command));
-        this.refreshHeld(plan);
-        return plan;
-      } finally { if (command.kind === 'stop') this.held.delete(sessionId); }
+      const plan = connection.plan(await this.send(connection.adapter, sessionId, command));
+      if (command.kind === 'stop') this.held.delete(sessionId);
+      else this.refreshHeld(plan);
+      return plan;
     },
     sessionSnapshot: async (sessionId: string): Promise<V.SessionSnapshot> => {
       const connection = await this.session.ready();
@@ -632,9 +756,19 @@ export class Playback {
     };
     try {
       const connection = await this.session.ready();
-      const plan = await this.send(connection, sessionId, command, origin);
+      const plan = await this.send(connection.adapter, sessionId, command, origin);
       answered(plan);
-      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(plan) });
+      if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
+        let nextPlan = connection.plan(plan);
+        if (command.kind === 'tracks') {
+          if (command.audioTrackId !== undefined && nextPlan.selectedAudioTrackId) this.audio = nextPlan.selectedAudioTrackId;
+          if (command.subtitleTrackId !== undefined) this.subtitle = nextPlan.selectedSubtitleTrackId;
+          nextPlan = this.withLocalTracks(nextPlan);
+        } else {
+          nextPlan = this.withLocalTracks(nextPlan);
+        }
+        this.patch({ plan: nextPlan });
+      }
     } catch (error) {
       answered(null);
       const words = commandFailure(command, error, origin);
@@ -662,12 +796,19 @@ export class Playback {
     }));
     const now = this.box.get().playback;
     // A restart (stall recovery) asks for the file now playing, not the one first asked for.
-    if (now.sessionId === sessionId) this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
+    if (now.sessionId === sessionId) {
+      // Track IDs and local choices belong to the previous version. Keep the negotiated
+      // selection through later snapshots and recovery, even when a track ID is reused.
+      this.localTracks = false;
+      this.audio = next.selectedAudioTrackId;
+      this.subtitle = next.selectedSubtitleTrackId;
+      this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
+    }
     return next;
   }
 
-  private async send(connection: Connection, sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<V.PlaybackPlan> {
-    const api = connection.adapter;
+  private async send(api: ServerAdapter, sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer',
+    canRetry?: () => Promise<boolean>): Promise<V.PlaybackPlan> {
     try {
       return await sendCommand(api, sessionId, command);
     } catch (error) {
@@ -682,6 +823,7 @@ export class Playback {
       const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks'].includes(command.kind);
       const wanted = command.kind === 'switch' && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
       if ((!absolute && !wanted) || !generations) throw error;
+      if (canRetry && !(await canRetry())) throw error;
       return sendCommand(api, sessionId, { ...command, ...generations, idempotencyKey: this.session.key() });
     }
   }
@@ -707,11 +849,50 @@ export class Playback {
         this.giveUp(true);
         return true;
       }
-      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(snapshot.plan) });
+      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: this.withLocalTracks(connection.plan(snapshot.plan)) });
       return true;
     } catch {
       // The caller starts over; the server's words are not the viewer's.
       return false;
+    }
+  }
+
+  /** A direct original was conclusively lost or truncated. Read the current plan before an end
+   * observation or a replacement session can mark the title watched. A newer source generation
+   * reopens in the existing session; an explicit version remains pinned and lets the chrome offer
+   * another version at the held position. */
+  async originalLost(sessionId: string, positionSeconds: number, failedSourceGeneration?: number): Promise<OriginalLostResult> {
+    const run = this.run;
+    const epoch = this.session.epoch;
+    const current = this.box.get().playback;
+    const before = current.plan;
+    if (!run || this.recovering || !before || current.sessionId !== sessionId || current.phase !== 'playing') return 'superseded';
+    const ownsRead = () => {
+      const now = this.box.get().playback;
+      return this.run === run && this.session.epoch === epoch && !this.recovering &&
+        now.sessionId === sessionId && now.phase === 'playing' &&
+        now.plan?.sourceGeneration === before.sourceGeneration && now.plan?.seekGeneration === before.seekGeneration;
+    };
+    try {
+      const connection = await this.session.ready();
+      if (!ownsRead()) return 'superseded';
+      const snapshot = await connection.adapter.sessionSnapshot(sessionId);
+      if (!ownsRead()) return 'superseded';
+      if (snapshot.plan.sessionId !== sessionId) return 'gone';
+      const plan = this.withLocalTracks(connection.plan(snapshot.plan));
+      if (plan.sourceFailure === 'version_unavailable') {
+        this.cursor = Math.max(0, positionSeconds);
+        this.lastPosition = { sessionId, seconds: this.cursor, ended: false };
+        this.patch({ plan, phase: 'playing', versions: sessionVersionsOf(plan) ?? this.box.get().playback.versions });
+        return 'version_unavailable';
+      }
+      if (plan.state === 'ended' || plan.sourceGeneration <= (failedSourceGeneration ?? before.sourceGeneration)) return 'gone';
+      this.cursor = plan.positionSeconds;
+      this.lastPosition = { sessionId, seconds: plan.positionSeconds, ended: false };
+      this.patch({ plan, phase: 'playing', error: '', errorCode: '', errorClass: '' });
+      return 'reopened';
+    } catch {
+      return ownsRead() ? 'gone' : 'superseded';
     }
   }
 
@@ -749,7 +930,14 @@ export class Playback {
     const ended = observation.state === 'ended';
     this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
     // Known as in flight at once, so a stop issued right after (an advance, Stop) waits for it.
-    const sent = this.session.ready().then(connection => connection.adapter.reportObservation(sessionId, observation));
+    const held = this.held.get(sessionId);
+    const sent = (async () => {
+      if (held?.owner && (await this.session.tokens(held.owner.connection))?.viewer.id !== held.owner.viewer) {
+        throw new Error('Playback viewer changed');
+      }
+      const adapter = held?.adapter ?? (await this.session.ready()).adapter;
+      return adapter.reportObservation(sessionId, observation);
+    })();
     this.reporting = sent.catch(() => undefined);
     // A session may go on past the player's end (a multi-part title's next part): show its plan at once.
     if (ended) void sent.then(() => this.followNow?.(sessionId), () => undefined);
@@ -761,7 +949,7 @@ export class Playback {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;
     if (snapshot.position !== undefined) this.cursor = snapshot.position;
-    if (snapshot.state === 'playing' || snapshot.state === 'paused') {
+    if (!this.localTracks && (snapshot.state === 'playing' || snapshot.state === 'paused')) {
       if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
       if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
     }
@@ -905,33 +1093,46 @@ export class Playback {
 
   /** Release a session that played, then publish the resume state the server kept for it. */
   private async finish(plan: V.PlaybackPlan, target: PlaybackTarget | null, phase: PlaybackPhase, last: LastPosition | undefined, reported: Promise<V.Ack | undefined>, handedOver = false): Promise<void> {
+    const held = this.held.get(plan.sessionId);
+    const epoch = held?.epoch ?? this.session.epoch;
+    const release = () => {
+      if (this.held.get(plan.sessionId) === held) this.held.delete(plan.sessionId);
+    };
+    const owner = held?.owner;
+    let viewerChanged = false;
+    const canStop = owner && (async () => {
+      if ((await this.session.tokens(owner.connection))?.viewer.id === owner.viewer) return true;
+      viewerChanged = true;
+      release();
+      return false;
+    });
     let confirmedPosition: number | undefined;
     try {
+      const adapter = held?.adapter ?? (await this.session.ready()).adapter;
       const ack = await reported;
-      const connection = await this.session.ready();
+      if (canStop && !(await canStop())) return;
       const endedOnHandover = handedOver && last?.ended && ack?.accepted;
       if (!endedOnHandover) {
         this.stopped(plan.sessionId);
-        try {
-          await connection.adapter.command(plan.sessionId, {
-            kind: 'stop',
-            sourceGeneration: plan.sourceGeneration,
-            seekGeneration: plan.seekGeneration,
-            idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
-          });
-        } finally { this.held.delete(plan.sessionId); }
-      } else this.held.delete(plan.sessionId);
+        await this.send(adapter, plan.sessionId, {
+          kind: 'stop',
+          sourceGeneration: plan.sourceGeneration,
+          seekGeneration: plan.seekGeneration,
+          idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
+        }, 'viewer', canStop);
+      }
+      release();
       const titleId = plan.titleId ?? (target?.kind === 'title' ? target.id : '');
-      if (titleId && plan.purpose !== 'preview') {
+      if (epoch === this.session.epoch && titleId && plan.purpose !== 'preview') {
         // Some servers return the raw session cursor even though their resume policy drops
         // it. Read the persisted watch state before publishing any resume UI.
-        const detail = await connection.adapter.detail(titleId, true);
+        const detail = await adapter.detail(titleId, true);
         confirmedPosition = detail.title.watch?.positionSeconds;
       }
     } catch {
-      // Ended, expired or already stopped: the server holds nothing for it.
+      // Keep a failed stop eligible for pagehide cleanup.
     }
-    if (phase !== 'ended') this.afterWatching(plan, target, confirmedPosition, last, reported);
+    if (!viewerChanged && epoch === this.session.epoch && phase !== 'ended') this.afterWatching(plan, target, confirmedPosition, last, reported);
   }
 
   /**
@@ -949,7 +1150,8 @@ export class Playback {
     // 5%). Publish only its answer, never a local position that will immediately disappear.
     if (confirmedPosition !== undefined) this.watched(watched);
     const media = target?.kind === 'title' ? target.media : undefined;
-    void reported.then(() => this.reconcile(watched, media));
+    const epoch = this.session.epoch;
+    void reported.then(() => { if (epoch === this.session.epoch) this.reconcile(watched, media); });
   }
 
   private end(): void {
@@ -964,6 +1166,7 @@ export class Playback {
     this.localTracks = false;
     this.audio = undefined;
     this.subtitle = undefined;
+    this.sessionContext = undefined;
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = undefined;
     this.externalId = undefined;
@@ -1102,8 +1305,8 @@ export class Playback {
   }
 
   /** A session this client opened, held until its stop is answered (`held`). */
-  private hold(adapter: ServerAdapter, plan: V.PlaybackPlan): void {
-    this.held.set(plan.sessionId, { adapter, plan });
+  private hold(adapter: ServerAdapter, plan: V.PlaybackPlan, owner?: { connection: Connection; viewer: string }): void {
+    this.held.set(plan.sessionId, { adapter, plan, epoch: this.session.epoch, owner });
   }
 
   /** A held session's newer plan (its generations, or the server ending it) replaces the one held. */

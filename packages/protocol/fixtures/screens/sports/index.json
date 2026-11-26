@@ -1,7 +1,7 @@
 {
   "schema": 1, "kind": "screen", "renderer": 19,
   "requires": ["sections", "shelf", "tabs", "table"],
-  "screen": "sports", "page": "index", "version": "2.0.0",
+  "screen": "sports", "page": "index", "version": "2.0.1",
   "title": "{s:title}", "presentation": "section", "refresh": 300,
   "focus": { "initial": "sports-hero-details" },
   "params": {
@@ -193,9 +193,9 @@
             { "type": "text", "text": "{e.start|start}", "when": [{ "test": "e.scored", "not": true }, { "test": "e.spoiler", "not": true }, { "test": "e.phase", "is": "eq", "value": "upcoming" }],
               "style": { "font-size": "32px", "line-height": "1.25", "font-weight": "800", "color": "#ffffff", "font-variant-numeric": "tabular-nums", "line-clamp": "1", "text-overflow": "ellipsis" }, "small": { "font-size": "24px" } },
             { "type": "text", "text": "{e.detail}{e.situation.0.value| · }{e.situation.1.value| · }", "when": [{ "test": "e.phase", "is": "ne", "value": "upcoming" }],
-              "style": { "margin-top": "4px", "font-size": "12.5px", "line-height": "1.25", "font-weight": "650", "color": "$palette.onTeam", "line-clamp": "1", "text-overflow": "ellipsis" } },
+              "style": { "margin-top": "4px", "font-size": "12.5px", "line-height": "1.25", "font-weight": "650", "color": "$palette.onTeam", "text-align": "center", "line-clamp": "2", "text-overflow": "ellipsis" } },
             { "type": "text", "text": "{e.situation.0.value}{e.situation.1.value| · }", "when": [{ "test": "e.phase", "is": "eq", "value": "upcoming" }, { "test": "e.situation.0.value" }],
-              "style": { "margin-top": "4px", "font-size": "12.5px", "line-height": "1.25", "font-weight": "650", "color": "$palette.onTeam", "line-clamp": "1", "text-overflow": "ellipsis" } } ] },
+              "style": { "margin-top": "4px", "font-size": "12.5px", "line-height": "1.25", "font-weight": "650", "color": "$palette.onTeam", "text-align": "center", "line-clamp": "2", "text-overflow": "ellipsis" } } ] },
           { "type": "repeat", "over": "e.sides", "as": "side", "skip": 1, "limit": 1, "item": {
             "type": "box", "style": { "flex": "1", "flex-direction": "row-reverse", "align-items": "center", "gap": "12px" }, "small": { "flex-direction": "column" },
             "children": [
