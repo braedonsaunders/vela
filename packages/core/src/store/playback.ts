@@ -765,8 +765,13 @@ export class Playback {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;
     const presenting = snapshot.state === 'playing' || snapshot.state === 'paused';
+    // A report from a generation the plan has moved past (a late one from before an accepted seek)
+    // is not the viewer's place. One ahead of the plan is newer than a reply the store has heard.
+    const plan = current.plan;
+    const stale = !!plan && ((snapshot.sourceGeneration !== undefined && snapshot.sourceGeneration < plan.sourceGeneration) ||
+      (snapshot.seekGeneration !== undefined && snapshot.seekGeneration < plan.seekGeneration));
     // An engine (re)loading a source reports a reset clock of zero before it presents: not the viewer's place.
-    if (snapshot.position !== undefined && (snapshot.position > 0 || presenting)) this.cursor = snapshot.position;
+    if (snapshot.position !== undefined && !stale && (snapshot.position > 0 || presenting)) this.cursor = snapshot.position;
     if (presenting) {
       if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
       if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
