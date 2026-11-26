@@ -67,6 +67,7 @@ import { useScopedReads } from './screen/scoped-reads';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
+import { plainBox } from './plain-box';
 import { moveWebRowFocus } from './web-row-navigation';
 import { rowLinkAvailable } from './row-link-available';
 import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
@@ -551,7 +552,8 @@ function SkinNodeView({ node, ctx: given, route, after, hero, changed }: { node:
   // Screens: a node whose bound value changes plays its onChange motion (a score pops).
   if (node.onChange && !changed) return <Changed node={node} ctx={ctx} route={route} after={after} hero={hero} />;
   switch (node.kind) {
-    case 'box': return <Box node={node} ctx={ctx} route={route} after={after} hero={hero} />;
+    case 'box': return plainBoxes && !route && !after && !hero && plainBox(node)
+      ? <PlainBox node={node} ctx={ctx} /> : <Box node={node} ctx={ctx} route={route} after={after} hero={hero} />;
     case 'text': return <TextNode node={node} ctx={ctx} />;
     case 'image': return <ImageNode node={node} ctx={ctx} />;
     case 'icon': return <Icon node={node} ctx={ctx} />;
@@ -744,9 +746,12 @@ const NativeStickyHeader = forwardRef<{ setNextHeaderY(y: number): void }, Stick
     });
   }, [layout, nextY, scrollAnimatedValue]);
   // Fabric's hit testing needs the settled transform in its shadow tree too. Drawing stays
-  // native-driven during the gesture; only publish the explicit value once scrolling pauses.
+  // native-driven during the gesture; only publish the explicit value once scrolling pauses. A TV
+  // has no touch to hit-test (its focus moves by native view positions, which the native-driven
+  // transform already moves), and each publish was a React commit after every D-pad scroll that
+  // relaid out the page: in a long library it doubled the JS work of a press up or down (#60).
   useEffect(() => {
-    if (!layout) return;
+    if (!layout || Platform.isTV) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const listener = scrollAnimatedValue.addListener(({ value }) => {
       clearTimeout(timer);
@@ -791,6 +796,50 @@ function bindAndroidHeroButton(target: Focusable, group: TVHeroGroup) {
     });
   }
   return () => { androidHeroButtons.delete(tag); };
+}
+
+/** Native boxes that only draw take PlainBox (plain-box.ts). Android only: tvOS's focus bands and
+ * the web's hover looks stay with Box. */
+const plainBoxes = Platform.OS === 'android';
+
+/** Box's drawing of a box that only draws: its style in its group's and state's look, its text
+ * inheritance, pointer policy and accessibility, and its children, without the press, focus,
+ * scroll, hero, motion and menu machinery (and their hooks and effects) Box keeps for the rest. */
+function PlainBox({ node, ctx }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx }) {
+  const { env, viewport } = useHost();
+  const measuring = useContext(Measuring);
+  const readingStop = useContext(ReadingStop);
+  const unfocusable = useContext(Unfocusable);
+  const parentText = useContext(Inherited);
+  const parentGroup = useContext(Group);
+  const parentDirection = useContext(Direction);
+  const parentPointer = useContext(PointerInheritance);
+  const band = useContext(Band);
+  // A reading stop draws a stop button, and the measuring copy its layout-only rows: Box's (both
+  // fixed by where the box sits, so the box never moves between the two).
+  if (measuring || (readingStop && !unfocusable)) return <Box node={node} ctx={ctx} />;
+  const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
+  const { own, inherited } = split(rowsFor(node, ctx, env, IDLE, parentGroup, disabled));
+  const text = inheritFrom(parentText, inherited, viewport);
+  const translated = translatedBox(own, viewport, text.fontSize);
+  if (translated.fx.hidden) return null;
+  const style = shrinkFor(translated.style, own, parentDirection) as typeof translated.style;
+  const pointer = pointerPolicy(style.pointerEvents, parentPointer);
+  const Frame = frameFor(node) as typeof AView;
+  const direction = String(style.flexDirection ?? 'column').startsWith('row') ? 'row' : 'column';
+  let element: ReactNode = (
+    <Frame style={{ ...style, pointerEvents: pointer.box } as ViewStyle} {...a11yProps(node, ctx, env)}>
+      {node.children.map((child, i) => <SkinNode key={i} node={child} ctx={ctx} />)}
+    </Frame>
+  );
+  element = <Direction.Provider value={direction}>{element}</Direction.Provider>;
+  // Inside a band the box is no band of its own (Box's Band provider).
+  if (band) element = <Band.Provider value={false}>{element}</Band.Provider>;
+  return (
+    <Inherited.Provider value={text}>
+      <PointerInheritance.Provider value={pointer.content}>{element}</PointerInheritance.Provider>
+    </Inherited.Provider>
+  );
 }
 
 function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, { kind: 'box' }>; ctx: Ctx; route?: boolean; after?: RNode; hero?: boolean; measure?: FitMeasure }) {
@@ -1376,19 +1425,18 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     );
   }
   const direction = fx.grid || (fx.scrollX && !fx.scrollY) || String(style.flexDirection ?? 'column').startsWith('row') ? 'row' : 'column';
+  // Providers that would only pass on what the box received are left out: a box that is no group
+  // passes its parent's group, and a band or reading stop below an ancestor's resets it only where
+  // one is set. Each is fixed by the node and where it sits, so the tree's shape never changes.
+  const ownBand = Platform.isTV && (vertical || node.id === 'vela-library-alternative');
+  let provided: ReactNode = routeReveal ? <RevealContext.Provider value={routeReveal}>{element}</RevealContext.Provider> : element;
+  if (readingStop) provided = <ReadingStop.Provider value={false}>{provided}</ReadingStop.Provider>;
+  if (ownBand !== band) provided = <Band.Provider value={ownBand}>{provided}</Band.Provider>;
+  provided = <Direction.Provider value={direction}>{provided}</Direction.Provider>;
+  if (node.group) provided = <Group.Provider value={groupValue}>{provided}</Group.Provider>;
   const drawnBox = (
     <Inherited.Provider value={text}>
-      <PointerInheritance.Provider value={web ? 'auto' : pointer.content}>
-      <Group.Provider value={groupValue}>
-        <Direction.Provider value={direction}>
-          <Band.Provider value={Platform.isTV && (vertical || node.id === 'vela-library-alternative')}>
-            <ReadingStop.Provider value={false}>
-              {routeReveal ? <RevealContext.Provider value={routeReveal}>{element}</RevealContext.Provider> : element}
-            </ReadingStop.Provider>
-          </Band.Provider>
-        </Direction.Provider>
-      </Group.Provider>
-      </PointerInheritance.Provider>
+      <PointerInheritance.Provider value={web ? 'auto' : pointer.content}>{provided}</PointerInheritance.Provider>
     </Inherited.Provider>
   );
   // A navigation row measures a hidden copy of itself in its parent's box (the room it has).

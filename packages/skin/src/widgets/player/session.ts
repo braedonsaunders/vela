@@ -11,6 +11,7 @@ import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
 import { belongs, qualityReached } from './present';
+import { paceSnapshot, type Paced } from './snapshot-pace';
 import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
@@ -48,6 +49,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const airDate = useVelaState(state => target.kind === 'title' ? state.titles[target.id]?.value?.title[0]?.airDate : undefined);
   const settings = useVelaState(state => state.playerSettings);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  // The chrome redraws for a report that only moves the clock once a second (snapshot-pace.ts).
+  const paced = useRef<Paced | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [refused, setRefused] = useState('');
   // A quiet (lab or development) build starts muted: the view takes this as its first command.
@@ -94,6 +97,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
 
   const begin = useCallback(
     (positionSeconds?: number) => {
+      paced.current = null;
       setSnapshot(null);
       setFailure(null);
       setRefused('');
@@ -325,7 +329,11 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     command: command && ['play', 'pause', 'seek', 'seekBy', 'catchUp'].includes(command.type) && commandSession.current !== sessionId ? undefined : command,
     videoFill: pictureChoice && settings.picture === 'fill',
     onSnapshot: next => {
-      setSnapshot(next);
+      const drawn = paceSnapshot(paced.current, next, Date.now());
+      if (drawn) {
+        paced.current = drawn;
+        setSnapshot(next);
+      }
       if (belongs(next, plan)) {
         position.current = next.position;
         paused.current = next.state === 'paused';

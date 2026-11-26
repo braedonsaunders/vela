@@ -745,3 +745,35 @@ test('the Ether session snapshot read is ended by its caller\'s signal', async (
     expect(request?.aborted).toBe(true);
   } finally { restoreFetch(); }
 });
+
+test('plans that only move the server\'s clock leave the plan on show; a real change still shows, in order', async () => {
+  let push: ((revision: number, extra: object) => Promise<void>) | null = null;
+  const h = await harness(async emit => {
+    push = (revision, extra) => emit(event('plan', revision, { plan: { sessionId: 's1', state: 'playing', positionSeconds: 0, audioTracks: [], subtitleTracks: [], sourceGeneration: 1, seekGeneration: 1, revision, ...extra } }));
+    await new Promise(() => {});
+  });
+  try {
+    await h.advance(1000);
+    // A real change (the playing release) is shown.
+    await push!(2, { positionSeconds: 10, playingLabel: '1080p' });
+    await h.settle();
+    const shown = h.box.get().playback.plan;
+    expect(shown?.revision).toBe(2);
+    for (let revision = 3; revision <= 6; revision++) {
+      await push!(revision, { positionSeconds: 10 + revision, playingLabel: '1080p' });
+      await h.settle();
+      expect(h.box.get().playback.plan).toBe(shown);
+    }
+    // A replay older than what was heard (though newer than what is on show) is still refused.
+    await push!(5, { positionSeconds: 15, state: 'paused', playingLabel: '1080p' });
+    await h.settle();
+    expect(h.box.get().playback.plan).toBe(shown);
+    await push!(7, { positionSeconds: 17, state: 'paused', playingLabel: '1080p' });
+    await h.settle();
+    expect(h.box.get().playback.plan?.state).toBe('paused');
+    expect(h.box.get().playback.plan?.revision).toBe(7);
+  } finally {
+    h.restore();
+    h.playback.stop();
+  }
+});
