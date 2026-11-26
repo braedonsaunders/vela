@@ -26,6 +26,11 @@ export const wideMusic = (width: number, height: number): boolean => twoPanes(wi
  * of LANDSCAPE_TWO_PANES; else they stack. */
 export const nowPlayingSideBySide = (width: number, height: number): boolean => twoPanes(width, height, 900);
 
+/** A short handheld window can fit a compact transport and an independently scrolling list. */
+export function nowPlayingCompactLandscape(width: number, height: number): boolean {
+  return width >= 560 && height > 0 && height <= 500 && width > height;
+}
+
 /** The wide bar's volume slider needs a roomy window; narrower bars keep the mute button (a touch
  * device has its own volume buttons). */
 export const barVolumeSlider = (width: number): boolean => width >= 1000;
