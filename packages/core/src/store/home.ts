@@ -155,8 +155,9 @@ export class Home {
         : home);
     }, this.slowDelayMs);
     this.slowTimer = slowTimer;
+    let connection: Connection | undefined;
     try {
-      const connection = await this.session.ready();
+      connection = await this.session.ready();
       const api = connection.adapter;
       await this.session.negotiate(api);
       const home = await api.home(false, signal);
@@ -169,8 +170,9 @@ export class Home {
       const model = homeModel(bootstrap, images, this.artWidth());
       this.box.update('home', home => ({ ...home, ...ready(model), slow: false, rowsLoading: [], moreRows: 'idle' }));
     } catch (error) {
-      if (signal.aborted) return;
-      if (epoch !== this.session.epoch) return;
+      if (signal.aborted || epoch !== this.session.epoch) return;
+      if (connection && await this.session.relocatePlex?.(connection, epoch, error, signal)) return;
+      if (signal.aborted || epoch !== this.session.epoch) return;
       const retry = retryPolicy(error, attempt);
       this.box.update('home', home => ({ ...home, ...failed(error, home), retry, slow: false }));
       if (retry.allowed && attempt < retry.limit) {
@@ -410,8 +412,9 @@ export class Home {
     const epoch = this.session.epoch;
     const cursor = model.nextCursor;
     this.box.update('home', home => ({ ...home, moreRows: 'loading' }));
+    let connection: Connection | undefined;
     try {
-      const connection = await this.session.ready();
+      connection = await this.session.ready();
       const data = await connection.adapter.rows({ cursor, placement: 'home' });
       if (data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) {
         throw new Error('Invalid home row continuation');
@@ -425,7 +428,9 @@ export class Home {
         const value = { ...home.value, rows: [...home.value.rows, ...rows], nextCursor: data.nextCursor ?? '' };
         return { ...home, value, moreRows: data.continuation === 'more' ? 'idle' : 'end' };
       });
-    } catch {
+    } catch (error) {
+      if (epoch !== this.session.epoch) return;
+      if (connection && await this.session.relocatePlex?.(connection, epoch, error)) return;
       if (epoch === this.session.epoch) this.box.update('home', home => ({ ...home, moreRows: 'failed' }));
     }
   }
@@ -444,8 +449,9 @@ export class Home {
     const featured = new Set(state.value.hero.map(card => card.id));
     this.setRowLoading(rowId, true);
     let again: Row | undefined;
+    let connection: Connection | undefined;
     try {
-      const connection = await this.session.ready();
+      connection = await this.session.ready();
       for (let page = 0, cursor = row.nextCursor; page < ROW_SKIP_PAGES && cursor; page++) {
         const data = await connection.adapter.row(rowId, cursor, PAGE_ITEMS);
         if (data.id !== rowId) throw new Error('Wrong row returned');
@@ -481,6 +487,7 @@ export class Home {
     } catch (error) {
       // The row keeps its cursor; the viewer can page again.
       if (!resolved && supersededRow(error) && epoch === this.session.epoch) again = await this.resolveRow(row).catch(() => undefined);
+      else if (connection && epoch === this.session.epoch) await this.session.relocatePlex?.(connection, epoch, error);
     } finally {
       if (epoch === this.session.epoch) this.setRowLoading(rowId, false);
     }
@@ -499,8 +506,9 @@ export class Home {
   async libraries(): Promise<void> {
     const epoch = this.session.epoch;
     this.box.update('libraries', libraries => loading(libraries));
+    let connection: Connection | undefined;
     try {
-      const connection = await this.session.ready();
+      connection = await this.session.ready();
       const images = await connection.images();
       const items: Destination[] = [];
       const seen = new Set<string>();
@@ -537,6 +545,8 @@ export class Home {
       }
       throw new Error('Library list exceeds page limit');
     } catch (error) {
+      if (epoch !== this.session.epoch) return;
+      if (connection && await this.session.relocatePlex?.(connection, epoch, error)) return;
       if (epoch === this.session.epoch) this.box.update('libraries', libraries => failed(error, libraries));
     }
   }
@@ -577,4 +587,3 @@ function wait(ms: number, signal: AbortSignal): Promise<void> {
     if (signal.aborted) aborted();
   });
 }
-
