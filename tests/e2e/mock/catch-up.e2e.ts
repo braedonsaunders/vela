@@ -102,6 +102,7 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       await app.screenshot('paused-live-rewind');
       await expect(goLive).toBeVisible();
       await goLive.tap();
+      await expect(screen.getByTestId('player-status')).toBeHidden();
       await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });
       expect(commands.filter(kind => kind === 'goLive')).toHaveLength(2);
     } finally {

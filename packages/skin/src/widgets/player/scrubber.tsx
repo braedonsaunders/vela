@@ -269,7 +269,8 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
           testID={preview !== null ? 'player-scrub-bubble' : undefined}
           style={{
             position: 'absolute',
-            bottom: height + look.size(8),
+            // The live delay notice occupies the strip directly above the track.
+            bottom: height + look.size(live ? 38 : 8),
             // Centred over the target, but kept over the timeline near either end.
             left: bubbleLeft(previewFraction, trackWidth, bubbleWidth),
             width: bubbleWidth,

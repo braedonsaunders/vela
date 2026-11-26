@@ -9,7 +9,7 @@ import { Platform, StyleSheet, View, Text } from 'react-native';
 import { clampSeek, stepLandsLive, msg } from '@vela/core';
 import { useHost } from '../../host';
 import { BottomBar, TopBar, bottomFade, type Opened, type Reveal, type TickerToggle } from './bars';
-import { usePlayerChrome, type PlayerChromeState } from './context';
+import { usePlayerChrome, type CommandInput, type PlayerChromeState } from './context';
 import { holdsChrome } from './hold';
 import { useIdle } from './idle';
 import { useScreenAwake } from './wake-lock';
@@ -89,13 +89,13 @@ function Chrome({ state }: { state: PlayerChromeState }) {
 
   const failed = failureOf(state, view);
   const blocked = !state.plan || view.ended || !!failed;
-  const [liveSeek, setLiveSeek] = useState<{ sessionId: string; generation: number; seconds: number } | null>(null);
+  const [liveSeek, setLiveSeek] = useState<{ sessionId: string; generation: number; seconds?: number } | null>(null);
   const seeking = liveSeek != null && liveSeek.sessionId === state.plan?.sessionId && !failed;
   useEffect(() => {
     if (!liveSeek) return;
     const snapshot = state.snapshot;
     const settled = snapshot && snapshot.seekGeneration > liveSeek.generation && !snapshot.waiting
-      && Math.abs(snapshot.position - liveSeek.seconds) < 3;
+      && (liveSeek.seconds === undefined ? snapshot.state === 'playing' : Math.abs(snapshot.position - liveSeek.seconds) < 3);
     if (!seeking || settled || state.actionError) setLiveSeek(null);
   }, [liveSeek, seeking, state.snapshot, state.actionError]);
   useEffect(() => {
@@ -104,7 +104,13 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     return () => clearTimeout(timer);
   }, [liveSeek]);
   const waiting = !failed && !seeking && (!state.plan || view.waiting);
-  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, state.send, seeking ? liveSeek.seconds : undefined, seeking);
+  const sendLive = (command: CommandInput) => {
+    const plan = state.plan;
+    if (command.type === 'catchUp' && (plan?.live?.timeshift || plan?.live?.mode === 'startOver'))
+      setLiveSeek({ sessionId: plan.sessionId, generation: plan.seekGeneration });
+    state.send(command);
+  };
+  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, sendLive, seeking ? liveSeek.seconds : undefined, seeking);
   // A channel back in the foreground goes to the live edge and plays (session.ts, returnedLive).
   const returnedLive = state.returnedLive ?? 0;
   useEffect(() => {
@@ -149,7 +155,6 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     if (rewind) {
       if (!live.archive && toLive) {
         lastStep.current = null;
-        setLiveSeek(null);
         live.backToLive();
         return;
       }
