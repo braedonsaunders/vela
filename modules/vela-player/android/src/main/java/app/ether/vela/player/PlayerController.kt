@@ -105,6 +105,7 @@ internal class PlayerController(
   }
 
   override val sessionPlayer: androidx.media3.common.Player? get() = engine?.sessionPlayer
+  override val sessionIsOnDemandVideo: Boolean get() = plan?.live == false
   override val sessionStyle: SessionStyle get() = SessionStyle.VIDEO
   override val sessionMetadata: androidx.media3.common.MediaMetadata? get() = (info ?: SessionInfo("", "", "", null)).metadata(spoken = false, video = true)
 

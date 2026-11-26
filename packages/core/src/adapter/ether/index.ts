@@ -8,6 +8,10 @@ import type {
   AudioFallback,
   ClientDeclaration,
   DescriptiveSearch,
+  DownloadResolution,
+  MediaDownloads,
+  OfflineProgress,
+  ResolveDownloadOptions,
   DeviceGrantSignIn,
   EventStream,
   FallbackCommand,
@@ -34,10 +38,11 @@ import type {
   Versions,
   WebCodeSignIn,
 } from '../capabilities';
-import type { TitleActions } from '../capabilities';
+import type { OfflineProgressEntry, TitleActions } from '../capabilities';
 import type { SubtitleSearch } from '../media-actions';
 import { VelaError } from '../errors';
 import { EtherTransport } from './transport';
+import { randomId } from '../../protocol/id';
 import { localeContext } from '../../i18n';
 import type { ScreenTarget } from '../../screens/keys';
 import { streamSearch, type ScreenStreamQuery } from '../../screens/stream';
@@ -60,7 +65,7 @@ const DESCRIBE_REUSE_MS = 5000;
 export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignIn, DeviceGrantSignIn,
   QuickConnectSignIn, ClientDeclaration, DescriptiveSearch, AiSearch, TrailerPreviews, Interactions,
   AudioFallback, TrackChanges, PathSwitching, ProactiveFallback, LiveTv, LibraryLive, EventStream, Appearance, Versions,
-  Multiview, TileReplan, SubtitleSearch, PluginScreens, HistoryRecap, PlaylistImports, LibraryDuplicates, UnloadStop {
+  Multiview, TileReplan, SubtitleSearch, PluginScreens, HistoryRecap, PlaylistImports, LibraryDuplicates, UnloadStop, MediaDownloads, OfflineProgress {
   private readonly http: EtherTransport;
   private guideWindowLimits: V.ServerCapabilities['liveGuideWindow'];
   private readonly credentials: Credentials;
@@ -258,6 +263,12 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return answer;
   }
 
+  async viewerLiveFeatures(): Promise<V.ServerCapabilities['features']> {
+    const answer = await this.http.request<V.ServerCapabilities>('GET', '/capabilities', undefined, CACHED);
+    this.guideWindowLimits = answer.liveGuideWindow;
+    return answer.features;
+  }
+
   async declareClient(request: V.NegotiateRequest): Promise<void> {
     const answer = await this.http.request<V.NegotiateResponse>('POST', '/negotiate', request);
     if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
@@ -277,6 +288,62 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
 
   setTitleWatch(id: string, request: V.WatchRequest): Promise<V.Ack> {
+    return this.http.request<V.Ack>('POST', `/titles/${segment(id)}/watch`, request);
+  }
+
+  async downloadsAvailable(): Promise<boolean> {
+    const capabilities = await this.http.request<V.ServerCapabilities>('GET', '/capabilities', undefined, CACHED);
+    return capabilities.features.downloads?.enabled === true;
+  }
+
+  async resolveDownload(id: string, options?: ResolveDownloadOptions): Promise<DownloadResolution> {
+    const { title } = await this.detail(id);
+    const request: V.DownloadRequest = {
+      idempotencyKey: options?.idempotencyKey ?? randomId(),
+      ...(options?.versionId ? { versionId: options.versionId } : {}),
+    };
+    const grant = await this.http.request<V.DownloadGrant>('POST', `/titles/${segment(id)}/download`, request);
+    const origin = new URL(this.origin).origin;
+    const url = new URL(grant.url, origin);
+    if (url.origin !== origin || url.username || url.password || !/^\/vela\/v0\/download\/[^/]+$/.test(url.pathname)) {
+      throw new Error('Invalid original download URL');
+    }
+    if (typeof grant.etag !== 'string' || !grant.etag.trim() || !Number.isFinite(Date.parse(grant.expiresAt))) {
+      throw new Error('The download grant has no valid file identity or expiration');
+    }
+    const localAsset = (path: string): string | undefined => {
+      const asset = new URL(path, origin);
+      return asset.origin === origin && !asset.username && !asset.password ? asset.href : undefined;
+    };
+    const sidecars = grant.subtitleTracks.flatMap(track => {
+      if (track.delivery?.kind !== 'external') return [];
+      const { format } = track.delivery;
+      if ((format !== 'webvtt' && format !== 'ass') || (options?.subtitleFormats && !options.subtitleFormats.includes(format))) return [];
+      const url = localAsset(track.delivery.url);
+      return url ? [{ trackId: track.id, url, format }] : [];
+    });
+    const poster = title.artwork.find(art => art.kind === 'poster')?.sizes[0]?.url;
+    return {
+      ...grant,
+      title,
+      url: url.href,
+      versionId: options?.versionId,
+      headers: {},
+      selectedAudioTrackId: grant.audioTracks.find(track => track.default)?.id,
+      selectedSubtitleTrackId: null,
+      sidecars,
+      posterUrl: poster ? localAsset(poster) : undefined,
+    };
+  }
+
+  replayWatchProgress(id: string, entry: OfflineProgressEntry): Promise<V.Ack> {
+    const request: V.OfflineWatchRequest = {
+      positionSeconds: entry.positionSeconds,
+      observedAt: entry.observedAt,
+      offline: true,
+      idempotencyKey: entry.idempotencyKey,
+      ...(entry.completed ? { played: true } : {}),
+    };
     return this.http.request<V.Ack>('POST', `/titles/${segment(id)}/watch`, request);
   }
 
@@ -529,7 +596,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
 
   startPlayback(request: V.PlaybackRequest) {
-    return this.http.request<V.PlaybackPlan | V.PlaybackPreparing>('POST', '/playback', request);
+    const archive = request.channelId && (request.programmeId !== undefined || request.startAt !== undefined);
+    return this.http.request<V.PlaybackPlan | V.PlaybackPreparing>('POST', '/playback',
+      archive ? { ...request, kind: 'channel' } : request);
   }
 
   reportObservation(sessionId: string, observation: V.PlayerObservation) {

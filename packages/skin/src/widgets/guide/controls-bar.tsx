@@ -133,7 +133,7 @@ export function DayChips({
             <Line look={look} size={13} weight={650} color={on ? look.inkInverse : look.ink}>
               {d.label}
             </Line>
-            {d.offset > 1 ? (
+            {d.offset < 0 || d.offset > 1 ? (
               <Line look={look} size={12} color={on ? look.inkInverse : look.ink} style={{ opacity: 0.62 }}>
                 {d.date}
               </Line>

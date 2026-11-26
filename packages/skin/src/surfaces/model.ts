@@ -14,6 +14,7 @@ export interface SurfaceFacts {
   kind?: SurfaceContext['kind'];
   /** The feed of the playing channel's live event (the session's liveEvent.feed). */
   eventFeed?: string;
+  delayed?: boolean;
   /** The plugin an alert comes from. */
   alertPlugin?: string;
   /** The kind of the title a title page shows. */
@@ -54,7 +55,9 @@ export const OVERLAYS_PER_ANCHOR = 2;
  * every applicable one (the player menu offers a switch for each, on or off). */
 export function playerOverlays(surfaces: readonly SurfaceContribution[], facts: SurfaceFacts, local: Record<string, boolean> = {}):
   { shown: SurfaceContribution[]; switchable: SurfaceContribution[] } {
-  const switchable = surfaces.filter(s => surfaceSlot(s)?.startsWith('player.overlay.') && surfaceApplies(s, facts));
+  // The ticker pulls current scores for multiple games. The per-game score bug can use pictureTime.
+  const switchable = surfaces.filter(s => surfaceSlot(s)?.startsWith('player.overlay.') && surfaceApplies(s, facts)
+    && !(facts.delayed && s.id === 'sports.ticker'));
   const counts = new Map<Anchor, number>();
   const shown: SurfaceContribution[] = [];
   for (const surface of switchable) {

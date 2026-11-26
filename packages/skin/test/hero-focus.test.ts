@@ -4,7 +4,7 @@
 // right turn); otherwise to the hero's primary button (Play or Resume, else More info, Restart
 // last), never to the pager.
 import { expect, test } from 'bun:test';
-import { heroButtonRank, heroEdgeKeyGate, heroFocusCarry } from '../src/hero-focus';
+import { androidHeroAfterTurn, androidHeroPageDirection, heroButtonRank, heroFocusCarry } from '../src/hero-focus';
 
 const resume = heroButtonRank('play', 'title-1');
 const restart = heroButtonRank('play', 'title-1|||0');
@@ -202,128 +202,51 @@ test('a stale turn direction never leaks into a later automatic rotation', () =>
   expect(carry.take(undefined, 21000)).toBe('later-play');
 });
 
-test('Android edge key gate rejects inward presses regardless of hold length and allows edge presses immediately', () => {
-  const gate = heroEdgeKeyGate();
+test('Android hero buttons page only on a fresh outward key-down', () => {
+  const carry = heroFocusCarry<string>();
+  const playable = ['Play', 'Restart', 'More info'];
+  const slides = [playable, ['More info'], playable, playable, playable, playable];
+  let slide = 2;
+  let buttons = slides[slide]!;
+  let focus = 'Play';
+  const mount = () => {
+    buttons.forEach(button => carry.add(button, button === 'Play' ? resume : button === 'Restart' ? restart : moreInfo));
+  };
+  mount();
+  const key = (type: 'left' | 'right', action = 0, repeat = 0) => {
+    const neighbor = buttons[buttons.indexOf(focus) + (type === 'left' ? -1 : 1)];
+    const direction = androidHeroPageDirection({
+      eventType: type, eventKeyAction: action, repeatCount: repeat, heroTag: 42, withinHero: !!neighbor,
+    });
+    if (direction) {
+      buttons.forEach(button => carry.remove(button));
+      slide = (slide + direction + slides.length) % slides.length;
+      buttons = slides[slide]!;
+      mount();
+      focus = carry.visualTargets()[androidHeroAfterTurn(buttons.length, direction, []).focus]!;
+    } else if (neighbor && action === 0 && repeat === 0) focus = neighbor;
+    return [slide + 1, focus];
+  };
 
-  // Normal 150ms inward press (Play -> More info): moved focus, must not turn.
-  gate.key(1, true, 'hero-primary', 1000);
-  gate.focused(1010);
-  gate.key(1, false, 'hero-more', 1150);
-  expect(gate.stayed(1, 1150, 1010, 300)).toBe(false);
-
-  // Fast double-tap (120ms later RIGHT on More info): stayed on More info, turns immediately
-  // without being dropped by the 300ms fallback settle window.
-  gate.key(1, true, 'hero-more', 1270);
-  gate.key(1, false, 'hero-more', 1350);
-  expect(gate.stayed(1, 1350, 1010, 300)).toBe(true);
-
-  // Long-held 400ms inward press (More info -> Play): exceeds 300ms, still rejected because focus moved.
-  gate.key(-1, true, 'hero-more', 3000);
-  gate.focused(3012);
-  gate.key(-1, false, 'hero-primary', 3400);
-  expect(gate.stayed(-1, 3400, 3012, 300)).toBe(false);
-
-  // Auto-repeat key-down after focus already moved does not overwrite the original down focus.
-  gate.key(1, true, 'hero-primary', 5000);
-  gate.focused(5008);
-  gate.key(1, true, 'hero-more', 5500);
-  gate.key(1, false, 'hero-more', 5600);
-  expect(gate.stayed(1, 5600, 5008, 300)).toBe(false);
-
-  // Super-fast tap where onFocus arrives after key-up on unnamed views (e.g. Restart with testID "").
-  gate.key(1, true, '', 7000);
-  gate.key(1, false, '', 7005);
-  gate.focused(7020);
-  expect(gate.stayed(1, 7005, 7020, 300)).toBe(false);
-
-  // Key-down when nothing was focused ("none") never counts as staying at an edge.
-  gate.key(1, true, 'none', 8000);
-  gate.focused(8010);
-  gate.key(1, false, 'hero-primary', 8150);
-  expect(gate.stayed(1, 8150, 8010, 300)).toBe(false);
-
-  // Fallback when no MainActivity key events were observed preserves settledMs gating.
-  const fallback = heroEdgeKeyGate();
-  expect(fallback.stayed(1, 1150, 1000, 300)).toBe(false);
-  expect(fallback.stayed(1, 1400, 1000, 300)).toBe(true);
+  expect(key('left')).toEqual([2, 'More info']);
+  expect(key('left', 0, 1)).toEqual([2, 'More info']);
+  expect(key('left', 1)).toEqual([2, 'More info']);
+  expect(key('left')).toEqual([1, 'Play']);
+  expect(key('right')).toEqual([1, 'Restart']);
+  expect(key('right', 0, 2)).toEqual([1, 'Restart']);
+  expect(key('right')).toEqual([1, 'More info']);
+  expect(key('right')).toEqual([2, 'More info']);
+  expect(key('right')).toEqual([3, 'More info']);
+  expect(key('right')).toEqual([4, 'More info']);
+  expect(key('left')).toEqual([4, 'Restart']);
+  expect(key('left')).toEqual([4, 'Play']);
+  expect(key('left')).toEqual([3, 'Play']);
+  expect(androidHeroPageDirection({ eventType: 'left', eventKeyAction: 0, repeatCount: 0 })).toBeUndefined();
 });
 
-test('full hero focus and paging sequence across playable and More-info-only slides', () => {
-  const carry = heroFocusCarry<string>();
-  const gate = heroEdgeKeyGate();
-  const xPlayable: Record<string, number> = { play: 38.5, more: 122.5 };
-  const xMoreOnly: Record<string, number> = { moreOnly: 38.5 };
-
-  // Slide 1/6: [Play, More info], starting on Play.
-  carry.add('play', resume);
-  carry.add('more', moreInfo);
-  carry.focused('play', true, 0);
-
-  // Before any turn: RIGHT (Play -> More info) and LEFT (More info -> Play) only move focus.
-  gate.key(1, true, 'hero-primary', 1000);
-  carry.focused('play', false, 1010);
-  carry.focused('more', true, 1010);
-  gate.focused(1010);
-  gate.key(1, false, 'hero-more', 1150);
-  expect(gate.stayed(1, 1150, 1010, 300)).toBe(false);
-  expect(carry.current()?.target).toBe('more');
-
-  gate.key(-1, true, 'hero-more', 2000);
-  carry.focused('more', false, 2010);
-  carry.focused('play', true, 2010);
-  gate.focused(2010);
-  gate.key(-1, false, 'hero-primary', 2150);
-  expect(gate.stayed(-1, 2150, 2010, 300)).toBe(false);
-  expect(carry.current()?.target).toBe('play');
-
-  // Move to More info, then RIGHT turn onto a More-info-only slide (2/6), then RIGHT turn onto
-  // playable slide (3/6): focus lands on More info (the right edge), NOT Play.
-  carry.focused('play', false, 3000);
-  carry.focused('more', true, 3000);
-  gate.key(1, true, 'hero-more', 4000);
-  gate.key(1, false, 'hero-more', 4150);
-  expect(gate.stayed(1, 4150, 3000, 300)).toBe(true);
-  expect(carry.atEdge('more', 1, t => xPlayable[t])).toBe(true);
-
-  // 1/6 -> 2/6 (More info only).
-  carry.turn(1, 4270);
-  carry.remove('play');
-  expect(carry.remove('more')).toBe(true);
-  carry.add('moreOnly', moreInfo);
-  expect(carry.take(undefined, 4290)).toBe('moreOnly');
-  carry.focused('moreOnly', true, 4305);
-  gate.focused(4305);
-
-  // 2/6 -> 3/6 (RIGHT turn onto playable [Play, More info]): lands on More info!
-  gate.key(1, true, 'hero-more', 6000);
-  gate.key(1, false, 'hero-more', 6150);
-  expect(gate.stayed(1, 6150, 4305, 300)).toBe(true);
-  expect(carry.atEdge('moreOnly', 1, t => xMoreOnly[t])).toBe(true);
-  carry.turn(1, 6270);
-  expect(carry.remove('moreOnly')).toBe(true);
-  carry.add('play3', resume);
-  carry.add('more3', moreInfo);
-  expect(carry.take(undefined, 6290)).toBe('more3');
-  carry.focused('more3', true, 6305);
-  gate.focused(6305);
-
-  // Next inward press (LEFT from More info on 3/6): moves focus to Play ONLY, does NOT turn back!
-  gate.key(-1, true, 'hero-more', 8000);
-  carry.focused('more3', false, 8010);
-  carry.focused('play3', true, 8010);
-  gate.focused(8010);
-  gate.key(-1, false, 'hero-primary', 8150);
-  expect(gate.stayed(-1, 8150, 8010, 300)).toBe(false);
-  expect(carry.current()?.target).toBe('play3');
-
-  // LEFT turn from Play on 3/6 onto playable slide 2': lands on Play (left edge).
-  gate.key(-1, true, 'hero-primary', 10000);
-  gate.key(-1, false, 'hero-primary', 10150);
-  expect(gate.stayed(-1, 10150, 8010, 300)).toBe(true);
-  carry.turn(-1, 10270);
-  expect(carry.remove('play3')).toBe(true);
-  carry.remove('more3');
-  carry.add('play2', resume);
-  carry.add('more2', moreInfo);
-  expect(carry.take(undefined, 10290)).toBe('play2');
+test('Android hero replays fast presses from the new slide edge even when its actions changed', () => {
+  expect(androidHeroAfterTurn(2, 1, [-1])).toEqual({ focus: 0 });
+  expect(androidHeroAfterTurn(3, 1, [-1, -1])).toEqual({ focus: 0 });
+  expect(androidHeroAfterTurn(1, 1, [-1])).toEqual({ focus: 0, turn: -1, remaining: [] });
+  expect(androidHeroAfterTurn(2, -1, [1, 1, -1])).toEqual({ focus: 1, turn: 1, remaining: [-1] });
 });

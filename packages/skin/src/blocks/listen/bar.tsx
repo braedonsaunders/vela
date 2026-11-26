@@ -57,7 +57,10 @@ export function NowPlayingBar({ queueOpen, onQueue, soundOpen = false, onSound, 
               <Cover uri={item.poster} shape="square" size={58} title={item.name} accent={item.accent} lift={0.5} />
             </Pressable>
             <View style={{ minWidth: 0, flexShrink: 1 }}>
-              {spoken ? <>
+              {audio.unreleased ? <>
+                <Link label={item.name} strong onPress={() => openNowPlaying()} menu={menu} testID="bar-title" part="bar.title" />
+                <Text accessibilityRole="alert" style={m.text({ 'font-size': '13px', color: '$ui.inkSecondary' })}>{audio.error}</Text>
+              </> : spoken ? <>
                 {/* A book or episode opens its page; the line under it is the chapter, else the book or show it is from. */}
                 <Link label={item.name} strong onPress={() => app.go(placeOf(item))} menu={menu} testID="bar-title" part="bar.title" />
                 <Link label={chapter?.name || container?.name || item.media?.byline || ''} onPress={() => app.go(placeOf(item))} testID="bar-subtitle" part="bar.subtitle" />
@@ -79,10 +82,10 @@ export function NowPlayingBar({ queueOpen, onQueue, soundOpen = false, onSound, 
             <IconButton symbol="shuffle" label={msg('media.player.shuffle')} onPress={() => store.audio.toggleShuffle()} active={!!audio.queue?.shuffle} size={34} iconSize={18} testID="bar-shuffle" />
             <Transport icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} />
           </>}
-          <Pressable onPress={() => store.audio.toggle()} disabled={!item} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : msg('media.player.play')} testID="bar-toggle"
+          {audio.unreleased ? null : <Pressable onPress={() => store.audio.toggle()} disabled={!item} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : msg('media.player.play')} testID="bar-toggle"
             style={[NO_RING, { width: 40, height: 40, borderRadius: 20, backgroundColor: m.ui.ink, alignItems: 'center', justifyContent: 'center', opacity: item ? 1 : 0.5 }, toggle.box]}>
             <MediaGlyph name={playing ? 'pause' : 'play'} size={18} color={m.ui.inkInverse} />
-          </Pressable>
+          </Pressable>}
           {spoken ? <>
             <IconButton symbol="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={34} iconSize={20} testID="bar-forward30" />
             <IconButton symbol="moon" label={sleeping ? sleepLabel(audio.sleep) : msg('media.player.sleep')} onPress={() => onPanel(panel === 'sleep' ? '' : 'sleep')} active={sleeping || panel === 'sleep'} size={34} iconSize={18} testID="bar-sleep" />

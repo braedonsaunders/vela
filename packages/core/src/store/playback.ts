@@ -1,3 +1,4 @@
+import type { Downloads } from './downloads';
 // Playback: the plan for a title, extra or channel; following the session while it plays (the
 // server's event stream, or snapshot reads for a server without one); the player's session
 // commands and observations; and stopping. Media credentials never enter state: the trusted host
@@ -24,31 +25,23 @@ import { withPlaying } from './playing-release';
 import { serverEnd } from './server-end';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
 import { matchSeriesTracks } from '../series-tracks';
+import type { ArchiveRange } from '../live/timeshift';
 import type { SeriesTracks } from './series-tracks';
 import type { Session } from './session';
-import type { StateBox } from './state';
+import { message, type StateBox } from './state';
 import type { VelaState } from './index';
 
 export type PlaybackTarget =
   /** `audio`: the app's audio engine plays it (music, audiobooks, podcasts), so the request declares what that engine plays. */
-  | { kind: 'title'; id: string; showId?: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext; audio?: true;
+  | { kind: 'title'; id: string; showId?: string; airDate?: string; positionSeconds?: number; mediaSourceId?: string; audioTrackId?: string; versionId?: string; context?: V.PlayContext; audio?: true;
     /** The title's media class when the caller knows it (the audio queue does): a class that never
      * enters Continue (music) is not followed by a read of Home's progress shelves. Not sent. */
     media?: V.MediaClass }
   | { kind: 'extra'; id: string }
   | { kind: 'channel'; id: string }
   /** A programme from the channel's archive (features.liveCatchUp): ended, or with `from: 'start'` on air from its start. */
-  | { kind: 'programme'; id: string; channelId: string; from?: 'start'; positionSeconds?: number }
+  | { kind: 'programme'; id: string; channelId: string; from?: 'start'; range?: ArchiveRange; positionSeconds?: number }
   | { kind: 'library-live'; id: string; libraryId: string; tab?: string };
-
-/** The window start a `timeshift_position_evicted` refusal names, or null for any other error. */
-function evictedWindowStart(error: unknown): number | null {
-  if (!(error instanceof VelaError) || error.detail.code !== 'timeshift_position_evicted') return null;
-  // The bounds ride in `details`, or beside the code on servers that flatten them.
-  const start = (error.detail.details as { windowStartSeconds?: unknown } | undefined)?.windowStartSeconds
-    ?? (error.detail as unknown as { windowStartSeconds?: unknown }).windowStartSeconds;
-  return typeof start === 'number' && Number.isFinite(start) ? start : null;
-}
 
 export type PlaybackPhase = 'idle' | 'starting' | 'preparing' | 'playing' | 'ended' | 'failed';
 export type OriginalLostResult = 'reopened' | 'version_unavailable' | 'gone' | 'superseded';
@@ -198,6 +191,7 @@ export class Playback {
     private readonly watched: (watched: Watched) => void,
     private readonly reconcile: (watched: Watched, media?: V.MediaClass) => void,
     private readonly seriesTracks?: SeriesTracks,
+    private readonly downloads?: Downloads,
   ) {
     this.trickplay.subscribe(() => this.trickplayChanged());
     session.onReset(kind => {
@@ -225,7 +219,8 @@ export class Playback {
           current.target.libraryId === target.libraryId &&
           current.target.tab === target.tab)) &&
         (target.kind !== 'programme' || (current.target.kind === 'programme' &&
-          current.target.channelId === target.channelId && current.target.from === target.from))) return;
+          current.target.channelId === target.channelId && current.target.from === target.from &&
+          current.target.range?.startAt === target.range?.startAt && current.target.range?.durationSeconds === target.range?.durationSeconds))) return;
     const stopping = this.stop();
     const run = {};
     this.run = run;
@@ -233,6 +228,30 @@ export class Playback {
     this.patch({ ...initialPlayback, phase: 'starting', target });
     await stopping;
     if (this.run !== run) return;
+    if (target.kind === 'title' && !target.audio && this.downloads) {
+      try {
+        const plan = await this.downloads.planFor(target.id, {
+          positionSeconds: target.positionSeconds,
+          versionId: target.versionId,
+          sourceId: target.mediaSourceId,
+        });
+        if (this.run !== run) return;
+        if (plan) {
+          await this.downloads.detailFor(target.id);
+          if (this.run !== run) return;
+          this.cursor = plan.positionSeconds;
+          this.patch({ phase: 'playing', plan, sessionId: plan.sessionId });
+          return;
+        }
+      } catch (error) {
+        if (this.run === run) this.patch({ phase: 'failed', error: message(error, 'Could not open download') });
+        return;
+      }
+    }
+    if (this.box.get().auth?.phase === 'offline') {
+      this.patch({ phase: 'failed', error: 'This title is unavailable offline' });
+      return;
+    }
     await this.request({ run, target, key: `play-${target.kind}-${target.id}-${randomId()}` }, 0, 0);
   }
 
@@ -291,7 +310,7 @@ export class Playback {
         reply = await api.startLibraryLive(target.libraryId, { itemId: target.id, tab: target.tab, liveMode: 'adaptive', client: this.session.client, idempotencyKey: intent.key });
       } else reply = await api.startPlayback({
           ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id }
-            : target.kind === 'programme' ? { channelId: target.channelId, programmeId: target.id, ...(target.from ? { from: target.from } : {}) }
+            : target.kind === 'programme' ? { channelId: target.channelId, ...(target.range ?? { programmeId: target.id, ...(target.from ? { from: target.from } : {}) }) }
             : { titleId: target.id }),
           ...(position !== undefined ? { positionSeconds: position } : {}),
           ...(target.kind === 'title' && target.mediaSourceId ? { mediaSourceId: target.mediaSourceId } : {}),
@@ -432,7 +451,8 @@ export class Playback {
     if (this.recovering && this.established && !finalRefusal(error) && !serverRefused(error)) { this.scheduleRecovery(intent); return; }
     if (this.recovering) this.established = false;
     this.recovering = false;
-    const refusal = startRefusal(error, 'Playback failed');
+    const target = intent.target;
+    const refusal = startRefusal(error, 'Playback failed', target.kind === 'title' ? target.airDate : undefined);
     const seconds = startRetry(error, attempt);
     this.patch({
       phase: 'failed',
@@ -611,6 +631,10 @@ export class Playback {
   recover(sessionId: string, reason = 'failed'): void {
     const run = this.run;
     const current = this.box.get().playback;
+    if (sessionId.startsWith('local-') && current.sessionId === sessionId) {
+      this.patch({ phase: 'failed', error: 'Could not play this download' });
+      return;
+    }
     // Only an established session is recovered: a start that never reached one (no session id)
     // already ended in its own failed or retrying state.
     if (!run || !this.established || !sessionId || this.recovering || current.sessionId !== sessionId || !current.target || current.phase === 'ended') return;
@@ -694,6 +718,7 @@ export class Playback {
   };
 
   get subtitleSearchAvailable(): boolean {
+    if (this.box.get().playback.sessionId.startsWith('local-')) return false;
     try { return hasSubtitleSearch(this.session.selected().adapter); } catch { return false; }
   }
 
@@ -745,6 +770,23 @@ export class Playback {
     return added ?? chosen;
   }
 
+  private pendingLiveTransport?: { sessionId: string; result: Promise<boolean> };
+
+  liveTransport(sessionId: string, command: { kind: 'pause' | 'resume' | 'goLive' } | { kind: 'seek'; positionSeconds: number }): Promise<boolean> {
+    const queue = this.pendingLiveTransport?.sessionId === sessionId ? this.pendingLiveTransport.result : Promise.resolve();
+    const result = queue.then(() => {
+      const plan = this.box.get().playback.plan;
+      if (!plan?.live || plan.sessionId !== sessionId) return false;
+      return this.command(sessionId, { ...command, sourceGeneration: plan.sourceGeneration,
+        seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() });
+    });
+    this.pendingLiveTransport = { sessionId, result };
+    void result.then(() => {
+      if (this.pendingLiveTransport?.result === result) this.pendingLiveTransport = undefined;
+    });
+    return result;
+  }
+
   /**
    * A player's session command (seek, pause, track change, path switch, fallback, stop). `origin`
    * says whether the viewer asked for it (a quality pick) or the engine sent it on its own (an
@@ -752,8 +794,25 @@ export class Playback {
    * command gets viewer copy, and one that lost to a newer generation, or that the engine sent
    * on its own, is dropped silently (the engine plans again from the newer plan).
    */
-  async command(sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<void> {
+  async command(sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<boolean> {
     const current = this.box.get().playback;
+    if (sessionId.startsWith('local-')) {
+      const plan = current.sessionId === sessionId ? current.plan : null;
+      if (!plan) return false;
+      if (command.kind === 'stop') await this.stop();
+      if (command.kind === 'pause') await this.checkpointDownload()?.catch(() => {});
+      if (command.kind === 'tracks') {
+        const { audioTrackId, subtitleTrackId } = command;
+        this.patch({ plan: {
+          ...plan,
+          revision: plan.revision + 1,
+          ...(plan.audioTracks.some(t => t.id === audioTrackId) ? { selectedAudioTrackId: audioTrackId } : {}),
+          ...(subtitleTrackId === null || plan.subtitleTracks.some(t => t.id === subtitleTrackId) ? { selectedSubtitleTrackId: subtitleTrackId } : {}),
+        } });
+      }
+      // File seeks and pause/resume happen in the native player.
+      return true;
+    }
     if (current.sessionId === sessionId && current.error) this.patch({ error: '' });
     // The engine recovering on its own (a path switch, a fallback) is not progress (stall.ts).
     const watch = origin === 'engine' || command.kind === 'prepare-fallback' ? this.stall : undefined;
@@ -779,18 +838,14 @@ export class Playback {
           nextPlan = this.withLocalTracks(nextPlan);
         }
         this.patch({ plan: nextPlan });
+        return true;
       }
+      return false;
     } catch (error) {
       answered(null);
       const words = commandFailure(command, error, origin);
       if (words && this.box.get().playback.sessionId === sessionId) this.patch({ error: words });
-      // A paused live position the rewind window left behind resumes at the window's start (spec B2).
-      const start = evictedWindowStart(error);
-      if (start !== null && (command.kind === 'resume' || command.kind === 'seek') && this.box.get().playback.sessionId === sessionId) {
-        const plan = this.box.get().playback.plan;
-        if (plan) await this.command(sessionId, { kind: 'seek', positionSeconds: start, sourceGeneration: plan.sourceGeneration,
-          seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() }, origin);
-      }
+      return false;
     } finally {
       if (seek) this.seeking.delete(seek);
     }
@@ -833,7 +888,7 @@ export class Playback {
       // still offers its path. A switch the engine sent on its own is tied to the source it was
       // planned against and is not: the engine plans again from the newer plan.
       const generations = staleGeneration(error) ? error.detail.currentGenerations : undefined;
-      const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks'].includes(command.kind);
+      const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks', 'goLive'].includes(command.kind);
       const wanted = command.kind === 'switch' && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
       if ((!absolute && !wanted) || !generations) throw error;
       if (canRetry && !(await canRetry())) throw error;
@@ -866,6 +921,7 @@ export class Playback {
   /** Read the session's authoritative plan again (the player found its grant expired or a reply stale).
    * False when the session is gone (the server ended it, or it cannot be read): the caller starts over. */
   async refresh(sessionId: string): Promise<boolean> {
+    if (sessionId.startsWith('local-')) return this.box.get().playback.sessionId === sessionId;
     try {
       const connection = await this.session.ready();
       const snapshot = await connection.adapter.sessionSnapshot(sessionId);
@@ -896,6 +952,10 @@ export class Playback {
    * reopens in the existing session; an explicit version remains pinned and lets the chrome offer
    * another version at the held position. */
   async originalLost(sessionId: string, positionSeconds: number, failedSourceGeneration?: number): Promise<OriginalLostResult> {
+    if (sessionId.startsWith('local-')) {
+      this.recover(sessionId);
+      return 'superseded';
+    }
     const run = this.run;
     const epoch = this.session.epoch;
     const current = this.box.get().playback;
@@ -961,6 +1021,16 @@ export class Playback {
 
   /** The player's progress report. */
   async observe(sessionId: string, observation: V.PlayerObservation): Promise<V.Ack> {
+    if (sessionId.startsWith('local-')) {
+      const { playback } = this.box.get();
+      if (playback.sessionId === sessionId && !observation.error && observation.state !== 'buffering') {
+        const ended = observation.state === 'ended';
+        this.cursor = observation.positionSeconds;
+        this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
+        await this.checkpointDownload(observation.observedAt);
+      }
+      return { accepted: true };
+    }
     const ended = observation.state === 'ended';
     this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
     // Known as in flight at once, so a stop issued right after (an advance, Stop) waits for it.
@@ -1080,14 +1150,33 @@ export class Playback {
     }
   }
 
+  /** Persist the latest local position before the app is suspended or the view closes. */
+  checkpointDownload(observedAt?: string): Promise<void> | undefined {
+    const { sessionId, plan } = this.box.get().playback;
+    if (!sessionId.startsWith('local-') || !plan?.titleId || this.lastPosition?.sessionId !== sessionId) return;
+    return this.downloads?.recordProgress({
+      titleId: plan.titleId,
+      positionSeconds: this.cursor,
+      durationSeconds: plan.durationSeconds,
+      completed: this.lastPosition.ended,
+      observedAt,
+    });
+  }
+
   /** Stop playing: the server releases the session at the plan's generations. */
   async stop(): Promise<void> {
     const { target, phase } = this.box.get().playback;
     const plan = this.box.get().playback.plan ?? this.abandoned;
     const last = plan && this.lastPosition?.sessionId === plan.sessionId ? this.lastPosition : undefined;
+    const checkpoint = this.checkpointDownload()?.catch(() => {});
     this.end();
     this.watch = undefined;
     this.box.update('playback', () => initialPlayback);
+    if (plan?.sessionId.startsWith('local-')) {
+      await checkpoint;
+      void this.downloads?.replayProgress();
+      return;
+    }
     if (plan?.state === 'ended') this.held.delete(plan.sessionId);
     if (!plan || plan.state === 'ended') return;
     await this.finish(plan, target, phase, last, this.reporting);
@@ -1244,7 +1333,7 @@ export class Playback {
    */
   trickplayFrame(sessionId: string, seconds: number): TrickplayFrame | null {
     const { plan } = this.box.get().playback;
-    if (!plan || plan.sessionId !== sessionId || plan.live || plan.channelId) return null;
+    if (!plan || sessionId.startsWith('local-') || plan.sessionId !== sessionId || plan.live || plan.channelId) return null;
     const offer = plan.trickplay ?? this.readTrickplayOffer(sessionId, plan.sourceGeneration);
     if (!offer) return null;
     return this.trickplay.frame(sessionId, plan.sourceGeneration, offer, seconds, async (index, etag, signal) => {
@@ -1389,7 +1478,7 @@ export class Playback {
 /** What a watch is of, whatever position or track a restart asks it again at. */
 function watchOf(target: PlaybackTarget): string {
   return JSON.stringify([target.kind, target.id,
-    target.kind === 'programme' ? [target.channelId, target.from ?? ''] : target.kind === 'library-live' ? [target.libraryId, target.tab ?? ''] : []]);
+    target.kind === 'programme' ? [target.channelId, target.from ?? '', target.range?.startAt, target.range?.durationSeconds] : target.kind === 'library-live' ? [target.libraryId, target.tab ?? ''] : []]);
 }
 
 function delay(ms: number, signal: AbortSignal): Promise<void> {

@@ -243,3 +243,35 @@ test.each([204, 500])('Plex close retries at the generation of a held seek (clea
   playback.stopOnUnload(({ url }) => unload.push(new URL(url).pathname));
   expect(unload).toEqual(status === 500 ? ['/music/:/transcode/universal/stop'] : []);
 });
+
+test('Plex sends the stopped timeline once more when pagehide skipped it and the one on the wire is refused', async () => {
+  const plex = new PlexAdapter({ origin: 'https://plex.example', credentials: new FakeCredentials(), clientIdentifier: 'client-1' });
+  const track = { ratingKey: '9', type: 'track', title: 'Opening', duration: 60000, Media: [{ id: 5, container: 'mp3', audioCodec: 'mp3',
+    Part: [{ id: 6, key: '/library/parts/6/1/file.mp3' }] }] };
+  const stoppedSent = Promise.withResolvers<void>();
+  const stoppedResponse = Promise.withResolvers<Response>();
+  let stops = 0;
+  const seen = routeFetch({
+    'GET /library/metadata/9': { MediaContainer: { Metadata: [track] } },
+    'POST /:/timeline': ({ url }: Seen) => {
+      if (url.searchParams.get('state') !== 'stopped') return new Response(null, { status: 204 });
+      // The first stopped timeline is held, then refused; every later one is refused too, so a loop would show.
+      if (++stops === 1) { stoppedSent.resolve(); return stoppedResponse.promise; }
+      return new Response(null, { status: stops === 2 ? 200 : 500 });
+    },
+    'GET /music/:/transcode/universal/stop': new Response(null, { status: 204 }),
+  });
+  const started = await plex.startPlayback({ titleId: '9', idempotencyKey: 'start' } as never) as PlaybackPlan;
+  const { sessionId, sourceGeneration, seekGeneration } = started;
+  const at = { sourceGeneration, seekGeneration };
+  const stop = plex.command(sessionId, { ...at, kind: 'stop', idempotencyKey: 'stop' }).catch(error => error);
+  await stoppedSent.promise;
+  const page = new EventTarget();
+  stopSessionsOnPageHide(page, { stopOnUnload(send) { const requests = plex.unloadStop(sessionId, at); requests.forEach(send); return requests.length; } });
+  page.dispatchEvent(new Event('pagehide'));
+  stoppedResponse.resolve(new Response(null, { status: 500 }));
+  await stop;
+  await new Promise(resolve => setTimeout(resolve, 20));
+  const timelines = seen.filter(({ url }) => url.pathname === '/:/timeline').map(({ url }) => url.searchParams.get('state'));
+  expect(timelines).toEqual(['stopped', 'stopped']);
+});

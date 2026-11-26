@@ -18,7 +18,7 @@ import { Arrive, MOTION, Presence, useLast } from '../../presence';
 import { LyricsPanel } from '../../blocks/listen/lyrics';
 import { SoundBlock, SoundSection } from '../../blocks/sound';
 import { musicTV } from '../../blocks/listen/layout';
-import { nowPlayingSideBySide } from './window-layout';
+import { nowPlayingCompactLandscape, nowPlayingSideBySide } from './window-layout';
 import { listForItem, toggleSound, type NowPlayingList } from './now-playing-list';
 import { NOW_PLAYING_PLAY, nowPlayingFirstFocus } from './now-playing-focus';
 import { usePart } from '../../blocks/listen/look';
@@ -72,13 +72,13 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} style={[m.text({ 'font-size': '15px', 'font-weight': '650' }), titlePart]}>{item.name}</Text>
             <Text numberOfLines={1} style={[m.text({ 'font-size': '13px', color: '$ui.inkSecondary' }), bylinePart]}>
-              {preview !== null ? `${clock(preview)} / ${clock(audio.durationSeconds)}` : audio.phase === 'failed' ? msg('media.player.failed') : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
+              {preview !== null ? `${clock(preview)} / ${clock(audio.durationSeconds)}` : audio.phase === 'failed' ? (audio.unreleased ? audio.error : msg('media.player.failed')) : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
             </Text>
           </View>
         </Pressable>
         {book && !m.small ? <RoundButton icon="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={40} testID="mini-back15" /> : null}
         {!book && !m.small ? <RoundButton icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} size={40} testID="mini-previous" iconSize={16} /> : null}
-        <PlayButton playing={playing} size={46} onPress={() => store.audio.toggle()} testID="mini-toggle" />
+        {audio.unreleased ? null : <PlayButton playing={playing} size={46} onPress={() => store.audio.toggle()} testID="mini-toggle" />}
         {book ? <RoundButton icon="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={40} testID="mini-forward30" />
           : <RoundButton icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} size={40} testID="mini-next" iconSize={16} />}
         {!m.small ? <RoundButton icon="close" label={msg('media.player.stop')} onPress={() => void store.audio.stop()} size={36} testID="mini-stop" iconSize={14} /> : null}
@@ -236,6 +236,10 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
 }) {
   const host = useHost();
   const m = useMediaLook();
+  const insets = host.viewport.insets;
+  const handheld = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
+  const compactLandscape = handheld && nowPlayingCompactLandscape(m.width, m.height);
+  const sideBySide = compactLandscape || nowPlayingSideBySide(m.width, m.height);
   const store = useVela();
   const actions = useMediaActions();
   const live = useAudio();
@@ -256,7 +260,9 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
     };
   }, [setPlayTarget]);
   useEffect(() => { if (!open) setEntered(false); }, [open]);
-  const initialFocus = nowPlayingFirstFocus({ tv: Platform.isTV, open: open && !hidden && !!item, laidOut, entered });
+  const { preferPlay, requestTarget: initialFocus } = nowPlayingFirstFocus({
+    tv: Platform.isTV, open: open && !hidden && !!item, laidOut, entered,
+  });
   useEffect(() => {
     if (!initialFocus) return;
     // A view can lay out during the opening fade, while tvOS still excludes it from focus.
@@ -296,6 +302,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   const reveal = () => {
     if (!revealing.current) return;
     revealing.current = false;
+    if (sideBySide) return;
     scroller.current?.scrollTo({ y: Math.max(0, listTop.current), animated: !m.look.still });
   };
   // The tabs' new place arrives with their layout (from the phone's lyrics, the page re-lays out);
@@ -304,7 +311,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
     if (!revealSound) return;
     let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(reveal); });
     return () => cancelAnimationFrame(frame);
-  }, [revealSound]);
+  }, [revealSound, sideBySide]);
   useEffect(() => { if (opening) setList(opening === 'sound' ? 'sound' : opening === 'lyrics' && music ? 'lyrics' : 'queue'); }, [opening, music]);
   // Space plays and pauses; Escape closes (web).
   useEffect(() => {
@@ -320,7 +327,6 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   }, [onClose, store, hidden]);
   if (!item || !audio.queue || hidden) return null;
   const playing = audio.phase === 'playing' || audio.phase === 'buffering' || audio.phase === 'loading';
-  const sideBySide = nowPlayingSideBySide(m.width, m.height);
   const coverSize = sideBySide ? Math.min(480, m.height - 360, (m.width - m.gutter * 2) * 0.42) : Math.min(m.width - m.gutter * 2 - 24, m.height * 0.42, 420);
   const tint = item.accent || m.ui.accent;
   // Android TV's artwork wash starts at the tinted gradient stop when no visualizer is showing.
@@ -333,7 +339,9 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   const sleeping = audio.sleep.mode !== 'off';
   const sleepLeft = audio.sleep.mode === 'timer' ? Math.max(0, (audio.sleep.endsAt - Date.now()) / 1000) : 0;
   const after = upNext(audio.queue);
-  const launcherByTitle = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
+  const launcherByTitle = handheld;
+  const playSize = compactLandscape ? 60 : 76;
+  const skipSize = compactLandscape ? 44 : 54;
   const launcher = onOpenVisualizer ? <RoundButton icon="visualizer" label={msg('visualizer.open')} onPress={onOpenVisualizer}
     nativeID="now-playing-visualizer" testID="now-playing-visualizer" size={44} /> : null;
   // Sound is one press away on every layout, beside the visualizer: the tab below can sit under the
@@ -345,32 +353,34 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   // Both ends of the header are as wide, so the source stays centred over the page.
   const headerSide = headerEnd * 44 + (headerEnd - 1) * 8;
   const controls = (
-    <Guide {...guided} style={{ gap: 22, width: '100%', maxWidth: 560, alignSelf: 'center' }}>
+    <Guide {...guided} style={{ gap: compactLandscape ? 14 : 22, width: '100%', maxWidth: 560, alignSelf: 'center' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        {launcherByTitle ? launcher : null}
-        <View style={{ flex: 1, gap: 6 }}>
-          <Text numberOfLines={2} accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': m.small ? '28px' : '36px', 'line-height': '1.08' }), titlePart.text]} testID="now-playing-title">{item.name}</Text>
+        {compactLandscape ? <Artwork item={item} size={m.width < 700 ? 88 : 112} playing={playing} style={artworkPart.box} /> : null}
+        {launcherByTitle && !compactLandscape ? launcher : null}
+        <View style={{ flex: 1, gap: compactLandscape ? 4 : 6 }}>
+          <Text numberOfLines={2} accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': compactLandscape ? '24px' : m.small ? '28px' : '36px', 'line-height': '1.08' }), titlePart.text]} testID="now-playing-title">{item.name}</Text>
           {item.media?.byline ? <TextLink label={item.media.byline} testID="now-playing-byline"
             onPress={item.media.bylineTarget ? () => { onClose(); const t = item.media!.bylineTarget; if (t.startsWith('title:')) actions.openTitle({ id: t.slice(6), kind: 'artist' }); else actions.openPerson(t.slice(7), item.media!.byline); } : undefined}
-            style={{ ...m.text({ 'font-size': '17px', color: '$ui.inkSecondary' }), ...bylinePart.text }} /> : null}
+            style={{ ...m.text({ 'font-size': compactLandscape ? '14px' : '17px', color: '$ui.inkSecondary' }), ...bylinePart.text }} /> : null}
+          {compactLandscape && launcher}
           {book && chapterIndex ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet' })}>{chapterIndex.name} · {msg('media.player.chapterOf', { index: number(chapterAt + 1), count: number(audio.chapters.length) })}</Text> : null}
         </View>
       </View>
       <Scrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={s => store.audio.seek(s)} chapters={book ? audio.chapters : []} />
-      {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : msg('media.player.failed')}</Text></Arrive> : null}
+      {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : audio.unreleased ? audio.error : msg('media.player.failed')}</Text></Arrive> : null}
       <View style={{ zIndex: 3 }}>
         <Guide {...guided} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           {book
             ? <RoundButton icon="speed" label={`${msg('media.player.speed')}: ${rateLabel(audio.rate)}`} onPress={() => setPanel(panel === 'speed' ? '' : 'speed')} active={audio.rate !== 1 || panel === 'speed'} testID="now-playing-speed" />
             : <RoundButton icon="shuffle" label={msg('media.player.shuffle')} onPress={() => store.audio.toggleShuffle()} active={audio.queue.shuffle} testID="now-playing-shuffle" />}
-          {book ? <RoundButton icon="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={54} testID="now-playing-back15" />
-            : <RoundButton icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} size={54} testID="now-playing-previous" iconSize={22} />}
-          <PlayButton playing={playing} size={76} onPress={() => store.audio.toggle()}
-            testID={NOW_PLAYING_PLAY} nativeID={NOW_PLAYING_PLAY} preferred={Platform.isTV && open && !entered}
+          {book ? <RoundButton icon="back15" label={msg('media.player.back15')} onPress={() => store.audio.skip(-15)} size={skipSize} testID="now-playing-back15" />
+            : <RoundButton icon="previous" label={msg('media.player.previous')} onPress={() => store.audio.previous()} size={skipSize} testID="now-playing-previous" iconSize={22} />}
+          {audio.unreleased ? <View style={{ width: playSize }} /> : <PlayButton playing={playing} size={playSize} onPress={() => store.audio.toggle()}
+            testID={NOW_PLAYING_PLAY} nativeID={NOW_PLAYING_PLAY} preferred={preferPlay}
             focusRef={playRef} onLayout={Platform.isTV ? () => setLaidOut(true) : undefined}
-            onFocus={Platform.isTV && open ? () => setEntered(true) : undefined} />
-          {book ? <RoundButton icon="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={54} testID="now-playing-forward30" />
-            : <RoundButton icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} size={54} testID="now-playing-next" iconSize={22} />}
+            onFocus={Platform.isTV && open ? () => setEntered(true) : undefined} />}
+          {book ? <RoundButton icon="forward30" label={msg('media.player.forward30')} onPress={() => store.audio.skip(30)} size={skipSize} testID="now-playing-forward30" />
+            : <RoundButton icon="next" label={msg('media.player.next')} onPress={() => store.audio.next()} size={skipSize} testID="now-playing-next" iconSize={22} />}
           {book
             ? <RoundButton icon="moon" label={msg('media.player.sleep')} onPress={() => setPanel(panel === 'sleep' ? '' : 'sleep')} active={sleeping || panel === 'sleep'} testID="now-playing-sleep" />
             : <RoundButton icon={audio.queue.repeat === 'one' ? 'repeatOne' : 'repeat'} label={audio.queue.repeat === 'one' ? msg('media.player.repeatOne') : msg('media.player.repeat')}
@@ -412,14 +422,19 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
       trailing={card.media?.clockLabel} onPress={() => store.audio.jump(audio.queue!.items.indexOf(card))} testID={`now-playing-next-${card.id}`} />)
     : [<Text key="none" style={m.text({ 'font-size': '14px', color: '$ui.inkQuiet', padding: '12px 14px' })}>{msg('media.player.nothingNext')}</Text>];
   const tabs = (
-    <View style={[{ flexDirection: 'row', gap: 8, marginBottom: 10 }, tabsPart.box]} accessibilityRole="tablist">
+    <View style={[{ flexDirection: 'row', flexWrap: compactLandscape ? 'wrap' : 'nowrap', gap: 8, marginBottom: 10 }, tabsPart.box]} accessibilityRole="tablist">
       <Chip label={msg('media.player.upNext')} selected={list === 'queue'} onPress={() => setList('queue')} testID="now-playing-queue-tab" />
       {audio.chapters.length ? <Chip label={msg('media.player.chapters')} selected={list === 'chapters'} onPress={() => setList('chapters')} testID="now-playing-chapters-tab" /> : null}
       {music ? <Chip label={msg('music.lyrics')} selected={list === 'lyrics'} onPress={() => setList('lyrics')} testID="now-playing-lyrics-tab" /> : null}
       <Chip label={msg('music.sound')} selected={list === 'sound'} onPress={() => setList('sound')} testID="now-playing-sound-tab" />
     </View>
   );
-  const top = Math.max(14, host.viewport.insets.top + 10);
+  const top = Math.max(14, insets.top + 10);
+  const headerSafeArea = launcherByTitle ? {
+    paddingTop: top,
+    paddingLeft: m.gutter - 6 + insets.left,
+    paddingRight: m.gutter - 6 + insets.right,
+  } : undefined;
   return (
     <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: onOpenVisualizer ? 'transparent' : m.ui.page }} testID="now-playing" accessibilityViewIsModal accessibilityLabel={msg('media.player.nowPlaying')}>
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden',
@@ -430,7 +445,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
         {background ? <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>{background}</View> : null}
         <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${washTop} 0%, ${alpha(m.ui.page, 0.7)} 60%, ${m.ui.page} 100%)` }), tintPart.box]} />
       </View>
-      <View style={[{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }, headerPart.box]}>
+      <View style={[{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }, headerPart.box, headerSafeArea]}>
         <View style={{ width: headerSide, alignItems: 'flex-start' }}>
           <RoundButton icon="down" label={msg('media.player.close')} onPress={onClose} testID="now-playing-close" nativeID="now-playing-close" size={42} />
         </View>
@@ -450,30 +465,47 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
           {launcherByTitle ? null : launcher}
         </View>
       </View>
-      <ScrollView ref={scroller} style={{ flex: 1 }} contentContainerStyle={[{ paddingHorizontal: m.gutter, paddingTop: PAGE_TOP, paddingBottom: 48, minHeight: '100%' as never }, stagePart.box]}>
-        {sideBySide ? (
-          <View style={{ flexDirection: 'row', gap: 56, alignItems: 'flex-start', maxWidth: 1280, width: '100%', alignSelf: 'center' } as ViewStyle}>
-            <View style={{ flex: 1, gap: 34, alignItems: 'center' }}>
-              <Artwork item={item} size={coverSize} playing={playing} style={artworkPart.box} />
+      {compactLandscape ? (
+        <View style={[{ flex: 1, flexDirection: 'row', gap: 28, paddingTop: 12,
+          paddingLeft: insets.left + 24, paddingRight: insets.right + 24, paddingBottom: insets.bottom }, stagePart.box]}>
+          <ScrollView style={{ flex: 1 }} automaticallyAdjustContentInsets={false}
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingBottom: panel ? 160 : 16 }}>
+            {controls}
+          </ScrollView>
+          <View style={{ flex: 1 }}>
+            {tabs}
+            <ScrollView key={list} style={{ flex: 1 }} automaticallyAdjustContentInsets={false}
+              contentContainerStyle={{ gap: 2, paddingBottom: 16 }}>
+              <Arrive still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive>
+            </ScrollView>
+          </View>
+        </View>
+      ) : (
+        <ScrollView ref={scroller} style={{ flex: 1 }} contentContainerStyle={[{ paddingHorizontal: m.gutter, paddingTop: PAGE_TOP, paddingBottom: 48, minHeight: '100%' as never }, stagePart.box]}>
+          {sideBySide ? (
+            <View style={{ flexDirection: 'row', gap: 56, alignItems: 'flex-start', maxWidth: 1280, width: '100%', alignSelf: 'center' } as ViewStyle}>
+              <View style={{ flex: 1, gap: 34, alignItems: 'center' }}>
+                <Artwork item={item} size={coverSize} playing={playing} style={artworkPart.box} />
+                {controls}
+              </View>
+              <View style={{ flex: 1, maxWidth: 520, paddingTop: 8 }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
+            </View>
+          ) : list === 'lyrics' ? (
+            // On a phone the lyrics take the screen, with the title and transport below them.
+            <View style={{ gap: 18 }}>
+              {tabs}
+              <View style={[{ height: Math.max(260, m.height - 430), overflow: 'hidden' }, m.box({ 'mask-image': 'linear-gradient(180deg, transparent 0%, #000 8%, #000 88%, transparent 100%)' })]}><LyricsPanel card={item} large /></View>
               {controls}
             </View>
-            <View style={{ flex: 1, maxWidth: 520, paddingTop: 8 }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
-          </View>
-        ) : list === 'lyrics' ? (
-          // On a phone the lyrics take the screen, with the title and transport below them.
-          <View style={{ gap: 18 }}>
-            {tabs}
-            <View style={[{ height: Math.max(260, m.height - 430), overflow: 'hidden' }, m.box({ 'mask-image': 'linear-gradient(180deg, transparent 0%, #000 8%, #000 88%, transparent 100%)' })]}><LyricsPanel card={item} large /></View>
-            {controls}
-          </View>
-        ) : (
-          <View style={{ gap: 28, alignItems: 'center' }}>
-            <Artwork item={item} size={coverSize} playing={playing} style={artworkPart.box} />
-            {controls}
-            <View style={{ width: '100%', maxWidth: 560 }} onLayout={e => { listTop.current = e.nativeEvent.layout.y + PAGE_TOP - 12; reveal(); }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
-          </View>
-        )}
-      </ScrollView>
+          ) : (
+            <View style={{ gap: 28, alignItems: 'center' }}>
+              <Artwork item={item} size={coverSize} playing={playing} style={artworkPart.box} />
+              {controls}
+              <View style={{ width: '100%', maxWidth: 560 }} onLayout={e => { listTop.current = e.nativeEvent.layout.y + PAGE_TOP - 12; reveal(); }}>{tabs}<Arrive key={list} still={m.look.still} style={{ gap: 2 }}>{listItems}</Arrive></View>
+            </View>
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }

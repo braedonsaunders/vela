@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type * as V from '../packages/protocol/types';
+import { faults } from './media';
 import { mediaChildren, mediaTitle } from '../packages/protocol/fixtures/media';
 import { entityKey, sportsEnabled, sportsGate, sportsModel, sportsNow, type SportsSim } from './sports';
 
@@ -25,6 +26,7 @@ type Json = Record<string, unknown>;
 const FIXTURES = process.env.VELA_MOCK_SCREEN_FIXTURES || join(import.meta.dir, '../packages/protocol/fixtures/screens');
 const noFromStart = process.env.VELA_MOCK_FROM_START !== '1';
 const H = 3600_000;
+const sportsMediaClockOffset = Date.now() - sportsNow();
 
 // Documents
 
@@ -243,7 +245,7 @@ const watchScore = (t: V.WatchTarget) => (t.live ? 2 : 0) + (t.kind === 'channel
 export function watchOf(event: V.LiveEvent) {
   const all = event.watch ?? [];
   const targets = all.filter(tunable).sort((a, b) => watchScore(b) - watchScore(a)).map(t => {
-    const fromStart = noFromStart || !t.programme ? undefined : t.programme.catchUp ? 'catchUp' : t.programme.startOver ? 'startOver' : undefined;
+    const fromStart = (noFromStart && !faults.catchUpFixture) || !t.programme ? undefined : t.programme.catchUp ? 'catchUp' : t.programme.startOver ? 'startOver' : undefined;
     return { kind: t.kind, channelId: t.channelId!, name: t.name, ...(t.number ? { number: t.number } : {}), ...(t.logo ? { logo: t.logo } : {}), live: t.live, confidence: t.confidence,
       ...(fromStart && t.programme ? { fromStart, programme: { id: t.programme.id, start: t.programme.start, end: t.programme.end } } : {}) };
   });
@@ -325,7 +327,9 @@ export function detailView(detail: V.LiveEventDetail, abbrs: ReadonlySet<string>
   const [a, b] = detail.competitors;
   const pair = a && b && detail.competitors.length === 2 ? (a.home && !b.home ? [b, a] : [a, b]) : null;
   const plays = detail.plays.map(play => ({ ...(play.clock ? { clock: play.clock } : {}), ...(play.period !== undefined ? { period: play.period } : {}), text: play.text,
-    emphasis: play.emphasis, ...(play.competitorId ? { competitorId: play.competitorId } : {}), ...(play.at ? { at: play.at } : {}), ...(play.score ? { score: play.score } : {}),
+    emphasis: play.emphasis, ...(play.competitorId ? { competitorId: play.competitorId } : {}), ...(play.at ? {
+      at: faults.catchUpFixture ? new Date(Date.parse(play.at) + sportsMediaClockOffset).toISOString() : play.at,
+    } : {}), ...(play.score ? { score: play.score } : {}),
     ...(play.score && pair ? { scores: pair.map(side => play.score![side.id] ?? '') } : {}) }));
   // Oldest first on the wire, unless the periods already run backwards.
   const first = plays[0]?.period, last = plays.at(-1)?.period;

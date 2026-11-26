@@ -3,21 +3,34 @@
 // the watch route with `kind=channel`.
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import type { Vela as Store } from '@vela/core';
+import type { ArchiveRange, Vela as Store } from '@vela/core';
 import { sampleUIFrames } from '@vela/player';
 import { LiveController, liveSource } from '@vela/skin/src/widgets/guide';
 import { preferences } from './data/preferences';
 
-function openWatch(channelId: string, replace: boolean): void {
+// A player action updates the current route. Each request can start a fresh session even when it
+// names the same programme again after Go live.
+let playbackRequest = 0;
+
+function openWatch(channelId: string, inPlace: boolean): void {
   const target = { pathname: '/watch/[id]' as const, params: { id: channelId, kind: 'channel' } };
-  if (replace) router.replace(target);
+  if (inPlace) router.setParams({
+    ...target.params, channelId: undefined, from: undefined, startAt: undefined, durationSeconds: undefined,
+    playbackRequest: String(++playbackRequest),
+  });
   else router.push(target);
 }
 
-function openCatchUp(channelId: string, programmeId: string, from: 'start' | undefined, replace: boolean): void {
-  const target = { pathname: '/watch/[id]' as const, params: { id: programmeId, kind: 'programme', channelId, ...(from ? { from } : {}) } };
-  if (replace) router.replace(target);
-  else router.push(target);
+function openCatchUp(channelId: string, programmeId: string, from: 'start' | undefined, inPlace: boolean, range?: ArchiveRange): void {
+  const params = {
+    id: programmeId, kind: 'programme', channelId, from,
+    startAt: range?.startAt, durationSeconds: range ? String(range.durationSeconds) : undefined,
+  };
+  if (inPlace) router.setParams({ ...params, playbackRequest: String(++playbackRequest) });
+  else router.push({ pathname: '/watch/[id]', params: {
+    id: params.id, kind: params.kind, channelId,
+    ...(from ? { from } : {}), ...(range ? { startAt: range.startAt, durationSeconds: params.durationSeconds } : {}),
+  } });
 }
 
 /** `session` changes with the server and viewer (the auth revision); null while signed out. */

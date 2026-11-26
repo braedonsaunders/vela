@@ -41,6 +41,9 @@ for (const stage of ['credentials', 'validation', 'description'] as const) {
     jest.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS);
     await starting;
     expect(h.state()).toMatchObject({ phase: 'offline', serverId: 'saved', serverKind: 'plex' });
+    if (stage !== 'credentials') {
+      expect(h.state()).toMatchObject({ viewer: h.saved.viewer.name, viewerId: h.saved.viewer.id });
+    }
     expect(h.state().error).not.toBe('');
     h.pending.resolve(stage === 'description' ? h.description : h.saved);
     await settle();

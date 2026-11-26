@@ -91,6 +91,8 @@ export interface ServerCapabilities {
     duplicates?: Feature;
     /** Libraries and titles carry media classes and roles (docs/media-kinds.md). */
     mediaClasses?: Feature & { classes: MediaClass[] };
+    /** Viewer policy for downloading original video files. */
+    downloads?: { enabled: boolean; maxPerDay?: number; remainingToday?: number };
     /** POST /titles/:id/read and reading progress, for these formats. */
     reading?: Feature & { formats: ReadingFormat[] };
     /** Audio-only plans (PlaybackPlan.media = 'audio'). */
@@ -433,6 +435,8 @@ export type SessionEvent = { cursor: Cursor; revision: number; sessionId: ID } &
 export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'source' | 'decoder' | 'playback' | 'capacity' | 'transient' | 'request' | 'conflict';
   code: string; message: string; retry: { allowed: boolean; afterSeconds?: number; maxAttempts?: number };
   requestId?: ID; currentGenerations?: Generations;
+  /** Archive and rewind bounds included with section C6 playback refusals. */
+  archiveDays?: number; earliestAt?: Timestamp; windowStartSeconds?: number; liveEdgeSeconds?: number;
   suggest?: { maxChannels: number; maxWindowMinutes: number };
   /** Attempted delivery labels (not path IDs) and human-readable diagnostics. */
   rejectedPaths?: { path: string; reasons: string[] }[];
@@ -459,6 +463,16 @@ export interface ChildrenPage extends Page<Title>, PartialAnswer {}
 /** One-use console Watch hand-off; redeem against the same Ether instance. */
 export interface WebCodeRedeemRequest extends Mutation { code: string; device: Device }
 
+export interface DownloadRequest extends Mutation { versionId?: ID }
+export interface DownloadGrant {
+  url: string; mimeType: string; container: string; byteLength?: number;
+  /** Stable file identity, shared by fresh tickets for the same original. */
+  etag: string; expiresAt: Timestamp; sourceId?: ID; originalVideo?: OriginalVideo;
+  audioTracks: Track[]; subtitleTracks: Track[]; chapters: Chapter[]; markers?: SkipMarker[];
+}
+export interface OfflineWatchRequest extends Mutation {
+  positionSeconds: number; observedAt: Timestamp; offline: true; played?: true;
+}
 export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false }
 
 export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[];

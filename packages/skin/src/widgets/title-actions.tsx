@@ -1,11 +1,13 @@
 // Capability-backed title mutations shown on every built-in title surface.
-import { msg, type TitleActions as Actions } from '@vela/core';
-import { useVela } from '@vela/core/react';
-import { useCallback, useEffect, useState, type ComponentRef } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { downloadPercent, isPlayableDownload, msg, type TitleActions as Actions } from '@vela/core';
+import { useVela, useVelaState } from '@vela/core/react';
+import { useCallback, useEffect, useState, type ReactNode, type ComponentRef } from 'react';
+import { Alert, Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { FocusPressable } from '../focus';
 import { useHost } from '../host';
 import { holdBack } from '../menu-key';
+import { useServerSwitch } from './auth/servers';
+import Svg, { Circle } from 'react-native-svg';
 import { Glyph } from './common/controls';
 import { SheetModal } from './common/sheet-modal';
 import { useLook } from './common/look';
@@ -101,7 +103,9 @@ export function TitleActions() {
     return () => { live = false; };
   }, [vela, id]);
   const hasWatchActions = !!actions && (actions.watched || actions.favorite || actions.watchlist);
-  if (!title || (!hasWatchActions && !host.env.canPlaylists)) return null;
+  const supportsDownloads = useVelaState(state => state.downloads.supported);
+  const downloadTitle = supportsDownloads && (title?.kind === 'movie' || title?.kind === 'episode');
+  if (!title || (!hasWatchActions && !host.env.canPlaylists && !downloadTitle)) return null;
 
   const change = async (value: { played?: boolean; favorite?: boolean; watchlisted?: boolean }) => {
     if (busy) return;
@@ -137,19 +141,105 @@ export function TitleActions() {
         {host.env.canPlaylists ? <ActionButton testID="detail-add-playlist" disabled={busy}
           icon="playlist-add" active={false} label={msg('cardMenu.addToPlaylist')}
           run={() => host.dispatch('addToPlaylist', `${id}|${title.kind}`)} /> : null}
+        {downloadTitle ? <TitleDownload key={id} id={id} name={title.name} onError={setError} /> : null}
       </View>
       {error ? <Text accessibilityRole="alert" style={look.text({ 'font-size': '13px', color: '$ui.accent' })}>{error}</Text> : null}
     </View>
   );
 }
 
-function ActionButton({ label, icon, active, testID, run, disabled }: {
+function TitleDownload({ id, name, onError }: { id: string; name: string; onError(message: string): void }) {
+  const vela = useVela();
+  const host = useHost();
+  const switcher = useServerSwitch();
+  const look = useLook();
+  const revision = useVelaState(state => state.auth.revision);
+  const item = useVelaState(state => state.downloads.items.find(item => item.titleId === id));
+  const [allowed, setAllowed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let current = true;
+    setAllowed(false);
+    void vela.downloads.canDownload().then(value => {
+      if (current) setAllowed(value);
+    }).catch(() => {});
+    return () => { current = false; };
+  }, [vela, revision]);
+  if (!allowed && !item) return null;
+
+  const download = async () => {
+    if (busy) return;
+    setBusy(true);
+    onError('');
+    try {
+      let started: unknown;
+      if (item?.status === 'failed' || item?.status === 'paused') {
+        started = await vela.downloads.resume(id);
+      } else {
+        const versions = await vela.catalogue.titleVersions(id).catch(() => null);
+        if (vela.getState().auth.revision !== revision) return;
+        started = await vela.downloads.enqueue(id, { versionId: versions?.selectedVersionId ?? undefined });
+      }
+      setFailed(!started);
+      if (!started) onError(vela.getState().downloads.error || 'Could not start the download');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = () => Alert.alert('Remove download?', name, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Remove', style: 'destructive', onPress: () => {
+      if (vela.getState().auth.revision !== revision) return;
+      void vela.downloads.remove(id).catch(() => onError('Could not remove the download'));
+    } },
+  ]);
+  const downloaded = isPlayableDownload(item);
+  const status = item?.status;
+  const transferring = status === 'queued' || status === 'downloading';
+  const retry = status === 'failed' || failed;
+  const percent = downloadPercent(item);
+  const label = downloaded ? 'Downloaded' : busy ? 'Preparing download' : status === 'downloading' ? 'Downloading' :
+    status === 'queued' ? 'Download queued' : retry ? 'Retry download' : status === 'paused' ? 'Resume download' : 'Download';
+  const press = () => {
+    if (downloaded) {
+      Alert.alert(name, undefined, [
+        { text: 'Play offline', onPress: () => host.dispatch('play', id) },
+        { text: 'Remove', style: 'destructive', onPress: remove },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    } else if (transferring) switcher?.openDownloads?.();
+    else void download();
+  };
+  return <ActionButton label={label} icon={retry && !downloaded ? 'restart' : status === 'queued' && !downloaded ? 'clock' : 'download'}
+    testID="detail-download" disabled={busy || (transferring && !downloaded && !switcher?.openDownloads)} round
+    active={downloaded} run={press} value={status === 'downloading' && percent !== undefined ? `${percent}%` : undefined}>
+    {downloaded ? <View pointerEvents="none" style={{
+      position: 'absolute', right: -1, bottom: -1, width: 16, height: 16, borderRadius: 8,
+      alignItems: 'center', justifyContent: 'center', backgroundColor: look.ui.ink,
+    }}><Glyph symbol="checkmark" size={11} color={look.ui.inkInverse} /></View> : null}
+    {status === 'downloading' && !downloaded ? (
+      <Svg width={44} height={44} viewBox="0 0 44 44" style={StyleSheet.absoluteFill} pointerEvents="none" accessible={false}>
+        <Circle cx={22} cy={22} r={20} stroke={look.ui.glassEdgeStrong} strokeWidth={2} fill="none" />
+        <Circle cx={22} cy={22} r={20} stroke={look.ui.accent} strokeWidth={2} fill="none"
+          strokeDasharray={[2 * Math.PI * 20, 2 * Math.PI * 20]}
+          strokeDashoffset={2 * Math.PI * 20 * (1 - (percent ?? 22) / 100)}
+          strokeLinecap="round" transform="rotate(-90 22 22)" />
+      </Svg>
+    ) : null}
+  </ActionButton>;
+}
+
+function ActionButton({ label, icon, active, testID, run, disabled, round, value, children }: {
   label: string;
   icon: string;
   active: boolean;
   testID: string;
   run(): void;
   disabled: boolean;
+  round?: boolean;
+  value?: string;
+  children?: ReactNode;
 }) {
   const look = useLook();
   const [hover, setHover] = useState(false);
@@ -163,6 +253,7 @@ function ActionButton({ label, icon, active, testID, run, disabled }: {
     <FocusPressable
       ref={tooltip}
       accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled, selected: active }}
+      accessibilityValue={value ? { text: value } : undefined}
       testID={testID}
       disabled={disabled} onPress={run}
       onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)}
@@ -171,7 +262,7 @@ function ActionButton({ label, icon, active, testID, run, disabled }: {
       style={[
         look.box({
           width: '44px', height: '44px', 'align-items': 'center', 'justify-content': 'center',
-          'border-radius': '$ui.radiusControl', 'background-color': lit || active ? '$ui.controlHover' : '$ui.control',
+          'border-radius': round ? '22px' : '$ui.radiusControl', 'background-color': lit || active ? '$ui.controlHover' : '$ui.control',
           border: focus ? '1px solid $ui.accent' : '1px solid $ui.glassEdge',
           'backdrop-filter': 'blur(16px)',
         }),
@@ -180,6 +271,7 @@ function ActionButton({ label, icon, active, testID, run, disabled }: {
         disabled ? { opacity: 0.5 } : null,
       ]}
     >
+      {children}
       <Glyph symbol={icon} size={18} color={look.ui.ink} />
     </FocusPressable>
   );

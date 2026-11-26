@@ -13,6 +13,7 @@ export type CommandInput = WithoutId<Command>;
 /** Why playback could not start: all streams in use (capacity), a refusal, or no server. */
 export interface StartFailure {
   streamingCap?: boolean;
+  unreleased?: boolean;
   capacity: boolean;
   message: string;
 }

@@ -220,6 +220,11 @@ internal sealed class MainWindow : Form
                 DisposePlayback();
                 return;
             }
+            if (kind == "caption-insets" && id == playerId)
+            {
+                if (message.TryGetProperty("mpv", out var layout)) playback?.SetCaptionInsets(layout);
+                return;
+            }
             if (kind is not ("mount" or "update") || string.IsNullOrEmpty(id)) return;
             if (kind == "mount")
             {

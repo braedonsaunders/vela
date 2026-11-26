@@ -21,6 +21,8 @@ final class AppKitPlaybackRendering: PlaybackRendering {
     private lazy var styled = ASSSubtitles()
     private let styledCaption = CALayer()
     private var styledTrack: Int?
+    private var captionInsets = CaptionInsets()
+    func setCaptionInsets(_ insets: CaptionInsets) { captionInsets = insets }
     init(host: NSView) { self.host = host }
     func bind(engine: AetherEngine) throws {
         guard let host else { throw PlaybackError("Missing video surface") }
@@ -89,11 +91,19 @@ final class AppKitPlaybackRendering: PlaybackRendering {
         for id in Array(images.keys) where !ids.contains(id) { images.removeValue(forKey: id)?.removeFromSuperlayer() }
         let coded = CGSize(width: Int(engine.sourceVideoWidth), height: Int(engine.sourceVideoHeight))
         let display = engine.softwareDisplaySize ?? coded
-        let rect = engine.nativePlayerLayer?.videoRect ?? AVMakeRect(aspectRatio: display, insideRect: surface.bounds)
+        let picture = engine.nativePlayerLayer?.videoRect ?? AVMakeRect(aspectRatio: display, insideRect: surface.bounds)
+        let rect = captionInsets.fit(picture, in: surface.bounds, flipped: surface.isFlipped)
         // Layers are placed directly: implicit animations would trail karaoke and moving signs.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
+        let empty = rect.isNull || rect.isEmpty
+        captions.isHidden = empty
+        for layer in images.values { layer.isHidden = empty }
+        if empty {
+            styledCaption.isHidden = true
+            return
+        }
         if drawStyled(engine: engine, cues: cues, time: time, rect: rect, coded: coded, surface: surface) {
             captions.stringValue = ""
             return
@@ -118,7 +128,12 @@ final class AppKitPlaybackRendering: PlaybackRendering {
             case .image: return nil
             }
         }.joined(separator: "\n")
-        captions.frame = CGRect(x: 40, y: surface.bounds.height * 0.05, width: max(0, surface.bounds.width - 80), height: surface.bounds.height * 0.25)
+        let width = rect.width * 0.9
+        let margin = rect.height * 0.06
+        let height = min(rect.height - margin, captions.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: width, height: rect.height)).height ?? 0)
+        captions.frame = CGRect(x: rect.midX - width / 2,
+                                y: surface.isFlipped ? rect.maxY - margin - height : rect.minY + margin,
+                                width: width, height: height)
     }
     /// Draws the active ASS/SSA track through libass; false when it is not one or libass is not built in.
     private func drawStyled(engine: AetherEngine, cues: [SubtitleCue], time: Double, rect: CGRect, coded: CGSize,

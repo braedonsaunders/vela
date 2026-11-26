@@ -65,6 +65,7 @@ export interface AudioState {
   sleep: Sleep;
   chapters: V.Chapter[];
   error: string;
+  unreleased?: boolean;
   /** No engine on this platform yet (native audio is device work). */
   unsupported: boolean;
   /** The app's own volume, 0..1, and mute (the device's volume still applies). */
@@ -238,7 +239,7 @@ export class Audio {
   }
 
   resume(): void {
-    if (!current(this.state.queue)) return;
+    if (!current(this.state.queue) || this.state.unreleased) return;
     // Still waiting for the plan: play once it arrives.
     if (this.loadToken && !this.sessionId) { this.autoplay = true; this.patch({ phase: 'loading' }); return; }
     // The session was taken (a video played) or ended: ask for a new one at the same place.
@@ -400,7 +401,7 @@ export class Audio {
     this.autoplay = true;
     this.engine?.unload();
     this.sessionId = ''; this.url = '';
-    this.patch({ phase: this.engine ? 'loading' : 'failed', positionSeconds: startSeconds, durationSeconds: item.durationSeconds, error: '' });
+    this.patch({ phase: this.engine ? 'loading' : 'failed', positionSeconds: startSeconds, durationSeconds: item.durationSeconds, error: '', unreleased: false });
     if (!this.engine) { if (prepared?.plan) this.playback.release(prepared.plan); return; }
     if (prepared?.plan) {
       this.loadToken = undefined;
@@ -433,7 +434,8 @@ export class Audio {
       this.begin(playback.plan, starting.startSeconds);
       return;
     }
-    this.patch({ phase: 'failed', error: playback.error || 'This item could not be played' });
+    this.patch({ phase: 'failed', error: playback.error || 'This item could not be played',
+      unreleased: mine && playback.errorCode === 'title_unreleased' });
   }
 
   /** The playback target for a queue item: a title, with the queue's source as its play context
@@ -441,8 +443,9 @@ export class Audio {
   private target(id: string, startSeconds = 0): Extract<PlaybackTarget, { kind: 'title' }> {
     const source = this.state.queue?.source;
     const context = source?.kind ? { kind: source.kind, id: source.id } : undefined;
-    const media = this.state.queue?.items.find(item => item.id === id)?.media?.class;
-    return { kind: 'title', id, audio: true, ...(startSeconds > 0 ? { positionSeconds: startSeconds } : {}), ...(context ? { context } : {}), ...(media ? { media } : {}) };
+    const item = this.state.queue?.items.find(item => item.id === id);
+    const media = item?.media?.class;
+    return { kind: 'title', id, audio: true, airDate: item?.airDate, ...(startSeconds > 0 ? { positionSeconds: startSeconds } : {}), ...(context ? { context } : {}), ...(media ? { media } : {}) };
   }
 
   private begin(plan: V.PlaybackPlan, startSeconds: number): void {

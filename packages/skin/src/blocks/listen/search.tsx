@@ -4,7 +4,7 @@
 // and TV draw the same page; on a TV the field opens Vela's keyboard (Android TV) or the system's.
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Platform, Pressable as PlainPressable, Text, View, type TextStyle } from 'react-native';
-import { msg, number, plural, searchList, type Card } from '@vela/core';
+import { msg, number, plural, releaseLabel, searchList, type Card } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '../../focus';
 import { NO_RING, Glyph, useInteraction } from '../../widgets/common/controls';
@@ -333,12 +333,13 @@ function TopResult({ card }: { card: Card }) {
   const round = role === 'artist';
   const size = tv ? 128 : m.small ? 88 : 104;
   const what = card.kind === 'playlist' ? msg('music.playlist') : msg(roleLabel(card));
-  const line = [what, round ? '' : card.media?.byline].filter(Boolean).join(' · ');
+  const release = releaseLabel(card.airDate);
+  const line = [release || what, round ? '' : card.media?.byline].filter(Boolean).join(' · ');
   const open = () => (leaf ? app.playCard(card) : app.go(placeOf(card)));
   // Touch keeps the play button in reach; a pointer raises it on hover, as a tile's does.
   const touch = !tv && (!web || m.width < 980);
   return (
-    <Surface onPress={open} onMenu={(anchor, mode, opener) => app.menu({ card, anchor, mode, opener })} focusId={`top:${card.id}`} testID={`music-search-top-${card.id}`} label={[card.name, line].filter(Boolean).join(', ')}
+    <Surface onPress={release && leaf ? undefined : open} onMenu={(anchor, mode, opener) => app.menu({ card, anchor, mode, opener })} focusId={`top:${card.id}`} testID={`music-search-top-${card.id}`} label={[card.name, line].filter(Boolean).join(', ')}
       style={(lit, focus) => [{ borderRadius: Number(m.ui.radiusCard) || 12, backgroundColor: lit ? m.ui.controlHover : m.ui.control, marginTop: 10 },
         tv ? { borderWidth: 2, borderColor: focus ? m.ui.ink : 'transparent', transform: [{ scale: focus ? 1.02 : 1 }] } : {}, transition('background-color, transform', 160)]}
       contentStyle={{ padding: m.small ? 16 : 20, gap: 16, minHeight: tv ? 260 : m.small ? 180 : 220 }}>
@@ -348,7 +349,7 @@ function TopResult({ card }: { card: Card }) {
           <Text numberOfLines={2} style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': tv ? '34px' : m.small ? '24px' : '30px', 'line-height': '1.1', color: '$ui.ink', 'letter-spacing': '-0.01em' })}>{card.name}</Text>
           <Text numberOfLines={1} style={m.text({ 'font-size': tv ? '18px' : '14px', color: '$ui.inkSecondary' })}>{line}</Text>
         </View>
-        {tv ? null : (
+        {tv || release ? null : (
           <View pointerEvents={lit || touch ? 'auto' : 'none'} style={[{ position: 'absolute', right: 20, bottom: 20, opacity: lit || touch ? 1 : 0, transform: [{ translateY: lit || touch ? 0 : 8 }] }, transition('opacity, transform', 220)]}>
             <PlayFab playing={false} size={52} onPress={() => app.playCard(card)} label={`${msg('media.ui.play')} ${card.name}`} testID="music-search-top-play" />
           </View>
