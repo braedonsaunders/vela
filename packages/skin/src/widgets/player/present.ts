@@ -418,6 +418,29 @@ export function viewCommand(command: Command | undefined, sentOn: string, sessio
   return command && ['audio', 'subtitle', 'play', 'pause', 'seek', 'seekBy', 'catchUp'].includes(command.type) && sentOn !== sessionId ? undefined : command;
 }
 
+/** An audio or subtitle pick awaiting the player: the session and the file (the selected path's
+ * `sourceId`) it was made on, and the track (null: Off). */
+export interface PendingPick { sessionId: string; source: string | undefined; trackId: string | null }
+
+/** The file a plan plays: its selected path's `sourceId`, or undefined when the server does not say. */
+export function planSource(plan: PlaybackPlan | null | undefined): string | undefined {
+  return plan?.paths.find(path => path.id === plan.selectedPathId)?.sourceId || undefined;
+}
+
+/** What a report of `plan` does to a pending pick: confirms it as the viewer's choice, drops it, or
+ * leaves it waiting. A pick names a track of the file it was made on, so a report of another file
+ * (the next version, whichever of its plan and the switch reply came first) drops it unconfirmed.
+ * When either file is unknown, the pick is judged by the report alone. */
+export function settlePick(pick: PendingPick, kind: 'audio' | 'subtitle', snapshot: Snapshot, plan: PlaybackPlan | null): 'confirm' | 'drop' | 'wait' {
+  if (pick.sessionId !== plan?.sessionId) return 'wait';
+  const now = planSource(plan);
+  if (pick.source && now && pick.source !== now) return 'drop';
+  if (kind === 'audio') return !snapshot.pendingAudioTrackId && snapshot.audioTrackId === pick.trackId ? 'confirm' : 'wait';
+  if (snapshot.pendingSubtitleTrackId) return 'wait';
+  if (snapshot.subtitleError) return 'drop';
+  return (snapshot.subtitleTrackId || null) === pick.trackId ? 'confirm' : 'wait';
+}
+
 /** Server acceptance can precede the engine switching; only its fresh, ready snapshot settles the choice. */
 export function qualityReached(id: string, snapshot: Snapshot | null, plan: PlaybackPlan | null): boolean {
   if (!belongs(snapshot, plan) || snapshot.waiting || snapshot.state === 'failed') return false;

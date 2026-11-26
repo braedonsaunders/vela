@@ -696,11 +696,41 @@ test('after a version switch, an Off the new version selected itself is not carr
   { b: { source: 'b', generation: 1, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('5', 'eng')], selectedAudioTrackId: '1' } });
 });
 
-test('of several tracks in the chosen language, region and flags on a new file, the codec alone does not pick one', async () => {
-  // English AAC dialogue 4 is chosen; the new file already plays English AC-3 dialogue 4 and has an English AAC commentary 7.
-  const commands = await recoverOnto(
-    { source: 'a', audioTracks: [audio('4', 'eng', { default: true }), audio('7', 'eng')], subtitleTracks: [], selectedAudioTrackId: '4' },
-    { audioTrackId: '4', subtitleTrackId: null },
-    { source: 'b', audioTracks: [audio('4', 'eng', { codec: 'ac3', default: true }), audio('7', 'eng')], subtitleTracks: [], selectedAudioTrackId: '4' });
-  expect(commands).toEqual([]);
+test('of several tracks in the chosen language, region and flags on a new file, recovery picks the one opening it picks', async () => {
+  // The series remembers en-US AAC audio; file B has en-US AAC 4 and en-US AC-3 7, which the server selects.
+  const b = { source: 'b', audioTracks: [audio('4', 'en-US'), audio('7', 'en-US', { codec: 'ac3' })], subtitleTracks: [], selectedAudioTrackId: '7' };
+  const series = { audio: { language: 'en-us', codecFamily: 'aac' }, updatedAt: 1 };
+  await lab([b], async ({ playback, box }) => {
+    await playback.start({ kind: 'title', id: 'episode', showId: 'show' });
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('4');
+  }, () => false, () => undefined, series);
+  await lab([
+    { source: 'a', audioTracks: [audio('4', 'en-US')], subtitleTracks: [], selectedAudioTrackId: '4' },
+    b,
+  ], async ({ playback, box, run }) => {
+    await playback.start({ kind: 'title', id: 'episode', showId: 'show' });
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('4');
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('4');
+  }, () => false, () => undefined, series);
+});
+
+test('after a version switch, an Off chosen on the new version is carried', async () => {
+  // Version B already selects no subtitle; the viewer chooses Off there and the player confirms it; B fails onto file C, whose default is forced 9.
+  await lab([
+    { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    { source: 'c', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('9', 'eng', { forced: true })], selectedAudioTrackId: '1', selectedSubtitleTrackId: '9' },
+  ], async ({ playback, box, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    await playback.switchVersion('s1', 'b');
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', sourceGeneration: 1, audioTrackId: '1', subtitleTrackId: null });
+    playback.rememberTrack('s1', 'subtitle', null);
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+  }, () => false, () => undefined, undefined,
+  { b: { source: 'b', generation: 1, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('5', 'eng')], selectedAudioTrackId: '1' } });
 });

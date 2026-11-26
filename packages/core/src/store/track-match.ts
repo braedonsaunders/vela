@@ -2,7 +2,7 @@
 // A track id names a stream of one file: on the same file it is reused as is, on another file it
 // may be another language or a commentary. There the choice goes by what the track was, its
 // language (any code for it: 'en', 'eng') and its forced and hearing-impaired flags; when several
-// fit, the one in the same region as series-tracks.ts picks it, or none (the codec does not decide).
+// fit, the one series-tracks.ts matchTrack picks when the episode is opened (region, then codec family), or none.
 // Without a file identity on either plan the id is reused when the track it names there is the
 // same language (or both have none) with the same flags; otherwise the choice goes by what the track was,
 // and a track its own plan did not list is not carried.
@@ -32,12 +32,9 @@ export function carriedTrack(id: string, choice: TrackChoice | undefined, plan: 
   if (!was || !languageOf(was)) return undefined;
   const found = tracks.filter(track => fits(track, was));
   if (found.length < 2) return found[0]?.id;
-  // Several fit: the one in the chosen region, as a remembered series choice is matched at the start of an
-  // episode; the codec family does not decide (it could move dialogue to a commentary), the server's stays.
+  // Several fit: the one a remembered series choice is matched to at the start of an episode.
   const traits = trackChoiceOf(was);
-  if (!traits) return undefined;
-  const { codecFamily: _, ...region } = traits;
-  return matchTrack(found, region, was.kind)?.id;
+  return traits ? matchTrack(found, traits, was.kind)?.id : undefined;
 }
 
 /** `track` is in the language `was` was in (both named) and has its forced and hearing-impaired flags. */
