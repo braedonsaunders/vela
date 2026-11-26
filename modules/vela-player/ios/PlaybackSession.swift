@@ -500,12 +500,19 @@ final class PlaybackSession {
             applyTracks()
             resumeAfterDisplaySwitch()
         case .endFile(let reason, _):
+            if reason == 0, playsOriginal, let duration = plan?.durationSeconds,
+               duration > 2, state.position < duration - 2 {
+                askForFreshPlan("original ended before its planned duration", originalLost: true, position: state.position)
+                break
+            }
             if reason == 4, !recoverPath() {
                 state.failure = "AetherEngine could not play any server path"
                 state.failureKind = "decoder"
             }
         case .refused(let status):
             askForFreshPlan("media request refused (\(status))")
+        case .originalLost(let position):
+            askForFreshPlan("original lost", originalLost: true, position: position)
         case .seekDone:
             pendingSeek = nil
             if !loggedOutput {
@@ -538,13 +545,19 @@ final class PlaybackSession {
     }
 
     /// Asks once per source for a fresh plan: the grant behind the media URL has expired or was revoked.
-    private func askForFreshPlan(_ reason: String) {
+    private func askForFreshPlan(_ reason: String, originalLost: Bool = false, position: Double? = nil) {
         guard let plan, refreshAsked != activeSource else {
             return
         }
         refreshAsked = activeSource
         print("[vela-player] session refresh: \(reason)")
-        onSessionRefresh(["sessionId": plan.sessionId])
+        var event: [String: Any] = ["sessionId": plan.sessionId]
+        if originalLost {
+            event["reason"] = "original_lost"
+            event["positionSeconds"] = position ?? state.position
+            event["sourceGeneration"] = plan.sourceGeneration
+        }
+        onSessionRefresh(event)
     }
 
     private func logOutput() {

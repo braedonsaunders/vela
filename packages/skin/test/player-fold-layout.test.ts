@@ -23,11 +23,14 @@ test('on a tabletop the picture takes the upper half and the controls the lower,
   expect(frames.chrome).toEqual({ top: 495.5, right: 0, bottom: 34, left: 0 });
 });
 
-test('held like a book the picture spans both halves, as fully open', () => {
+test('held like a book the picture spans both halves while chrome avoids the hinge', () => {
   const landscape: Viewport = { width: 867, height: 669, insets: { top: 0, right: 0, bottom: 34, left: 0 }, sides: { left: 0, right: 84 } };
   const frames = watchFrames({ ...landscape, fold: { posture: 'book', division: { x: 455.5, y: 0, width: 40, height: 669 } } });
   expect(frames.picture).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
-  expect(frames.chrome).toEqual({ top: 0, right: 84, bottom: 34, left: 0 });
+  expect(frames.chrome).toEqual({ top: 0, right: 495.5, bottom: 34, left: 0 });
+  const reversed = { ...landscape, sides: { left: 84, right: 0 } };
+  expect(watchFrames({ ...reversed, fold: { posture: 'book', division: { x: 455.5, y: 0, width: 40, height: 669 } } }).chrome)
+    .toEqual({ top: 0, right: 0, bottom: 34, left: 495.5 });
 });
 
 test('a fold too near an edge to leave two usable halves is drawn flat', () => {

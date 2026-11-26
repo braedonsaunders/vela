@@ -60,7 +60,7 @@ interface NativeViewProps {
   onObservation?: (event: NativeSyntheticEvent<{ sessionId: string; observation: PlayerObservation }>) => void;
   onCommand?: (event: NativeSyntheticEvent<{ id: number; ok: boolean; failure?: Failure }>) => void;
   onSessionCommand?: (event: NativeSyntheticEvent<{ sessionId: string; command: SessionCommand }>) => void;
-  onSessionRefresh?: (event: NativeSyntheticEvent<{ sessionId: string }>) => void;
+  onSessionRefresh?: (event: NativeSyntheticEvent<{ sessionId: string; reason?: 'original_lost'; positionSeconds?: number; sourceGeneration?: number }>) => void;
   onPictureInPicture?: (event: NativeSyntheticEvent<{ active: boolean; closed: boolean }>) => void;
   style?: StyleProp<ViewStyle>;
 }

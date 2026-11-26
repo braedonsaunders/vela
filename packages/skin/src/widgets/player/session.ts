@@ -36,12 +36,13 @@ export interface LiveSessionOwner {
   updatePlan(plan: PlaybackPlan): void;
 }
 
-/** Phones and tablets choose whether the picture fits the screen or fills it; TVs and the web fit. */
+/** Native phones and tablets offer both picture modes. The watch route opts in on compact web. */
 const PICTURE_CHOICE = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
 
 /** `shownAway`: whether the player's picture stays on screen while the app is in the background (Android's
  * picture-in-picture window), read as the app leaves the foreground; the watch then goes on. */
-export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner, shownAway?: () => boolean): PlaybackSession {
+export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner, shownAway?: () => boolean, webPicture = false): PlaybackSession {
+  const pictureChoice = PICTURE_CHOICE || webPicture;
   const vela = useVela();
   const playback = useVelaState(state => state.playback);
   const settings = useVelaState(state => state.playerSettings);
@@ -58,6 +59,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   qualityPick.current = pendingQualityId;
   const [pendingVersionId, setPendingVersionId] = useState<string>();
   const [versionMessage, setVersionMessage] = useState('');
+  const [offerVersions, setOfferVersions] = useState(0);
+  const offeredSourceFailure = useRef('');
   const versionAttempt = useRef(0);
   const versionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const position = useRef(0);
@@ -201,6 +204,13 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const plan = playback.target?.id === id && playback.target.kind === kind ? playback.plan : null;
   const sessionId = plan?.sessionId ?? '';
   useEffect(() => {
+    if (plan?.sourceFailure !== 'version_unavailable') return;
+    const failure = `${sessionId}:${plan.revision}`;
+    if (offeredSourceFailure.current === failure) return;
+    offeredSourceFailure.current = failure;
+    setOfferVersions(value => value + 1);
+  }, [sessionId, plan?.revision, plan?.sourceFailure]);
+  useEffect(() => {
     versionAttempt.current++;
     if (versionTimer.current) clearTimeout(versionTimer.current);
     setPendingVersionId(undefined); setVersionMessage('');
@@ -262,7 +272,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const view: VelaPlayerProps = {
     plan: plan ?? undefined,
     command,
-    videoFill: PICTURE_CHOICE && settings.picture === 'fill',
+    videoFill: pictureChoice && settings.picture === 'fill',
     onSnapshot: next => {
       setSnapshot(next);
       if (belongs(next, plan)) {
@@ -310,6 +320,14 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     // An expired grant or a stale reply: core re-reads the session's authoritative plan; a gone session starts over.
     onSessionRefresh: event => {
       if (event.sessionId !== sessionId) return;
+      if (event.reason === 'original_lost') {
+        const held = Number.isFinite(event.positionSeconds) ? Math.max(0, event.positionSeconds!) : position.current;
+        position.current = held;
+        void vela.playback.originalLost(event.sessionId, held, event.sourceGeneration).then(result => {
+          if (result === 'gone') startOver(event.sessionId);
+        });
+        return;
+      }
       void vela.playback.refresh(event.sessionId).then(live => {
         if (!live) startOver(event.sessionId);
       });
@@ -321,7 +339,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     [settings.streaming, settings.metered, setStreaming]);
   const sleepTimer = useMemo(() => ({ value: sleep, set: setSleep }), [sleep, setSleep]);
   const setPicture = useCallback((fill: boolean) => vela.playerSettings.setPicture(fill ? 'fill' : 'fit'), [vela]);
-  const picture = useMemo(() => (PICTURE_CHOICE ? { fill: settings.picture === 'fill', set: setPicture } : undefined), [settings.picture, setPicture]);
+  const picture = useMemo(() => (pictureChoice ? { fill: settings.picture === 'fill', set: setPicture } : undefined), [pictureChoice, settings.picture, setPicture]);
 
   const chromeTarget: ChromeTarget = target.kind === 'programme' ? { kind, id, channelId: target.channelId, ...(target.from ? { from: target.from } : {}) } : { kind, id };
   const owned = owner && !ownedPlan ? owner : undefined;
@@ -342,6 +360,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       pendingQualityId,
       pendingVersionId,
       versionMessage,
+      offerVersions,
       send,
       switchVersion,
       refreshVersions,

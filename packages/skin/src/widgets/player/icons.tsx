@@ -31,7 +31,8 @@ export type PlayerIconName =
   | 'pictureFit'
   | 'pictureFill'
   | 'skip'
-  | 'next';
+  | 'next'
+  | 'more';
 
 interface Props {
   name: PlayerIconName;
@@ -176,6 +177,8 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
     case 'skip':
       // Two chevrons: past a stretch (the intro, the credits).
       return <Path d="M5.5 6.5l5.5 5.5-5.5 5.5M12.5 6.5l5.5 5.5-5.5 5.5" stroke={color} {...STROKE} strokeWidth={2} />;
+    case 'more':
+      return <>{[5, 12, 19].map(x => <Circle key={x} cx={x} cy={12} r={1.6} fill={color} />)}</>;
     case 'next':
       // Play to the bar: the next episode.
       return (
