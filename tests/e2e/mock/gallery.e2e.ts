@@ -104,6 +104,7 @@ describe('Gallery deterministic release gate', { session: 'mock-gallery', serial
     await screen.getByRole('button', 'Harbour at dawn').tap();
     const alerts = screen.getByTestId('live-alerts');
     const controls = screen.getByTestId('gallery-photo-controls');
+    const edges = screen.getByTestId('gallery-photo-edges');
     const postAlert = (eventId: string) => browser.evaluate(async id => (await fetch('/__admin/sports', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -116,7 +117,8 @@ describe('Gallery deterministic release gate', { session: 'mock-gallery', serial
     await expect.poll(async () => {
       const toast = await alerts.boundingBox();
       const bar = await controls.boundingBox();
-      return !!toast && !!bar && toast.y >= bar.y + bar.height + 8;
+      const row = await edges.boundingBox();
+      return !!toast && !!bar && !!row && toast.y >= Math.max(bar.y + bar.height, row.y + row.height) + 8;
     }).toBe(true);
 
     await screen.getByRole('button', 'Full screen').tap();

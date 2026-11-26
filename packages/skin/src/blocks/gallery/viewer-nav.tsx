@@ -138,7 +138,7 @@ export function PhotoViewerNavigation({ navigation, card, ratio, children }: {
       <View style={StyleSheet.absoluteFill}
         {...(web ? { onPointerEnter: () => setHover(true), onPointerLeave: () => setHover(false) } : {})}>
         <PhotoTouchSurface key={card.id} ratio={ratio} onSwipe={move}>{children}</PhotoTouchSurface>
-        {!fullscreen ? <PhotoArrows navigation={navigation} pointerInside={hover} /> : null}
+        {!fullscreen ? <PhotoArrows navigation={navigation} pointerInside={hover} embedded /> : null}
         {info && !fullscreen ? <PhotoInfo card={card} /> : null}
       </View>
       {fullscreen ? <FullscreenPhoto card={card} ratio={ratio} navigation={navigation} reveal={reveal} hide={hide} /> : null}
@@ -195,12 +195,20 @@ function PhotoDisplayControls({ navigation, back, reveal, titleBar }: {
   );
 }
 
-function PhotoArrows({ navigation, pointerInside, reveal }: { navigation: PhotoNavigation; pointerInside: boolean; reveal?: () => void }) {
+function PhotoArrows({ navigation, pointerInside, reveal, embedded }: {
+  navigation: PhotoNavigation; pointerInside: boolean; reveal?: () => void; embedded?: boolean;
+}) {
   const m = useMediaLook();
   const coarse = web && typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
   const visible = !web || coarse || m.small || m.tv || pointerInside;
+  const reportChrome = useContext(TitleChromeLayout);
+  const row = useRef<ComponentRef<typeof View>>(null);
   return (
-    <View pointerEvents="box-none" style={{
+    <View ref={row} pointerEvents="box-none" testID={embedded ? 'gallery-photo-edges' : undefined}
+      onLayout={embedded && reportChrome ? () => row.current?.measureInWindow((_x, y, _width, height) => {
+        if (height > 0 && y >= 0) reportChrome('gallery-photo-edges', y + height);
+      }) : undefined}
+      style={{
       position: 'absolute', left: 10, right: 10, top: '50%', transform: [{ translateY: m.tv ? -25 : -22 }],
       flexDirection: 'row', justifyContent: 'space-between',
     }}>

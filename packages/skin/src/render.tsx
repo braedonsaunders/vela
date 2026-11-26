@@ -797,8 +797,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const reportNav = useContext(NavFit);
   const lead = useContext(RouteLead);
   const { env, viewport } = host;
-  const titleChrome = env.route === 'title' && (node.testId === 'detail-close' || node.testId === 'detail-back')
-    ? use(TitleChromeLayout) : undefined;
+  const titleControl = node.testId === 'detail-close' || node.testId === 'detail-back' ? node.testId : undefined;
+  const titleChrome = env.route === 'title' && titleControl ? use(TitleChromeLayout) : undefined;
   const [cardMenu, setCardMenu] = useState<{ anchor: CardMenuAnchor; mode: CardMenuOpenMode } | null>(null);
   // Only the hero reads the hero's count and index: every other box redraws without them.
   const swipe = useHeroSwipe(!!hero, hero ? env.home?.hero.length ?? 0 : 0, hero ? env.heroIndex : 0, host.dispatch);
@@ -1259,10 +1259,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onLongPress={cardPrimary ? () => openAnchoredMenu(Platform.isTV ? 'tv' : 'touch') : undefined}
         {...(web && cardPrimary ? { onContextMenu: openPointerMenu } : {})}
         onPress={onPress}
-        onLayout={titleChrome ? () => {
+        onLayout={titleControl && titleChrome ? () => {
           const target = buttonRef.current as ComponentRef<typeof View> | null;
           target?.measureInWindow((_x, y, _width, height) => {
-            if (height > 0 && y >= 0) titleChrome(node.testId!, y + height);
+            if (height > 0 && y >= 0) titleChrome(titleControl, y + height);
           });
         } : undefined}
         onFocus={event => {

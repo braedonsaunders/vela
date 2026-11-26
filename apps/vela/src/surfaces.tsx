@@ -107,7 +107,7 @@ function Placed({ pathname }: { pathname: string }) {
     pathname,
     sectionTop: safeTop + (look.small ? 64 : look.size(100)),
     titleFallbackBottom: safeTop + (look.small ? 124 : Math.max((viewport?.height ?? 0) * 0.04, look.size(100)) + look.size(74)),
-    titleControlsBottom: chrome.title?.path === pathname ? Math.max(...Object.values(chrome.title.controls)) : undefined,
+    titleControlsBottoms: chrome.title?.path === pathname ? Object.values(chrome.title.controls) : undefined,
     clearance: Math.max(12, look.size(14)),
     photoFullscreen: chrome.photosFullscreen > 0,
   });
