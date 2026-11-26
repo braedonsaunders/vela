@@ -52,6 +52,7 @@ export function MenuPanel({
     return () => { active = false; };
   }, [anchorRef, viewport.width, viewport.height]);
   const native = Platform.OS !== 'web';
+  const fullWidth = look.small && viewport.height > watchWidth(viewport);
   const preferredWidth = look.size(wide ? 420 : 320);
   const panelWidth = Math.min(preferredWidth, Math.max(0, viewport.width - look.size(24)));
   const stickyHeaderIndices: number[] = [];
@@ -82,9 +83,9 @@ export function MenuPanel({
         right: native && anchor ? Math.max(0, watchWidth(viewport) - anchor.left - anchor.width) : 0,
         bottom: native && anchor ? Math.max(0, viewport.height - anchor.top) : '100%',
         marginBottom: look.size(12),
-        left: !wide && !native && look.small ? 0 : undefined,
-        width: wide ? Math.min(panelWidth, native && anchor ? anchor.width : panelWidth)
-          : look.small ? (native ? anchor?.width : undefined) : look.size(320),
+        left: !wide && !native && fullWidth ? 0 : undefined,
+        width: !wide && fullWidth ? (native ? anchor?.width : undefined)
+          : Math.min(panelWidth, native && anchor ? anchor.width : panelWidth),
         maxHeight: native && anchor ? Math.min(maxHeight, Math.max(44, anchor.top - look.size(24))) : maxHeight,
         borderRadius: Math.min(look.radiusPanel, look.size(18)),
         borderWidth: 1,

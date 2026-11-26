@@ -276,7 +276,7 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
   ));
   const wide = opened === 'quality' && !!state.plan?.versions?.length;
   const panelWidth = menuLayout?.menu === opened ? menuLayout.width :
-    look.small && !wide ? panelRight - frame.left - look.gutter : look.size(wide ? 420 : 320);
+    portrait && !wide ? panelRight - frame.left - look.gutter : look.size(wide ? 420 : 320);
   const panelHeight = menuLayout?.menu === opened ? Math.min(menuHeight, menuLayout.height) : menuHeight;
   const panels: CaptionRect[] = [];
   if (hasPanel) panels.push({

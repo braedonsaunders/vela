@@ -20,6 +20,13 @@ test('leaves a column beside a side panel or a band above a phone menu', () => {
   expect(captionInsets(phone, portrait, 750, [menu])).toEqual({ left: 0, right: 0, top: 312, bottom: 412 });
 });
 
+test('a phone in landscape leaves enough room beside a compact panel', () => {
+  const phone = { left: 0, top: 0, right: 844, bottom: 390 };
+  const landscape = { ...phone, left: 75, right: 769 };
+  const panel = { left: 508, top: 110, right: 828, bottom: 324 };
+  expect(captionInsets(phone, landscape, 290, [panel])).toEqual({ left: 75, right: 346, top: 0, bottom: 110 });
+});
+
 test('a tabletop picture stays at rest when the chrome is in the lower pane', () => {
   const picture = { left: 0, top: 24, right: 800, bottom: 390 };
   expect(captionInsets(picture, picture, 530, [{ left: 380, top: 410, right: 700, bottom: 590 }]))
