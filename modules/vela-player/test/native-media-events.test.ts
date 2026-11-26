@@ -11,7 +11,7 @@ test('native playback leaves buffering when the clock advances after a seek with
     error: null,
     muted: true,
     paused: false,
-    readyState: 2,
+    readyState: 4,
     seeking: false,
     videoWidth: 0,
     volume: 0,
@@ -24,13 +24,16 @@ test('native playback leaves buffering when the clock advances after a seek with
   clearInterval(host.lifecycle.timer);
   try {
     host.media.backend = 'file';
-    host.playback.status = 'playing';
     host.playback.wantsPlay = true;
     bindMedia(host, host.session.controller.start('resume-film'));
     const emit = (name: string) => video.dispatchEvent(new Event(name));
 
+    emit('playing');
+    expect(host.playback.status).toBe('playing');
+
     video.seeking = true;
     emit('seeking');
+    video.readyState = 2;
     emit('waiting');
     video.currentTime = 99;
     video.seeking = false;
