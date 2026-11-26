@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  analyzePress, cpuIn, jsSources, parseProbe, parseProbeJs, pressStarts, settlingMount, sumCounts, summarize,
+  analyzePress, anchorPresses, cpuIn, jsSources, parseMarks, parseProbe, parseProbeJs, pressStarts, settlingMount, sumCounts, summarize,
   type TraceEvents,
 } from './tv-nav-analysis';
 import { deviceScript, formatComparison, parseEvents, runTotals, type RunReport } from './tv-nav';
@@ -11,6 +11,13 @@ const span = (at: number, dur: number) => ({ ts: ms(at), dur: ms(dur) });
 describe('tv-nav press analysis', () => {
   test('a press is its key-down: its key-up and repeats within the gap belong to it', () => {
     expect(pressStarts([span(0, 1), span(80, 1), span(1200, 1), span(1290, 1)])).toEqual([0, ms(1200)]);
+  });
+
+  test('markers name the presses: each starts at the first key-down after its marker, or at the marker', () => {
+    const marks = parseMarks('  10.000000  1 2 I VELANAV : 0\n  12.000000  1 2 I VELANAV : 1\n  12.100000  1 2 I ReactNativeJS: x', 'VELANAV');
+    expect(marks).toEqual([10e9, 12e9]);
+    // The first press left no input slice; the second's key-down came 300 ms after its marker.
+    expect(anchorPresses(marks, [12.3e9, 12.38e9])).toEqual([10e9, 12.3e9]);
   });
 
   test('CPU time is the scheduled time clipped to the window', () => {
@@ -31,9 +38,11 @@ describe('tv-nav press analysis', () => {
       frames: [span(5, 3), span(22, 8), span(62, 8)],
       sched: { js: [span(3, 15), span(40, 10)], main: [span(0, 4)], render: [span(22, 8), span(62, 8)] },
     };
+    // 50 views created from 40 ms on: the content shows with the frame after the mount at 60 ms.
+    events.views = Array.from({ length: 60 }, (_, i) => span(40 + i * 0.2, 0.1));
     const commits = [{ ts: ms(19), comps: 80, hosts: 2, top: 'Box:4', upd: 'RCTView:3', src: 'Box:1' }];
     const press = analyzePress(events, commits, 'row →', 0, ms(1000));
-    expect(press).toMatchObject({ focusMs: 2, mountMs: 21, frameMs: 30, settleMs: 70, jsMs: 25, mainMs: 4, renderMs: 16,
+    expect(press).toMatchObject({ focusMs: 2, mountMs: 21, frameMs: 30, settleMs: 70, contentMs: 70, jsMs: 25, mainMs: 4, renderMs: 16,
       mounts: 2, frames: 3, commits: 1, comps: 80, top: 'Box:4', updated: 'RCTView:3', sources: 'Box:1' });
   });
 
@@ -61,7 +70,8 @@ describe('tv-nav probe and trace parsing', () => {
   });
 
   test('trace_processor rows split into keys, frames and each thread\'s scheduling', () => {
-    const events = parseEvents('"kind","ts","dur"\n"key",100,5\n"frame",200,50\n"js",300,10\n"main",400,-1\n');
+    const events = parseEvents('"kind","ts","dur"\n"key",100,5\n"frame",200,50\n"view",250,3\n"js",300,10\n"main",400,-1\n');
+    expect(events.views).toEqual([{ ts: 250, dur: 3 }]);
     expect(events.keys).toEqual([{ ts: 100, dur: 5 }]);
     expect(events.frames).toEqual([{ ts: 200, dur: 50 }]);
     expect(events.sched.js).toEqual([{ ts: 300, dur: 10 }]);
@@ -80,16 +90,16 @@ describe('tv-nav scenarios', () => {
     expect(deviceScript([{ link: 'vela://library/1', wait: 500 }, { key: 'DPAD_DOWN', window: 1500 }, { wait: 2000 }, { key: 'DPAD_RIGHT', burst: 3, window: 4000 }])).toBe([
       '#!/system/bin/sh',
       "am start -a android.intent.action.VIEW -d 'vela://library/1' app.ether.vela >/dev/null 2>&1", 'sleep 0.5',
-      'input keyevent --duration 80 KEYCODE_DPAD_DOWN', 'sleep 1.5',
+      'log -t VELANAV 0', 'input keyevent --duration 80 KEYCODE_DPAD_DOWN', 'sleep 1.5',
       'sleep 2',
-      'input keyevent KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT', 'sleep 4',
+      'log -t VELANAV 1', 'input keyevent KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT', 'sleep 4',
     ].join('\n') + '\n');
   });
 
   test('a comparison reads before and after side by side', () => {
     const report = (label: string, js: number): RunReport => ({
       label, scenario: 'home', serial: 'e', measuredAt: '', presses: [], warnings: [],
-      summary: Object.fromEntries(['focusMs', 'mountMs', 'frameMs', 'settleMs', 'jsMs', 'mainMs', 'renderMs', 'mounts', 'frames', 'commits', 'comps']
+      summary: Object.fromEntries(['focusMs', 'mountMs', 'frameMs', 'settleMs', 'contentMs', 'jsMs', 'mainMs', 'renderMs', 'mounts', 'frames', 'commits', 'comps']
         .map(m => [m, { n: 1, median: m === 'jsMs' ? js : 1, p90: m === 'jsMs' ? js : 1, total: m === 'jsMs' ? js : 1 }])) as RunReport['summary'],
     });
     expect(formatComparison(report('before', 80), report('after', 20))).toContain('| jsMs | 80 / 80; 80 | 20 / 20; 20 |');

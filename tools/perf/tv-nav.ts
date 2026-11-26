@@ -16,11 +16,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  analyzePress, cpuIn, parseProbe, parseProbeJs, pressStarts, summarizePresses, METRICS,
+  analyzePress, anchorPresses, cpuIn, parseMarks, parseProbe, parseProbeJs, pressStarts, summarizePresses, METRICS,
   type PressMetrics, type Span, type TraceEvents, type Metric, type Summary,
 } from './tv-nav-analysis';
 
 const PACKAGE = 'app.ether.vela';
+/** The log tag of the device script's press markers. */
+const MARK = 'VELANAV';
 
 /** A press (`key`, Android KEYCODE_ name without the prefix) or a pause. `window` is how long the
  * press is measured for (the next press waits that long); `burst` sends several keys back to back. */
@@ -99,6 +101,24 @@ export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: 
     settle: 15000,
     steps: [{ wait: 10000 }],
   },
+  /** Screen transitions, each measured to its first content (contentMs): Movies, a title page and
+   * back, Movies' Library grid, Home. */
+  transitions: {
+    settle: 15000,
+    steps: [
+      ...repeat('DPAD_UP', 'up to nav', 3, 900),
+      press('DPAD_RIGHT', 'nav → Movies'),
+      press('DPAD_CENTER', 'open Movies', 6000),
+      press('DPAD_CENTER', 'open title', 6000),
+      press('BACK', 'close title', 4000),
+      press('DPAD_UP', 'up to the chips', 1500),
+      press('DPAD_RIGHT', 'chip → Library', 1500),
+      press('DPAD_CENTER', 'open Library grid', 6000),
+      ...repeat('DPAD_UP', 'up to nav', 2, 1500),
+      press('DPAD_LEFT', 'nav → Home'),
+      press('DPAD_CENTER', 'open Home', 6000),
+    ],
+  },
   /** Plays the first Movies title (from its page's Play), then works the player's controls. Leaves
    * the player with Back, which stops the session. */
   player: {
@@ -158,11 +178,14 @@ duration_ms: ${Math.ceil(seconds * 1000)}
 /** One shell script on the device, so presses are paced by the device and not by adb round trips. */
 export function deviceScript(steps: Step[]): string {
   const lines = ['#!/system/bin/sh'];
+  let press = 0;
   for (const step of steps) {
     if ('link' in step) lines.push(`am start -a android.intent.action.VIEW -d '${step.link}' ${PACKAGE} >/dev/null 2>&1`, `sleep ${step.wait / 1000}`);
     else if ('wait' in step) lines.push(`sleep ${step.wait / 1000}`);
     else {
       const keys = Array.from({ length: step.burst ?? 1 }, () => `KEYCODE_${step.key}`).join(' ');
+      // A marker in the log names the press, so presses map to steps even if one leaves no input slice.
+      lines.push(`log -t ${MARK} ${press++}`);
       lines.push(step.burst ? `input keyevent ${keys}` : `input keyevent --duration 80 ${keys}`);
       lines.push(`sleep ${(step.window ?? 1200) / 1000}`);
     }
@@ -181,6 +204,8 @@ select 'key' kind, ts, dur from slices where utid in (select utid from main) and
 union all select 'focus', ts, dur from slices where utid in (select utid from main) and name = 'FabricEventEmitter.receiveEvent(''topFocus'')'
 union all select 'mount', ts, dur from slices where utid in (select utid from main) and name like 'MountItemDispatcher::mountViews%'
 union all select 'frame', ts, dur from slices where utid in (select utid from render) and name like 'DrawFrame%'
+union all select 'view', s.ts, s.dur from slice s join thread_track tt on s.track_id = tt.id
+  where tt.utid in (select utid from main) and s.name like 'SurfaceMountingManager::createViewUnsafe%'
 union all select 'js', ts, dur from sched where utid in (select utid from js)
 union all select 'main', ts, dur from sched where utid in (select utid from main)
 union all select 'render', ts, dur from sched where utid in (select utid from render)
@@ -188,7 +213,7 @@ order by ts;
 `;
 
 export function parseEvents(csv: string): TraceEvents {
-  const events: TraceEvents = { keys: [], focus: [], mounts: [], frames: [], sched: { js: [], main: [], render: [] } };
+  const events: TraceEvents = { keys: [], focus: [], mounts: [], frames: [], views: [], sched: { js: [], main: [], render: [] } };
   for (const line of csv.split('\n')) {
     const match = /^"(\w+)",(\d+),(-?\d+)/.exec(line.trim());
     if (!match) continue;
@@ -198,6 +223,7 @@ export function parseEvents(csv: string): TraceEvents {
       case 'focus': events.focus.push(span); break;
       case 'mount': events.mounts.push(span); break;
       case 'frame': events.frames.push(span); break;
+      case 'view': events.views!.push(span); break;
       case 'js': case 'main': case 'render': events.sched[match[1]].push(span); break;
     }
   }
@@ -266,12 +292,13 @@ async function measure(o: Options, name: string, label: string): Promise<RunRepo
         await Bun.sleep(1000);
       }
     }
-    const logcat = adb(o, 'logcat', '-d', '-v', 'monotonic', '-s', 'ReactNativeJS:I');
+    const logcat = adb(o, 'logcat', '-d', '-v', 'monotonic', '-s', 'ReactNativeJS:I', `${MARK}:I`, `${MARK}:D`);
     writeFileSync(join(work, 'events.sql'), EVENTS_SQL);
     const events = parseEvents(run([o.tp, '-q', join(work, 'events.sql'), join(work, 'trace.pftrace')]));
     const probe = parseProbe(logcat);
     const probeJs = parseProbeJs(logcat);
-    const starts = pressStarts(events.keys);
+    const marks = parseMarks(logcat, MARK);
+    const starts = marks.length ? anchorPresses(marks, pressStarts(events.keys)) : pressStarts(events.keys);
     const warnings: string[] = [];
     if (!events.sched.js.length) warnings.push('no JS thread scheduling in the trace');
     // A burst is one step: key-downs within its sending time belong to it.
@@ -284,7 +311,8 @@ async function measure(o: Options, name: string, label: string): Promise<RunRepo
         break;
       }
       const span = step.burst ? step.burst * 150 * 1e6 : 0;
-      do at++; while (starts[at] !== undefined && starts[at] <= from + span);
+      if (marks.length) at++;
+      else do at++; while (starts[at] !== undefined && starts[at] <= from + span);
       const next = starts[at];
       const to = next ?? from + (step.window ?? 1200) * 1e6;
       metrics.push(analyzePress(events, probe, step.label ?? step.key, from, to, o.quietMs, probeJs));

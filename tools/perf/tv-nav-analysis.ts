@@ -8,6 +8,9 @@
 //   frameMs   key-down → the end of the first RenderThread frame begun after that mount
 //   settleMs  key-down → the end of the first frame after the press's last mount that is followed by
 //             `quietMs` without a mount (screens fill in over several commits)
+//   contentMs key-down → the end of the first frame after the mount that follows the press's
+//             CONTENT_VIEWSth native view created (preallocated or mounted): when a screen the press
+//             opened first shows its content
 //   jsMs / mainMs / renderMs   CPU time on the JS thread, the UI thread and RenderThread
 //   mounts, frames, commits, comps   Fabric mounts, frames drawn, React commits and components the
 //             probe saw render (probe builds only)
@@ -19,8 +22,13 @@ export interface TraceEvents {
   focus: Span[];
   mounts: Span[];
   frames: Span[];
+  /** Native views Fabric created (SurfaceMountingManager::createViewUnsafe). */
+  views?: Span[];
   sched: { js: Span[]; main: Span[]; render: Span[] };
 }
+
+/** Views created after a press for it to be a screen's content arriving, not a focus look. */
+export const CONTENT_VIEWS = 50;
 export interface ProbeCommit { ts: number; comps: number; hosts: number; top: string; upd?: string; src?: string }
 /** One 200 ms window of the probe's JS-time attribution: source → [count, ms]. */
 export interface ProbeJs { ts: number; sources: Record<string, [number, number]> }
@@ -31,6 +39,7 @@ export interface PressMetrics {
   mountMs: number | null;
   frameMs: number | null;
   settleMs: number | null;
+  contentMs: number | null;
   jsMs: number;
   mainMs: number;
   renderMs: number;
@@ -60,6 +69,25 @@ export function pressStarts(keys: Span[], gapMs = 250): number[] {
     last = key.ts;
   }
   return starts;
+}
+
+/** The device script's press markers (`logcat -v monotonic`), in order: one per press. */
+export function parseMarks(logcat: string, tag: string): number[] {
+  const marks: number[] = [];
+  for (const line of logcat.split('\n')) {
+    const match = new RegExp(`^\\s*(\\d+)\\.(\\d+)\\s.*\\s${tag}\\s*:`).exec(line);
+    if (match) marks.push(Number(match[1]) * 1e9 + Number(match[2].padEnd(9, '0').slice(0, 9)));
+  }
+  return marks;
+}
+
+/** Each press starts at its key-down: the first after its marker (the input command takes a while
+ * to start), else its marker when the key left no input slice. */
+export function anchorPresses(marks: number[], keyDowns: number[], withinMs = 1500): number[] {
+  return marks.map((mark, i) => {
+    const next = marks[i + 1] ?? Infinity;
+    return keyDowns.find(down => down >= mark && down < Math.min(next, mark + withinMs * MS)) ?? mark;
+  });
 }
 
 /** CPU time (ms) of scheduled spans clipped to [from, to). */
@@ -119,6 +147,9 @@ export function analyzePress(
   const mountEnd = firstMount ? firstMount.ts + firstMount.dur : null;
   const firstFrame = mountEnd !== null ? frameEnd(frames, mountEnd, to + 2000 * MS) : null;
   const rest = settlingMount(mounts, quietMs);
+  const created = within(sorted(events.views ?? []), from, to)[CONTENT_VIEWS - 1];
+  const contentMount = created ? mounts.find(mount => mount.ts + mount.dur >= created.ts) : undefined;
+  const contentFrame = contentMount ? frameEnd(frames, contentMount.ts + contentMount.dur, to + 2000 * MS) : null;
   const settleFrame = rest ? frameEnd(frames, rest.ts + rest.dur, to + 2000 * MS) : null;
   const commits = probe.filter(commit => commit.ts >= from && commit.ts < to);
   const ms = (end: number | null) => (end === null ? null : round((end - from) / MS));
@@ -129,6 +160,7 @@ export function analyzePress(
     mountMs: ms(mountEnd),
     frameMs: ms(firstFrame),
     settleMs: ms(settleFrame),
+    contentMs: ms(contentFrame),
     jsMs: round(cpuIn(events.sched.js, from, to)),
     mainMs: round(cpuIn(events.sched.main, from, to)),
     renderMs: round(cpuIn(events.sched.render, from, to)),
@@ -195,7 +227,7 @@ export function summarize(values: (number | null)[]): Summary {
   return { n: present.length, median: pick(0.5), p90: pick(0.9), total: round(present.reduce((a, b) => a + b, 0)) };
 }
 
-export const METRICS = ['focusMs', 'mountMs', 'frameMs', 'settleMs', 'jsMs', 'mainMs', 'renderMs', 'mounts', 'frames', 'commits', 'comps'] as const;
+export const METRICS = ['focusMs', 'mountMs', 'frameMs', 'settleMs', 'contentMs', 'jsMs', 'mainMs', 'renderMs', 'mounts', 'frames', 'commits', 'comps'] as const;
 export type Metric = typeof METRICS[number];
 
 export function summarizePresses(presses: PressMetrics[]): Record<Metric, Summary> {
