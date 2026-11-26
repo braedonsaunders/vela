@@ -308,6 +308,18 @@ export const RICH_BLOCKS = {
     props: { id: { type: 'template', required: true, doc: 'The title id.' } },
     parts: [], templates: [], tv: 'As the page.',
   },
+  timeline: {
+    doc: 'A virtualized square photo grid with calendar headings and cursor paging.',
+    props: {
+      items: { type: 'value', required: true, doc: 'The photo list source ({items, more}).' },
+      source: { type: 'template', doc: 'The list source name for vela.more.' },
+      pending: { type: 'value', doc: 'Whether a page is being read ({src.x.$pending}).' },
+      failed: { type: 'template', doc: 'The last source error ({src.x.$error}).' },
+    },
+    parts: ['timeline.month', 'timeline.day', 'timeline.tile'],
+    templates: [],
+    tv: 'Moves by D-pad through square photo tiles.',
+  },
   albumsGrid: {
     doc: 'The albums grid (a Show all of albums), paged as the viewer nears its end.',
     props: { query: { type: 'template', doc: 'The albums query (the place\'s).' } },

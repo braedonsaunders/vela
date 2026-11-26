@@ -571,7 +571,7 @@ export const mediaPersonArtwork = (id: string): ArtworkRef => mediaArtwork(id, '
 export const creditLabel = (role: string): string => roleLabel[role] ?? role;
 /** Titles that credit a person, with the credit as a role label. Artists credit their albums. */
 export function mediaPersonTitles(personId: string): { title: Title; role: string }[] {
-  return [...artists, ...albums, ...series, ...books, ...audiobooks, ...shows].flatMap(title => {
+  return [...artists, ...albums, ...series, ...books, ...audiobooks, ...shows, ...levels.photos!['']!].flatMap(title => {
     const credit = title.media?.credits?.find(value => value.personId === personId);
     if (!credit || title.media?.role === 'artist') return [];
     return [{ title, role: creditLabel(credit.role) }];
@@ -658,4 +658,47 @@ export function mediaLibraryPeople(libraryId: string, creditRole: string): { per
   for (const entry of mediaLibraryEntries(libraryId, libraryId === 'books' ? 'book' : '') ?? []) if (entry.kind === 'title')
     for (const credit of entry.title.media?.credits ?? []) if (credit.role === creditRole && credit.personId) counts.set(credit.personId, (counts.get(credit.personId) ?? 0) + 1);
   return [...counts].map(([id, itemCount]) => ({ person: people.get(id)!, itemCount }));
+}
+
+/** Optional mock catalogue. The baseline Photos fixtures stay intact for parity captures. */
+export function enableGalleryFixtures(scale: number): void {
+  const library = mediaLibraries.find(item => item.id === 'photos')!;
+  if (library.tabs?.some(tab => tab.id === 'photo-albums')) return;
+  const subjects = [
+    { id: person('elena-rivers', 'Elena Rivers', 'subject', 'Photography', ''), name: 'Elena Rivers' },
+    { id: person('sam-calder', 'Sam Calder', 'subject', 'Photography', ''), name: 'Sam Calder' },
+  ];
+  const galleryAlbums: Title[] = [];
+  const galleryPhotos = photos.map(title => ({ ...title, media: { ...title.media! } }));
+  const count = Number.isFinite(scale) ? Math.min(20_000, Math.floor(scale)) : 0;
+  for (let index = photos.length; index < count; index++) {
+    const id = `photo-gallery-${index + 1}`;
+    const airDate = new Date(fixtureNow - (201 + Math.floor((index - photos.length) / 12)) * 86_400_000).toISOString().slice(0, 10);
+    galleryPhotos.push({
+      id, kind: 'movie', name: `Field notes ${index + 1}`, summary: '', year: Number(airDate.slice(0, 4)), airDate, genres: [],
+      artwork: [mediaArtwork(id, 'square'), mediaArtwork(id, 'wide', 'backdrop'), mediaArtwork(id, 'wide', 'thumb')],
+      media: { class: 'photo', role: 'item', facts: [{ label: 'Taken', value: airDate }] },
+    });
+  }
+  for (const [index, name] of ['Along the coast', 'A year outdoors'].entries()) {
+    const id = `photo-album-${index + 1}`;
+    const children = galleryPhotos.filter((_, position) => position % subjects.length === index);
+    for (const child of children) {
+      child.media!.parents = [{ id, name, role: 'album' }];
+      child.media!.credits = [{ name: subjects[index]!.name, personId: subjects[index]!.id, role: 'subject' }];
+    }
+    const cover = children[0]!;
+    galleryAlbums.push({
+      id, kind: 'movie', name, summary: '', airDate: cover.airDate, year: cover.year, genres: [], artwork: cover.artwork,
+      media: { class: 'photo', role: 'album', childCount: children.length },
+    });
+    childrenOf.set(id, children);
+  }
+  levels.photos = { '': galleryPhotos, item: galleryPhotos, album: galleryAlbums };
+  for (const title of [...galleryPhotos, ...galleryAlbums]) byId.set(title.id, title);
+  library.tabs = [
+    { id: 'library', label: 'All photos', kind: 'library', level: 'item' },
+    { id: 'photo-albums', label: 'Albums', kind: 'library', level: 'album' },
+    { id: 'photo-people', label: 'People', kind: 'people', facet: 'subject', order: 'name' },
+  ];
 }
