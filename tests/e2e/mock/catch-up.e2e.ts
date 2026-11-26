@@ -195,6 +195,7 @@ describe('Live TV catch-up release gate', () => {
       expect(recoveredStartOver.start.from).toBe('start');
       expect(recoveredStartOver.start.programmeId).toBe(guide.programmes[1]!.id);
 
+      await recoverWatch(true);
       await expect(goLive).toHaveAttribute('aria-label', 'Go live');
       await goLive.tap();
       await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });

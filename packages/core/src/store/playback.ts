@@ -968,6 +968,7 @@ export class Playback {
         if (nextPlan.live && (command.kind === 'goLive' || command.kind === 'seek' || command.kind === 'pause')) {
           this.liveTransportIntent = { sessionId, atLive: command.kind === 'goLive' };
         }
+        if (origin === 'viewer' && command.kind === 'goLive') this.resetRestartBudget(sessionId);
         this.patch({ plan: nextPlan });
         return true;
       }
@@ -994,6 +995,7 @@ export class Playback {
     const now = this.box.get().playback;
     // A restart (stall recovery) asks for the file now playing, not the one first asked for.
     if (now.sessionId === sessionId) {
+      if (!this.recovering) this.resetRestartBudget(sessionId);
       // Track IDs and local choices belong to the previous version. Keep the negotiated
       // selection through later snapshots and recovery, even when a track ID is reused.
       this.localTracks = false;
@@ -1002,6 +1004,13 @@ export class Playback {
       this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
     }
     return next;
+  }
+
+  private resetRestartBudget(sessionId: string): void {
+    if (!this.stall || this.watch?.session !== sessionId) return;
+    this.watch.restarts = 0;
+    this.stall = stallWatch(Date.now());
+    this.armWatchdog(sessionId);
   }
 
   private async send(api: ServerAdapter, sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer',
@@ -1165,7 +1174,7 @@ export class Playback {
   }
 
   /** A player snapshot: live status (reconnecting, delivery, drift) when the engine observes it. */
-  snapshot(snapshot: LiveObservation & StallSample & { seekTarget?: number | null; audioTrackId?: string | null; subtitleTrackId?: string | null; timeshiftRecoveryEvicted?: boolean | null }): void {
+  snapshot(snapshot: LiveObservation & StallSample & { audioTrackId?: string | null; subtitleTrackId?: string | null; timeshiftRecoveryEvicted?: boolean | null }): void {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;
     if (snapshot.position !== undefined) this.cursor = snapshot.position;
@@ -1192,6 +1201,7 @@ export class Playback {
     }
     if (this.stall && snapshot.sessionId && current.phase === 'playing') {
       this.stall = heardEngine(this.stall, snapshot, Date.now());
+      if (this.watch?.session === snapshot.sessionId) this.watch.restarts = this.stall.attempt;
       this.armWatchdog(snapshot.sessionId);
     }
     const live = liveStatus(snapshot);
