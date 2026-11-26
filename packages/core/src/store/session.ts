@@ -38,6 +38,7 @@ export class Session {
   private readonly registry: ServerRegistry;
   private readonly connections = new Map<string, Connection>();
   private readonly resetListeners = new Set<(kind: ResetKind, refused?: boolean) => void>();
+  private readonly forgetListeners = new Set<(id: string) => void>();
   /** The server last read as selected: undefined before the first read, '' while there is none. */
   private activeId: string | undefined;
   private deviceValue: V.Device | undefined;
@@ -129,6 +130,12 @@ export class Session {
     return () => this.resetListeners.delete(listener);
   }
 
+  /** Hear when a server record is removed so server-scoped preferences can be pruned. */
+  onForget(listener: (id: string) => void): () => void {
+    this.forgetListeners.add(listener);
+    return () => this.forgetListeners.delete(listener);
+  }
+
   /** The viewer signed in or out: everything read for the previous viewer is dropped. */
   resetSession(): void {
     this.epoch++;
@@ -206,6 +213,7 @@ export class Session {
   /** Forget a removed server's connection. */
   forget(id: string): void {
     this.connections.delete(id);
+    for (const listener of [...this.forgetListeners]) listener(id);
   }
 
   tokens(connection: Connection): Promise<V.Tokens | null> {
