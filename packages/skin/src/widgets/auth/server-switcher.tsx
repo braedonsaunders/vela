@@ -1,7 +1,7 @@
 // Widget `serverSwitcher` (the profile menu): your servers, the current one checked, each with
 // its kind and state; choosing another switches to it, and "Add a server" opens Connect. Its text
 // takes the node's inherited rows; the quiet lines and the check take the document's `ui` inks.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { msg } from '@vela/core';
 import { eyebrow } from '../../resolve/vela-base/look';
@@ -29,11 +29,15 @@ export function ServerSwitcher({ params }: WidgetProps) {
   const host = useHost();
   const [error, setError] = useState('');
   const [pending, setPending] = useState('');
+  const [confirmId, setConfirmId] = useState('');
+  const [returnTo, setReturnTo] = useState('');
   const selecting = useRef(false);
   const busy = pending !== '';
   if (!switcher) return null;
   const pick = async (server: ServerOption) => {
     if (server.selected || selecting.current) return;
+    setConfirmId('');
+    setReturnTo('');
     selecting.current = true;
     setPending(server.id);
     setError('');
@@ -42,6 +46,20 @@ export function ServerSwitcher({ params }: WidgetProps) {
       await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
       const outcome = await switcher.actions.select(server.id);
       if (outcome.error) setError(outcome.error);
+    } finally {
+      selecting.current = false;
+      setPending('');
+    }
+  };
+  const remove = async (server: ServerOption) => {
+    if (server.selected || server.id === switcher.servers.selectedId || selecting.current) return;
+    selecting.current = true;
+    setPending(server.id);
+    setError('');
+    try {
+      const outcome = await switcher.actions.remove(server.id);
+      if (outcome.error) setError(outcome.error);
+      else setConfirmId('');
     } finally {
       selecting.current = false;
       setPending('');
@@ -57,18 +75,51 @@ export function ServerSwitcher({ params }: WidgetProps) {
       <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' }} style={{ paddingVertical: 4 }}>
         {title}
       </Words>
-      {switcher.servers.list.map(server => (
-        <View key={server.id}><Row
-          label={server.selected && switcher.brandingName ? switcher.brandingName : server.name}
-          detail={pending === server.id ? msg('ui.connectingToYourLibrary') : serverDetail(server)}
-          busy={pending === server.id}
-          ready={server.status === 'ready'}
-          selected={server.selected}
-          disabled={busy}
-          onPress={() => pick(server)}
-          testID={`server-${server.id}`}
-        />{server.etherOrigin ? <Row label="Ether available" testID={`server-ether-${server.id}`} onPress={() => void (async () => { const result = await switcher.actions.add('ether', server.name, server.etherOrigin!); if (result.error) setError(result.error); else { const selected = await switcher.actions.select(result.id); if (selected.error) setError(selected.error); } })()} /> : null}</View>
-      ))}
+      {switcher.servers.list.map(server => {
+        const removable = !server.selected && server.id !== switcher.servers.selectedId;
+        const confirming = removable && confirmId === server.id;
+        return (
+          <View key={server.id}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -10, gap: 4 }}>
+              <Row
+                label={server.selected && switcher.brandingName ? switcher.brandingName : server.name}
+                detail={pending === server.id && !confirming ? msg('ui.connectingToYourLibrary') : serverDetail(server)}
+                busy={pending === server.id && !confirming}
+                ready={server.status === 'ready'}
+                selected={server.selected}
+                disabled={busy}
+                onPress={() => pick(server)}
+                testID={`server-${server.id}`}
+                inline
+              />
+              {removable && !confirming ? <Row
+                icon="close"
+                iconOnly
+                accessibilityLabel={msg('connect.remove', { name: server.name })}
+                onPress={() => { setError(''); setReturnTo(''); setConfirmId(server.id); }}
+                disabled={busy}
+                preferFocus={returnTo === server.id}
+                testID={`server-remove-${server.id}`}
+                inline
+                compact
+              /> : null}
+            </View>
+            {confirming ? (
+              <View style={{ gap: 4, paddingVertical: 6 }}>
+                <Words rows={{ 'font-size': '13px' }}>{msg('connect.removeConfirm', { name: server.name })}</Words>
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+                  <Row label={msg('ui.cancel')} onPress={() => { setReturnTo(server.id); setConfirmId(''); }} disabled={busy}
+                    testID="server-remove-cancel" inline compact preferFocus />
+                  <Row label={msg('connect.removeAction')} accessibilityLabel={msg('connect.remove', { name: server.name })}
+                    onPress={() => void remove(server)} disabled={busy} busy={pending === server.id}
+                    testID="server-remove-confirm" inline compact destructive />
+                </View>
+              </View>
+            ) : null}
+            {server.etherOrigin ? <Row label="Ether available" testID={`server-ether-${server.id}`} disabled={busy} onPress={() => void (async () => { const result = await switcher.actions.add('ether', server.name, server.etherOrigin!); if (result.error) setError(result.error); else { const selected = await switcher.actions.select(result.id); if (selected.error) setError(selected.error); } })()} /> : null}
+          </View>
+        );
+      })}
       <Row label={params.addLabel || msg('connect.add')} onPress={switcher.openConnect} disabled={busy} testID="server-add" />
       {switcher.consoleUrl && Platform.OS === 'web' ? (
         <Row label={msg('server.backToEther')} href={switcher.consoleUrl} testID="back-to-ether" />
@@ -80,6 +131,8 @@ export function ServerSwitcher({ params }: WidgetProps) {
 
 function Row({
   label,
+  iconOnly = false,
+  destructive = false,
   detail,
   ready = true,
   selected = false,
@@ -89,8 +142,14 @@ function Row({
   href,
   icon,
   testID,
+  accessibilityLabel,
+  inline = false,
+  compact = false,
+  preferFocus = false,
 }: {
-  label: string;
+  label?: string;
+  iconOnly?: boolean;
+  destructive?: boolean;
   detail?: string;
   ready?: boolean;
   selected?: boolean;
@@ -100,25 +159,41 @@ function Row({
   href?: string;
   icon?: string;
   testID: string;
+  accessibilityLabel?: string;
+  inline?: boolean;
+  compact?: boolean;
+  preferFocus?: boolean;
 }) {
   const look = useLook();
   // The menu's own face, where the document sets one.
   const face = useInheritedText().style.fontFamily;
   const { state, handlers } = useInteraction();
+  const button = useRef<ComponentRef<typeof APressable>>(null);
+  useEffect(() => {
+    if (Platform.OS === 'web' && preferFocus && !disabled) button.current?.focus();
+  }, [preferFocus, disabled]);
+  const rows = destructive ? { ...ROW, 'background-color': '#a32638' }
+    : iconOnly ? { ...ROW, 'justify-content': 'center', width: '44px', padding: '0px' }
+    : compact ? { ...ROW, 'background-color': '$ui.control' } : ROW;
+  const looks = destructive ? { ...LOOKS, hover: { 'background-color': '#b83143' } } : LOOKS;
   return (
     <APressable
+      ref={button}
       onPress={onPress}
       disabled={disabled}
+      focusable={!disabled}
+      hasTVPreferredFocus={Platform.isTV && preferFocus}
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole={href ? 'link' : 'menuitem'}
       {...(href && Platform.OS === 'web' ? { href } : {})}
       accessibilityState={{ selected, disabled, busy }}
       testID={testID}
-      style={[look.box(overlaid(ROW, state, LOOKS, disabled)), NO_RING]}
+      style={[look.box(overlaid(rows, state, looks, disabled)), inline && { marginLeft: 0, marginRight: 0, flex: compact ? undefined : 1 }, NO_RING]}
       {...handlers}
     >
       {icon ? <Glyph symbol={icon} size={17} color={look.ui.ink} /> : null}
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Words rows={{ 'font-size': '14px' }} style={face ? { fontFamily: face } : undefined} lines={1}>
+      {iconOnly ? null : <View style={{ flex: compact ? undefined : 1, minWidth: 0, gap: 2 }}>
+        <Words rows={{ 'font-size': '14px', ...(destructive ? { color: '#ffffff' } : {}) }} style={face ? { fontFamily: face } : undefined} lines={1}>
           {label}
         </Words>
         {detail ? (
@@ -126,7 +201,7 @@ function Row({
             {detail}
           </Words>
         ) : null}
-      </View>
+      </View>}
       {busy ? <ActivityIndicator size="small" color={look.ui.accent} /> : selected ? <Glyph symbol="checkmark" size={14} color={look.ui.accent} /> : null}
     </APressable>
   );

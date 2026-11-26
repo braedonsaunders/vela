@@ -774,6 +774,8 @@
   "connect.add": "Add a server",
   "connect.signedOut": "Signed out",
   "connect.remove": "Remove {name}",
+  "connect.removeAction": "Remove",
+  "connect.removeConfirm": "Remove {name} from this device? Its downloads will be deleted.",
   "connect.plex.signIn": "Sign in with Plex",
   "connect.otherServer": "Use a server address",
   "connect.plex.eyebrow": "Plex",
