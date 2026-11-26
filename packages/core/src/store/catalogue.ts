@@ -148,14 +148,20 @@ export class Catalogue {
   }
 
   async libraryLive(id: string, tab: string, search = '', filter = '', cursor?: string, signal?: AbortSignal): Promise<LibraryLiveModel> {
+    const epoch = this.session.epoch;
     const connection = await this.session.ready();
     const adapter = connection.adapter;
     const available = this.session.features?.libraryLive?.available === true;
     if (!available || !hasLibraryLive(adapter)) throw new Error('Library live is unavailable');
-    const result = await this.retrying(() => adapter.libraryLive(id, { tab, query: search || undefined, filter: filter || undefined, cursor, limit: 50 }), signal);
-    const images = await connection.images();
-    return { items: result.items.map(item => libraryLiveCard(item, images, this.artWidth())), filters: result.filters,
-      cursor: result.nextCursor ?? '', continuation: result.continuation };
+    try {
+      const result = await this.retrying(() => adapter.libraryLive(id, { tab, query: search || undefined, filter: filter || undefined, cursor, limit: 50 }), signal);
+      const images = await connection.images();
+      return { items: result.items.map(item => libraryLiveCard(item, images, this.artWidth())), filters: result.filters,
+        cursor: result.nextCursor ?? '', continuation: result.continuation };
+    } catch (error) {
+      if (!signal?.aborted && epoch === this.session.epoch) await this.session.relocatePlex?.(connection, epoch, error, signal);
+      throw error;
+    }
   }
   /** Available before a library's asynchronous rows arrive. */
   get libraryRecommendationsAvailable(): boolean {
@@ -173,6 +179,8 @@ export class Catalogue {
   /** Collections are a side read some servers answer in tens of seconds: they wait in a lane of
    * their own, so they never hold every connection to the server (lane.ts). */
   private readonly sideLane = new Lane(SIDE_READS);
+  /** Open title views; closing one aborts its read and stops keeping any relocation search alive. */
+  private readonly viewControllers = new Set<AbortController>();
 
   /** The server answers a recommended tab's own rows (features.pluginLevels.tabRows). */
   get libraryTabRowsAvailable(): boolean {
@@ -220,6 +228,8 @@ export class Catalogue {
     private readonly retryOptions: Pick<ReadRetryOptions, 'sleep'> = {},
   ) {
     session.onReset(() => {
+      for (const controller of this.viewControllers) controller.abort();
+      this.viewControllers.clear();
       this.libraryReads.clear();
       this.librarySnapshots.clear();
       this.collectionReads.clear();
@@ -232,10 +242,10 @@ export class Catalogue {
   }
 
   /** A title's details, read once per session unless `refresh` asks again (after playback, say). */
-  async title(id: string, refresh = false): Promise<void> {
+  async title(id: string, refresh = false, signal?: AbortSignal): Promise<void> {
     const known = this.box.get().titles[id];
     if (known && known.load !== 'failed' && !refresh) return;
-    await this.read('titles', id, async connection => (await this.detail(connection, id)).model);
+    await this.read('titles', id, async connection => (await this.detail(connection, id, signal)).model, false, signal);
   }
 
   /**
@@ -244,27 +254,39 @@ export class Catalogue {
    */
   view(id: string): () => void {
     const release = this.pending.view(id);
+    const controller = new AbortController();
+    this.viewControllers.add(controller);
     const known = this.box.get().titles[id];
-    if (known?.load === 'ready') void this.refreshTitle(id);
-    else void this.title(id);
-    return release;
+    const work = known?.load === 'ready'
+      ? this.refreshTitle(id, controller.signal)
+      : this.title(id, false, controller.signal);
+    void work.finally(() => { this.viewControllers.delete(controller); });
+    return () => {
+      controller.abort();
+      this.viewControllers.delete(controller);
+      release();
+    };
   }
 
   /** Read a title again in place: no loading state, and a failure keeps the page as drawn. */
-  private async refreshTitle(id: string): Promise<void> {
+  private async refreshTitle(id: string, signal?: AbortSignal): Promise<void> {
     const epoch = this.session.epoch;
+    let connection: Connection | undefined;
     try {
-      const connection = await this.session.ready();
-      const { model } = await this.detail(connection, id);
-      if (epoch === this.session.epoch) this.box.update('titles', titles => ({ ...titles, [id]: ready(model) }));
-    } catch {
+      connection = await this.session.ready();
+      if (signal?.aborted) return;
+      const { model } = await this.detail(connection, id, signal);
+      if (epoch === this.session.epoch && !signal?.aborted) this.box.update('titles', titles => ({ ...titles, [id]: ready(model) }));
+    } catch (error) {
+      if (signal?.aborted || epoch !== this.session.epoch) return;
+      if (connection) await this.session.relocatePlex?.(connection, epoch, error, signal);
       // The page keeps what it shows; a later read brings it up to date.
     }
   }
 
   /** One read of a title's details; a partial answer is followed while the title is on screen. */
-  private async detail(connection: Connection, id: string): Promise<{ model: DetailModel; answer: V.TitleDetail }> {
-    const answer = await this.titleDetail(connection, id);
+  private async detail(connection: Connection, id: string, signal?: AbortSignal): Promise<{ model: DetailModel; answer: V.TitleDetail }> {
+    const answer = await this.titleDetail(connection, id, signal);
     // Capability decoration is secondary metadata. A temporary describe failure must not discard
     // a complete title answer that is already available.
     const capabilities = await capabilitiesOf(connection.adapter).catch(() => ({ features: this.session.features ?? {} } as V.ServerCapabilities));
@@ -282,8 +304,8 @@ export class Catalogue {
     return { model, answer };
   }
 
-  private titleDetail(connection: Connection, id: string): Promise<V.TitleDetail> {
-    return this.retrying(() => connection.adapter.detail(id));
+  private titleDetail(connection: Connection, id: string, signal?: AbortSignal): Promise<V.TitleDetail> {
+    return this.retrying(() => connection.adapter.detail(id), signal);
   }
 
   /** Where the viewer left a title, applied at once to every title page drawn that shows it. */
@@ -331,14 +353,14 @@ export class Catalogue {
   }
 
   /** The rows the server relates to a title. */
-  async related(id: string): Promise<void> {
+  async related(id: string, signal?: AbortSignal): Promise<void> {
     const known = this.box.get().related[id];
     if (known && known.load !== 'failed') return;
     await this.read('related', id, async connection => {
-      const data = await this.retrying(() => connection.adapter.rows({ placement: 'detail', titleId: id }));
+      const data = await this.retrying(() => connection.adapter.rows({ placement: 'detail', titleId: id }), signal);
       const images = await connection.images();
       return data.items.map(row => feedRow(row, images, this.artWidth()));
-    });
+    }, false, signal);
   }
 
   /**
@@ -408,7 +430,18 @@ export class Catalogue {
     };
     signal?.throwIfAborted();
     join(signal);
-    const promise = (async () => work(await this.session.ready(), controller.signal))();
+    const promise = (async () => {
+      let connection: Connection | undefined;
+      try {
+        connection = await this.session.ready();
+        return await work(connection, controller.signal);
+      } catch (error) {
+        if (!controller.signal.aborted && epoch === this.session.epoch && connection) {
+          await this.session.relocatePlex?.(connection, epoch, error, controller.signal);
+        }
+        throw error;
+      }
+    })();
     this.partReads.set(key, { epoch, progressRevision, promise, join });
     try {
       const value = await promise;
@@ -424,19 +457,31 @@ export class Catalogue {
   }
 
   async moreLibraryCollections(id: string, cursor: string, tab?: string, search?: string, signal?: AbortSignal): Promise<{ items: Card[]; cursor: string }> {
+    const epoch = this.session.epoch;
     const connection = await this.session.ready();
     if (!hasLibraryRecommendations(connection.adapter)) return { items: [], cursor: '' };
     const adapter = connection.adapter;
-    const [page, images] = await Promise.all([this.retrying(() => this.sideLane.run(() => adapter.libraryCollections(id, cursor, tab, search)), signal), connection.images()]);
-    return { items: page.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), this.dateDisplay(id))), cursor: page.nextCursor ?? '' };
+    try {
+      const [page, images] = await Promise.all([this.retrying(() => this.sideLane.run(() => adapter.libraryCollections(id, cursor, tab, search)), signal), connection.images()]);
+      return { items: page.items.map(item => withDateDisplay(entry(item, images, this.artWidth()), this.dateDisplay(id))), cursor: page.nextCursor ?? '' };
+    } catch (error) {
+      if (!signal?.aborted && epoch === this.session.epoch) await this.session.relocatePlex?.(connection, epoch, error, signal);
+      throw error;
+    }
   }
 
   async moreLibraryRow(id: string, cursor: string, libraryId?: string): Promise<Row> {
+    const epoch = this.session.epoch;
     const connection = await this.session.ready();
-    const data = await this.retrying(() => connection.adapter.row(id, cursor));
-    const row = feedRow(data, await connection.images(), this.artWidth());
-    const display = this.dateDisplay(libraryId);
-    return { ...row, items: row.items.map(item => withDateDisplay(item, display)) };
+    try {
+      const data = await this.retrying(() => connection.adapter.row(id, cursor));
+      const row = feedRow(data, await connection.images(), this.artWidth());
+      const display = this.dateDisplay(libraryId);
+      return { ...row, items: row.items.map(item => withDateDisplay(item, display)) };
+    } catch (error) {
+      if (epoch === this.session.epoch) await this.session.relocatePlex?.(connection, epoch, error);
+      throw error;
+    }
   }
 
   /** One library view, `pages` pages deep (100 items a page, or the query's `limit`). A background revisit
@@ -534,6 +579,7 @@ export class Catalogue {
     key: string,
     work: (connection: Connection) => Promise<SliceValue<K>>,
     background = false,
+    signal?: AbortSignal,
   ): Promise<void> {
     const epoch = this.session.epoch;
     const set = (value: Loadable<SliceValue<K>>) => {
@@ -542,12 +588,16 @@ export class Catalogue {
     const previous = this.box.get()[slice][key] as Loadable<SliceValue<K>> | undefined;
     const quiet = background && !!previous?.value;
     if (!quiet) set(loading(previous));
+    let connection: Connection | undefined;
     try {
-      const connection = await this.session.ready();
+      connection = await this.session.ready();
+      if (signal?.aborted) return;
       const value = await work(connection);
-      if (epoch === this.session.epoch) set(ready(value));
+      if (epoch === this.session.epoch && !signal?.aborted) set(ready(value));
     } catch (error) {
-      if (epoch === this.session.epoch && !quiet) set(failed(error, previous));
+      if (signal?.aborted || epoch !== this.session.epoch) return;
+      if (connection && await this.session.relocatePlex?.(connection, epoch, error, signal)) return;
+      if (!signal?.aborted && epoch === this.session.epoch && !quiet) set(failed(error, previous));
     }
   }
 }

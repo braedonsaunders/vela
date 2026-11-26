@@ -10,6 +10,7 @@
 import type * as V from '../wire';
 import { capabilitiesOf } from '../adapter/advertise';
 import { hasDescriptiveSearch, hasUnifiedSearch } from '../adapter/capabilities';
+import type { Connection } from '../adapter/connection';
 import type { ServerAdapter } from '../adapter';
 import { card } from '../discovery/models';
 import { liveSearch } from '../live/search';
@@ -243,9 +244,11 @@ export class Search {
   }
 
   private async fast(query: string, generation: number, cursor?: string, again = false): Promise<void> {
+    const epoch = this.session.epoch;
+    const signal = this.controller.signal;
+    let connection: Connection | undefined;
     try {
-      const signal = this.controller.signal;
-      const connection = await this.session.ready();
+      connection = await this.session.ready();
       if (!this.current(generation) || signal.aborted) return;
       const api = connection.adapter;
       const unified = cursor || again ? this.unifiedFor === generation : await this.lanes(api, generation, signal);
@@ -268,15 +271,21 @@ export class Search {
       this.patch('fast', { status: 'ready', items: cursor ? [...this.box.get()[this.slice].fast.items, ...items] : items, nextCursor: result.nextCursor, loadingMore: false, error: '', ...live });
       if (!cursor) this.describeIfWanted(query, generation);
     } catch (error) {
-      if (this.current(generation)) this.patch('fast', { loadingMore: false, status: 'failed', error: message(error) });
+      if (signal.aborted || epoch !== this.session.epoch || !this.current(generation)) return;
+      if (connection && await this.session.relocatePlex?.(connection, epoch, error, signal)) return;
+      if (!signal.aborted && epoch === this.session.epoch && this.current(generation)) {
+        this.patch('fast', { loadingMore: false, status: 'failed', error: message(error) });
+      }
     }
   }
 
   private async descriptive(query: string, generation: number, cursor?: string): Promise<void> {
+    const epoch = this.session.epoch;
+    const signal = this.controller.signal;
+    let connection: Connection | undefined;
     try {
-      const signal = this.controller.signal;
       const options = this.options(this.box.get()[this.slice]);
-      const connection = await this.session.ready();
+      connection = await this.session.ready();
       if (!this.current(generation) || signal.aborted) return;
       const api = connection.adapter;
       if (!hasDescriptiveSearch(api)) {
@@ -292,7 +301,11 @@ export class Search {
       this.patch('descriptive', { nextCursor: result.nextCursor, loadingMore: false });
       this.described(query, generation, result.descriptive, cursor ? [...this.box.get()[this.slice].descriptive.items, ...items] : items, cursor);
     } catch (error) {
-      if (this.current(generation)) this.patch('descriptive', { loadingMore: false, status: 'failed', error: message(error), canRetry: false });
+      if (signal.aborted || epoch !== this.session.epoch || !this.current(generation)) return;
+      if (connection && await this.session.relocatePlex?.(connection, epoch, error, signal)) return;
+      if (!signal.aborted && epoch === this.session.epoch && this.current(generation)) {
+        this.patch('descriptive', { loadingMore: false, status: 'failed', error: message(error), canRetry: false });
+      }
     }
   }
 

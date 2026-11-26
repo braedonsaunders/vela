@@ -4,6 +4,7 @@
 import type * as V from '../wire';
 import type { Card, DetailModel } from '../models';
 import { entry } from '../discovery/models';
+import type { Connection } from '../adapter/connection';
 import { hasReading, hasTitleChildren } from '../adapter/capabilities';
 import { childrenKey, pluginLevelsOf } from '../plugin-levels';
 import type { Session } from './session';
@@ -101,8 +102,9 @@ export class Media {
     const set = (value: Loadable<ChildrenModel>) => this.box.update('children', map => ({ ...map, [key]: value }));
     const previous = this.box.get().children[key];
     set(loading(previous));
+    let connection: Connection | undefined;
     try {
-      const connection = await this.session.ready();
+      connection = await this.session.ready();
       const adapter = connection.adapter;
       if (!hasTitleChildren(adapter)) throw new Error('Title children are unavailable');
       const images = await connection.images();
@@ -126,6 +128,8 @@ export class Media {
       }
       if (live()) set(ready({ items, complete, more }));
     } catch (error) {
+      if (!live()) return;
+      if (connection && await this.session.relocatePlex?.(connection, epoch, error, read.controller.signal)) return;
       if (live()) set(failed(error, this.box.get().children[key]));
     }
   }
