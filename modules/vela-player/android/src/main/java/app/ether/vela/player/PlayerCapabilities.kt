@@ -28,12 +28,13 @@ internal object PlayerCapabilities {
   fun capabilities(context: android.content.Context?): Map<String, Any> {
     val displayHdr = displayHdr(context)
     val hdr = playableHdr(displayHdr, decoders)
-    val dvProfiles = dolbyVisionDecoderProfiles()
+    val dvProfiles = if ("dv" in hdr) {
+      AvFormats.dolbyVisionProfiles(dolbyVisionDecoderProfiles(), DolbyVision.convertsProfile7)
+    } else emptyList()
     val route = context?.let { runCatching { AudioRoute.probe(it) }.getOrNull() }
     return probed + buildMap {
-      put("hdr", hdr)
-      // Shown as Dolby Vision only where the display takes it; elsewhere the base layer plays as HDR10/HLG.
-      if ("dv" in hdr) put("dolbyVisionProfiles", AvFormats.dolbyVisionProfiles(dvProfiles, DolbyVision.convertsProfile7))
+      put("hdr", if (dvProfiles.isEmpty()) hdr - "dv" else hdr)
+      put("dolbyVisionProfiles", dvProfiles)
       route?.let { put("audioOutput", AvFormats.audioOutput(it.passthrough, it.maxChannels, it.maxSampleRate, floatPcm = true)) }
     }
   }

@@ -273,7 +273,7 @@ internal class PlayerController(
     if (ownsDisplay) report.routePassthrough = runCatching { AudioRoute.probe(context).passthrough.isNotEmpty() }.getOrDefault(false)
     recovering = false
     client.onSubtitleCues = { host.subtitles(it) }
-    client.onChange = {
+    client.onChange = change@{
       if (engine === client && !recovering) {
         if (readRetryStarted != 0L && state.position > readRetryPosition + 10) { readRetryStarted = 0L; readRetryAttempt = 0 }
         applyTracks()
@@ -284,14 +284,20 @@ internal class PlayerController(
         // A live window slides under a seek; once playback settles again the seek has landed.
         if (this.plan?.live == true && state.loaded && !state.pausedForCache) pendingSeek = null
         startOverPlacement()
+        val plannedDuration = plan.durationSeconds
+        if (path.isOriginalFile && state.phase == PlayerState.Phase.ENDED && originalEndedEarly(state.position, plannedDuration)) {
+          askForFreshPlan("original ended before its planned duration", true)
+          return@change
+        }
         report.publish(state, pendingSeek)
       }
     }
-    client.onFailure = { code, unauthorized ->
+    client.onFailure = { code, unauthorized, originalLost ->
       // A rejected track and the decoder may both fail before the switch plan arrives.
       // The abandoned engine must not spend another path or race that in-flight command.
       if (engine === client && !recovering && readRetry == null) {
-        if (unauthorized) askForFreshPlan("media grant refused")
+        if (originalLost) askForFreshPlan("original lost", true)
+        else if (unauthorized) askForFreshPlan("media grant refused")
         else if (transientMediaFailure(code)) {
           val now = android.os.SystemClock.elapsedRealtime()
           if (readRetryStarted == 0L) readRetryStarted = now
@@ -385,7 +391,7 @@ internal class PlayerController(
   }
 
   /** Asks once per source for a fresh plan: the grant behind the media URL has expired or was revoked. */
-  private fun askForFreshPlan(reason: String) {
+  private fun askForFreshPlan(reason: String, originalLost: Boolean = false) {
     if (plan == null || refreshAsked == activeSource) {
       return
     }
@@ -394,7 +400,7 @@ internal class PlayerController(
     engine?.play(false)
     host.keepScreenOn(false)
     Log.i("vela-media3", "session refresh: $reason")
-    report.sessionRefresh()
+    report.sessionRefresh(originalLost, state.position)
   }
 
   /** What the video is and what the display is, for the console. */

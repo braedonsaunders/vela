@@ -1,5 +1,5 @@
 import { expect, type App, type Screen } from 'e2e';
-import { describe, test } from '@e2e-dev/web';
+import { describe, test, type Browser } from '@e2e-dev/web';
 
 const scenes = [
   'Synthwire Valley', 'Basalt Ridge', 'Mercury Tide', 'Basalt Organ',
@@ -14,8 +14,20 @@ async function openGaplessAlbum(app: App, screen: Screen) {
   await expect(screen.getByTestId('music-play')).toBeVisible();
 }
 
+async function openVisualizer(browser: Browser, screen: Screen) {
+  // The canvas is attached after the real renderer draws its first frame.
+  await expect.poll(() => browser.evaluate(() => !!document.querySelector('[data-testid="visualizer-background"] canvas')),
+    { timeout: 30_000 }).toBe(true);
+  await screen.getByTestId('now-playing-visualizer').press('Enter');
+  await expect(screen.getByTestId('visualizer-page')).toBeVisible();
+  await expect.poll(() => browser.evaluate(() => !!document.querySelector('[data-testid="visualizer-fullscreen"] canvas')),
+    { timeout: 30_000 }).toBe(true);
+}
+
 describe('Music deterministic release gate', { session: 'mock-music', serial: true }, () => {
   test('503 preparation retry, gapless change, scenes, Off, and retired-scene fallback', async ({ app, browser, screen }) => {
+    // Keep the real WebGL render targets small on the runner's software adapter.
+    await browser.setViewport({ width: 960, height: 600 });
     await openGaplessAlbum(app, screen);
 
     expect(await browser.evaluate(async () => (await fetch('/__admin/faults', {
@@ -43,8 +55,7 @@ describe('Music deterministic release gate', { session: 'mock-music', serial: tr
     await screen.getByTestId('now-playing-toggle').tap();
     await expect(screen.getByTestId('now-playing-toggle')).toHaveAttribute('aria-label', 'Play');
 
-    await screen.getByTestId('now-playing-visualizer').tap();
-    await expect(screen.getByTestId('visualizer-page')).toBeVisible();
+    await openVisualizer(browser, screen);
     await screen.getByTestId('visualizer-picker-toggle').tap();
     await expect(screen.getByRole('radiogroup', 'Scenes')).toBeVisible();
     await expect(screen.getByRole('radio', 'Off')).toHaveCount(1);
@@ -79,8 +90,7 @@ describe('Music deterministic release gate', { session: 'mock-music', serial: tr
     await screen.getByTestId('music-play').tap();
     await expect(screen.getByTestId('now-playing-bar')).toBeVisible({ timeout: 30_000 });
     await screen.getByTestId('bar-expand').tap();
-    await expect(screen.getByTestId('now-playing-visualizer')).toBeVisible({ timeout: 30_000 });
-    await screen.getByTestId('now-playing-visualizer').tap();
+    await openVisualizer(browser, screen);
     await expect(screen.getByTestId('visualizer-caption')).toHaveText('Synthwire Valley');
     await screen.getByTestId('visualizer-close').tap();
     await screen.getByTestId('now-playing-close').tap();

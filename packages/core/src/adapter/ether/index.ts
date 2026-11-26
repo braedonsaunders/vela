@@ -565,7 +565,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
 
   sessionSnapshot(sessionId: string) {
-    return this.http.request<V.SessionSnapshot>('GET', `/sessions/${segment(sessionId)}`);
+    // Playback recovery is authority-sensitive (including original_lost): never let a platform
+    // HTTP cache hand the player the generation whose grant just failed.
+    return this.http.request<V.SessionSnapshot>('GET', `/sessions/${segment(sessionId)}`, undefined, FRESH);
   }
 
   /** A session's trickplay sheet (bearer and device, revalidated by ETag); the route width is the offer's. */

@@ -41,7 +41,7 @@ export function restoreFetch(): void {
 
 /**
  * Replace global fetch until restoreFetch. Routes are `METHOD /path` (query ignored) mapped to a
- * JSON body, a Response, or a function of the request returning either. Unrouted requests are 404s.
+ * JSON body, a Response, or a route function that can return either asynchronously. Unrouted requests are 404s.
  */
 export function routeFetch(routes: Record<string, Answer>): Seen[] {
   const seen: Seen[] = [];
@@ -52,7 +52,7 @@ export function routeFetch(routes: Record<string, Answer>): Seen[] {
     seen.push(request);
     const route = routes[`${method} ${url.pathname}`];
     if (route === undefined) return new Response('not found', { status: 404 });
-    const answer = typeof route === 'function' ? (route as (r: Seen) => unknown)(request) : route;
+    const answer = typeof route === 'function' ? await (route as (r: Seen) => unknown)(request) : route;
     return answer instanceof Response ? answer : Response.json(answer);
   };
   globalThis.fetch = Object.assign(fake, { preconnect: () => {} }) as typeof fetch;

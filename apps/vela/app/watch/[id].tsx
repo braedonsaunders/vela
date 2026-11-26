@@ -3,13 +3,16 @@
 // playback slice starts, follows and stops the session; this route is the trusted host that hands
 // the server's media authorization to the player.
 import { router, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
-import { useCallback, useEffect, useMemo } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, type ComponentProps } from 'react';
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { SafeAreaProvider, useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { msg, type PlaybackTarget } from '@vela/core';
 import { pictureInPicture, VelaPlayerView } from '@vela/player';
 import type { DetailModel } from '@vela/skin';
 import { useLiveContext, useLiveView, useLiveWatch } from '@vela/skin/src/widgets/guide';
 import { backFromNavigation, episodeLabel, useBackHeld, useNextEpisode, usePlaybackSession, WatchSurface, type NextEpisode } from '@vela/skin/src/widgets/player';
+import { playerUsesHandheldGeometry } from '@vela/skin/src/widgets/player/look';
+import { phoneControlLayout, watchSideInsets } from '@vela/skin/src/widgets/player/phone-layout';
 import { startPosition } from '../../src/play-action';
 import { useVela } from '../../src/vela';
 
@@ -24,19 +27,19 @@ function heading(detail: DetailModel | undefined): string {
   return title.name;
 }
 
-function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?: string, channelId?: string, from?: string): PlaybackTarget {
+function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?: string, channelId?: string, from?: string, showId?: string): PlaybackTarget {
   if (kind === 'channel') return { kind: 'channel', id };
   // A programme from the channel's archive: ended (catch-up), or on air from its start.
   if (kind === 'programme' && channelId) return { kind: 'programme', id, channelId, ...(from === 'start' ? { from: 'start' as const } : {}) };
   if (kind === 'extra') return { kind: 'extra', id };
   if (kind === 'library-live' && libraryId) return { kind: 'library-live', id, libraryId, tab };
-  return { kind: 'title', id };
+  return { kind: 'title', id, ...(showId ? { showId } : {}) };
 }
 
 export default function Watch() {
-  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string }>();
+  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string; showId?: string }>();
   const { host, openTitle, store } = useVela();
-  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from]);
+  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from, showId), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId]);
   const live = useLiveContext();
   const liveView = useLiveView();
   // A channel's session is the live controller's: its plan, its refusal (or a retry on the
@@ -51,7 +54,9 @@ export default function Watch() {
     updatePlan: (plan: Parameters<typeof live.controller.updateWatchPlan>[0]) => live.controller.updateWatchPlan(plan),
   } : undefined;
   // Android's picture-in-picture window keeps the watch on screen while the app is in the background.
-  const session = usePlaybackSession(target, owned, pictureInPicture);
+  const { width, height } = useWindowDimensions();
+  const webPicture = Platform.OS === 'web' && phoneControlLayout(width, height, playerUsesHandheldGeometry(), false).compact;
+  const session = usePlaybackSession(target, owned, pictureInPicture, webPicture);
   const skin = host('watch', id);
   const sessionId = session.view.plan?.sessionId ?? '';
   const channels = liveView.guide?.channels;
@@ -76,8 +81,8 @@ export default function Watch() {
   const next = useNextEpisode(target.kind === 'title' ? skin?.env.detail?.title[0] : undefined);
   const nextEpisode = useMemo<NextEpisode | null>(() => next ? {
     label: episodeLabel(next),
-    play: () => router.setParams({ id: next.id, kind: undefined, positionSeconds: undefined, mediaSourceId: undefined, audioTrackId: undefined, versionId: undefined }),
-  } : null, [next]);
+    play: () => router.setParams({ id: next.id, kind: undefined, positionSeconds: undefined, mediaSourceId: undefined, audioTrackId: undefined, versionId: undefined, showId: next.showId ?? showId }),
+  } : null, [next, showId]);
 
   const { stop } = session;
   const close = useCallback(() => {
@@ -100,14 +105,40 @@ export default function Watch() {
   const metadata = { title, ...(poster ? { artworkUrl: poster } : {}) };
   if (!skin) return <View style={styles.stage} />;
   return (
-    <WatchSurface host={skin} state={{ ...session.chrome, title, close, nextEpisode, episode: target.kind === 'title' && skin.env.detail?.title[0]?.kind === 'episode' }}>
+    <RouteSurface host={skin} state={{ ...session.chrome, title, close, nextEpisode, episode: target.kind === 'title' && skin.env.detail?.title[0]?.kind === 'episode' }}>
       {session.view.plan ? (
         <View pointerEvents={Platform.OS === 'android' ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
           <VelaPlayerView {...session.view} metadata={metadata} style={StyleSheet.absoluteFill} />
         </View>
       ) : null}
-    </WatchSurface>
+    </RouteSurface>
   );
+}
+
+type SurfaceProps = ComponentProps<typeof WatchSurface>;
+
+function RouteSurface(props: SurfaceProps) {
+  if (Platform.isTV || Platform.OS === 'web') return <WatchSurface {...props} />;
+  // A full-screen modal owns its own UIKit/Android view and system bars.
+  return <SafeAreaProvider><NativeWatchSurface {...props} /></SafeAreaProvider>;
+}
+
+function NativeWatchSurface({ host, ...props }: SurfaceProps) {
+  const { width, height } = useSafeAreaFrame();
+  const safe = useSafeAreaInsets();
+  const { top, bottom } = safe;
+  const { left, right } = watchSideInsets(width, height, Platform.OS === 'ios' && !Platform.isPad, safe.left, safe.right);
+  const watchHost = useMemo(() => ({
+    ...host,
+    viewport: {
+      ...host.viewport,
+      width: width - left - right,
+      height,
+      insets: { top, right: 0, bottom, left: 0 },
+      sides: { left, right },
+    },
+  }), [host, width, height, top, right, bottom, left]);
+  return <WatchSurface {...props} host={watchHost} />;
 }
 
 const styles = StyleSheet.create({

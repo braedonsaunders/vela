@@ -8,6 +8,7 @@ import { publishHostState, emitHostEvent } from './events';
 import { recoverPlayback } from './recovery';
 import { awaitingReplacement } from './authorizations';
 import { endPlayback } from './session';
+import { isOriginalLostError, originalEndedEarly } from '../original-lost';
 export async function activatePacketRuntime(
   context: HostContext,
   source: Source,
@@ -34,6 +35,14 @@ export async function activatePacketRuntime(
     onFailure: (reason, _position, transport) => {
       if (current()) {
         const generation = context.media.runtimeGeneration!;
+        if (isOriginalLostError(reason) && context.session.current) {
+          context.playback.status = 'loading';
+          context.playback.failure = null;
+          emitHostEvent(context, { type: 'session-refresh', sessionId: context.session.current.id,
+            reason: 'original_lost', positionSeconds: _position, sourceGeneration: generation.source });
+          publishHostState(context, true);
+          return;
+        }
         if (transport?.httpStatus === 410 && awaitingReplacement(context, generation)) {
           context.playback.status = 'loading';
           publishHostState(context);
@@ -59,6 +68,16 @@ export async function activatePacketRuntime(
           if (context.session.pendingSeek?.authorized) context.session.pendingSeek = undefined;
         }
       } else if (event.type === 'ended') {
+        const currentSession = context.session.current;
+        if (context.media.source?.original && currentSession &&
+            originalEndedEarly(context.media.runtime.readout.position, currentSession.duration)) {
+          context.playback.status = 'loading';
+          emitHostEvent(context, { type: 'session-refresh', sessionId: currentSession.id,
+            reason: 'original_lost', positionSeconds: context.media.runtime.readout.position,
+            sourceGeneration: context.session.controller.source });
+          publishHostState(context, true);
+          return;
+        }
         endPlayback(context);
         return;
       }

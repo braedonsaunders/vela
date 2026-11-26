@@ -22,7 +22,8 @@ enum PlayerCapabilities {
 
     static func probe() -> [String: Any] {
         var video = ["h264"]
-        if VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) {
+        let hevc = VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC)
+        if hevc {
             video.append("hevc")
         }
         if VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) {
@@ -39,7 +40,8 @@ enum PlayerCapabilities {
         let modes = AVPlayer.availableHDRModes
         let hdrModes: [(AVPlayer.HDRMode, String)] = [(.hdr10, "hdr10"), (.hlg, "hlg"), (.dolbyVision, "dv")]
         var hdr = hdrModes.filter { modes.contains($0.0) }.map(\.1)
-        let dolbyVision = modes.contains(.dolbyVision)
+        let dolbyVision = hevc && modes.contains(.dolbyVision)
+        if !dolbyVision { hdr.removeAll { $0 == "dv" } }
         #endif
         // HDR10+ metadata reaches the display with the stream; a panel without HDR10+ shows its HDR10 base.
         if hdr.contains("hdr10") { hdr.insert("hdr10+", at: 1) }
@@ -64,9 +66,9 @@ enum PlayerCapabilities {
         ]
         // Profile 7 is converted to 8.1 by the engine. Without a Dolby Vision display, AVPlayer still composes
         // Profile 5 (it has no other base layer), and the Mac applies every RPU to its EDR output.
-        if dolbyVision {
-            out["dolbyVisionProfiles"] = ["5", "7", "8.1", "8.4"]
-        } else {
+        // Ether takes "7" for the engine's Profile 7 to 8.1 conversion.
+        out["dolbyVisionProfiles"] = dolbyVision ? ["5", "7", "8.1", "8.4"] : [String]()
+        if !dolbyVision && hevc {
             #if os(macOS)
             out["dolbyVisionReshape"] = ["5", "7", "8.1", "8.4"]
             #else

@@ -47,3 +47,18 @@ test("a search's live hits follow its titles in the order they stand: on now, th
   // Only live hits: Done lands on the channel.
   expect(searchDoneFocus('news', answer('news', 'ready', [], { channels: [channel] }))).toEqual({ to: 'result', does: ['openHit:channel|ch-1'] });
 });
+
+test('grouped Done waits for results, then focuses an answering server while another is loading', () => {
+  const search: SearchView = {
+    ...answer('observ', 'loading'),
+    sections: [
+      { id: 'slow', name: 'Slow', status: 'loading', results: [] },
+      { id: 'fast', name: 'Fast', status: 'loading', results: [] },
+    ],
+  };
+  expect(searchDoneFocus('observ', search)).toEqual({ to: 'wait' });
+  search.sections![1] = { id: 'fast', name: 'Fast', status: 'ready', results: [
+    { ref: 'origin-result', card: card('t1'), viewer: 'v', policy: 'p' },
+  ] };
+  expect(searchDoneFocus('observ', search)).toEqual({ to: 'result', does: ['openSearchResult:origin-result', 'searchScope:current'] });
+});

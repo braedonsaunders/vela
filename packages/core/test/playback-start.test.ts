@@ -4,6 +4,7 @@ import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
 import type { PlaybackPlan } from '../src/wire';
+import { VelaError } from '../src/adapter/errors';
 
 test('startup is visible synchronously and repeat starts are ignored, not queued', async () => {
   let resolve!: (plan: PlaybackPlan) => void;
@@ -81,4 +82,93 @@ test('explicit zero overrides server resume without publishing watch state befor
   expect(requests[0]?.positionSeconds).toBe(0);
   expect(watched).toBe(0);
   await playback.stop();
+});
+
+test.each([false, true])('stop respects the originating viewer after switching (viewer changed: %s)', async changed => {
+  const calls: string[] = [];
+  const progress = Promise.withResolvers<{ accepted: boolean }>();
+  const plan = {
+    sessionId: 'shared-id', sourceGeneration: 0, seekGeneration: 0, state: 'playing', titleId: 't',
+    paths: [], audioTracks: [], subtitleTracks: [],
+  } as unknown as PlaybackPlan;
+  const adapter = (name: string) => ({
+    startPlayback: async () => plan,
+    sessionSnapshot: async () => ({ plan }),
+    reportObservation: () => { calls.push(`${name}:progress`); return progress.promise; },
+    command: async () => { calls.push(`${name}:stop`); return { ...plan, state: 'ended' }; },
+    detail: async () => { calls.push(`${name}:detail`); return { title: { watch: { positionSeconds: 30 } } }; },
+  });
+  const origin = adapter('origin');
+  let active = origin;
+  let viewer = 'original';
+  const session = {
+    epoch: 0, onReset() {},
+    ready: async () => ({ adapter: active, plan: (value: PlaybackPlan) => value }),
+    negotiate: async () => {}, client: {},
+    tokens: async ({ adapter }: { adapter: typeof origin }) => ({ viewer: { id: adapter === origin ? viewer : 'other-server' } }),
+  };
+  const box = new StateBox({ playback: initialPlayback } as VelaState);
+  const playback = new Playback(box, session as unknown as Session,
+    () => calls.push('publish'), () => calls.push('reconcile'));
+  await playback.start({ kind: 'title', id: 't' });
+  const reporting = playback.observe(plan.sessionId, { positionSeconds: 30, state: 'playing' } as never);
+  await Promise.resolve();
+  const stopping = playback.stop();
+  active = adapter('new');
+  session.epoch++;
+  if (changed) viewer = 'different-profile';
+  progress.resolve({ accepted: true });
+  await Promise.all([reporting, stopping]);
+  expect(calls).toEqual(changed ? ['origin:progress'] : ['origin:progress', 'origin:stop']);
+});
+
+test.each([false, true])('stale stop retries on the opening server only while its viewer matches (viewer changed: %s)', async changed => {
+  const plan = {
+    sessionId: 's', sourceGeneration: 0, seekGeneration: 0, state: 'playing', titleId: 't',
+    paths: [], audioTracks: [], subtitleTracks: [],
+  } as unknown as PlaybackPlan;
+  const generations = { sourceGeneration: 1, seekGeneration: 2 };
+  const started = Promise.withResolvers<void>();
+  const stopReply = Promise.withResolvers<PlaybackPlan>();
+  const calls: unknown[] = [];
+  const origin = {
+    startPlayback: async () => plan,
+    sessionSnapshot: async () => ({ plan }),
+    command: async (_id: string, command: unknown) => {
+      calls.push(command);
+      if (calls.length !== 1) return { ...plan, state: 'ended' };
+      started.resolve();
+      return stopReply.promise;
+    },
+    unloadStop: () => [{ url: 'https://original.example/stop', method: 'POST' }],
+  };
+  const connection = { adapter: origin, plan: (value: PlaybackPlan) => value };
+  let active = connection;
+  let viewer = 'original';
+  const session = {
+    epoch: 0, onReset() {}, ready: async () => active, negotiate: async () => {},
+    client: {}, key: () => 'retry',
+    tokens: async () => ({ viewer: { id: viewer } }),
+  };
+  const box = new StateBox({ playback: initialPlayback } as VelaState);
+  const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
+  await playback.start({ kind: 'title', id: 't' });
+  const stopping = playback.stop();
+  await started.promise;
+  active = { ...connection, adapter: { ...origin, command: async () => {
+    calls.push('Stop reached the selected server');
+    return plan;
+  } } };
+  session.epoch++;
+  if (changed) viewer = 'different-profile';
+  stopReply.reject(new VelaError({
+    class: 'request', code: 'stale_generation', message: 'Generation changed',
+    currentGenerations: generations, retry: { allowed: false },
+  }, 409));
+  await stopping;
+  expect(calls).toEqual([
+    { kind: 'stop', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'stop-s-0-0' },
+    ...(changed ? [] : [{ kind: 'stop', ...generations, idempotencyKey: 'retry' }]),
+  ]);
+  expect(playback.stopOnUnload(() => {})).toBe(0);
 });

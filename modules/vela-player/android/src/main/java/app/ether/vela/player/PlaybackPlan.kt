@@ -8,6 +8,7 @@ internal class PlaybackPlan(
   val sourceGeneration: Int,
   val seekGeneration: Int,
   val positionSeconds: Double,
+  val durationSeconds: Double?,
   val paths: List<PlanPath>,
   val selectedPathId: String,
   val audioTracks: List<PlanTrack>,
@@ -19,6 +20,7 @@ internal class PlaybackPlan(
   val live: Boolean = false,
   /** `live.mode`: adaptive, low-delay or startOver (a growing programme played from its start). */
   val liveMode: String? = null,
+  val selectedVersionId: String? = null,
 ) {
   /** Start over: a live (EVENT) playlist that begins at the programme's start; it is joined at the plan position. */
   val startOver: Boolean
@@ -57,7 +59,9 @@ internal class PlaybackPlan(
         sourceGeneration = value.int("sourceGeneration") ?: return null,
         seekGeneration = value.int("seekGeneration") ?: return null,
         positionSeconds = value.number("positionSeconds") ?: 0.0,
+        durationSeconds = value.number("durationSeconds"),
         paths = value.objects("paths").mapNotNull(PlanPath::from),
+        selectedVersionId = value.text("selectedVersionId"),
         selectedPathId = value.text("selectedPathId") ?: return null,
         audioTracks = value.objects("audioTracks").mapNotNull(PlanTrack::from),
         subtitleTracks = value.objects("subtitleTracks").mapNotNull(PlanTrack::from),

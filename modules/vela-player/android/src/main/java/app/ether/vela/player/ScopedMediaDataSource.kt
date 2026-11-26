@@ -9,19 +9,23 @@ import java.io.EOFException
 import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.ProtocolException
 import java.net.URL
 import java.util.concurrent.atomic.AtomicLong
 
 /** Each player captures one immutable grant. Manifests, segments, seeks and subtitles all use it.
  * `received` counts the media bytes read, as they arrive (the snapshot's loadProgress). */
-internal class ScopedMediaDataSource(private val grant: MediaAccess?, private val received: AtomicLong? = null) : BaseDataSource(true) {
+internal class ScopedMediaDataSource(private val grant: MediaAccess?, private val received: AtomicLong? = null,
+  private val isOriginal: (Uri) -> Boolean = { false }) : BaseDataSource(true) {
   private var connection: HttpURLConnection? = null
   private var input: InputStream? = null
   private var remaining = C.LENGTH_UNSET.toLong()
   private var opened = false
+  private var original = false
 
   override fun open(dataSpec: DataSpec): Long {
     transferInitializing(dataSpec)
+    original = isOriginal(dataSpec.uri)
     var url = URL(dataSpec.uri.toString())
     var authorized = grant?.contains(dataSpec.uri) == true
     try {
@@ -48,7 +52,8 @@ internal class ScopedMediaDataSource(private val grant: MediaAccess?, private va
           url = next
           continue
         }
-        if (status !in 200..299) throw MediaHttpFailure(status)
+        if (status !in 200..299) throw MediaHttpFailure(status,
+          originalLostResponse(status, conn.getHeaderField("X-Ether-Playback-Error")))
         if (status == 206) {
           val range = conn.getHeaderField("Content-Range")?.let { Regex("bytes (\\d+)-(\\d+)/(?:\\d+|\\*)").matchEntire(it) }
           if (range == null || range.groupValues[1].toLongOrNull() != dataSpec.position) throw IOException("Invalid media range response")
@@ -81,9 +86,17 @@ internal class ScopedMediaDataSource(private val grant: MediaAccess?, private va
   override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
     if (length == 0) return 0
     if (remaining == 0L) return C.RESULT_END_OF_INPUT
-    val count = try { input!!.read(buffer, offset, if (remaining < 0) length else minOf(length.toLong(), remaining).toInt()) }
-      catch (_: IOException) { throw IOException("Media read failed") }
+    val count = try {
+      input!!.read(buffer, offset, if (remaining < 0) length else minOf(length.toLong(), remaining).toInt())
+    } catch (error: IOException) {
+      // Some HTTP stacks throw on short fixed-length bodies instead of returning EOF.
+      val prematureEof = error is EOFException || error.message == "Premature EOF" ||
+        (error is ProtocolException && error.message == "unexpected end of stream")
+      if (original && remaining > 0 && prematureEof) throw OriginalLostFailure()
+      throw IOException("Media read failed")
+    }
     if (count < 0) {
+      if (remaining > 0 && original) throw OriginalLostFailure()
       if (remaining > 0) throw EOFException("Incomplete media response")
       return C.RESULT_END_OF_INPUT
     }
@@ -103,9 +116,11 @@ internal class ScopedMediaDataSource(private val grant: MediaAccess?, private va
     if (opened) { opened = false; transferEnded() }
   }
 
-  class Factory(private val grant: MediaAccess?, private val received: AtomicLong? = null) : DataSource.Factory {
-    override fun createDataSource(): DataSource = ScopedMediaDataSource(grant, received)
+  class Factory(private val grant: MediaAccess?, private val received: AtomicLong? = null,
+    private val isOriginal: (Uri) -> Boolean = { false }) : DataSource.Factory {
+    override fun createDataSource(): DataSource = ScopedMediaDataSource(grant, received, isOriginal)
   }
 }
 
-internal class MediaHttpFailure(val status: Int) : IOException("Media request refused ($status)")
+internal class MediaHttpFailure(val status: Int, val originalLost: Boolean = false) : IOException("Media request refused ($status)")
+internal class OriginalLostFailure : EOFException("Incomplete original media response")

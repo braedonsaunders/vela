@@ -6,7 +6,7 @@ import type { ComponentType } from 'react';
 import type { VelaExperience } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
 import type { LibraryParams } from '../browse/library-query';
-import { MusicSection } from '../music/music-section';
+import { ListenSection } from '../listen/section';
 import { WatchLibrary } from './watch';
 
 export type LibrarySectionProps = { id: string; params: LibraryParams & { m?: string } };
@@ -17,8 +17,8 @@ function ReadLibrary(props: LibrarySectionProps) { return <WatchLibrary {...prop
 function GalleryLibrary(props: LibrarySectionProps) { return <WatchLibrary {...props} />; }
 /** Live TV: today the standard library's live tabs, whose channels open the guide and the player. */
 function LiveLibrary(props: LibrarySectionProps) { return <WatchLibrary {...props} />; }
-/** Music, audiobooks and podcasts: the audio app. */
-function ListenLibrary({ id, params }: LibrarySectionProps) { return <MusicSection libraryId={id} at={params.m} />; }
+/** Music, audiobooks and podcasts: the listen experience's documents. */
+function ListenLibrary({ id, params }: LibrarySectionProps) { return <ListenSection libraryId={id} at={params.m} />; }
 
 export const EXPERIENCE_SECTIONS: Record<VelaExperience, ComponentType<LibrarySectionProps>> = {
   watch: WatchLibrary,

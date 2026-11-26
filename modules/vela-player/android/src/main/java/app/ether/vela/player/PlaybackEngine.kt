@@ -24,7 +24,7 @@ internal interface PlaybackEngine {
   val liveWindowSeconds: Double
   val state: PlayerState
   var onChange: () -> Unit
-  var onFailure: (Int, Boolean) -> Unit
+  var onFailure: (Int, Boolean, Boolean) -> Unit
   var onSubtitleCues: (CueGroup) -> Unit
   fun load(url: Uri, plan: PlaybackPlan?, position: Double?, loop: Boolean = false)
   fun attach(surface: Surface?)
@@ -58,7 +58,7 @@ internal class Media3Engine(
 ) : PlaybackEngine {
   override val state = PlayerState()
   override var onChange: () -> Unit = {}
-  override var onFailure: (Int, Boolean) -> Unit = { _, _ -> }
+  override var onFailure: (Int, Boolean, Boolean) -> Unit = { _, _, _ -> }
   override var onSubtitleCues: (CueGroup) -> Unit = {}
   private val main = Handler(Looper.getMainLooper())
   private val selector = DefaultTrackSelector(context)
@@ -122,7 +122,7 @@ internal class Media3Engine(
     // Media3 releases both locks on pause, background pause and engine release.
     .setWakeMode(C.WAKE_MODE_NETWORK)
     .setTrackSelector(selector)
-    .setMediaSourceFactory(DefaultMediaSourceFactory(ScopedMediaDataSource.Factory(grant, received), extractors))
+    .setMediaSourceFactory(DefaultMediaSourceFactory(ScopedMediaDataSource.Factory(grant, received) { it == originalUri }, extractors))
     .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(
       buffering.minimumMs, buffering.maximumMs, buffering.startMs, buffering.resumeMs)
       .setPrioritizeTimeOverSizeThresholds(buffering.prioritizeTime)
@@ -210,12 +210,13 @@ internal class Media3Engine(
         if (!refused && missingSupportedVideo(tracks.groups.isNotEmpty(), video.isNotEmpty(), video.any { it.isSupported },
             plan?.paths?.any { it.expectsVideo } == true)) {
           refused = true
-          onFailure(PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, false)
+          onFailure(PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, false, false)
         } else update()
       }
       override fun onPlayerError(error: PlaybackException) {
         val refused = generateSequence(error as Throwable?) { it.cause }.filterIsInstance<MediaHttpFailure>().firstOrNull()
-        onFailure(refused?.status ?: error.errorCode, refused?.status in listOf(401, 403))
+        val truncated = generateSequence(error as Throwable?) { it.cause }.any { it is OriginalLostFailure }
+        onFailure(refused?.status ?: error.errorCode, refused?.status in listOf(401, 403), refused?.originalLost == true || truncated)
       }
     })
     main.post(tick)
@@ -393,7 +394,7 @@ internal class Media3Engine(
   // itself is released once that is done, when release() no longer waits.
   override fun releaseSoon() {
     onChange = {}
-    onFailure = { _, _ -> }
+    onFailure = { _, _, _ -> }
     onSubtitleCues = {}
     main.removeCallbacks(tick)
     player.stop()

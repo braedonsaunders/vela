@@ -21,7 +21,7 @@ export const createWebPlayerHost: CreateWebPlayerHost = (element, initialProps, 
   const ambient = props.ambient === true;
   const media = new ControllerMediaAccess(options.access);
   const runtimes = bundledRuntimeServices(options.assetBaseURL);
-  const surface = createBrowserSurface(element);
+  const surface = createBrowserSurface(element, initialProps.videoFill);
   const events = createViewEvents(
     () => props,
     () => engine,
@@ -105,6 +105,9 @@ export const createWebPlayerHost: CreateWebPlayerHost = (element, initialProps, 
 
   function update(next: VelaPlayerProps) {
     if (disposed) return;
+    if (next.videoFill !== props.videoFill) {
+      surface.video.style.objectFit = next.videoFill ? 'cover' : 'contain';
+    }
     props = next;
     const currentRevision = ++revision;
     void apply(next, currentRevision).catch((error) => {

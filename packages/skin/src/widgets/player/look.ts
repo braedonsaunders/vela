@@ -8,6 +8,8 @@ import { uiDefaults } from '../../resolve/ui-defaults';
 import { colour } from '../../css';
 import { fontFace } from '../../fonts';
 import { useHost } from '../../host';
+import { watchFrames, watchWidth } from './fold-layout';
+import { phoneControlLayout } from './phone-layout';
 
 type Colours = {
   -readonly [K in keyof typeof uiDefaults as (typeof uiDefaults)[K] extends string ? K : never]: string;
@@ -18,6 +20,8 @@ export interface PlayerLook extends Omit<Colours, 'font' | 'fontDisplay'> {
   radiusPanel: number;
   /** Phones: tighter gutters, no volume slider, full-width panels. */
   small: boolean;
+  showSteps: boolean;
+  short: boolean;
   /** Television: larger type and targets, focus instead of hover. */
   tv: boolean;
   /** Reduced motion: no slides, no spin. */
@@ -40,11 +44,20 @@ const COLOUR_KEYS = Object.keys(uiDefaults).filter(
 const TV_SCALE = 1.4;
 const TV_HEIGHT = 1080;
 
+export function playerUsesHandheldGeometry(): boolean {
+  return Platform.OS === 'ios' || Platform.OS === 'android'
+    || (Platform.OS === 'web' && typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true);
+}
+
 export function usePlayerLook(): PlayerLook {
   const { doc, env, viewport } = useHost();
   // A wide desktop window still uses pointer-sized controls, not remote/TV styling.
   const tv = Platform.isTV;
-  const small = !tv && viewport.width < 640;
+  const { chrome } = watchFrames(viewport);
+  const width = watchWidth(viewport) - chrome.left - chrome.right;
+  const { compact: small, gutter, short, showSteps } = phoneControlLayout(
+    width, viewport.height - chrome.top - chrome.bottom, playerUsesHandheldGeometry(), tv, watchWidth(viewport), viewport.height,
+  );
   return useMemo(() => {
     const ui = resolveUi(doc.document.ui);
     const colours = {} as Colours;
@@ -72,12 +85,14 @@ export function usePlayerLook(): PlayerLook {
       radiusControl: ui.radiusControl,
       radiusPanel: ui.radiusPanel,
       small,
+      short,
+      showSteps,
       tv,
       still: env.still,
-      gutter: small ? 16 : size(40),
+      gutter: size(gutter),
       size,
       text,
       display,
     };
-  }, [doc, tv, small, env.still, viewport.height]);
+  }, [doc, tv, small, short, showSteps, gutter, env.still, viewport.height]);
 }

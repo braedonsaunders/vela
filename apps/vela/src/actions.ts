@@ -145,6 +145,10 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
         // The field's own focus sets search-focused; on a TV it opens the keyboard.
         if (focusElement('vela-search')) return;
         return actions.setFlag('search-focused', true);
+      case 'searchScope': return store.search.setAll(arg === 'all');
+      case 'searchServerPage': return store.search.serverPage(arg);
+      case 'openSearchResult':
+        return void store.search.openResult(arg, card => select(place, [card.id, card.kind, '', card.showId ?? ''].join('|')));
       case 'searchLibrary': return store.search.setOptions({ library: arg || undefined });
       case 'searchSort': return store.search.setOptions({ sort: (arg || undefined) as import('../../../packages/protocol/types').SearchSort | undefined });
       case 'searchDirection': return store.search.setOptions({ direction: arg as import('../../../packages/protocol/types').SearchDirection });
