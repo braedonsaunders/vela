@@ -157,10 +157,12 @@ export function decidedMedia(decision: Node): Node | undefined {
 }
 /** The part of a decision's output that plays: the one marked selected, else the requested part, else its first. */
 const decidedPart = (media: Node | undefined, index = 0): Node | undefined => media?.Part?.find(chosen) ?? media?.Part?.[index] ?? media?.Part?.[0];
+export function decidedStreams(decision: Node, index = 0): Node[] {
+  return decidedPart(decidedMedia(decision), index)?.Stream ?? [];
+}
 /** Whether a decision copies the video of the requested part (a remux, while the audio may still be converted). */
 export function copiesVideo(decision: Node, index = 0): boolean {
-  const streams: Node[] = decidedPart(decidedMedia(decision), index)?.Stream ?? [];
-  return streams.find(s => Number(s.streamType) === 1)?.decision === 'copy';
+  return decidedStreams(decision, index).find(s => Number(s.streamType) === 1)?.decision === 'copy';
 }
 /** Whether a decision refuses the stream: its general, transcode or MDE code at 2000 or more, as Plezy reads them. */
 export const refusesStream = (decision: Node) => ['generalDecisionCode', 'transcodeDecisionCode', 'mdeDecisionCode'].some(key => Number(decision[key]) >= 2000);
