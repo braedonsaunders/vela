@@ -197,7 +197,7 @@ test('a server refusal recovers at once; a server briefly unavailable is followe
   }
 });
 
-test('an end in the first frame after a reconnection, unseen by the player, is recovered', async () => {
+test('an end in the first frame after a reconnection whose snapshot had the session takes the end path', async () => {
   const h = await harness(async (emit, attempt) => {
     if (attempt === 1) return;
     // The snapshot read first still had the session; the stream it opened then says ended.
@@ -206,11 +206,39 @@ test('an end in the first frame after a reconnection, unseen by the player, is r
   try {
     await h.advance(3000);
     expect(h.connections()).toBe(2);
-    expect(h.box.get().playback.phase).not.toBe('ended');
-    expect(h.starts).toHaveLength(2);
-    expect(h.stops).toEqual(['s1']);
+    expect(h.box.get().playback.phase).toBe('ended');
+    expect(h.starts).toHaveLength(1);
+    expect(h.stops).toEqual([]);
     await h.playback.stop();
   } finally { h.restore(); }
+});
+
+test('a server stop long after a reconnection on a quiet stream ends a title and fails a live channel', async () => {
+  for (const target of [{ kind: 'title', id: 'movie' }, { kind: 'channel', id: 'fox' }] as PlaybackTarget[]) {
+    let stop: (() => void) | undefined;
+    const h = await harness(async (emit, attempt) => {
+      if (attempt === 1) return;
+      // Only heartbeats and live-event updates follow the reconnection, then the server stops the session.
+      await emit({ event: 'liveEvent', data: JSON.stringify({ liveEvent: null }) });
+      await new Promise<void>(resolve => { stop = resolve; });
+      await emit(event('ended', 2, { reason: 'stopped' }));
+      await new Promise(() => {});
+    }, target);
+    try {
+      await h.advance(1000);
+      expect(h.connections()).toBe(2);
+      await h.advance(60_000);
+      expect(h.box.get().playback.phase).toBe('playing');
+      stop!();
+      await h.settle();
+      expect(h.box.get().playback.phase).toBe(target.kind === 'title' ? 'ended' : 'failed');
+      await h.advance(20_000);
+      expect(h.starts).toHaveLength(1);
+      expect(h.stops).toEqual([]);
+      expect(h.box.get().playback.phase).toBe(target.kind === 'title' ? 'ended' : 'failed');
+      await h.playback.stop();
+    } finally { h.restore(); }
+  }
 });
 
 test('a later end on a reconnected stream, and an end the player reported during the wait, both finish', async () => {

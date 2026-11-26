@@ -461,13 +461,14 @@ export class Playback {
             controller.signal.addEventListener('abort', abort, { once: true });
             // The first plan is the snapshot read before connecting; the next is the stream's first event,
             // from which the connection counts as up. Followed again after a drop, an end the player never
-            // reached in either of them means the server let the session go while its events were down
-            // (Ether's disconnect grace): it is restarted, not finished.
+            // reached in that snapshot means the server let the session go while its events were down
+            // (Ether's disconnect grace): it is restarted, not finished. Once the snapshot showed the
+            // session alive, an end on the stream is the server's own and takes the end path.
             const onPlan = (plan: V.PlaybackPlan) => {
               const index = plans++;
               if (index === 0) clearTimeout(deadline);
               if (index === 1) connected = Date.now();
-              if (resumed && index <= 1 && plan.state === 'ended' && !(this.lastPosition?.sessionId === sessionId && this.lastPosition.ended)) {
+              if (resumed && index === 0 && plan.state === 'ended' && !(this.lastPosition?.sessionId === sessionId && this.lastPosition.ended)) {
                 lost = true;
                 throw new Error('Session ended while its events were down');
               }
