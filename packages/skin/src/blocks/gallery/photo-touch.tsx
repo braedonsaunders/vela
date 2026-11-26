@@ -133,15 +133,24 @@ function TouchSurface({ ratio, onSwipe, onTap, onTouch, children }: PhotoTouchPr
     }, TAP_MS);
   }
 
-  const handlesPan = (event: GestureResponderEvent) => current.current.scale > 1 || event.nativeEvent.touches.length > 1;
+  const handlesPan = (event: GestureResponderEvent) => {
+    const { touches } = event.nativeEvent;
+    if (current.current.scale > 1 || touches.length > 1) return true;
+    if (!onSwipe || !contact.current || !touches[0]) return false;
+    const start = contact.current.point;
+    const location = point(event, touches[0]);
+    const dx = Math.abs(location.x - start.x);
+    return dx > MOVE_SLOP && dx > Math.abs(location.y - start.y) * 1.4;
+  };
   return (
     <View testID="gallery-photo-touch-surface" collapsable={false}
-      style={[StyleSheet.absoluteFill, { overflow: 'hidden' }, Platform.OS === 'web' ? { touchAction: 'none' } as ViewStyle : null]}
+      style={[StyleSheet.absoluteFill, { overflow: 'hidden' }, Platform.OS === 'web' ? { touchAction: pose.scale > 1 ? 'none' : 'pan-y' } as ViewStyle : null]}
       onLayout={event => {
         const { width, height } = event.nativeEvent.layout;
         setViewport(old => old.width === width && old.height === height ? old : { width, height });
       }}
       onTouchStart={begin} onTouchMove={move} onTouchEnd={finish} onTouchCancel={() => { contact.current = null; }}
+      onStartShouldSetResponderCapture={() => current.current.scale > 1}
       onMoveShouldSetResponderCapture={handlesPan} onResponderTerminationRequest={() => !contact.current}
       onResponderTerminate={() => { contact.current = null; }}>
       <View testID="gallery-photo-transform" pointerEvents="none" style={[StyleSheet.absoluteFill,
