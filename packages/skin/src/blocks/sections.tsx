@@ -20,6 +20,7 @@ import { inheritText } from '../text-inheritance';
 import type { Ctx, Env } from '../vocabulary';
 import { FocusBand, hasFocusableChild } from './focus';
 import { FIRST_SECTIONS, initialStreamedCount, nextStreamedCount, parsePoints } from './layout-math';
+import { sectionsContentPadding } from './sections-padding';
 import { useBlockLook, type BlockLook } from './look';
 import { ScopedRecordNode } from './record-scope';
 import { useScreenBlockRuntime, type BlockRNodeCommon, type SectionsBlockNode } from './types';
@@ -148,19 +149,12 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
   const embedded = !!runtime?.scrollKey;
   const defaultGap = embedded ? 0 : px(isPage ? 22 : 30);
   const gap = parsePoints(node.gap, px, defaultGap);
-  // An embedded page's own padding rows pad its scroll content (so the end space counts in the scroll,
-  // as the music pages' contentContainerStyle did).
-  // The style in force: the viewport, TV, fold and platform variants are already in it; the first
-  // state that holds replaces it (a compact shell with a queue pads for its mini player).
-  const inForce = (embedded ? node.states?.find(state => holds(state.when, ctx, host.env))?.layer.style : undefined) ?? node.base.style;
-  const own = (row: string) => {
-    const raw = inForce?.[row];
-    return embedded && raw !== undefined ? parsePoints(fill(raw, ctx, host.env), px, 0) : undefined;
-  };
-  const padAll = own('padding');
-  const topPad = embedded ? own('padding-top') ?? padAll ?? 0 : isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
-  const bottomPad = embedded ? own('padding-bottom') ?? padAll ?? 0 : px(isPage ? 48 : 64) + (isPage ? 0 : gap);
-  const sidePads = embedded ? { paddingLeft: own('padding-left') ?? padAll ?? 0, paddingRight: own('padding-right') ?? padAll ?? 0 } : {};
+  // An embedded page's own padding rows (from the style in force) pad its scroll content, so the end
+  // space counts in the scroll, as the music pages' contentContainerStyle did.
+  const content = embedded ? sectionsContentPadding(node, ctx, host.env, px) : {};
+  const topPad = embedded ? content.top ?? 0 : isPage ? 0 : look.barTop + px(look.tv ? 8 : 12);
+  const bottomPad = embedded ? content.bottom ?? 0 : px(isPage ? 48 : 64) + (isPage ? 0 : gap);
+  const sidePads = embedded ? { paddingLeft: content.left ?? 0, paddingRight: content.right ?? 0 } : {};
 
   const inheritedRows: Record<string, string> = {};
   for (const [k, v] of Object.entries(node.base.style ?? {})) {

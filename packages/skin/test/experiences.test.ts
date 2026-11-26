@@ -452,3 +452,19 @@ describe('roleLabel and spokenMode pipes', () => {
     expect(draw('{src.t|spokenMode}', {})).toBe('');
   });
 });
+
+describe('an experience page root\'s content padding', () => {
+  test('reads the style in force: TV variant, and the first state that holds (a compact shell with a queue)', async () => {
+    const { sectionsContentPadding } = await import('../src/blocks/sections-padding');
+    const page = builtIn({ type: 'sections', children: [], style: { 'padding-bottom': '32px' }, tv: { 'padding-bottom': '48px', 'padding-right': '32px' },
+      states: [{ when: [{ test: 'env.form', is: 'eq', value: 'small' }, { test: 'src.queue.current' }], style: { 'padding-bottom': '110px' } }] });
+    const px = (n: number) => n;
+    const wide = resolveScreenDocument(page, at()).tree;
+    expect(sectionsContentPadding(wide, root({ queue: { current: { id: 't' } } }), { ...env, form: 'wide' } as Env, px).bottom).toBe(32);
+    const phone = resolveScreenDocument(page, at({ width: 390, height: 844 })).tree;
+    expect(sectionsContentPadding(phone, root({ queue: { current: null } }), { ...env, form: 'small' } as Env, px).bottom).toBe(32);
+    expect(sectionsContentPadding(phone, root({ queue: { current: { id: 't' } } }), { ...env, form: 'small' } as Env, px).bottom).toBe(110);
+    const tv = resolveScreenDocument(page, at({ width: 1920, height: 1080, tv: true })).tree;
+    expect(sectionsContentPadding(tv, root({}), { ...env, form: 'tv' } as Env, px)).toEqual({ top: undefined, bottom: 48, left: undefined, right: 32 });
+  });
+});
