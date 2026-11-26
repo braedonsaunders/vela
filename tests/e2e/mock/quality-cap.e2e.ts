@@ -4,8 +4,8 @@ import { waitForVideoPlayback } from './player-ready';
 
 describe('Quality-cap deterministic release gate', { session: 'mock-quality-cap' }, () => {
   test('a widescreen 720p film starts within the Wi-Fi cap', async ({ app, browser, screen }) => {
-    // The film suite seeks this same title and the mock remembers its stop position.
-    await app.open('/vela/watch/title-1-1?positionSeconds=0');
+    // Exercise the WebKit resume path independently of the film suite's saved position.
+    await app.open('/vela/watch/title-1-1?positionSeconds=99');
     await expect(screen.getByTestId('player-close')).toBeVisible({ timeout: 30_000 });
     await waitForVideoPlayback(browser, screen);
     await screen.getByTestId('player-quality-button').tap();
