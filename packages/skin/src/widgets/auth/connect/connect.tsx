@@ -59,7 +59,8 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
     else onClose?.();
   };
   useEffect(() => {
-    const release = holdBack(() => { if (!flow.history.length && !onClose) return false; back(); return true; });
+    if (!flow.history.length && !onClose) return;
+    const release = holdBack(() => { back(); return true; });
     if (Platform.OS !== 'web') return release;
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); back(); } };
     window.addEventListener('keydown', key);
