@@ -38,6 +38,7 @@ function mockTarget(browser: 'chromium' | 'webkit', port: number) {
           VELA_E2E_BUN: process.env.VELA_E2E_BUN ?? 'bun',
           VELA_MOCK_MEDIA_ROOT: process.env.VELA_MOCK_MEDIA_ROOT ?? join(homedir(), '.scratch/tmp/vela/media'),
           VELA_MOCK_MUSIC_ROOT: process.env.VELA_MOCK_MUSIC_ROOT ?? join(homedir(), '.scratch/tmp/vela/media-music'),
+          VELA_MOCK_BOOKS_ROOT: process.env.VELA_MOCK_BOOKS_ROOT ?? join(homedir(), '.scratch/tmp/vela/media-books'),
           VELA_MOCK_FORMATS_ROOT: process.env.VELA_MOCK_FORMATS_ROOT ?? join(homedir(), '.scratch/tmp/vela/formats'),
         },
         log: `.e2e/logs/${name}.log`,

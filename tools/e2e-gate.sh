@@ -38,6 +38,7 @@ export PLAYWRIGHT_SKIP_BROWSER_GC=1
 export VELA_MOCK_SILENT_MEDIA=1
 export VELA_MOCK_MEDIA_ROOT=${VELA_MOCK_MEDIA_ROOT:-$HOME/.scratch/tmp/vela/media}
 export VELA_MOCK_MUSIC_ROOT=${VELA_MOCK_MUSIC_ROOT:-$HOME/.scratch/tmp/vela/media-music}
+export VELA_MOCK_BOOKS_ROOT=${VELA_MOCK_BOOKS_ROOT:-$HOME/.scratch/tmp/vela/media-books}
 export VELA_E2E_PLEX_TOKEN_FILE=${VELA_E2E_PLEX_TOKEN_FILE:-$HOME/.scratch/tmp/thr_9jsg8ia37s/prod-readiness-private/owner-token}
 
 umask 077
@@ -71,6 +72,9 @@ if [ ! -f "$VELA_MOCK_MEDIA_ROOT/master.m3u8" ] || [ ! -f "$VELA_MOCK_MEDIA_ROOT
 fi
 if [ ! -f "$VELA_MOCK_MUSIC_ROOT/gapless-sweep-1.m4a" ]; then
   "$VELA_E2E_BUN" mock-server/scripts/make-gapless-media.ts
+fi
+if [ ! -f "$VELA_MOCK_BOOKS_ROOT/book-harbour-of-bells.epub" ] || [ ! -f "$VELA_MOCK_BOOKS_ROOT/book-field-guide-imaginary-birds.pdf" ]; then
+  "$VELA_E2E_BUN" mock-server/scripts/make-book-media.ts
 fi
 
 run_gate() {
