@@ -30,9 +30,13 @@ export function Credentials({ busy, onSignIn, onQuick, canPassword = true, canQu
         <Pill primary height={layout?.tight ? 44 : 52} label={msg('ui.signIn')} onPress={submit}
           disabled={!ready} busy={busy} testID="connect-sign-in" />
       </View> : null}
-      <View style={{ gap: layout?.tight ? 8 : 14 }}>
-        {secondary}
-        {canQuick ? <Pill label="Use a code" height={layout?.tight ? 44 : 52} onPress={onQuick} disabled={busy} testID="connect-quick" /> : null}
+      <View style={{ gap: layout?.tight ? 8 : 14, flexDirection: layout?.inlineAlternatives ? 'row' : 'column' }}>
+        {secondary ? <View style={layout?.inlineAlternatives ? { flex: 1 } : undefined}>{secondary}</View> : null}
+        {canQuick ? (
+          <View style={layout?.inlineAlternatives ? { flex: 1 } : undefined}>
+            <Pill label="Use a code" height={layout?.tight ? 44 : 52} onPress={onQuick} disabled={busy} testID="connect-quick" />
+          </View>
+        ) : null}
       </View>
       {!canPassword && !canQuick ? <Alert>No sign-in methods are available. Go back to choose another server.</Alert> : null}
     </View>

@@ -13,11 +13,13 @@ export function authLayout(viewport: Viewport, availableHeight = viewport.height
   const compact = !tv && touch && Math.min(viewport.width, viewport.height) < 600;
   const landscape = compact && viewport.width > viewport.height;
   const tight = !tv && height < 760;
+  const short = !tv && height < 420;
   const padding = compact ? (height < 420 ? 8 : 16) : tight ? 16 : Math.max(28, viewport.height * 0.07);
-  const logoHeight = compact ? (height < 580 ? 0 : tight ? 44 : 64) : tight ? 44 : 104;
-  const gap = compact ? (tight ? 8 : 16) : tight ? 12 : 24;
+  const logoHeight = short || (compact && height < 580) ? 0 : tight ? 44 : compact ? 64 : 104;
+  const gap = short || (compact && tight) ? 8 : compact ? 16 : tight ? 12 : 24;
   const cardHeight = Math.max(0, height - padding * 2 - (logoHeight ? logoHeight + gap : 0));
   const minimal = compact && cardHeight < 330;
   return { compact, landscape, tight, minimal, padding, logoHeight, gap, cardHeight,
+    inlineAlternatives: short && !compact && viewport.width >= 520,
     headingSize: tight ? 24 : compact ? 30 : 42 };
 }
