@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { timelineRows } from '../src/blocks/gallery/timeline-layout';
+import { photoRows, timelineRows } from '../src/blocks/gallery/timeline-layout';
 
 const photo = (id: string, airDate: string) => ({ id, airDate });
 
@@ -20,4 +20,15 @@ test('adds day headers only for dense months with multiple days and keeps equal-
   expect(rows.map(row => row.kind)).toEqual(['month', 'day', 'photos', 'photos', 'day', 'photos', 'photos']);
   expect(rows.flatMap(row => row.kind === 'photos' ? row.photos : [])).toEqual(photos);
   expect(timelineRows(photos.slice(0, 9), 4).filter(row => row.kind === 'day')).toEqual([]);
+});
+
+
+test('album and person grids preserve their source order without headings', () => {
+  const old = photo('old', '2024-12-02');
+  const current = photo('current', '2026-02-15');
+  const undated = photo('undated', '');
+  expect(photoRows([old, current, undated], 2)).toEqual([
+    { kind: 'photos', key: 'old', photos: [old, current] },
+    { kind: 'photos', key: 'undated', photos: [undated] },
+  ]);
 });

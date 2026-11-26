@@ -87,8 +87,9 @@ test('the Gallery fixture pages the timeline and resolves album and person seque
     expect(list('subject').items.slice(0, 50)).toEqual(subject);
     await more('subject');
     expect(list('subject').items).toHaveLength(120);
-    expect(list('album').items).toEqual(subject.slice(0, 1));
+    expect(list('album').items).toEqual(first.slice(0, 1));
+    expect(subject.slice(0, 2)).toEqual([first[0]!, first[3]!]);
     await more('album');
-    expect(list('album').items).toEqual(subject.slice(0, 2));
+    expect(list('album').items).toEqual([first[0]!, first[2]!]);
   });
 }, 10_000);

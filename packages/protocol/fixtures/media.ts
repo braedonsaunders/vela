@@ -683,10 +683,7 @@ export function enableGalleryFixtures(scale: number): void {
   for (const [index, name] of ['Along the coast', 'A year outdoors'].entries()) {
     const id = `photo-album-${index + 1}`;
     const children = galleryPhotos.filter((_, position) => position % subjects.length === index);
-    for (const child of children) {
-      child.media!.parents = [{ id, name, role: 'album' }];
-      child.media!.credits = [{ name: subjects[index]!.name, personId: subjects[index]!.id, role: 'subject' }];
-    }
+    for (const child of children) child.media!.parents = [{ id, name, role: 'album' }];
     const cover = children[0]!;
     galleryAlbums.push({
       id, kind: 'movie', name, summary: '', airDate: cover.airDate, year: cover.year, genres: [], artwork: cover.artwork,
@@ -694,6 +691,11 @@ export function enableGalleryFixtures(scale: number): void {
     });
     childrenOf.set(id, children);
   }
+  // Make the subjects cross album boundaries so a viewer sequence can prove which grid opened it.
+  galleryPhotos.forEach((photo, index) => {
+    const subject = subjects[(index + Math.floor(index / 2)) % subjects.length]!;
+    photo.media!.credits = [{ name: subject.name, personId: subject.id, role: 'subject' }];
+  });
   levels.photos = { '': galleryPhotos, item: galleryPhotos, album: galleryAlbums };
   for (const title of [...galleryPhotos, ...galleryAlbums]) byId.set(title.id, title);
   library.tabs = [

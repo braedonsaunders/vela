@@ -35,7 +35,7 @@ import { ListenLookProvider, usePart, type ListenLook } from './listen/look';
 import { fillParts } from './listen/part-style';
 import { asCard, barPresses, cardOf, cardsOf, parseBool, parseEnum, parseNumber, propDefault, tableTracks } from './listen/props';
 import { BookCover, BookFacts, BookHero, BookReadAction, BookSeriesList, BookSummary, SeriesHero } from './read/book';
-import { TimelineBlock } from './gallery/timeline';
+import { GalleryGridBlock } from './gallery/timeline';
 import { ReaderBlock } from './read/reader';
 import { TrackList, type TrackListOptions } from './listen/track-table';
 
@@ -111,7 +111,15 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
     case 'player': drawn = <PlayerRichBlock props={props} press={host.screenPress} />; break;
     case 'visualizer': drawn = <VisualizerBlock mode={props.enum('mode', ['background', 'fullscreen'] as const)} sceneId={props.text('sceneId') || undefined}
       fallback={node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : undefined} />; break;
-    case 'timeline': drawn = <TimelineBlock props={props} items={cardsOf(props.value('items'), scoped.screen?.record ?? (() => undefined))} pageKey={scoped.screen?.page.key ?? ''} />; break;
+    case 'timeline':
+    case 'galleryDirectory': {
+      const directory = node.block === 'galleryDirectory';
+      const cards = cardsOf(props.value('items'), scoped.screen?.record ?? (() => undefined));
+      const items = cards.filter(card => directory && card.kind === 'person'
+        || card.media?.class === 'photo' && card.media.role === (directory ? 'album' : 'item'));
+      drawn = <GalleryGridBlock directory={directory} props={props} items={items} pageKey={scoped.screen?.page.key ?? ''} />;
+      break;
+    }
     case 'reader':
     case 'bookCover':
     case 'bookHero':

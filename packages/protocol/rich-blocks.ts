@@ -35,6 +35,13 @@ const flag = (doc: string, fallback?: 'true' | 'false'): RichPropSpec => ({ type
 const readItem = { type: 'value', required: true, doc: 'The book or series as an item: record or a vela.title value.' } as const;
 const readItems = { type: 'value', doc: 'The children as item: records, from vela.children.' } as const;
 
+const galleryListProps = {
+  items: { type: 'value', required: true, doc: 'The list source ({items, more}).' },
+  source: { type: 'template', doc: 'The list source name for vela.more.' },
+  pending: { type: 'value', doc: 'Whether a page is being read ({src.x.$pending}).' },
+  failed: { type: 'template', doc: 'The last source error ({src.x.$error}).' },
+} as const;
+
 export const RICH_BLOCKS = {
   reader: {
     doc: 'The full-screen book reader, driven by Vela’s reader session.',
@@ -310,15 +317,17 @@ export const RICH_BLOCKS = {
   },
   timeline: {
     doc: 'A virtualized square photo grid with calendar headings and cursor paging.',
-    props: {
-      items: { type: 'value', required: true, doc: 'The photo list source ({items, more}).' },
-      source: { type: 'template', doc: 'The list source name for vela.more.' },
-      pending: { type: 'value', doc: 'Whether a page is being read ({src.x.$pending}).' },
-      failed: { type: 'template', doc: 'The last source error ({src.x.$error}).' },
-    },
+    props: { ...galleryListProps, groupByDate: flag('Group photos under calendar headings.', 'true') },
     parts: ['timeline.month', 'timeline.day', 'timeline.tile'],
     templates: [],
     tv: 'Moves by D-pad through square photo tiles.',
+  },
+  galleryDirectory: {
+    doc: 'A paged grid of Gallery albums or people. Each tile shows its artwork, name and count.',
+    props: { ...galleryListProps, kind: { type: 'enum', values: ['albums', 'people'], required: true, doc: 'The directory to display.' } },
+    parts: ['galleryDirectory.tile', 'galleryDirectory.name', 'galleryDirectory.count'],
+    templates: [],
+    tv: 'Moves by D-pad through album or person tiles.',
   },
   albumsGrid: {
     doc: 'The albums grid (a Show all of albums), paged as the viewer nears its end.',
