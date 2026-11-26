@@ -125,6 +125,11 @@ final class PlaybackClient {
         rendering.layout()
     }
 
+    func setCaptionInsets(_ insets: CaptionInsets) {
+        rendering.setCaptionInsets(insets)
+        drawCaptions()
+    }
+
     /// Fit or fill the picture while it plays (the viewer's choice on a phone or tablet).
     func setAspectFill(_ fill: Bool) {
         guard fill != aspectFill else { return }

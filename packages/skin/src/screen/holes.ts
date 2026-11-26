@@ -253,7 +253,7 @@ export function timeOf(value: unknown): number {
 /**
  * `{list|asOf:at}`: of a list of timed items, the newest whose `at` is at or before the picture's
  * time (the context's `pictureTime`; now when live). `asOf:at,score.mtl` reads a path of that item.
- * A list with no times is the live value: unfiltered (with a path, read from its last item).
+ * At live, a list with no times keeps its last value. Delayed playback needs a timed value.
  */
 function asOfPipe(before: Value, spec: string): Value {
   const [at = 'at', path = ''] = spec.split(',').map(s => s.trim());
@@ -268,10 +268,15 @@ function asOfPipe(before: Value, spec: string): Value {
       const t = timeOf(walk(entry, atPath, read));
       if (!Number.isFinite(t)) continue;
       timed = true;
-      if (t <= limit && t >= bestAt) { best = entry; bestAt = t; }
+      if (t > limit || t < bestAt) continue;
+      if (valuePath.length && walk(entry, valuePath, read) == null) continue;
+      best = entry;
+      bestAt = t;
     }
     // A list without times (an older plugin) is the live value, unfiltered.
-    if (!timed) return valuePath.length ? walk(list[list.length - 1], valuePath, read) : before(c, e);
+    if (!timed && !c.screen?.page.context?.delayed) {
+      return valuePath.length ? walk(list[list.length - 1], valuePath, read) : before(c, e);
+    }
     return valuePath.length ? walk(best, valuePath, read) : best;
   };
 }

@@ -84,7 +84,7 @@ const roleLabel: Record<string, string> = { artist: 'Artist', albumArtist: 'Albu
 
 // ---------------------------------------------------------------------------------------------
 // Music: artist → album → track. Title.kind keeps the show/season/episode projection.
-interface AlbumSpec { slug: string; name: string; year: number; month: number; type: 'Album' | 'EP'; summary: string; discs: string[]; gapless?: GaplessFormat }
+interface AlbumSpec { slug: string; name: string; year: number; month: number; day?: number; type: 'Album' | 'EP'; summary: string; discs: string[]; gapless?: GaplessFormat }
 interface ArtistSpec { slug: string; name: string; genres: string[]; label: string; bio: string; composer?: string; albums: AlbumSpec[] }
 /** A filmed concert: a plugin's video level under the artist (features.pluginLevels), role 'concert'. */
 interface ConcertSpec { slug: string; name: string; venue: string; year: number; month: number; minutes: number; summary: string; positionSeconds?: number }
@@ -166,6 +166,10 @@ const artistSpecs: ArtistSpec[] = [
         summary: 'Remastered anniversary reissue of the boathouse debut, packaged with the original master transfers.',
         discs: ['Paper Boats (2024 Remaster)|Salt in the Lamplight (2024 Remaster)|Harbour Lights (2024 Remaster)'] },
     ] },
+  { slug: 'tomorrow-signals', name: 'Tomorrow Signals', genres: ['Ambient'], label: 'Vela',
+    bio: 'Fictional recordings from a future release.',
+    albums: [{ slug: 'unreleased-signals', name: 'Unreleased Signals', year: 2099, month: 12, day: 11, type: 'EP',
+      summary: 'An upcoming release from Tomorrow Signals.', discs: ['First Signal|Second Signal'] }] },
 ];
 /** Artists with albums only, concerts only (Harbour Brass Collective) and both (The Hollow Lanterns, Velvet Comet). */
 /** A fixture track's loudness (features.loudness), stable per track: most albums measured (with fades),
@@ -228,7 +232,7 @@ for (const spec of artistSpecs) {
       credits: [{ name: spec.name, role: 'artist', personId }] } };
   artists.push(artist);
   spec.albums.forEach((album, albumIndex) => {
-    const albumId = variant(`album-${album.slug}`, albums.length, 5), airDate = `${album.year}-${String(album.month).padStart(2, '0')}-${String(3 + albumIndex * 7).padStart(2, '0')}`;
+    const albumId = variant(`album-${album.slug}`, albums.length, 5), airDate = `${album.year}-${String(album.month).padStart(2, '0')}-${String(album.day ?? 3 + albumIndex * 7).padStart(2, '0')}`;
     const cover = mediaArtwork(albumId, 'square');
     const albumTracks: Title[] = [];
     album.discs.forEach((disc, discIndex) => disc.split('|').forEach((name, index) => {

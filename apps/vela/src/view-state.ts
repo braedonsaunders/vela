@@ -18,6 +18,7 @@ export interface ViewState {
   setSeason(id: string): void;
   heroIndex: number;
   setHeroIndex(index: number): void;
+  stepHero(direction: -1 | 1): void;
   still: boolean;
 }
 
@@ -25,6 +26,9 @@ export function useViewState(heroCount: number, query: string, heroPreviewing: b
   const [flags, setFlags] = useState<string[]>([]);
   const [season, setSeason] = useState('');
   const [heroIndex, setHeroIndex] = useState(0);
+  const stepHero = useCallback((direction: -1 | 1) => {
+    if (heroCount > 1) setHeroIndex(current => (current + direction + heroCount) % heroCount);
+  }, [heroCount]);
   const [still, setStill] = useState(false);
 
   useEffect(() => {
@@ -65,7 +69,7 @@ export function useViewState(heroCount: number, query: string, heroPreviewing: b
     season,
     setSeason,
     heroIndex: heroCount ? heroIndex % heroCount : 0,
-    setHeroIndex,
+    setHeroIndex, stepHero,
     still,
-  }), [flags, setFlag, toggleFlag, onlyFlag, resetFlags, season, heroCount, heroIndex, still]);
+  }), [flags, setFlag, toggleFlag, onlyFlag, resetFlags, season, heroCount, heroIndex, stepHero, still]);
 }

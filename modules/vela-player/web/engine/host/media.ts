@@ -14,6 +14,7 @@ import { publishHostState, emitHostEvent } from './events';
 import { usesPacketRuntime, backendFor } from './quality';
 import { recoverPlayback } from './recovery';
 import { applyNativeAudio } from './platform';
+import { releaseSeekPicture } from './seek-picture';
 import { playMedia, retirePlayIntent } from './transport';
 export function releaseOriginal(context: HostContext) {
   releaseOverlay(context);
@@ -26,7 +27,8 @@ export function releaseOriginal(context: HostContext) {
   context.media.runtimeGeneration = undefined;
   if (original) context.media.closingRuntime = original.dispose().catch(() => {});
 }
-export function resetMedia(context: HostContext) {
+export function resetMedia(context: HostContext, keepPicture = false) {
+  if (!keepPicture) releaseSeekPicture(context);
   retirePlayIntent(context);
   if (context.watchdog.videoCallback !== undefined)
     context.surface.video.cancelVideoFrameCallback?.(context.watchdog.videoCallback);
@@ -59,13 +61,14 @@ export async function activateSource(
   context.playback.resumePosition = position;
   resetProgress(context, position);
   const token = context.session.controller.changeSource(!initial);
-  resetMedia(context);
+  resetMedia(context, !!context.session.pendingSeek && !!context.session.current?.live);
   context.media.source = source;
   context.watchdog.frameSeen = false;
   playbackMark('source:open', source.delivery);
   context.watchdog.videoCallback = context.surface.video.requestVideoFrameCallback?.(() => {
     if (context.session.controller.current(token)) {
       context.watchdog.videoCallback = undefined;
+      releaseSeekPicture(context);
       if (context.media.backend !== 'webgpu' && !context.media.runtime && !context.watchdog.frameSeen) {
         context.watchdog.frameSeen = true;
         playbackMark('first-frame', context.media.backend === 'mse' ? 'mse' : 'native');
@@ -120,7 +123,7 @@ export async function activateSource(
         context.surface.video,
         () => publishHostState(context),
         () => {
-          if (context.session.controller.current(token) && context.session.current)
+          if (context.media.pipeline === pipeline && !token.signal.aborted && context.session.current)
             emitHostEvent(context, { type: 'session-refresh', sessionId: context.session.current.id });
         },
         context.surface.mediaAccess?.fetch,
@@ -131,13 +134,14 @@ export async function activateSource(
       pipeline.expensiveSwitches = source.strategy === 'transcode';
       pipeline.initialRenditionId = context.quality.manual ?? source.initialRenditionId;
       pipeline.liveTargetSeconds = context.live.targetSeconds;
+      pipeline.startLiveAtEdge = !context.session.current?.startOver;
       pipeline.liveWindowStart = context.session.current?.liveWindowStart ?? null;
       pipeline.maxLiveDrift = context.session.current?.liveMaxDrift ?? 45;
       pipeline.abr.manual = context.quality.manual;
       void pipeline
         .run(source.renditions ?? [], position, !!context.session.current?.live, token.signal, source.url)
         .catch((e) => {
-          if (context.session.controller.current(token)) void recoverPlayback(context, e, token);
+          if (context.media.pipeline === pipeline && !token.signal.aborted) void recoverPlayback(context, e, context.session.controller.token());
         });
     } else {
       context.media.backend = source.delivery === 'file' ? 'file' : 'native-hls';
@@ -175,7 +179,7 @@ export async function activateSource(
     await metadata(context, token);
     cancelled(token.signal);
     context.surface.video.playbackRate = context.playback.speed;
-    if (context.media.backend !== 'mse' && position > 0)
+    if (context.media.backend !== 'mse' && (position > 0 || context.session.current?.startOver))
       context.surface.video.currentTime = Math.max(0, position - context.media.nativeOrigin);
     applySubtitle(context);
     applyNativeAudio(context);

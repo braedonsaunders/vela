@@ -22,6 +22,7 @@ export type PlayerIconName =
   | 'channelUp'
   | 'channelDown'
   | 'live'
+  | 'clock'
   | 'alert'
   | 'check'
   | 'ticker'
@@ -159,6 +160,13 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
         <>
           <Circle cx={12} cy={12} r={2.6} fill={color} />
           <Path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4" stroke={color} {...STROKE} />
+        </>
+      );
+    case 'clock':
+      return (
+        <>
+          <Circle cx={12} cy={12} r={8.5} stroke={color} {...STROKE} />
+          <Path d="M12 7.5V12l3 2" stroke={color} {...STROKE} />
         </>
       );
     case 'alert':

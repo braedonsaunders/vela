@@ -1,3 +1,4 @@
+import type { CaptionInsets } from '@vela/player-api';
 import type { BrowserRuntimeServices } from './services';
 import { CoreQuality } from '../core/quality';
 import { type OriginalBackend } from '../universal/loader';
@@ -136,6 +137,7 @@ export interface HostTelemetryState {
 }
 export interface HostSurfaceState {
   video: ExtendedVideo;
+  captionInsets?: CaptionInsets;
   fullscreenContainer: HTMLElement;
   ambient: boolean;
   /** One tile of a multiview grid: starts muted and never reads or writes the viewer's volume. */

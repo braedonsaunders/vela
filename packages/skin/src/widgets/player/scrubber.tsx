@@ -194,7 +194,7 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
         style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center' }}
         {...keys}
       >
-        <View style={{ height: bar, borderRadius: bar / 2, backgroundColor: look.track, overflow: 'hidden' }}>
+        <View style={{ height: bar, borderRadius: bar / 2, backgroundColor: live ? look.trackStrong : look.track, overflow: 'hidden' }}>
           {view.buffered.map((range, i) => (
             <View
               key={i}
@@ -215,7 +215,7 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
               bottom: 0,
               left: 0,
               width: `${fraction * 100}%`,
-              backgroundColor: focused && look.tv ? look.accent : look.ink,
+              backgroundColor: live || (focused && look.tv) ? look.accent : look.ink,
             }}
           />
         </View>
@@ -269,7 +269,8 @@ export function Scrubber({ look, view, disabled, onSeek, onActive, thumbnail, pr
           testID={preview !== null ? 'player-scrub-bubble' : undefined}
           style={{
             position: 'absolute',
-            bottom: height + look.size(8),
+            // The live delay notice occupies the strip directly above the track.
+            bottom: height + look.size(live ? 38 : 8),
             // Centred over the target, but kept over the timeline near either end.
             left: bubbleLeft(previewFraction, trackWidth, bubbleWidth),
             width: bubbleWidth,

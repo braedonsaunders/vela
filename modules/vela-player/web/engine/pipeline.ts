@@ -7,7 +7,7 @@ import { parsePlaylist, playlistChanged, type Playlist } from './hls';
 import { cancelled, delay } from './session';
 import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 import { livePlaylistReloadDelayMs } from './core/source/reload';
-import { gapJump, timeRanges } from './gap-jump';
+import { gapJump, liveSeekLanding, timeRanges } from './gap-jump';
 import { fragmentStart, initFacts } from './init-codecs';
 import type { MediaFetch } from './media-auth';
 
@@ -90,6 +90,15 @@ export class SegmentPipeline {
     return this.audio ? this.audio.select(trackId) : Promise.reject(new Error('No alternate audio buffer'));
   }
   liveTargetSeconds = 12;
+  startLiveAtEdge = true;
+  private pendingLiveSeek: number | null = null;
+
+  seekLive(position: number): boolean {
+    if (this.publishedStart === null || this.publishedEdge === null || !Number.isFinite(position)
+      || position < this.publishedStart || position >= this.publishedEdge) return false;
+    this.pendingLiveSeek = position;
+    return true;
+  }
   livePlaybackRate = 1;
   expensiveSwitches = false;
   initialRenditionId?: string;
@@ -343,7 +352,7 @@ export class SegmentPipeline {
       media.duration = this.timelineOriginSeconds + list.segments.reduce((sum, s) => sum + s.duration, 0);
     const liveStart = Math.max(list.segments[0].start, (this.publishedEdge ?? 0) - this.liveTargetSeconds);
     let next = live
-      ? (list.segments.find((s) => s.start + s.duration > (position > 0 ? position : liveStart)) ??
+      ? (list.segments.find((s) => s.start + s.duration > (position > 0 || !this.startLiveAtEdge ? position : liveStart)) ??
         list.segments.at(-1))
       : (list.segments.find((s) => s.start + s.duration > position) ??
         (list.ended && position === media.duration ? list.segments.at(-1) : undefined));
@@ -353,12 +362,32 @@ export class SegmentPipeline {
       first = true,
       played = false,
       playlistAdvanced = true;
+    let seekingTo: number | null = null;
     // Live sliding manifests are anchored by overlapping sequence, never reset to zero.
     while (!signal.aborted) {
+      if (this.pendingLiveSeek !== null) {
+        const desired = this.pendingLiveSeek;
+        this.pendingLiveSeek = null;
+        const targetSegment = list.segments.find(segment => segment.start + segment.duration > desired);
+        if (targetSegment) {
+          const seek = Math.max(targetSegment.start, desired);
+          sequence = targetSegment.sequence;
+          seekingTo = seek;
+          // An already buffered position can move immediately. The same producer then fills
+          // the first gap after it, keeping the SourceBuffers and the last presented picture.
+          const landing = liveSeekLanding(seek, timeRanges(this.video.buffered));
+          if (landing) {
+            this.video.currentTime = landing.position;
+            seekingTo = null;
+            sequence = list.segments.find(segment => segment.start + segment.duration > landing.bufferedEnd + 0.05)?.sequence
+              ?? list.segments.at(-1)!.sequence + 1;
+          }
+        }
+      }
       await this.audio?.applySelection(list, signal);
       const ahead = bufferAhead(this.video);
       const target = live ? this.liveTargetSeconds + this.nominalSegmentSeconds * 2 : 30;
-      if (ahead >= target || !this.streamingAllowed) {
+      if (seekingTo === null && (ahead >= target || !this.streamingAllowed)) {
         await delay(250, signal);
         continue;
       }
@@ -530,6 +559,16 @@ export class SegmentPipeline {
           s.start += offset;
         });
         this.published(list);
+      }
+      if (seekingTo !== null) {
+        const landing = liveSeekLanding(seekingTo, timeRanges(this.video.buffered));
+        if (!landing) {
+          sequence++;
+          continue;
+        }
+        this.video.currentTime = landing.position;
+        seekingTo = null;
+        first = false;
       }
       if (first) {
         this.video.currentTime = live ? Math.max(next.start, position) : position;

@@ -35,3 +35,15 @@ export function gapJump(currentTime: number, ranges: readonly MediaRange[], live
   const buffered = ranges.some((r) => currentTime >= r.start - NEAR_SECONDS && currentTime < r.end);
   return liveStarting && !buffered && gap > TINY_GAP_SECONDS ? ahead.start + LAND_SECONDS : null;
 }
+
+/** Land an intentional live seek only when the destination has a frame beyond it. */
+export function liveSeekLanding(target: number, ranges: readonly MediaRange[]): { position: number; bufferedEnd: number } | null {
+  for (const range of ranges) {
+    if (range.start - target > TINY_GAP_SECONDS) continue;
+    const position = target < range.start ? range.start + LAND_SECONDS : target;
+    // A muxed fragment can end a few frames before its advertised end. Wait for
+    // the next fragment rather than seeking into that gap and snapping to the old live buffer.
+    if (position + 0.05 < range.end) return { position, bufferedEnd: range.end };
+  }
+  return null;
+}

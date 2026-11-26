@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { barVolumeSlider, nowPlayingSideBySide, twoPanes, wideMusic } from '../src/widgets/media/window-layout';
+import { barVolumeSlider, nowPlayingCompactLandscape, nowPlayingSideBySide, twoPanes, wideMusic } from '../src/widgets/media/window-layout';
 
 // Windows in points, after the side safe areas (what Vela lays out in).
 const duoFolded = { width: 466, height: 678 };
@@ -55,4 +55,14 @@ test('no width yet (before the first layout) is one pane', () => {
 test('the bar keeps its volume slider only where it fits', () => {
   expect(barVolumeSlider(duoUnfolded.width)).toBe(false);
   expect(barVolumeSlider(iPadLandscape.width)).toBe(true);
+});
+
+test('short phone landscapes have separate transport and list panes', () => {
+  expect(nowPlayingCompactLandscape(890, 384)).toBe(true);
+  expect(nowPlayingCompactLandscape(594, 466)).toBe(true);
+  expect(nowPlayingCompactLandscape(duoFoldedLandscape.width, duoFoldedLandscape.height)).toBe(true);
+  expect(nowPlayingCompactLandscape(duoFolded.width, duoFolded.height)).toBe(false);
+  expect(nowPlayingCompactLandscape(559, 360)).toBe(false);
+  expect(nowPlayingCompactLandscape(duoUnfolded.width, duoUnfolded.height)).toBe(false);
+  expect(nowPlayingCompactLandscape(890, 0)).toBe(false);
 });

@@ -52,7 +52,7 @@ export interface LiveOptions {
   openWatch(channelId: string, replace: boolean): void;
   /** Open a programme from the channel's archive full screen (features.liveCatchUp): an ended one, or
    * with `from: 'start'` the one on air from its beginning. Absent: the host has no catch-up. */
-  openCatchUp?(channelId: string, programmeId: string, from: 'start' | undefined, replace: boolean): void;
+  openCatchUp?(channelId: string, programmeId: string, from: 'start' | undefined, replace: boolean, range?: import('@vela/core').ArchiveRange): void;
   /** What the server offers for catch-up and timeshift; absent: neither. */
   catchUp?: import('@vela/core').CatchUpOffer;
 }
@@ -161,7 +161,12 @@ export class LiveController {
   }
 
   chooseDay(day: number): void {
-    const next = Math.max(0, Math.min(DAYS - 1, Math.round(day)));
+    const next = Math.max(this.firstArchiveDay, Math.min(DAYS - 1, Math.round(day)));
+    if (next < this.firstDay - 1 || next > this.lastDay + 1) {
+      this.blocks.clear();
+      this.guideRange = undefined;
+      this.firstDay = this.lastDay = next;
+    }
     this.day = next;
     this.firstDay = Math.min(this.firstDay, next);
     this.lastDay = Math.max(this.lastDay, next);
@@ -186,7 +191,7 @@ export class LiveController {
     if (!this.guide || !this.blocks.size) return;
     const loaded = [...this.blocks.keys()].sort((a, b) => a - b);
     let changed = false;
-    for (const day of requestedDays(loaded[0]!, loaded[loaded.length - 1]!, from, to, this.guide.minutes)) {
+    for (const day of requestedDays(loaded[0]!, loaded[loaded.length - 1]!, from, to, this.guide.minutes, this.firstArchiveDay)) {
       if (day < this.firstDay) { this.firstDay = day; changed = true; }
       if (day > this.lastDay) { this.lastDay = day; changed = true; }
     }
@@ -240,13 +245,19 @@ export class LiveController {
   /** What the server offers for catch-up and timeshift; the archive only where the host can open it. */
   get catchUpOffer(): import('@vela/core').CatchUpOffer {
     const offer = this.options.catchUp;
-    return { archive: !!offer?.archive && !!this.options.openCatchUp, timeshift: !!offer?.timeshift };
+    const archive = !!offer?.archive && !!this.options.openCatchUp;
+    return { archive, maxDays: archive ? offer?.maxDays : undefined, timeshift: !!offer?.timeshift };
+  }
+
+  private get firstArchiveDay(): number {
+    return -Math.max(0, Math.min(30, Math.floor(this.catchUpOffer.maxDays ?? 0)));
   }
 
   /** Play a programme from the channel's archive: an ended one (catch-up), or the one on air from its start. */
   playProgramme(channelId: string, programmeId: string, kind: 'catchUp' | 'startOver', replace = false): void {
     if (!channelId || !programmeId || !this.options.openCatchUp) return;
-    this.options.openCatchUp(channelId, programmeId, kind === 'startOver' ? 'start' : undefined, replace);
+    const range = this.guide?.channels.find(channel => channel.id === channelId)?.programmes.find(p => p.id === programmeId)?.archiveRange;
+    this.options.openCatchUp(channelId, programmeId, kind === 'startOver' ? 'start' : undefined, replace, range);
   }
 
   /** From a programme in the archive back to the channel live, in place. */
@@ -381,11 +392,11 @@ export class LiveController {
     for (const [day, block] of this.blocks) {
       const next = advanceGuideClock(block, this.now);
       shift = day - next.day;
-      if (next.day >= -1) advanced.set(next.day, next);
+      if (next.day >= Math.min(-1, this.firstArchiveDay) && next.day < DAYS) advanced.set(next.day, next);
     }
     if (advanced.size) {
       this.blocks.clear(); for (const [day, block] of advanced) this.blocks.set(day, block);
-      this.day = Math.max(0, this.day - shift);
+      this.day = Math.max(this.firstArchiveDay, this.day - shift);
       this.firstDay = Math.min(...advanced.keys()); this.lastDay = Math.max(...advanced.keys());
       this.guide = timeline(this.blocks, this.day);
     } else if (this.blocks.size) {
@@ -415,7 +426,7 @@ export class LiveController {
     const base = this.surfaces.has('guide') && this.guideIds.length ? this.guideIds : channels.slice(0, 48).map(c => c.id);
     const ids = [...new Set([...base, ...retained].filter(Boolean))].sort();
     const days = Array.from({ length: this.lastDay - this.firstDay + 1 }, (_, i) => this.firstDay + i).filter(day => {
-      if (day < 0) return false;
+      if (day < this.firstArchiveDay) return false;
       if (!this.guideRange || !this.blocks.has(day) || day === this.day) return true;
       const start = this.guide?.dayStarts?.[day] ?? day * 1440;
       return start < this.guideRange.to && start + this.blocks.get(day)!.minutes > this.guideRange.from;
@@ -436,7 +447,7 @@ export class LiveController {
         return Promise.resolve(advanceGuideClock(block, this.now));
       }
       return loadGuide(this.options.source, offset, this.now, this.options.scope, this.options.images, undefined, ids, range,
-        { clock: () => this.timing.now(), revalidate: read, currentUntil: this.clockUntil, archive: this.catchUpOffer.archive });
+        { clock: () => this.timing.now(), revalidate: read, currentUntil: this.clockUntil, archive: this.catchUpOffer.archive, archiveDays: this.catchUpOffer.maxDays, initialLineup: this.surfaces.has('guide') && !base.length });
     })).then(
       models => {
         if (generation !== this.loadGeneration) return;

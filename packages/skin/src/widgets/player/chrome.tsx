@@ -4,12 +4,12 @@
 // controls with their menus, and the info card sits at the top right. It hides itself while
 // playback runs untouched and comes back on any pointer, key or remote input.
 import { FocusPressable as Pressable } from '../../focus';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View, Text } from 'react-native';
-import { clampSeek, LIVE_SLACK_SECONDS, msg } from '@vela/core';
+import { clampSeek, stepLandsLive, msg } from '@vela/core';
 import { useHost } from '../../host';
 import { BottomBar, TopBar, bottomFade, type Opened, type Reveal, type TickerToggle } from './bars';
-import { usePlayerChrome, type PlayerChromeState } from './context';
+import { usePlayerChrome, type CommandInput, type PlayerChromeState } from './context';
 import { holdsChrome } from './hold';
 import { useIdle } from './idle';
 import { useScreenAwake } from './wake-lock';
@@ -20,7 +20,9 @@ import { usePlayerLook } from './look';
 import { belongs, present, type PlayerView } from './present';
 import { NO_CLICK, pictureClick, UNDO_AFTER_MS, type ClickMemory, type PlayCommand } from './picture-click';
 import { PICTURE_TEST_ID } from './remote-actions';
-import { watchFrames } from './fold-layout';
+import { watchFrames, watchPictureBounds, watchWidth } from './fold-layout';
+import type { CaptionInsets } from '@vela/player-api';
+import { CAPTION_MOVE_MS, captionInsets, moveCaptionInsets, type CaptionRect } from './caption-area';
 import { Status, type Failed } from './status';
 import { SkipButton, skipHere } from './skip';
 import { useVelaState } from '@vela/core/react';
@@ -40,15 +42,19 @@ const POINTER_CLICKS = Platform.OS === 'web' && typeof window !== 'undefined'
 
 /** Draws nothing outside a watch route (the route provides the chrome's state). */
 export function PlayerChrome() {
-  const state = usePlayerChrome();
-  return state ? <Chrome state={state} /> : null;
+  return <WatchPlayerChrome />;
 }
+
+export const WatchPlayerChrome = memo(function WatchPlayerChrome({ onCaptionInsets }: { onCaptionInsets?: (value: CaptionInsets) => void }) {
+  const state = usePlayerChrome();
+  return state ? <Chrome state={state} onCaptionInsets={onCaptionInsets} /> : null;
+});
 
 /** What stops playback, in the viewer's words: a start the server refused, or the engine's failure. */
 function failureOf(state: PlayerChromeState, view: PlayerView): Failed | null {
   if (state.startFailure) {
     const message = state.startFailure.capacity ? msg('player.capacity') : state.startFailure.message;
-    return { message, capacity: state.startFailure.capacity };
+    return { ...state.startFailure, message };
   }
   if (state.failure && !state.failure.recoverable) return { message: state.failure.message, capacity: false };
   if (view.state === 'failed') return { message: view.reason || msg('ui.playbackCouldnTBeStarted'), capacity: false };
@@ -61,15 +67,19 @@ function waitingLabel(view: PlayerView): string {
   return msg('ui.buildingALittleBreathingRoom');
 }
 
-function Chrome({ state }: { state: PlayerChromeState }) {
+function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptionInsets?: (value: CaptionInsets) => void }) {
   const look = usePlayerLook();
   const { viewport } = useHost();
   const view = useMemo(() => present(state.plan, state.snapshot), [state.plan, state.snapshot]);
   const [opened, setOpened] = useState<Opened>(null);
   const [info, setInfo] = useState(false);
+  const [infoBounds, setInfoBounds] = useState<CaptionRect>();
   const [active, setActive] = useState(false);
   /** The bottom bar's height (its fade included): the skip button stands just over its controls. */
   const [barHeight, setBarHeight] = useState(0);
+  const [rowHeight, setRowHeight] = useState(0);
+  const [menuLayout, setMenuLayout] = useState<{ menu: Opened; width: number; height: number }>();
+  const captionCurrent = useRef<CaptionInsets | null>(null);
   /** What a hidden chrome focuses when it comes up (TV): the play toggle, or the timeline after a
    * step from the remote, so that the next side presses keep stepping. */
   const [reveal, setReveal] = useState<Reveal>('toggle');
@@ -89,8 +99,28 @@ function Chrome({ state }: { state: PlayerChromeState }) {
 
   const failed = failureOf(state, view);
   const blocked = !state.plan || view.ended || !!failed;
-  const waiting = !failed && (!state.plan || view.waiting);
-  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, state.send);
+  const [liveSeek, setLiveSeek] = useState<{ sessionId: string; generation: number; seconds?: number } | null>(null);
+  const seeking = liveSeek != null && liveSeek.sessionId === state.plan?.sessionId && !failed;
+  useEffect(() => {
+    if (!liveSeek) return;
+    const snapshot = state.snapshot;
+    const settled = snapshot && snapshot.seekGeneration > liveSeek.generation && !snapshot.waiting
+      && (liveSeek.seconds === undefined ? snapshot.state === 'playing' : Math.abs(snapshot.position - liveSeek.seconds) < 3);
+    if (!seeking || settled || state.actionError) setLiveSeek(null);
+  }, [liveSeek, seeking, state.snapshot, state.actionError]);
+  useEffect(() => {
+    if (!liveSeek) return;
+    const timer = setTimeout(() => setLiveSeek(null), 12_000);
+    return () => clearTimeout(timer);
+  }, [liveSeek]);
+  const waiting = !failed && !seeking && (!state.plan || view.waiting);
+  const sendLive = (command: CommandInput) => {
+    const plan = state.plan;
+    if (command.type === 'catchUp' && (plan?.live?.timeshift || plan?.live?.mode === 'startOver'))
+      setLiveSeek({ sessionId: plan.sessionId, generation: plan.seekGeneration });
+    state.send(command);
+  };
+  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, sendLive, seeking ? liveSeek.seconds : undefined, seeking);
   // A channel back in the foreground goes to the live edge and plays (session.ts, returnedLive).
   const returnedLive = state.returnedLive ?? 0;
   useEffect(() => {
@@ -131,15 +161,16 @@ function Chrome({ state }: { state: PlayerChromeState }) {
 
   // A channel's rewind window bounds every seek; one that reaches the live edge goes back to live.
   const rewind = live.live && live.window?.seekable ? live.window : null;
-  const seek = (seconds: number) => {
+  const seek = (seconds: number, toLive = !!rewind && seconds >= rewind.edge - 0.5) => {
     if (rewind) {
-      if (!live.archive && seconds >= rewind.edge - LIVE_SLACK_SECONDS) {
+      if (!live.archive && toLive) {
         lastStep.current = null;
         live.backToLive();
         return;
       }
       seconds = clampSeek(rewind, seconds);
       live.leftLive();
+      if (state.plan) setLiveSeek({ sessionId: state.plan.sessionId, generation: state.plan.seekGeneration, seconds });
     }
     lastStep.current = { seconds, at: Date.now() };
     send({ type: 'seek', seconds });
@@ -150,7 +181,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     if (blocked) return;
     const from = recentStep() ?? (rewind ? rewind.position : view.position);
     const limit = rewind ? rewind.edge : view.duration > 0 ? view.duration : Number.POSITIVE_INFINITY;
-    seek(Math.max(rewind ? rewind.start : 0, Math.min(limit, from + delta)));
+    const toLive = !!rewind && stepLandsLive({ edge: rewind.edge, position: from }, delta);
+    seek(Math.max(rewind ? rewind.start : 0, Math.min(limit, from + delta)), toLive);
   };
   const toggle = (menu: Exclude<Opened, null>) => {
     // One version read per opening of the quality menu, never a poll while it stands open.
@@ -245,7 +277,66 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const top = look.small ? (look.short ? 54 : 76) : look.size(108);
   // The chrome spans the stage, so a tap anywhere on the picture wakes it; its controls keep to
   // the safe area (and to a tabletop's lower half: fold-layout.ts).
-  const frame = watchFrames(viewport).chrome;
+  const frames = watchFrames(viewport);
+  const frame = frames.chrome;
+  const width = watchWidth(viewport);
+  const height = viewport.height;
+  const picture = { left: frames.picture.left, top: frames.picture.top,
+    right: width - frames.picture.right, bottom: height - frames.picture.bottom };
+  const shown = watchPictureBounds(viewport, { ...frames, chrome: frames.picture }, state.snapshot?.video, state.picture?.fill ?? false);
+  const video = { left: shown.left, top: shown.top, right: width - shown.right, bottom: height - shown.bottom };
+  const barBottom = height - frame.bottom - surfaces.lift;
+  const controlsTop = chromeUp && !failed && barHeight > fade ? barBottom - barHeight + fade : Infinity;
+  const hasPanel = chromeUp && !failed && opened !== null && !(opened === 'chapters' && Platform.OS === 'web' && !look.small);
+  const panelRight = width - frame.right - look.gutter;
+  const rowPadding = look.small ? (look.short ? 6 : 18) : look.size(30);
+  const panelBottom = barBottom - rowPadding - rowHeight - look.size(12);
+  const portrait = look.small && height > width;
+  const menuHeight = Math.round(Math.min(
+    (height - frame.top - frame.bottom) * 0.55,
+    portrait ? Math.max(44, panelBottom - video.top - Math.min(128, (video.bottom - video.top) * 0.55)) : Infinity,
+  ));
+  const wide = opened === 'quality' && !!state.plan?.versions?.length;
+  const panelWidth = menuLayout?.menu === opened ? menuLayout.width :
+    portrait && !wide ? panelRight - frame.left - look.gutter : look.size(wide ? 420 : 320);
+  const panelHeight = menuLayout?.menu === opened ? Math.min(menuHeight, menuLayout.height) : menuHeight;
+  const panels: CaptionRect[] = [];
+  if (hasPanel) panels.push({
+    left: panelRight - panelWidth, right: panelRight, bottom: panelBottom, top: panelBottom - panelHeight,
+  });
+  if (info && !failed && infoBounds) panels.push({
+    left: frame.left + infoBounds.left, right: frame.left + infoBounds.right,
+    top: frame.top + infoBounds.top, bottom: frame.top + infoBounds.bottom,
+  });
+  const { left, right, top: captionTop, bottom } = captionInsets(picture, video, controlsTop, panels);
+  useEffect(() => {
+    if (!onCaptionInsets) return;
+    const target = { left, right, top: captionTop, bottom };
+    const from = captionCurrent.current;
+    const put = (value: CaptionInsets) => {
+      captionCurrent.current = value;
+      onCaptionInsets(value);
+    };
+    if (!from || look.still) { put(target); return; }
+    let tick = 0;
+    let start: number | undefined;
+    const animate = (now: number) => {
+      start ??= now;
+      const progress = (now - start) / CAPTION_MOVE_MS;
+      put(moveCaptionInsets(from, target, progress));
+      if (progress < 1) tick = requestAnimationFrame(animate);
+    };
+    tick = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(tick);
+  }, [left, right, captionTop, bottom, look.still, onCaptionInsets]);
+  // Give the cue its column/band before mounting the panel. Closing removes the
+  // panel immediately so the cue has room to return along the same path.
+  const [presentedMenu, setPresentedMenu] = useState<Opened>(null);
+  useEffect(() => {
+    if (!hasPanel || look.still) { setPresentedMenu(opened); return; }
+    const timer = setTimeout(() => setPresentedMenu(opened), CAPTION_MOVE_MS + 34);
+    return () => clearTimeout(timer);
+  }, [opened, hasPanel, look.still]);
   // Fade across the whole picture, including the area under side insets or a book's other pane.
   const bleed = look.small ? { left: -frame.left, right: -frame.right } : undefined;
   return (
@@ -287,8 +378,13 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           stepFrom={recentStep}
           blocked={blocked}
           opened={opened}
+          presentPanel={!hasPanel || presentedMenu === opened}
           info={info}
-          menuHeight={Math.round((look.small ? viewport.height - frame.top - frame.bottom : viewport.height) * 0.55)}
+          menuHeight={menuHeight}
+          onRowLayout={setRowHeight}
+          onMenuLayout={(width, height) => setMenuLayout(previous =>
+            previous?.menu === opened && previous.width === width && previous.height === height
+              ? previous : { menu: opened, width, height })}
           bleed={bleed}
           send={send}
           seek={seek}
@@ -335,7 +431,12 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           <Text style={look.text(14, 500, look.ink)}>{state.versionMessage}</Text>
         </View>
       ) : null}
-      {info && !failed ? <InfoCard look={look} view={view} top={top} /> : null}
+      {info && !failed ? <InfoCard look={look} view={view} top={top} onLayout={event => {
+        const { x, y, width, height } = event.nativeEvent.layout;
+        setInfoBounds(previous => previous?.left === x && previous.top === y &&
+          previous.right === x + width && previous.bottom === y + height
+          ? previous : { left: x, top: y, right: x + width, bottom: y + height });
+      }} /> : null}
       </View>
     </View>
   );

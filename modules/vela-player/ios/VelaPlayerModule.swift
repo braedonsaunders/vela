@@ -3,6 +3,18 @@ import ExpoModulesCore
 import Foundation
 import UIKit
 
+#if os(iOS)
+public final class VelaDownloadsAppDelegateSubscriber: ExpoAppDelegateSubscriber {
+    public func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        OfflineDownloads.shared.handleEventsForBackgroundURLSession(identifier: identifier, completionHandler: completionHandler)
+    }
+}
+#endif
+
 // Opt-in UI timing for device benchmarks. No display link exists in normal builds.
 private final class UIFrameTiming: NSObject {
     static let shared = UIFrameTiming()
@@ -50,6 +62,12 @@ public final class VelaPlayerModule: Module {
         return audio
     }
 
+    private func downloads() -> OfflineDownloads {
+        let manager = OfflineDownloads.shared
+        manager.emit = { [weak self] body in self?.sendEvent("onDownload", body) }
+        return manager
+    }
+
     public func definition() -> ModuleDefinition {
         Name("VelaPlayer")
 
@@ -64,12 +82,16 @@ public final class VelaPlayerModule: Module {
             // Segments a killed session left in tmp (AetherEngine holds a lock on every live one).
             let swept = PlaybackCacheBudget.removeStaleSessions()
             if swept > 0 { print("[vela-aether-cache] launch swept=\(swept)") }
+            #if os(iOS)
+            _ = self.downloads()
+            #endif
         }
 
         // The app takes the remote's play/pause for itself (an alert toast's action) until released.
         // onAudio: the audio player's status and the system's media commands (AudioPlayback).
         // onNetwork: the network became metered or unmetered (NetworkPath), for the streaming cap.
-        Events("onClaimedPlayPause", "onAudio", "onNetwork")
+        // onDownload: background transfer progress, completion and failure (OfflineDownloads).
+        Events("onClaimedPlayPause", "onAudio", "onNetwork", "onDownload")
         Function("networkMetered") { [weak self] () -> Bool in
             let path = NetworkPath.shared
             path.changed = { metered in self?.sendEvent("onNetwork", ["metered": metered]) }
@@ -161,6 +183,38 @@ public final class VelaPlayerModule: Module {
             }
         }.runOnQueue(.main)
 
+        // Offline original-file downloads on iPhone and iPad (OfflineDownloads).
+        Function("downloadsBaseDirectoryUrl") { [weak self] () -> String in
+            (self?.downloads() ?? OfflineDownloads.shared).baseDirectoryUrl()
+        }
+        AsyncFunction("downloadsFreeBytes") { [weak self] () -> Double? in
+            (self?.downloads() ?? OfflineDownloads.shared).freeBytes().map(Double.init)
+        }
+        AsyncFunction("downloadsReadSnapshot") { [weak self] () -> [String: Any] in
+            (self?.downloads() ?? OfflineDownloads.shared).readSnapshot()
+        }
+        AsyncFunction("downloadsWriteSnapshot") { [weak self] (snapshot: [String: Any]) in
+            try (self?.downloads() ?? OfflineDownloads.shared).writeSnapshot(snapshot)
+        }
+        AsyncFunction("downloadsStartTransfer") { [weak self] (request: [String: Any]) in
+            try (self?.downloads() ?? OfflineDownloads.shared).startTransfer(request)
+        }
+        AsyncFunction("downloadsResumeTransfer") { [weak self] (request: [String: Any]) in
+            try (self?.downloads() ?? OfflineDownloads.shared).resumeTransfer(request)
+        }
+        AsyncFunction("downloadsPauseTransfer") { [weak self] (serverId: String, viewerId: String, titleId: String) in
+            (self?.downloads() ?? OfflineDownloads.shared).pauseTransfer(serverId: serverId, viewerId: viewerId, titleId: titleId)
+        }
+        AsyncFunction("downloadsRemoveTitle") { [weak self] (serverId: String, viewerId: String, titleId: String) in
+            (self?.downloads() ?? OfflineDownloads.shared).removeTitle(serverId: serverId, viewerId: viewerId, titleId: titleId)
+        }
+        AsyncFunction("downloadsRemoveViewer") { [weak self] (serverId: String, viewerId: String) in
+            (self?.downloads() ?? OfflineDownloads.shared).removeViewer(serverId: serverId, viewerId: viewerId)
+        }
+        AsyncFunction("downloadsRemoveServer") { [weak self] (serverId: String) in
+            (self?.downloads() ?? OfflineDownloads.shared).removeServer(serverId: serverId)
+        }
+
         // What this device plays (VideoToolbox's hardware decoders, AetherEngine's audio and subtitles).
         Function("capabilities") { () -> [String: Any] in
             PlayerCapabilities.probe()
@@ -193,6 +247,9 @@ public final class VelaPlayerModule: Module {
             }
             Prop("tile") { (view: VelaPlayerView, tile: Int?) in
                 view.setTile(tile)
+            }
+            Prop("captionInsets") { (view: VelaPlayerView, insets: [String: Any]?) in
+                view.setCaptionInsets(insets)
             }
             Prop("videoFill") { (view: VelaPlayerView, fill: Bool?) in
                 view.setVideoFill(fill ?? false)

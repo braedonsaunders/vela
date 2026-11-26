@@ -10,17 +10,26 @@ const DAY = 86_400_000;
 export interface CatchUpOffer {
   /** Some channel keeps an archive: past programmes and Start over. */
   archive: boolean;
+  /** Largest archive available to this viewer. */
+  maxDays?: number;
   /** Live channels may carry a rewind window: pause, rewind and Back to live. */
   timeshift: boolean;
 }
 
 export function catchUpOffer(features: Partial<V.ServerCapabilities['features']> | null | undefined): CatchUpOffer {
   const feature = features?.liveCatchUp;
-  return { archive: !!feature?.available, timeshift: !!feature?.timeshift?.available };
+  return { archive: !!feature?.available, ...(feature?.available && feature.maxDays ? { maxDays: feature.maxDays } : {}), timeshift: !!feature?.timeshift?.available };
 }
 
 /** How a guide programme can play beyond live: from the archive once ended, from its start while on air. */
 export type CatchUpKind = 'catchUp' | 'startOver';
+
+export interface ArchiveRange { startAt: string; durationSeconds: number }
+
+/** An id-less listing still needs a stable cell key and a distinct cache entry. */
+export function guideProgrammeKey(programme: Pick<V.Programme, 'id' | 'channelId' | 'start'>): string {
+  return programme.id || `archive-range:${programme.channelId}:${programme.start}`;
+}
 
 /** Why a programme cannot play from the archive, for the programme panel's note. */
 export type CatchUpRefusal = 'no-archive' | 'too-old' | 'upcoming';
@@ -30,21 +39,20 @@ type Timed = Pick<V.Programme, 'start' | 'end' | 'catchUp' | 'startOver'>;
 /**
  * The A4 rule, recomputed with the caller's clock because guide pages are cached for minutes and a
  * programme ends inside that time: ended and wholly inside the archive is catch-up, on air with its
- * start inside the archive is Start over. Without the channel's archive depth the server's flags
- * decide, moved along by the clock (a Start over that has since ended is catch-up). A flag the server
- * set still wins over a computed refusal: it knows its own archive better than a cached depth.
+ * start inside the archive is Start over. An explicit flag for the current phase takes precedence.
+ * Without archive depth, a cached Start over flag can carry forward when the programme ends.
  */
 export function programmeCatchUp(programme: Timed, archiveDays: number | undefined, now: number, offer: CatchUpOffer): CatchUpKind | null {
   if (!offer.archive) return null;
   const start = Date.parse(programme.start), end = Date.parse(programme.end);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start > now) return null;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || start > now) return null;
   const ended = end <= now;
   const kind: CatchUpKind = ended ? 'catchUp' : 'startOver';
-  if (archiveDays !== undefined && archiveDays > 0 && start >= now - archiveDays * DAY) return kind;
-  const flagged = programme.catchUp === true || programme.startOver === true;
-  // A flag on a programme the cached depth has since aged out stays a refusal: the archive moved on.
-  if (flagged && !(archiveDays !== undefined && archiveDays > 0 && start < now - archiveDays * DAY)) return kind;
-  return null;
+  const flag = ended ? programme.catchUp : programme.startOver;
+  const archived = archiveDays !== undefined && archiveDays > 0
+    ? start >= now - archiveDays * DAY
+    : ended && programme.startOver === true;
+  return (flag ?? archived) ? kind : null;
 }
 
 /** Why `programmeCatchUp` said no, or null when it did not. */
@@ -91,6 +99,7 @@ export interface WindowInput {
 export interface TimeshiftWindow {
   start: number;
   edge: number;
+  edgeAt: number;
   /** The playhead, held inside the window. */
   position: number;
   /** Seconds the playhead trails the live edge (the stream's own latency included). */
@@ -115,6 +124,8 @@ export const LIVE_SLACK_SECONDS = 15;
  */
 export function timeshiftWindow({ live, receivedAt, now, position, engine }: WindowInput): TimeshiftWindow | null {
   const startOver = live.mode === 'startOver';
+  const issuedEdgeAt = Date.parse(live.edgeAt ?? '');
+  const hasClock = Number.isFinite(issuedEdgeAt);
   let edge: number, start: number;
   if (engine?.edgeSeconds != null && Number.isFinite(engine.edgeSeconds)) {
     edge = engine.edgeSeconds + (engine.edgeMovedAt !== undefined ? Math.max(0, now - engine.edgeMovedAt) / 1000 : 0);
@@ -123,14 +134,14 @@ export function timeshiftWindow({ live, receivedAt, now, position, engine }: Win
     if (!startOver && max && max > 0) start = Math.max(start, edge - max * 60);
   } else {
     if (live.liveEdgeSeconds === undefined) return null;
-    edge = live.liveEdgeSeconds + Math.max(0, now - receivedAt) / 1000;
+    edge = live.liveEdgeSeconds + Math.max(0, now - (hasClock ? issuedEdgeAt : receivedAt)) / 1000;
     start = live.windowStartSeconds ?? live.liveEdgeSeconds;
     const max = live.timeshift?.maxMinutes;
     if (!startOver && max && max > 0) start = Math.max(start, edge - max * 60);
   }
   if (!(edge >= start)) return null;
   const at = Math.min(edge, Math.max(start, position));
-  const behind = Math.max(0, edge - at);
+  const behind = Math.max(0, edge - position);
   const seekable = startOver || (!!live.timeshift && edge - start > LIVE_SLACK_SECONDS * 2);
   // An engine reading its playlist judges "behind" against its own latency target, which it widens
   // after stalls; its verdict stands. One whose edge has stood still (paused) judges nothing current,
@@ -138,7 +149,9 @@ export function timeshiftWindow({ live, receivedAt, now, position, engine }: Win
   // than the stream's latency. Without a rewind window the engine's report is all there is.
   const fresh = engine?.edgeSeconds != null && (engine.edgeMovedAt === undefined || now - engine.edgeMovedAt <= EDGE_STALE_MS);
   const delayed = !seekable ? !!engine?.canCatchUp : fresh ? !!engine!.canCatchUp : behind > LIVE_SLACK_SECONDS * 2;
-  return { start, edge, position: at, behind, delayed, seekable, startOver };
+  const edgeAt = hasClock && live.liveEdgeSeconds !== undefined
+    ? issuedEdgeAt + (edge - live.liveEdgeSeconds) * 1000 : now;
+  return { start, edge, edgeAt, position: at, behind, delayed, seekable, startOver };
 }
 
 /** Where a seek may land: inside the window, short of the edge by the stream's latency. */
@@ -149,7 +162,7 @@ export function clampSeek(window: Pick<TimeshiftWindow, 'start' | 'edge'>, secon
 
 /** A step that would land within the stream's latency of the edge is a return to live instead. */
 export function stepLandsLive(window: Pick<TimeshiftWindow, 'edge' | 'position'>, seconds: number): boolean {
-  return window.position + seconds >= window.edge - LIVE_SLACK_SECONDS;
+  return seconds > 0 && window.position + seconds >= window.edge - LIVE_SLACK_SECONDS;
 }
 
 /** The playhead's share of the window, 0..1. */
@@ -217,6 +230,7 @@ export function catchUpErrorMessage(code: string | undefined): string {
     case 'catchup_unavailable': return msg('catchUp.unavailable');
     case 'timeshift_outside_window': return msg('catchUp.outsideWindow');
     case 'timeshift_position_evicted': return msg('catchUp.evicted');
+    case 'provider_busy': return msg('catchUp.providerBusy');
     default: return '';
   }
 }

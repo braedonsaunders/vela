@@ -7,6 +7,7 @@ import {
   hasDeviceGrantSignIn,
   hasHistoryRecap,
   hasLibraryDuplicates,
+  hasMediaDownloads,
   hasLiveTv,
   hasLibraryLive,
   hasMusicLibrary,
@@ -24,7 +25,7 @@ import {
   hasViewerPlaylists,
 } from './capabilities';
 
-type FeatureName = keyof V.ServerCapabilities['features'];
+type FeatureName = Exclude<keyof V.ServerCapabilities['features'], 'downloads'>;
 
 const NOT_OFFERED: V.Feature = { available: false, reason: 'Not offered by this server' };
 
@@ -47,6 +48,7 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       ...(hasUnifiedSearch(adapter) && description.features.unifiedSearch ? { unifiedSearch: description.features.unifiedSearch } : {}),
       proactiveFallback: operation('proactiveFallback', hasProactiveFallback(adapter)),
       liveTV: operation('liveTV', hasLiveTv(adapter)),
+      ...(hasLiveTv(adapter) && description.features.liveCatchUp ? { liveCatchUp: description.features.liveCatchUp } : {}),
       ...(description.features.livePreview ? { livePreview: description.features.livePreview } : {}),
       libraryLive: operation('libraryLive', hasLibraryLive(adapter)),
       trailerPreview: operation('trailerPreview', hasTrailerPreviews(adapter)),
@@ -65,6 +67,7 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       ...(description.features.mediaClasses ? { mediaClasses: description.features.mediaClasses } : {}),
       ...(description.features.audioPlayback ? { audioPlayback: description.features.audioPlayback } : {}),
       ...(description.features.libraryExperiences ? { libraryExperiences: description.features.libraryExperiences } : {}),
+      ...(hasMediaDownloads(adapter) && description.features.downloads ? { downloads: description.features.downloads } : {}),
       ...(hasReading(adapter) && description.features.reading ? { reading: description.features.reading } : {}),
       // Multiview: an operation, so the adapter must offer it too.
       ...(hasMultiview(adapter) && description.features.multiview ? { multiview: description.features.multiview } : {}),

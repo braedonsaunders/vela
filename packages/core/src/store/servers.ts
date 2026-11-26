@@ -9,6 +9,7 @@ import { probeEther, probeServer } from '../adapter/probe';
 import type * as V from '../wire';
 import { ServerCredentials, type ServerKind, type ServerRecord } from '../session/servers';
 import { msg, time } from '../i18n';
+import type { Downloads } from './downloads';
 import { pageSecure, type VelaPlatform } from './platform';
 import type { Session } from './session';
 import { endSession, signInFailure, type QuickCode } from './auth';
@@ -110,6 +111,7 @@ export class Servers {
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly platform: VelaPlatform,
+    private readonly downloads?: Downloads,
   ) {
     session.onReset(() => void this.refresh().catch(() => {}));
   }
@@ -222,6 +224,7 @@ export class Servers {
         // Unreachable: the local session is still forgotten.
       }
       await connection.credentials.set(null);
+      await this.downloads?.removeServer(id);
       this.session.servers.remove(id);
       this.session.forget(id);
       this.session.selected();
@@ -236,7 +239,10 @@ export class Servers {
     try {
       const connection = this.session.connection(id);
       const epoch = this.session.epoch;
+      const stored = await this.session.tokens(connection);
+      const viewerId = stored?.viewer.id || (connection === this.session.selected() ? this.box.get().auth.viewerId : '');
       await endSession(connection, this.session);
+      if (viewerId) await this.downloads?.removeViewer(id, viewerId);
       if (connection === this.session.selected() && epoch === this.session.epoch) this.session.resetSession();
       else {
         this.session.serverSessionChanged?.(id);

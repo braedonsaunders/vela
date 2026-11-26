@@ -26,6 +26,8 @@ final class UIKitPlaybackRendering: PlaybackRendering {
     private var styledTrack: Int?
     private let retainPausedPicture: Bool
     private var aspectFill = false
+    private var captionInsets = CaptionInsets()
+    func setCaptionInsets(_ insets: CaptionInsets) { captionInsets = insets }
     private var displayCriteriaObservation: NSKeyValueObservation?
     private var displayObservers: [NSObjectProtocol] = []
     init(host: UIView, retainPausedPicture: Bool) {
@@ -95,7 +97,16 @@ final class UIKitPlaybackRendering: PlaybackRendering {
         }
         let coded = CGSize(width: Int(engine.sourceVideoWidth), height: Int(engine.sourceVideoHeight))
         let display = engine.softwareDisplaySize ?? coded
-        let rect = Self.captionRect(picture: engine.nativePlayerLayer?.videoRect, display: display, bounds: surface.bounds, fill: aspectFill)
+        let picture = Self.captionRect(picture: engine.nativePlayerLayer?.videoRect, display: display, bounds: surface.bounds, fill: aspectFill)
+        let rect = captionInsets.fit(picture, in: surface.bounds)
+        let empty = rect.isNull || rect.width <= 1 || rect.height <= 1
+        for view in bitmapCaptions.values { view.isHidden = empty }
+        if empty {
+            captions.isHidden = true
+            styledCaption.isHidden = true
+            textKey = ""
+            return
+        }
         if drawStyled(engine: engine, cues: cues, time: time, rect: rect, coded: coded, surface: surface) {
             captions.attributedText = nil
             textKey = ""
@@ -120,18 +131,18 @@ final class UIKitPlaybackRendering: PlaybackRendering {
                                 y: canvasRect.minY + image.position.minY * canvasRect.height,
                                 width: image.position.width * canvasRect.width, height: image.position.height * canvasRect.height)
         }
-        drawText(cues.filter { if case .image = $0.body { return false }; return true }, rect: rect, surface: surface)
+        drawText(cues.filter { if case .image = $0.body { return false }; return true }, rect: rect, pictureHeight: picture.height)
     }
 
     /// Text cues in the viewer's appearance, sized and placed against the picture, keeping the runs'
     /// bold, italic, underline, strike-through and colour, and an ASS `\an` top or middle placement.
-    private func drawText(_ cues: [SubtitleCue], rect: CGRect, surface: UIView) {
+    private func drawText(_ cues: [SubtitleCue], rect: CGRect, pictureHeight: CGFloat) {
         let look = SubtitleAppearance.current
         // Drawn on every clock tick: only a change of cues, look or picture rebuilds the text.
-        let key = "\(cues.map(\.id))|\(look)|\(rect)"
+        let key = "\(cues.map(\.id))|\(look)|\(rect)|\(pictureHeight)"
         guard key != textKey else { return }
         textKey = key
-        let height = max(18, rect.height * look.heightFraction)
+        let height = min(max(12, pictureHeight * look.heightFraction), rect.height * 0.42)
         let ink: UIColor = look.color == "yellow" ? UIColor(red: 1, green: 0.92, blue: 0.23, alpha: 1) : .white
         let base = UIFont.systemFont(ofSize: height, weight: .semibold)
         let shadow = NSShadow()
@@ -174,8 +185,8 @@ final class UIKitPlaybackRendering: PlaybackRendering {
         captions.clipsToBounds = look.background == "box"
         let inset = look.background == "box" ? height * 0.35 : 0
         let width = rect.width * 0.9
-        let fitted = captions.sizeThatFits(CGSize(width: width - inset * 2, height: .greatestFiniteMagnitude))
-        let box = CGSize(width: min(width, fitted.width + inset * 2), height: fitted.height + inset)
+        let fitted = captions.sizeThatFits(CGSize(width: max(1, width - inset * 2), height: .greatestFiniteMagnitude))
+        let box = CGSize(width: min(width, fitted.width + inset * 2), height: min(rect.height, fitted.height + inset))
         let margin = rect.height * (look.position == "raised" ? 0.16 : 0.06)
         let placement = cues.lazy.compactMap(\.placement).first
         var y = rect.maxY - margin - box.height
@@ -187,7 +198,7 @@ final class UIKitPlaybackRendering: PlaybackRendering {
             x = min(max(rect.minX, rect.minX + point.x * rect.width - box.width / 2), rect.maxX - box.width)
             y = min(max(rect.minY, rect.minY + point.y * rect.height - box.height), rect.maxY - box.height)
         }
-        captions.frame = CGRect(x: x, y: y, width: box.width, height: box.height)
+        captions.frame = CGRect(x: x, y: max(rect.minY, y), width: box.width, height: box.height)
     }
 
     /// Draws the active ASS/SSA track through libass; false when it is not one or libass is not built in.

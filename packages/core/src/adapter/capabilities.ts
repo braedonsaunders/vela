@@ -319,6 +319,8 @@ export interface ProactiveFallback {
 }
 
 export interface LiveTv {
+  /** Viewer-specific Live TV capabilities for a guide opened before bootstrap settles. */
+  viewerLiveFeatures?(): Promise<V.ServerCapabilities['features']>;
   channels(cursor?: string, limit?: number): Promise<V.Page<V.Channel>>;
   guide(query: V.GuideQuery): Promise<V.GuideResponse>;
   guideWindow?(query: V.GuideWindowRequest): Promise<V.GuideWindowResponse | null>;
@@ -464,4 +466,78 @@ export interface UnloadStop {
 }
 export function hasUnloadStop(adapter: ServerAdapter): adapter is ServerAdapter & UnloadStop {
   return 'unloadStop' in adapter && typeof adapter.unloadStop === 'function';
+}
+
+/** An external subtitle sidecar fetched alongside a downloaded original media file. */
+export interface DownloadSidecar {
+  trackId: string;
+  format: 'webvtt' | 'ass';
+  url: string;
+}
+
+/**
+ * Everything needed to fetch a title's original file for offline playback and build its local
+ * PlaybackPlan without contacting the server again. Credentials stay in `headers`, never in `url`.
+ */
+export interface DownloadResolution {
+  title: V.Title;
+  versionId?: string;
+  versionLabel?: string;
+  sourceId?: string;
+  url: string;
+  headers: Record<string, string>;
+  mimeType: string;
+  container: string;
+  byteLength?: number;
+  etag?: string;
+  expiresAt?: V.Timestamp;
+  originalVideo?: V.OriginalVideo;
+  audioTracks: V.Track[];
+  subtitleTracks: V.Track[];
+  selectedAudioTrackId?: string;
+  selectedSubtitleTrackId: string | null;
+  chapters: V.Chapter[];
+  markers?: V.SkipMarker[];
+  sidecars: DownloadSidecar[];
+  posterUrl?: string;
+}
+
+export interface ResolveDownloadOptions {
+  versionId?: string;
+  subtitleFormats?: readonly string[];
+  idempotencyKey?: string;
+}
+
+/** Original-file download resolution for offline playback on iPhone and iPad. */
+export interface MediaDownloads {
+  /** Whether the server offers original-file downloads to the viewer (e.g. Plex root `allowSync`). */
+  downloadsAvailable?(): Promise<boolean>;
+  resolveDownload(id: string, options?: ResolveDownloadOptions): Promise<DownloadResolution>;
+}
+export function hasMediaDownloads(adapter: ServerAdapter): adapter is ServerAdapter & MediaDownloads {
+  return 'resolveDownload' in adapter && typeof (adapter as unknown as MediaDownloads).resolveDownload === 'function';
+}
+
+/** One checkpointed watch progress entry recorded during local/offline playback. */
+export interface OfflineProgressEntry {
+  serverId: string;
+  viewerId: string;
+  titleId: string;
+  positionSeconds: number;
+  durationSeconds: number;
+  /** True only when playback reached its natural end (`state === 'ended'`). */
+  completed: boolean;
+  /** When the position was observed on the device, RFC 3339 UTC. */
+  observedAt: V.Timestamp;
+  idempotencyKey: string;
+  /** The server's watch state when the title was downloaded, for servers without `lastViewedAt`. */
+  baseline?: { positionSeconds: number; played: boolean; lastViewedAt?: V.Timestamp };
+}
+
+/** Replaying watch progress recorded while playing a downloaded file offline or locally. */
+export interface OfflineProgress {
+  replayWatchProgress(id: string, entry: OfflineProgressEntry): Promise<V.Ack>;
+}
+export function hasOfflineProgress(adapter: ServerAdapter): adapter is ServerAdapter & OfflineProgress {
+  return 'replayWatchProgress' in adapter && typeof (adapter as unknown as OfflineProgress).replayWatchProgress === 'function';
 }

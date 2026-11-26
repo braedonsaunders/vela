@@ -1,3 +1,4 @@
+import { useVelaState } from '@vela/core/react';
 // The watch route: a title, a channel (`?kind=channel`) or an extra (`?kind=extra`) played full
 // screen through VelaPlayerView, under the player chrome in the active document's look. Core's
 // playback slice starts, follows and stops the session; this route is the trusted host that hands
@@ -27,19 +28,35 @@ function heading(detail: DetailModel | undefined): string {
   return title.name;
 }
 
-function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?: string, channelId?: string, from?: string, showId?: string): PlaybackTarget {
+function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?: string, channelId?: string, from?: string, showId?: string, startAt?: string, durationSeconds?: string): PlaybackTarget {
   if (kind === 'channel') return { kind: 'channel', id };
   // A programme from the channel's archive: ended (catch-up), or on air from its start.
-  if (kind === 'programme' && channelId) return { kind: 'programme', id, channelId, ...(from === 'start' ? { from: 'start' as const } : {}) };
+  if (kind === 'programme' && channelId) {
+    const duration = Number(durationSeconds);
+    const range = startAt && Number.isFinite(Date.parse(startAt)) && Number.isFinite(duration) && duration > 0
+      ? { startAt, durationSeconds: duration } : undefined;
+    return { kind: 'programme', id, channelId, ...(range ? { range } : from === 'start' ? { from } : {}) };
+  }
   if (kind === 'extra') return { kind: 'extra', id };
   if (kind === 'library-live' && libraryId) return { kind: 'library-live', id, libraryId, tab };
   return { kind: 'title', id, ...(showId ? { showId } : {}) };
 }
 
 export default function Watch() {
-  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string; showId?: string }>();
+  const { id, kind } = useLocalSearchParams<{ id: string; kind?: string }>();
+  const { store } = useVela();
+  const phase = useVelaState(state => state.auth.phase);
+  const hydrated = useVelaState(state => state.downloads.hydrated);
+  if (phase !== 'signed-in' && !(phase === 'offline' && hydrated && !kind && store.downloads.isPlayable(id))) {
+    return <View style={styles.stage} />;
+  }
+  return <WatchPlayer />;
+}
+
+function WatchPlayer() {
+  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId, startAt, durationSeconds, playbackRequest } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string; showId?: string; startAt?: string; durationSeconds?: string; playbackRequest?: string }>();
   const { host, openTitle, store } = useVela();
-  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from, showId), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId]);
+  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from, showId, startAt, durationSeconds), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId, startAt, durationSeconds]);
   const live = useLiveContext();
   const liveView = useLiveView();
   // A channel's session is the live controller's: its plan, its refusal (or a retry on the
@@ -56,7 +73,7 @@ export default function Watch() {
   // Android's picture-in-picture window keeps the watch on screen while the app is in the background.
   const { width, height } = useWindowDimensions();
   const webPicture = Platform.OS === 'web' && phoneControlLayout(width, height, playerUsesHandheldGeometry(), false).compact;
-  const session = usePlaybackSession(target, owned, pictureInPicture, webPicture);
+  const session = usePlaybackSession(target, owned, pictureInPicture, webPicture, playbackRequest);
   const skin = host('watch', id);
   const sessionId = session.view.plan?.sessionId ?? '';
   const channels = liveView.guide?.channels;
@@ -72,13 +89,15 @@ export default function Watch() {
   // which would pop the player: its removal waits while a menu holds Back.
   usePreventRemove(useBackHeld(), backFromNavigation);
 
-  useEffect(() => (id && target.kind === 'title' ? openTitle(id) : undefined), [id, target.kind, openTitle]);
+  const local = session.view.plan?.sessionId.startsWith('local-') === true;
+  const offline = useVelaState(state => state.auth.phase === 'offline');
+  useEffect(() => (!offline && !store.downloads.isPlayable(id) && id && target.kind === 'title' ? openTitle(id) : undefined), [id, target.kind, openTitle, offline, store]);
 
   // Media authorization belongs to the signed-in session (src/media-access.ts), not to a watch.
 
   // An episode's next one: the chrome offers it (and on the final credits, in place of Skip
   // credits). Starting it keeps this route, so the session in hand stops before the next begins.
-  const next = useNextEpisode(target.kind === 'title' ? skin?.env.detail?.title[0] : undefined);
+  const next = useNextEpisode(!offline && !local && target.kind === 'title' ? skin?.env.detail?.title[0] : undefined);
   const nextEpisode = useMemo<NextEpisode | null>(() => next ? {
     label: episodeLabel(next),
     play: () => router.setParams({ id: next.id, kind: undefined, positionSeconds: undefined, mediaSourceId: undefined, audioTrackId: undefined, versionId: undefined, showId: next.showId ?? showId }),
@@ -88,15 +107,16 @@ export default function Watch() {
   const close = useCallback(() => {
     stop();
     if (router.canGoBack()) router.back();
-    else router.replace('/');
-  }, [stop]);
+    else router.replace(offline || local ? '/downloads' : '/');
+  }, [stop, offline, local]);
 
-  const channel = target.kind === 'channel' ? channels?.find(c => c.id === id) : undefined;
+  const liveChannelId = session.view.plan?.channelId || (target.kind === 'channel' ? id : '');
+  const channel = liveChannelId ? channels?.find(c => c.id === liveChannelId) : undefined;
   const programmeChannel = target.kind === 'programme' ? channels?.find(c => c.id === target.channelId) : undefined;
   const title = channel
     ? `${channel.number} · ${channel.name}`
     : target.kind === 'programme'
-      ? [session.view.plan?.title, programmeChannel?.name].filter(Boolean).join(' · ') || msg('catchUp.fromArchive')
+      ? [session.view.plan?.title, !liveChannelId ? programmeChannel?.name : undefined].filter(Boolean).join(' · ') || msg('catchUp.fromArchive')
     : target.kind === 'library-live'
       ? session.view.plan?.title ?? 'Live'
       : heading(skin?.env.detail);
@@ -106,9 +126,9 @@ export default function Watch() {
   if (!skin) return <View style={styles.stage} />;
   return (
     <RouteSurface host={skin} state={{ ...session.chrome, title, close, nextEpisode, episode: target.kind === 'title' && skin.env.detail?.title[0]?.kind === 'episode' }}>
-      {session.view.plan ? (
+      {captionInsets => session.view.plan ? (
         <View pointerEvents={Platform.OS === 'android' ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
-          <VelaPlayerView {...session.view} metadata={metadata} style={StyleSheet.absoluteFill} />
+          <VelaPlayerView {...session.view} metadata={metadata} captionInsets={captionInsets} style={StyleSheet.absoluteFill} />
         </View>
       ) : null}
     </RouteSurface>

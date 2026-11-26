@@ -5,7 +5,7 @@ import { useRef, useState } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { msg } from '@vela/core';
 import { eyebrow } from '../../resolve/vela-base/look';
-import { useInheritedText, type WidgetProps } from '../../host';
+import { useHost, useInheritedText, type WidgetProps } from '../../host';
 import { serverDetail } from './connect/server-row';
 import type { ServerOption } from './connect/model';
 import { Alert, APressable, Glyph, NO_RING, overlaid, useInteraction, Words } from '../common/controls';
@@ -26,6 +26,7 @@ const LOOKS = { hover: { 'background-color': '$ui.control' }, focus: { 'box-shad
 
 export function ServerSwitcher({ params }: WidgetProps) {
   const switcher = useServerSwitch();
+  const host = useHost();
   const [error, setError] = useState('');
   const [pending, setPending] = useState('');
   const selecting = useRef(false);
@@ -49,6 +50,10 @@ export function ServerSwitcher({ params }: WidgetProps) {
   const title = params.label || msg('connect.servers');
   return (
     <View style={{ gap: 2 }} accessibilityRole="menu" accessibilityLabel={title}>
+      {switcher.openDownloads ? <Row label="Downloads" testID="server-downloads" icon="download" onPress={() => {
+        host.setFlag('menu', false);
+        switcher.openDownloads?.();
+      }} disabled={busy} /> : null}
       <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' }} style={{ paddingVertical: 4 }}>
         {title}
       </Words>
@@ -82,6 +87,7 @@ function Row({
   busy = false,
   onPress,
   href,
+  icon,
   testID,
 }: {
   label: string;
@@ -92,6 +98,7 @@ function Row({
   busy?: boolean;
   onPress?(): void;
   href?: string;
+  icon?: string;
   testID: string;
 }) {
   const look = useLook();
@@ -109,6 +116,7 @@ function Row({
       style={[look.box(overlaid(ROW, state, LOOKS, disabled)), NO_RING]}
       {...handlers}
     >
+      {icon ? <Glyph symbol={icon} size={17} color={look.ui.ink} /> : null}
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Words rows={{ 'font-size': '14px' }} style={face ? { fontFamily: face } : undefined} lines={1}>
           {label}

@@ -17,7 +17,7 @@ const programme = (start: number, end: number, extra: Partial<V.Programme> = {})
 describe('catch-up offer', () => {
   test('reads the archive and timeshift independently', () => {
     expect(catchUpOffer({ liveCatchUp: { available: false, timeshift: { available: true, maxMinutes: 60 } } })).toEqual({ archive: false, timeshift: true });
-    expect(catchUpOffer({ liveCatchUp: { available: true, maxDays: 7, timeshift: { available: false } } })).toEqual({ archive: true, timeshift: false });
+    expect(catchUpOffer({ liveCatchUp: { available: true, maxDays: 7, timeshift: { available: false } } })).toEqual({ archive: true, maxDays: 7, timeshift: false });
     expect(catchUpOffer({})).toEqual({ archive: false, timeshift: false });
     expect(catchUpOffer(null)).toEqual({ archive: false, timeshift: false });
   });
@@ -53,8 +53,9 @@ describe('guide eligibility', () => {
     expect(programmeCatchUp(programme(NOW - HOUR, NOW + MINUTE, { startOver: true }), undefined, NOW, both)).toBe('startOver');
     // A flag cannot make an upcoming programme playable.
     expect(programmeCatchUp(programme(NOW + MINUTE, NOW + HOUR, { catchUp: true }), undefined, NOW, both)).toBeNull();
-    // A flag on a programme the depth has aged out stays refused.
-    expect(programmeCatchUp(programme(NOW - 3 * DAY, NOW - 3 * DAY + HOUR, { catchUp: true }), 2, NOW, both)).toBeNull();
+    // Explicit flags override a cached channel depth.
+    expect(programmeCatchUp(programme(NOW - 3 * DAY, NOW - 3 * DAY + HOUR, { catchUp: true }), 2, NOW, both)).toBe('catchUp');
+    expect(programmeCatchUp(programme(NOW - HOUR, NOW, { catchUp: false, startOver: true }), 2, NOW, both)).toBeNull();
   });
 
   test('requests ask for the range, or for the programme on air from its start', () => {
@@ -84,6 +85,12 @@ describe('the rewind window', () => {
     expect(window.seekable).toBe(true);
   });
 
+  test('the server clock anchors the window even when a plan arrives late', () => {
+    const window = timeshiftWindow({ live: { ...live, edgeAt: iso(NOW) }, receivedAt: NOW + 5_000,
+      now: NOW + 10_000, position: 1850 })!;
+    expect(window).toMatchObject({ edge: 1910, edgeAt: NOW + 10_000, behind: 60 });
+  });
+
   test('a paused playhead falls behind and is held inside the window', () => {
     const paused = timeshiftWindow({ live, receivedAt: NOW, now: NOW + 10 * MINUTE, position: 1000 })!;
     expect(paused.behind).toBe(1500);
@@ -96,6 +103,12 @@ describe('the rewind window', () => {
     const window = timeshiftWindow({ live, receivedAt: NOW, now: NOW + HOUR, position: 50, engine: { edgeSeconds: 80, windowStartSeconds: 0, canCatchUp: true } })!;
     expect(window).toMatchObject({ start: 0, edge: 80, position: 50, behind: 30, delayed: true });
     expect(timeshiftWindow({ live, receivedAt: NOW, now: NOW, position: 70, engine: { edgeSeconds: 80, windowStartSeconds: 0, canCatchUp: false } })!.delayed).toBe(false);
+  });
+
+  test('clock labels carry the plan wall clock into the engine timeline', () => {
+    const window = timeshiftWindow({ live: { ...live, edgeAt: iso(NOW) }, receivedAt: NOW, now: NOW + 10_000,
+      position: 1850, engine: { edgeSeconds: 1906, windowStartSeconds: 100, canCatchUp: true } });
+    expect(window).toMatchObject({ edge: 1906, edgeAt: NOW + 6_000, behind: 56 });
   });
 
   test("a paused engine's edge stands still; the window's grows from when it last moved", () => {
@@ -137,6 +150,7 @@ describe('the rewind window', () => {
     expect(clampSeek({ start: 100, edge: 1000 }, 999)).toBe(985);
     expect(clampSeek({ start: 100, edge: 1000 }, 500)).toBe(500);
     expect(stepLandsLive({ edge: 1000, position: 980 }, 10)).toBe(true);
+    expect(stepLandsLive({ edge: 1000, position: 999 }, -10)).toBe(false);
     expect(stepLandsLive({ edge: 1000, position: 900 }, 10)).toBe(false);
     expect(windowFraction({ start: 100, edge: 300, position: 150 })).toBe(0.25);
     expect(windowFraction({ start: 100, edge: 100, position: 100 })).toBe(1);
@@ -159,7 +173,8 @@ describe('labels and picture time', () => {
   test('refusals have words; other errors do not', () => {
     for (const code of ['catchup_not_supported', 'catchup_outside_archive', 'catchup_unavailable', 'timeshift_outside_window', 'timeshift_position_evicted'])
       expect(catchUpErrorMessage(code)).not.toBe('');
-    expect(catchUpErrorMessage('provider_busy')).toBe('');
+    expect(catchUpErrorMessage('provider_busy')).not.toBe('');
+    expect(catchUpErrorMessage('unknown')).toBe('');
   });
 });
 

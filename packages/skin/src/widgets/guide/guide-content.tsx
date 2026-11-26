@@ -190,6 +190,7 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   const landing = useMemo(() => ({
     minute: handOff && handOff.minute >= 0 ? handOff.minute + (handOffOffset ?? 0) : model.landing,
     channelId: handOff?.channelId || view.tunedId || rows[0]?.id || '',
+    explicit: !!handOff && handOff.minute >= 0,
   }), [handOff?.channelId, handOff?.minute, handOffOffset]);
   const zoomOptions = ([0, 1, 2] as Zoom[]).map(z => {
     const hours = z === 0 ? '4½' : z === 1 ? '3' : '2';
@@ -375,7 +376,7 @@ interface BodyProps {
   zoom: Zoom;
   still: boolean;
   selected: { channel: string; programme: string };
-  landing: { minute: number; channelId: string };
+  landing: { minute: number; channelId: string; explicit: boolean };
   gridKey: string;
   grid: React.RefObject<GridHandle | null>;
   nowList: React.RefObject<{ toTop(): void } | null>;

@@ -6,7 +6,7 @@
 // props; with the same data it draws the same pixels.
 import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
-import { msg, type Card } from '@vela/core';
+import { isUnreleased, msg, releaseLabel, type Card } from '@vela/core';
 import type { RecordReader } from '../../screen/scope';
 import { useMediaLook } from '../../widgets/media/parts';
 import { DuplicatesCover } from '../duplicates';
@@ -19,7 +19,7 @@ import {
   ActionBar, ArtistHero, ArtistLiked, coverSize, DiscographyHeading, DiscographyShelf, FollowButton, Genres, Header, HomeShelves, MoreButton, Mosaic,
   pad, QuickTiles, usePlayingFrom,
 } from './pages';
-import { Byline, Heart, IconButton, LikedCover, MusicTile, PlayFab, Shelf, Wash } from './parts';
+import { Byline, Heart, IconButton, LikedCover, MusicTile, PlayFab, ReleaseStatus, Shelf, Wash } from './parts';
 import { cardOf, cardsOf, dedupeAlbums, shelfSubtitle } from './props';
 import type { Props } from './rich';
 import { ListeningSearch, RecentSearches, SearchField, SearchResults } from './search';
@@ -110,7 +110,10 @@ function CoverBlock({ props, read }: { props: Props; read: RecordReader }) {
 function ActionBarBlock({ props, read }: { props: Props; read: RecordReader }) {
   const app = useMusic();
   const card = cardOf(props.value('item'), read);
+  const release = releaseLabel(card?.airDate);
   const tracks = cardsOf(props.value('tracks'), read).filter(t => t.media?.audio !== false);
+  const playable = tracks.filter(t => !isUnreleased(t.airDate));
+  const blocked = release || (tracks.length && !playable.length ? releaseLabel(tracks[0]?.airDate) : '');
   const sourceId = props.text('sourceId') || card?.id || '';
   const source = { id: sourceId, name: props.text('sourceName') || card?.name || '', kind: props.enum('sourceKind', ['title', 'playlist', 'favorites'] as const) };
   const playing = usePlayingFrom(sourceId);
@@ -121,8 +124,8 @@ function ActionBarBlock({ props, read }: { props: Props; read: RecordReader }) {
     <ActionBar>
       {buttons.map(button => {
         switch (button) {
-          case 'play': return <PlayFab key={button} playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(tracks, 0, source))} testID="music-play" opensPage />;
-          case 'shuffle': return <IconButton key={button} symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(tracks, 0, source, true)} />;
+          case 'play': return blocked ? <ReleaseStatus key={button} label={blocked} /> : <PlayFab key={button} playing={playing} size={58} onPress={() => (playing ? app.toggle() : app.play(playable, 0, source))} testID="music-play" opensPage />;
+          case 'shuffle': return blocked ? null : <IconButton key={button} symbol="shuffle" label={msg('media.ui.shuffle')} size={44} iconSize={24} onPress={() => app.play(playable, 0, source, true)} />;
           case 'heart': return card ? <Heart key={button} card={card} size={44} iconSize={26} /> : null;
           case 'follow': return card ? <FollowButton key={button} on={following} onPress={() => app.like(card, !following)} /> : null;
           case 'more': return card ? <MoreButton key={button} card={card} /> : null;

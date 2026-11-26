@@ -1,3 +1,4 @@
+import type { CaptionInsets } from '@vela/player-api';
 import type { BrowserRuntimeServices } from './host/services';
 import type { Command, EngineEvent, PlaybackSession, Snapshot } from './model';
 import type { BrowserMediaAccess } from './media-auth';
@@ -21,6 +22,9 @@ export class PlaybackEngine {
     shared = false,
   ) {
     this.context = createHostContext(video, deliver, fullscreenContainer, ambient, mediaAccess, runtimes, shared);
+  }
+  setCaptionInsets(insets: CaptionInsets | undefined) {
+    this.context.surface.captionInsets = insets;
   }
   get video() {
     return this.context.surface.video;

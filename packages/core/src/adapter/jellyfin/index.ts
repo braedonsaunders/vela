@@ -280,7 +280,7 @@ export class JellyfinAdapter
                     }]), ...(i.CriticRating === undefined ? [] : [{
                         source: 'Critic', kind: 'critic' as const, value: i.CriticRating, scale: 100
                     }])], artwork: this.artwork(i), showId: i.SeriesId, showName: i.SeriesName, seasonId: i.SeasonId, seasonNumber: i.Type === 'Season' ? i.IndexNumber : i.ParentIndexNumber, episodeNumber: i.Type === 'Episode' ? i.IndexNumber : undefined, watch: {
-                positionSeconds: seconds(i.UserData?.PlaybackPositionTicks) ?? 0, played: i.UserData?.Played ?? false, favorite: i.UserData?.IsFavorite ?? false, watchlisted: false, ...reading
+                positionSeconds: seconds(i.UserData?.PlaybackPositionTicks) ?? 0, played: i.UserData?.Played ?? false, favorite: i.UserData?.IsFavorite ?? false, watchlisted: false, ...(i.UserData?.LastPlayedDate ? { lastViewedAt: i.UserData.LastPlayedDate } : {}), ...reading
             }
         };
     }

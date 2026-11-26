@@ -1,3 +1,4 @@
+import { applyOfflineWatch, downloadFeature, issueDownload, serveDownload } from './downloads';
 import { librarySortTitle, matchesLibrarySearch } from './library-search';
 import { renderArtwork } from './artwork';
 import { previewSessions, stopPreview, trailerPreview } from './previews';
@@ -27,8 +28,35 @@ withArchives(channels);
 const channelById = new Map(channels.map(c => [c.id, c]));
 initSports(channels);
 // Guide programmes carry the catch-up flags their channel's archive implies, computed as they are read.
-const fixtureGuide = (from: number, until: number, ids: string[]) => (scaleFixture?.guide ?? defaultGuide)(from, until, ids).map(p => flagProgramme(p, channelById.get(p.channelId)));
-setWatchProgramme((channelId, eventStart) => eventProgramme(channelById.get(channelId), fixtureGuide(eventStart - 6 * 3600_000, eventStart + 3600_000, [channelId]), eventStart));
+const fixtureEpoch = Date.now();
+const archiveFixture: V.Programme[] = [
+  { name: 'Archive Match', offset: -45, end: -15 },
+  { name: 'Live Match', offset: -15, end: 120 },
+].map(({ name, offset, end }) => {
+  const start = fixtureEpoch + offset * 60_000;
+  return { id: `catchup:channel-1:${start}`, channelId: 'channel-1', name, summary: '', artwork: [],
+    start: new Date(start).toISOString(), end: new Date(fixtureEpoch + end * 60_000).toISOString() };
+});
+const sportsArchiveFixture = ['channel-7', 'channel-29'].map(channelId => ({
+  ...archiveFixture[1]!, id: archiveFixture[1]!.id.replace('channel-1', channelId), channelId,
+}));
+const catchUpProgrammes = [...archiveFixture, ...sportsArchiveFixture];
+const catchUpChannels = new Set(catchUpProgrammes.map(p => p.channelId));
+const fixtureGuide = (from: number, until: number, ids: string[]) => {
+  let programmes = (scaleFixture?.guide ?? defaultGuide)(from, until, ids);
+  if (faults.catchUpFixture) {
+    programmes = programmes.filter(p => !catchUpChannels.has(p.channelId));
+    programmes.push(...catchUpProgrammes.filter(p => (!ids.length || ids.includes(p.channelId))
+      && Date.parse(p.start) < until && Date.parse(p.end) > from));
+  }
+  return programmes.map(p => flagProgramme(p, channelById.get(p.channelId)));
+};
+setWatchProgramme((channelId, eventStart) => {
+  const channel = channelById.get(channelId);
+  const fixture = faults.catchUpFixture && sportsArchiveFixture.find(p => p.channelId === channelId);
+  if (fixture) return eventProgramme(channel, [fixture], Date.parse(fixture.start));
+  return eventProgramme(channel, fixtureGuide(eventStart - 6 * 3600_000, eventStart + 3600_000, [channelId]), eventStart);
+});
 const mockSeasonCount = Math.max(0, Math.floor(Number(process.env.VELA_MOCK_SEASONS) || 0));
 const gapChannels = new Set((process.env.VELA_MOCK_GUIDE_GAPS ?? '').split(','));
 const gapHour = Math.floor(Date.now() / 3600000) * 3600000;
@@ -469,7 +497,10 @@ function currentSession(id: string, g: Grant): Session { const s = sessions.get(
 
 async function api(req: Request, url: URL, body: any): Promise<Response> {
   const path = url.pathname.replace(/^\/vela\/v0/, ''), method = req.method;
-  if (method === 'GET' && path === '/capabilities') return cached(req, capabilities, 'public');
+  if (method === 'GET' && path === '/capabilities') {
+    const viewerGrant = req.headers.has('authorization') ? authenticate(req) : undefined;
+    return cached(req, { ...capabilities, features: { ...capabilities.features, downloads: downloadFeature(viewerGrant?.viewer.id) } }, viewerGrant?.id ?? 'public');
+  }
   if (method === 'GET' && path === '/appearance') return cached(req, appearance(), 'public');
   if (method === 'POST' && path === '/auth/plex') {
     if (body.plexToken !== 'mock-plex-approved') return Response.json({ error: 'not_shared' }, {status: 403});
@@ -909,7 +940,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       return json({ ...next, cleared: true });
     }
   }
-  const titleMatch = /^\/titles\/([^/]+)(?:\/(children|extras|watch))?$/.exec(path);
+  const titleMatch = /^\/titles\/([^/]+)(?:\/(children|extras|watch|download))?$/.exec(path);
   const previewMatch = /^\/titles\/([^/]+)\/trailer-preview$/.exec(path);
   if (method === 'POST' && previewMatch) {
     const title = allTitles.find(t => t.id === previewMatch[1]);
@@ -998,9 +1029,16 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       ? { ...raw.title, rating: 'gb/U' }
       : raw.title;
     const d = { ...raw, title: mockTitle, seasons: scaledSeasons, cast: raw.cast.map(person => person.artwork ? { ...person, artwork: personArtwork(g) } : person) };
+    if (method === 'POST' && titleMatch[2] === 'download') {
+      return json(await issueDownload(g.id, g.viewer.id, d, body));
+    }
     if (method === 'POST' && titleMatch[2] === 'watch') {
       const t = allTitles.find(t => t.id === titleMatch[1])!;
       t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false };
+      if (body.offline === true) {
+        if (applyOfflineWatch(t.watch, body)) feedChanged();
+        return json({ accepted: true } satisfies V.Ack);
+      }
       for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key];
       if (body.continueWatching === false) removedContinue.add(t.id);
       if (typeof body.played === 'boolean' || body.continueWatching === false) feedChanged();
@@ -1008,7 +1046,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       return json({ accepted: true });
     }
     if (method === 'GET' && !titleMatch[2] && coldTitle(d.title.id)) return partial({ ...d, extras: [], pending: ['extras'], refreshAfterMs: 2000 });
-    if (method === 'GET') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: d.extras } : d, g.id);
+    if (method === 'GET' && titleMatch[2] !== 'download') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: d.extras } : d, g.id);
   }
   if (method === 'POST' && path === '/search') {
     if (typeof body.query !== 'string' || !Number.isInteger(body.generation) || !['fast', 'descriptive', ...(capabilities.features.unifiedSearch ? ['auto'] : [])].includes(body.mode)) fail('request', 'invalid_search', 'Query, generation and mode required');
@@ -1091,6 +1129,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (body.audioTrackId !== undefined || body.subtitleTrackId != null) fail('policy', 'feature_unavailable', 'Initial track selection is unavailable; use native HLS audio and sidecar subtitles');
     if (!body.client || [body.titleId, body.channelId, body.extraId].filter(Boolean).length !== 1) fail('request', 'invalid_target', 'Exactly one playback target required');
     const mediaTarget = body.titleId ? findMediaTitle(body.titleId) : undefined;
+    if (mediaTarget?.airDate === '2099-12-11') fail('source', 'title_unreleased', 'title unreleased', {}, 409);
     // A video child (a concert) plays through the ordinary video path, whatever its library holds.
     const videoChild = mediaTarget && levelsEnabled && isVideoChild(mediaTarget) ? mediaTarget : undefined;
     const listening = videoChild ? undefined : mediaTarget;
@@ -1258,6 +1297,7 @@ async function dispatch(req: Request): Promise<Response> {
       }
       return json(revised.map(s => ({ sessionId: s.plan.sessionId, revision: s.plan.revision, sourceGeneration: s.plan.sourceGeneration })));
     }
+    if (req.method === 'GET' && url.pathname === '/__admin/catch-up-fixture') return json(archiveFixture);
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; if ('refreshAbandonMs' in data) { abandonedRefreshKeys.clear(); refreshAbandonArmed = faults.refreshAbandonMs > 0; } return json(faults); }
     if (req.method === 'POST' && url.pathname === '/__admin/sports') return json(sportsAdmin(await req.json()));
@@ -1301,6 +1341,13 @@ async function dispatch(req: Request): Promise<Response> {
     const response = await (media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3], truncateOriginal));
     if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
     return response;
+  }
+  const download = /^\/vela\/v0\/download\/([a-f0-9-]+)$/.exec(url.pathname);
+  if (download && (req.method === 'GET' || req.method === 'HEAD')) {
+    return serveDownload(req, download[1]!, owner => {
+      const grant = grants.get(owner);
+      return !!grant && !grant.revoked && grant.expires > Date.now();
+    });
   }
   // Reading grants: opaque short-lived document URLs, fetched without the bearer.
   const reading = /^\/reading\/media\/([a-f0-9]+)\/([^/]+)$/.exec(url.pathname);

@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HostContext } from '@vela/skin/src/host';
 import { MediaActionsContext } from '@vela/skin/src/widgets/media';
 import { MINI_PLAYER_HEIGHT, MiniPlayer } from '@vela/skin/src/widgets/media/player';
-import { NOW_PLAYING_PLAY } from '@vela/skin/src/widgets/media/now-playing-focus';
+import { NOW_PLAYING_PLAY, nowPlayingDockFocus } from '@vela/skin/src/widgets/media/now-playing-focus';
 import { MOTION, Presence } from '@vela/skin/src/presence';
 import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { focusElement } from '@vela/skin/src/escape';
@@ -50,7 +50,9 @@ const FocusGuide = TVFocusGuideView as ComponentType<ComponentProps<typeof TVFoc
 
 /** On a TV, Now Playing draws over a page that stays in the focus engine: while open it takes the
  * focus and keeps it (the remote's presses never reach the page beneath), and gives it back on close. */
-function TVFocusTrap({ open, playTarget, children }: { open: boolean; playTarget?: number; children: ReactNode }) {
+function TVFocusTrap({ open, playTarget, guideAction, children }: {
+  open: boolean; playTarget?: number; guideAction: ReturnType<typeof nowPlayingDockFocus>['guideAction']; children: ReactNode;
+}) {
   const guide = useRef<FocusGuideHandle>(null);
   const destinations = useMemo(() => playTarget === undefined ? undefined : [playTarget], [playTarget]);
   const restore = useRef<number>(0);
@@ -63,14 +65,14 @@ function TVFocusTrap({ open, playTarget, children }: { open: boolean; playTarget
     restore.current = requestAnimationFrame(() => focusElement(NOW_PLAYING_PLAY));
   } : undefined;
   useEffect(() => {
-    if (!Platform.isTV || Platform.OS !== 'ios') return;
-    if (!open || playTarget === undefined) {
+    if (!guideAction) return;
+    if (guideAction === 'clear') {
       guide.current?.setDestinations?.([]);
       return;
     }
     const frame = requestAnimationFrame(() => guide.current?.requestTVFocus?.());
     return () => cancelAnimationFrame(frame);
-  }, [open, playTarget]);
+  }, [open, playTarget, guideAction]);
   if (!Platform.isTV) return <>{children}</>;
   return (
     <FocusGuide ref={guide} style={fill} focusable={open} destinations={destinations}
@@ -131,7 +133,11 @@ export function AudioDock({ children }: { children: ReactNode }) {
   const audio = useVelaState(state => state.audio);
   const pathname = usePathname();
   const host = vela.host('home', '');
-  const insets = useSafeAreaInsets();
+  const { top, right, bottom: safeBottom, left } = useSafeAreaInsets();
+  // The dock covers the window on both phones. Android's route host has already consumed the bars.
+  const nowPlayingHost = useMemo(() => host && (Platform.OS === 'android' || Platform.OS === 'ios') && !Platform.isTV
+    ? { ...host, viewport: { ...host.viewport, insets: { top, right, bottom: safeBottom, left } } }
+    : host, [host, top, right, safeBottom, left]);
   const ui = host?.doc.document.ui;
   const pageColor = useMemo(() => resolveUi(ui).page, [ui]);
   const [open, setOpen] = useState(false);
@@ -229,20 +235,23 @@ export function AudioDock({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [fullscreen, leaveVisualizer]);
   const nowPlayingOpen = playing && open;
+  const { routeActive, appleTV, guideTarget, guideAction } = nowPlayingDockFocus({
+    tv: Platform.isTV, os: Platform.OS, open: nowPlayingOpen, fullscreen, playTag: playTarget,
+  });
   const dock = useMemo<ListenDock>(() => ({
     close, openVisualizer: readyToOpen ? openVisualizer : undefined, visualizer: visualizerSwitch, hidden: fullscreen, open: nowPlayingOpen,
-    setPlayTarget: Platform.isTV && Platform.OS === 'ios' ? setPlayTarget : undefined,
-  }), [close, readyToOpen, openVisualizer, visualizerSwitch, fullscreen, nowPlayingOpen]);
+    setPlayTarget: appleTV ? setPlayTarget : undefined,
+  }), [close, readyToOpen, openVisualizer, visualizerSwitch, fullscreen, nowPlayingOpen, appleTV]);
   const noBack = useCallback(() => undefined, []);
   const noParams = useCallback(() => undefined, []);
   const screenActions = useAppScreenActions({ host: host ?? null, back: noBack, setParams: noParams });
   const nowPlayingParams = useMemo<Record<string, string>>(() => (panel ? { panel } : {} as Record<string, string>), [panel]);
   // A route still mounting under the overlay can request TV focus without a remote press.
   const screens = Platform.isTV
-    ? <FocusBoundary active={!nowPlayingOpen} style={screenStyle}>{children}</FocusBoundary>
+    ? <FocusBoundary active={routeActive} style={screenStyle}>{children}</FocusBoundary>
     : children;
-  if (!host) return <>{screens}</>;
-  const bottom = Math.max(14, insets.bottom + 10);
+  if (!host || !nowPlayingHost) return <>{screens}</>;
+  const bottom = Math.max(14, safeBottom + 10);
   const still = host.env.still;
   // Now Playing rises out of the mini player and sinks back into it: its top starts and ends at the
   // bar's top edge while the bar fades out under it, then in again (presence.tsx).
@@ -252,14 +261,14 @@ export function AudioDock({ children }: { children: ReactNode }) {
   // tabs above the screen.
   const nowPlaying = (
     <Presence shown={nowPlayingOpen} still={still} offstage={Platform.isTV ? { opacity: 0 } : { y: fromBar, opacity: 0 }} enterMs={NOW_PLAYING_ENTER} exitMs={NOW_PLAYING_EXIT} style={fill}>
-      <TVFocusTrap open={nowPlayingOpen} playTarget={fullscreen ? undefined : playTarget}>
+      <TVFocusTrap open={nowPlayingOpen} playTarget={guideTarget} guideAction={guideAction}>
         <View collapsable={false} style={[fill, visuals && { backgroundColor: pageColor }]} testID={fullscreen ? 'visualizer-page' : undefined} accessibilityViewIsModal>
           <ListenDockContext.Provider value={dock}>
-            <ScreenView target={NOW_PLAYING_TARGET} href={builtinHref('listen', 'nowPlaying')} params={nowPlayingParams} host={host} active={nowPlayingOpen}
+            <ScreenView target={NOW_PLAYING_TARGET} href={builtinHref('listen', 'nowPlaying')} params={nowPlayingParams} host={nowPlayingHost} active={nowPlayingOpen}
               actions={screenActions} route={false} quiet />
             {fullscreen ? <View style={fill}><ScreenView target={VISUALIZER_TARGET} href={builtinHref('listen', 'visualizer')} host={host} active actions={screenActions} route={false} quiet /></View> : null}
           </ListenDockContext.Provider>
-          {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: insets.top + 16, left: insets.left + 20, borderRadius: 24, backgroundColor: pageColor }}>
+          {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: top + 16, left: left + 20, borderRadius: 24, backgroundColor: pageColor }}>
             <RoundButton icon="back" label={msg('visualizer.close')} testID="visualizer-close" onPress={leaveVisualizer} />
           </View> : null}
         </View>

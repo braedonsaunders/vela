@@ -8,7 +8,7 @@ import type { Focusable } from '../../escape';
 import { placeParam, type MusicPlace } from './place';
 import { useFocusedTVKeys } from '../../tv-keys';
 import { musicTV } from './layout';
-import { msg, type Card } from '@vela/core';
+import { msg, releaseLabel, type Card } from '@vela/core';
 import { FocusPressable as Pressable } from '../../focus';
 import { useHost } from '../../host';
 import { NO_RING, Glyph, useInteraction } from '../../widgets/common/controls';
@@ -179,10 +179,11 @@ export function MusicTile({ card, size: wanted, subtitle, testID, preferred }: {
   const size = m.small ? Math.min(wanted, 132) : wanted;
   const round = card.media?.role === 'artist';
   const role = card.media?.role;
+  const release = releaseLabel(card.airDate);
   const playable = role === 'album' || role === 'track' || card.kind === 'playlist' || role === 'audiobook' || role === 'part' || role === 'show' || role === 'episode';
   // An episode names its show, a part its book; spoken word shows where the viewer is.
-  const line = subtitle ?? (round ? msg('media.ui.artist') : role === 'episode' || role === 'part' ? [card.media?.parent?.name, card.media?.byline].filter(Boolean)[0] ?? ''
-    : role === 'show' ? card.media?.byline ?? '' : [card.yearLabel, card.media?.byline].filter(Boolean).join(' · '));
+  const line = release || (subtitle ?? (round ? msg('media.ui.artist') : role === 'episode' || role === 'part' ? [card.media?.parent?.name, card.media?.byline].filter(Boolean)[0] ?? ''
+    : role === 'show' ? card.media?.byline ?? '' : [card.yearLabel, card.media?.byline].filter(Boolean).join(' · ')));
   const listened = listenedFraction(card);
   return (
     <Surface onPress={() => app.go(placeOf(card))} onMenu={(anchor, mode, opener) => app.menu({ card, anchor, mode, opener })} focusId={card.id} preferred={preferred} testID={testID} label={[card.name, line].filter(Boolean).join(', ')}
@@ -198,7 +199,7 @@ export function MusicTile({ card, size: wanted, subtitle, testID, preferred }: {
                 <View style={{ width: `${Math.round(listened * 100)}%`, height: 4, backgroundColor: m.ui.accent }} />
               </View>
             ) : null}
-            {playable && !musicTV() ? (
+            {!release && playable && !musicTV() ? (
               <View pointerEvents={lit ? 'auto' : 'none'} style={[{ position: 'absolute', right: 8, bottom: 8, opacity: lit ? 1 : 0, transform: [{ translateY: lit ? 0 : 10 }] }, transition('opacity, transform', 240)]}>
                 <PlayFab playing={false} size={46} onPress={() => app.playCard(card)} label={`${msg('media.ui.play')} ${card.name}`} />
               </View>
@@ -320,6 +321,11 @@ export function Wash({ accent, height = 420, image }: { accent: string; height?:
 }
 
 /** "Daft Punk · 2001 · 14 songs, 1 h 1 min" with the artist as a link. */
+export function ReleaseStatus({ label }: { label: string }) {
+  const m = useMediaLook();
+  return <Text testID="music-release-status" style={[m.text({ 'font-size': '16px', 'font-weight': '650', color: '$ui.ink' }), { paddingVertical: 12 }]}>{label}</Text>;
+}
+
 export function Byline({ card, facts }: { card: Card; facts: string[] }) {
   const app = useMusic();
   const m = useMediaLook();

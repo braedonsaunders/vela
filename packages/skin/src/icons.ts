@@ -40,6 +40,7 @@ export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
   remove: { paths: ['M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5'], stroke: true },
   /** Four tiles: Live TV multiview. */
   multiview: { paths: ['M3.5 5.5h7.5v6H3.5zM13 5.5h7.5v6H13zM3.5 13.5h7.5v6H3.5zM13 13.5h7.5v6H13z'], stroke: true },
+  download: { paths: ['M12 3v12M7 10l5 5 5-5M4 16v4h16v-4'], stroke: true },
   'playlist-add': { paths: ['M4 6h15M4 11h15M4 16h7M17 14v7M13.5 17.5h7'], stroke: true },
   'star-fill': { paths: ['M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8 6.6 19.7l1.1-6.1-4.5-4.2 6.1-.8z'] },
   sort: { paths: ['M7 4v16M3.5 16.5L7 20l3.5-3.5M17 20V4M13.5 7.5L17 4l3.5 3.5'], stroke: true },

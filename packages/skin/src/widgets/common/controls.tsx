@@ -72,6 +72,7 @@ export function Words({
   children: ReactNode;
   style?: TextStyle;
   accessibilityRole?: 'header' | 'alert' | 'text';
+  accessibilityLabel?: string;
   testID?: string;
 }) {
   const look = useLook();
@@ -107,12 +108,15 @@ export function Glyph({ symbol, size, color }: { symbol: string; size: number; c
 }
 
 /** An eyebrow over a display title, as the base's sign-in heads its card. */
-export function Heading({ eyebrow: over, title, lines = 2 }: { eyebrow?: string; title: string; lines?: number }) {
+export function Heading({ eyebrow: over, title, lines = 2, accessibilityLabel }: {
+  eyebrow?: string; title: string; lines?: number; accessibilityLabel?: string;
+}) {
   const layout = useAuthLayout();
   return (
     <View style={{ gap: layout?.tight ? 4 : 10 }}>
       {over && !layout?.tight ? <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.accent' }}>{over}</Words> : null}
-      <Words rows={{ ...display, 'font-size': `${layout?.headingSize ?? 42}px` }} lines={lines} accessibilityRole="header" aria-level={1}>
+      <Words rows={{ ...display, 'font-size': `${layout?.headingSize ?? 42}px` }} lines={lines}
+        accessibilityRole="header" accessibilityLabel={accessibilityLabel} aria-level={1}>
         {title}
       </Words>
     </View>

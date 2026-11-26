@@ -110,12 +110,14 @@ function TickLabel({ look, label, hour, tick, now, scale, viewportWidth, scrollX
   viewportWidth: number; scrollX: SharedValue<number>;
 }) {
   const collision = useAnimatedStyle(() => {
-    if (now < 0) return { opacity: 1 };
     const labelLeft = tick * scale - scrollX.value + 10;
+    const labelWidth = 82;
+    if (labelLeft < 0 || labelLeft + labelWidth > viewportWidth) return { opacity: 0 };
+    if (now < 0) return { opacity: 1 };
     const nowPosition = now * scale - scrollX.value;
     const pillWidth = 88;
     const pillLeft = nowPillOffset(nowPosition, viewportWidth, pillWidth);
-    return { opacity: rulerLabelVisible(labelLeft, 82, pillLeft, pillWidth) ? 1 : 0 };
+    return { opacity: rulerLabelVisible(labelLeft, labelWidth, pillLeft, pillWidth) ? 1 : 0 };
   });
   return <Animated.View style={collision}>
     <Line look={look} size={12} weight={hour ? 650 : 500} color={hour ? look.ink : look.inkQuiet} tabular style={{ paddingLeft: 10 }}>

@@ -109,7 +109,7 @@ export async function activatePacketRuntime(
                   live: {
                     windowStartSeconds: context.session.current.liveWindowStart,
                     targetSeconds: context.live.targetSeconds,
-                    startAtEdge: !context.session.pendingSeek,
+                    startAtEdge: !context.session.pendingSeek && !context.session.current.startOver,
                   },
                 }
               : {}),

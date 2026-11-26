@@ -20,6 +20,7 @@ export interface ConnectProps {
   actions: ServerActions;
   serverId?: string;
   onClose?(): void;
+  onDownloads?(): void;
   auth?: SessionAuth;
   authActions?: AuthActions;
   /** Owner-facing identity for the selected server. Its technical record name remains internal. */
@@ -30,7 +31,7 @@ export interface ConnectProps {
   plexLink?: boolean;
 }
 
-export function Connect({ servers, actions, onClose, auth, authActions, serverId = '', brandingName, standaloneSignIn = false, plexLink = false }: ConnectProps) {
+export function Connect({ servers, actions, onClose, onDownloads, auth, authActions, serverId = '', brandingName, standaloneSignIn = false, plexLink = false }: ConnectProps) {
   const layout = useAuthLayout();
   useEffect(() => () => authActions?.cancelPlex(), [authActions]);
   const [flow, send] = useReducer(authFlow, servers.list.length, (count): AuthFlow => serverId
@@ -58,7 +59,8 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
     else onClose?.();
   };
   useEffect(() => {
-    const release = holdBack(() => { if (!flow.history.length && !onClose) return false; back(); return true; });
+    if (!flow.history.length && !onClose) return;
+    const release = holdBack(() => { back(); return true; });
     if (Platform.OS !== 'web') return release;
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); back(); } };
     window.addEventListener('keydown', key);
@@ -95,12 +97,16 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
   useEffect(() => {
     if (auth?.quick && step.page === 'signin' && target === auth.serverId) send({type: 'code'});
   }, [auth?.quick, step.page, target]);
-  const title = step.page === 'choose' ? 'Choose a server' : step.page === 'add' ? 'Add a server' : step.page === 'plex' || step.page === 'server-plex' ? 'Sign in with Plex' : step.page === 'code' ? 'Use a code' : `Sign in to ${name}`;
+  const offline = step.page === 'signin' && target === auth?.serverId && auth?.phase === 'offline';
+  const savedOffline = offline && !!auth.viewerId;
+  const title = savedOffline ? "You're offline" : step.page === 'choose' ? 'Choose a server' : step.page === 'add' ? 'Add a server' : step.page === 'plex' || step.page === 'server-plex' ? 'Sign in with Plex' : step.page === 'code' ? 'Use a code' : `Sign in to ${name}`;
+  // Fabric ignores the no-common-ligatures font variant. Non-joiners keep the ffl glyphs distinct.
+  const displayTitle = savedOffline ? title.replace('ffl', 'f\u200cf\u200cl') : title;
   const serverPlex = step.page === 'signin' && target === auth?.serverId && auth.plexAvailable ? <Pill primary label="Sign in with Plex" testID="server-plex" height={layout?.tight ? 44 : 52} disabled={busy} onPress={() => { send({type: 'server-plex'}); void run(() => authActions!.startPlex()); }}><PlexMark /></Pill> : null;
   return <View style={{ gap: layout?.gap ?? 20, minHeight: 0, flexShrink: 1 }}>
     <View style={{ gap: layout?.tight ? 4 : 12 }}>
       {flow.history.length || onClose ? <Pill label={flow.history.length ? 'Back' : 'Cancel'} height={44} align="flex-start" onPress={back} testID="auth-back" /> : null}
-      {!layout?.minimal ? <Heading title={title} /> : null}
+      {!layout?.minimal ? <Heading title={displayTitle} accessibilityLabel={savedOffline ? title : undefined} /> : null}
     </View>
     {step.page === 'choose' ? <>
       <Pill label="Add a server" height={44} onPress={() => send({type: 'add'})} testID="auth-add" />
@@ -109,13 +115,13 @@ export function Connect({ servers, actions, onClose, auth, authActions, serverId
       </ScrollView>
     </> : step.page === 'add' ? <AddressStep servers={[]} busy={busy} probe={url => actions.probe(url)} onAdd={add} onSelect={select} onRemove={id => void run(() => actions.remove(id))} onPlex={() => { send({type: 'plex'}); void run(() => actions.plexStart()); }} error="" />
     : step.page === 'server-plex' ? <PlexStep link={auth?.plex ?? null} busy={busy} starting={busy && !auth?.plex} error={auth?.error ?? ''} onStart={() => void run(() => authActions!.startPlex())} onChoose={() => {}} onChooseProfile={(id, pin) => void run(() => authActions!.choosePlexProfile(id, pin))} onCancel={back} />
+    : offline ? <Reconnecting name={name} auth={auth} busy={busy} onDownloads={onDownloads} onRetry={() => void run(() => authActions?.retry?.() ?? Promise.resolve())} onSignInAgain={authActions?.signInAgain ? () => void run(() => authActions.signInAgain!()) : undefined} />
     : step.page === 'plex' || kind === 'plex' ? <PlexStep link={servers.plex} busy={busy} starting={busy && !servers.plex} error="" onStart={() => void run(() => actions.plexStart())} onChoose={id => void run(async () => { const result = await actions.plexChoose(id); if (!result.error && result.id) { setNote(result.note ?? ''); setAdded({id: result.id, name: 'server', kind: result.note ? 'ether' : 'plex'}); send({type: 'server', serverId: result.id}); } return result; })} onChooseProfile={(id, pin) => void run(() => actions.plexChooseProfile(id, pin))} onCancel={back} />
     : step.page === 'code' ? <View style={{ gap: layout?.gap ?? 18, alignItems: 'center' }}>
       {quick?.code ? <CodeTiles code={quick.code} testID="connect-code" /> : <Waiting>Requesting a code…</Waiting>}
       {quick?.status === 'expired' || quick?.status === 'denied' ? <Alert>{quick.status === 'expired' ? 'Code expired. Go back to request another.' : 'Code rejected. Try again.'}</Alert> : <Waiting>On a signed-in device, open your Ether server console, then Quick Connect.</Waiting>}
       {quick?.expiresLabel ? <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }}>{`Code expires at ${quick.expiresLabel}.`}</Words> : null}
     </View> : auth?.phase === 'starting' || auth?.phase === 'redeeming' ? <Waiting>{auth.phase === 'redeeming' ? `Signing in to ${name}…` : `Connecting to ${name}…`}</Waiting>
-    : auth?.phase === 'offline' ? <Reconnecting name={name} auth={auth} busy={busy} onRetry={() => void run(() => authActions?.retry?.() ?? Promise.resolve())} onSignInAgain={authActions?.signInAgain ? () => void run(() => authActions.signInAgain!()) : undefined} />
     : target === auth?.serverId && auth.plexAvailable && !auth.passwordAvailable && !auth.quickAvailable ? serverPlex
     : <Credentials secondary={serverPlex} busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.landscape || layout?.minimal}
       onSignIn={(username, password) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, password) : actions.jellyfinSignIn(target, username, password))}

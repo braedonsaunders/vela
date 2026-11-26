@@ -3,7 +3,7 @@ import { deviceLanguages, iso6391, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguag
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { LibraryJumpIndex, LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
+import type { DownloadResolution, DownloadSidecar, LibraryJumpIndex, LibraryRecommendations, LiveTv, MediaDownloads, OfflineProgressEntry, PathSwitching, ResolveDownloadOptions, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
 import type { LibraryJumpBucket } from '../../models';
 import { parsePlexJumpIndex } from './jump-index';
 import { VelaError } from '../errors';
@@ -27,6 +27,12 @@ interface PlexSession {
   pending: Promise<unknown>;
   /** Pagehide ends session work without waiting for the serial queue. */
   readonly sessionWork: AbortController;
+  /** The progress report queued last, not started yet: a later one in its state and generations takes its place and
+   * its answer, and a command at its generations queued after it, one that will run, keeps its position and sequence without its post (`by`),
+   * its answer then that of the command's first timeline post, or, when the command posts none, accepted once its position is applied. */
+  waiting?: { r: V.PlayerObservation; work?: Promise<V.Ack>; by?: Promise<unknown> };
+  /** The state of the last timeline posted. */
+  posted?: string;
   /** The transcode session of the server's stream while one is started (none while the stream is deferred). */
   transcodeId?: string;
   /** The stopped timeline has been sent; stream cleanup can still be pending. */
@@ -34,6 +40,10 @@ interface PlexSession {
   scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
+  /** The idempotency keys of the mutations queued and not settled yet, each with how many calls carry it. */
+  queued?: Map<string, number>;
+  /** While a command that took over a waiting report runs: answers that report with the command's first timeline post. */
+  carry?: (post: Promise<unknown>) => void;
   /** A title that started without intro or credits markers: when they were last asked for, and how often. */
   markers?: { at: number; asked: number; reading: boolean };
   /** A multi-part item (several files stacked as one title): its parts, the one playing, and the
@@ -103,7 +113,7 @@ function plexPlayed(n: Node): boolean {
 }
 
 /** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
-export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, LibraryJumpIndex, Versions, TrickplaySheets, UnloadStop {
+export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, LibraryJumpIndex, Versions, TrickplaySheets, UnloadStop, MediaDownloads {
   readonly origin: string;
   private sessions = new Map<string, PlexSession>();
   /** Sections by key, from the last section list: a music section named for audiobooks holds books. */
@@ -111,6 +121,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   private watchlistProbe?: Promise<boolean>;
   private liveConfig?: { dvr: string; grid: string; channels: string };
   private delegation?: Promise<string>;
+  /** Whether the signed-in account has sync/download permission on this server (`allowSync`). */
+  private allowSync?: boolean;
   /** The token the last authorised request carried, for a request that cannot wait for credentials (`unloadStop`). */
   private lastToken?: string;
   constructor(private config: PlexConfig) {
@@ -221,7 +233,13 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     // /identity carries no name (PMS and Ether alike): the server's name is its root container's.
     let name = '';
     if (await this.config.credentials.get()) {
-      try { name = (await this.request('/', {}, 'GET', true, signal)).friendlyName || ''; } catch { /* the name the server was added under stands */ }
+      try {
+        const container = await this.request('/', {}, 'GET', true, signal);
+        name = container.friendlyName || '';
+        if (container.allowSync !== undefined) {
+          this.allowSync = container.allowSync === true || container.allowSync === 1 || container.allowSync === '1';
+        }
+      } catch { /* the name the server was added under stands */ }
       try {
         const dvrs = await this.request('/livetv/dvrs', {}, 'GET', true, signal);
         if (dvrs.Dvr?.length) {
@@ -309,9 +327,10 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       if (n[field] !== undefined) ratings.push({ source: n[image] || 'Plex', kind, value: Number(n[field]), scale: 10 });
     let themeMusic: V.ThemeMusic | undefined;
     if (n.theme) { try { themeMusic = { url: this.mediaURL(n.theme), expiresAt: '9999-12-31T23:59:59Z' }; } catch {} }
+    const lastViewedAt = Number(n.lastViewedAt) > 0 ? new Date(Number(n.lastViewedAt) * 1000).toISOString() : undefined;
     return { ...(projection?.media ? { media: projection.media } : {}), id: String(n.ratingKey), kind: projection?.kind ?? n.type, name: n.title || '', summary: n.summary || '', year: n.year, airDate: n.originallyAvailableAt,
       genres: (n.Genre || []).map((g: Node) => g.tag), durationSeconds: seconds(n.duration), rating: n.contentRating, ratings,
-      artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: plexPlayed(n), favorite: false, watchlisted: false },
+      artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: plexPlayed(n), favorite: false, watchlisted: false, ...(lastViewedAt ? { lastViewedAt } : {}) },
       ...(themeMusic ? { themeMusic } : {}), showId: n.grandparentRatingKey ? String(n.grandparentRatingKey) : n.type === 'season' && n.parentRatingKey != null ? String(n.parentRatingKey) : undefined,
       showName: n.type === 'episode' ? n.grandparentTitle : n.type === 'season' ? n.parentTitle : undefined,
       seasonId: n.type === 'episode' && n.parentRatingKey != null ? String(n.parentRatingKey) : undefined, seasonNumber: n.type === 'season' ? n.index : n.parentIndex, episodeNumber: n.type === 'episode' ? n.index : undefined };
@@ -626,6 +645,118 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   async clearVersionChoice(id: string, _request: V.ClearVersionChoiceRequest): Promise<V.ClearVersionChoiceResponse> {
     return { ...(await this.titleVersions(id)), cleared: false };
   }
+  /** Whether the signed-in account may download original files from this Plex server (`allowSync`). */
+  async downloadsAvailable(): Promise<boolean> {
+    if (this.allowSync !== undefined) return this.allowSync;
+    try {
+      const root = await this.request('/');
+      if (root.allowSync !== undefined) {
+        this.allowSync = root.allowSync === true || root.allowSync === 1 || root.allowSync === '1';
+        return this.allowSync;
+      }
+    } catch {
+      // If the root container does not state allowSync, let the part request enforce server policy.
+    }
+    return true;
+  }
+  /**
+   * Resolve a movie or episode's original file for offline download: `GET {Part.key}?download=1`
+   * with `mediaHeaders()`, plus external text subtitle sidecars and poster artwork. Multi-part
+   * stacked items are refused because they play through the server's HLS stream.
+   */
+  async resolveDownload(titleId: string, options?: ResolveDownloadOptions): Promise<DownloadResolution> {
+    const n = await this.metadata(titleId);
+    if (!['movie', 'episode', 'clip'].includes(n.type)) {
+      fail('Only movies and episodes can be downloaded for offline playback');
+    }
+    if (n.allowSync === false || n.allowSync === 0 || n.allowSync === '0' || this.allowSync === false) {
+      throw new VelaError({ class: 'policy', code: 'download_not_allowed', message: 'Downloads are not allowed for this account on this Plex server', retry: { allowed: false } }, 403);
+    }
+    const mediaList: Node[] = n.Media ?? [];
+    const chosen = options?.versionId;
+    const media = chosen ? mediaList.find((m: Node, index: number) => mediaId(m, index) === chosen) : mediaList[0];
+    if (chosen && !media) fail('Unknown Plex version');
+    if (!media) fail('Plex title has no downloadable media', 'playback');
+    const parts: Node[] = media.Part ?? [];
+    if (!parts.length || !parts[0]?.key) fail('Plex title has no downloadable media', 'playback');
+    if (parts.length > 1) fail('This title is in several parts, which play through the server\'s stream', 'playback');
+    const part = parts[0]!;
+    const mediaIndex = Math.max(0, mediaList.indexOf(media));
+    const version = plexVersion(media, mediaIndex);
+    const subtitleFormats = options?.subtitleFormats ?? ['ass', 'ssa', 'webvtt', 'vtt', 'srt'];
+    const streams: Node[] = part.Stream ?? [];
+    const sidecars: DownloadSidecar[] = [];
+    const audioTracks: V.Track[] = streams.filter(s => Number(s.streamType) === 2).map(s => ({
+      id: String(s.id),
+      streamIndex: s.index,
+      kind: 'audio',
+      language: s.languageCode || 'und',
+      name: s.displayTitle || s.title || s.language || s.codec || '',
+      codec: s.codec || '',
+      channels: s.channels,
+      default: !!s.selected,
+      forced: !!s.forced,
+      hearingImpaired: !!s.hearingImpaired,
+    }));
+    const subtitleTracks: V.Track[] = [];
+    for (const s of streams.filter(st => Number(st.streamType) === 3)) {
+      const id = String(s.id);
+      const base: V.Track = {
+        id,
+        streamIndex: s.index,
+        kind: 'subtitle',
+        language: s.languageCode || 'und',
+        name: s.displayTitle || s.title || s.language || s.codec || '',
+        codec: s.codec || '',
+        default: !!s.selected,
+        forced: !!s.forced,
+        hearingImpaired: !!s.hearingImpaired,
+      };
+      if (s.key && isTextSidecar(s.codec)) {
+        const external = plexSidecar(new URL(this.mediaURL(s.key)), s.codec, subtitleFormats);
+        sidecars.push({ trackId: id, format: external.format, url: external.url });
+        subtitleTracks.push({
+          ...base,
+          ...(external.format === 'webvtt' ? { url: external.url } : {}),
+          delivery: { kind: 'external', format: external.format, url: external.url },
+        });
+      } else if (!s.key) {
+        // Embedded text and bitmap (PGS/VobSub) tracks inside the original file are rendered by libmpv offline.
+        subtitleTracks.push({ ...base, delivery: { kind: 'embedded' } });
+      }
+    }
+    const playing = playingAudio(streams, media.audioCodec);
+    const selectedAudioTrackId = audioTracks.find(t => t.default)?.id ?? playing.id ?? audioTracks[0]?.id;
+    const selectedSubtitleTrackId = subtitleTracks.find(t => t.default)?.id ?? null;
+    const downloadUrl = new URL(this.mediaURL(part.key));
+    downloadUrl.searchParams.set('download', '1');
+    const container = String(part.container || media.container || 'mkv').toLowerCase();
+    const mimeType = container === 'mp4' || container === 'm4v' ? 'video/mp4' : container === 'webm' ? 'video/webm' : 'video/x-matroska';
+    const title = this.title({ ...n, duration: media.duration ?? n.duration });
+    const posterUrl = title.artwork.find(a => a.kind === 'poster')?.sizes[0]?.url ?? title.artwork[0]?.sizes[0]?.url;
+    const markers = plexMarkers(n);
+    const byteLength = Number(part.size) > 0 ? Number(part.size) : undefined;
+    return {
+      title,
+      versionId: version.id,
+      versionLabel: version.label,
+      url: downloadUrl.href,
+      headers: await this.mediaHeaders(),
+      mimeType,
+      container,
+      ...(byteLength ? { byteLength } : {}),
+      ...(part.id != null ? { sourceId: String(part.id) } : {}),
+      ...(media.videoCodec ? { originalVideo: { codec: String(media.videoCodec), width: media.width, height: media.height } } : {}),
+      audioTracks,
+      subtitleTracks,
+      ...(selectedAudioTrackId ? { selectedAudioTrackId } : {}),
+      selectedSubtitleTrackId,
+      chapters: this.chapters(n),
+      ...(markers ? { markers } : {}),
+      sidecars,
+      ...(posterUrl ? { posterUrl } : {}),
+    };
+  }
   async startPlayback(r: V.PlaybackRequest): Promise<V.PlaybackPlan> {
     for (const s of this.sessions.values()) if (s.mutations.has(r.idempotencyKey)) return s.mutations.get(r.idempotencyKey)!;
     if (r.channelId) return this.livePlayback(r);
@@ -863,53 +994,100 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     }
     return null;
   }
-  private async timeline(s: PlexSession, state: string) {
+  async replayWatchProgress(id: string, entry: OfflineProgressEntry): Promise<V.Ack> {
+    await this.request('/:/timeline', {
+      ratingKey: id,
+      key: `/library/metadata/${id}`,
+      identifier: 'com.plexapp.plugins.library',
+      state: 'stopped',
+      time: Math.round(entry.positionSeconds * 1000),
+      duration: Math.round(entry.durationSeconds * 1000),
+      offline: 1,
+      updated: Math.floor(Date.parse(entry.observedAt) / 1000),
+    }, 'POST');
+    if (entry.completed) await this.setTitleWatch(id, { played: true, idempotencyKey: entry.idempotencyKey });
+    return { accepted: true };
+  }
+
+  private async timeline(s: PlexSession, state: string, retried = false) {
     if (s.plan.channelId || s.timelineStopped) return;
     // Once dispatched, the terminal timeline outlives pagehide. Pagehide still stops the stream.
     const keepaliveStarted = state === 'stopped' ? () => { s.timelineStopped = true; } : undefined;
-    try {
-      await this.request('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`, time: Math.round(s.plan.positionSeconds * 1000),
-        duration: s.metadata.duration, state, session: s.plan.sessionId, hasMDE: 1, identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': s.plan.sessionId },
-      'POST', true, s.sessionWork.signal, undefined, keepaliveStarted);
-    } catch (error) {
+    const post = this.request('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`, time: Math.round(s.plan.positionSeconds * 1000),
+      duration: s.metadata.duration, state, session: s.plan.sessionId, hasMDE: 1, identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': s.plan.sessionId },
+    'POST', true, retried ? undefined : s.sessionWork.signal, undefined, keepaliveStarted).catch(error => {
       // An explicit HTTP refusal allows a retry. A missing reply may follow an accepted timeline.
-      if (keepaliveStarted && error instanceof VelaError && error.detail.code === 'plex_http') s.timelineStopped = false;
+      if (keepaliveStarted && error instanceof VelaError && error.detail.code === 'plex_http') {
+        s.timelineStopped = false;
+        // Pagehide skipped the stopped timeline because this one was on the wire; send it once more on its own.
+        if (s.sessionWork.signal.aborted && !retried) void this.timeline(s, 'stopped', true).catch(() => {});
+      }
       throw error;
-    }
+    });
+    s.carry?.(post);
+    delete s.carry;
+    await post;
+    s.posted = state;
   }
   async reportObservation(id: string, r: V.PlayerObservation): Promise<V.Ack> {
     const s = this.session(id);
     const { signal } = s.sessionWork;
-    return this.serialize(s, async () => {
-      if (signal.aborted || s.timelineStopped || s.plan.state === 'ended') return ack;
+    const w = s.waiting;
+    // An end, an invalid position and progress in a stacked title's part before the last are queued on their own.
+    const alone = r.state === 'ended' || !Number.isFinite(r.positionSeconds) || r.positionSeconds < 0 || !!s.stack && s.stack.index < s.stack.parts.length - 1;
+    if (w?.work && !alone && r.state === w.r.state && r.sourceGeneration === w.r.sourceGeneration && r.seekGeneration === w.r.seekGeneration) {
+      if (r.sequence > w.r.sequence) w.r = r;
+      return w.work;
+    }
+    const slot: PlexSession['waiting'] = alone ? undefined : { r };
+    const sent = this.serialize(s, async (): Promise<boolean> => {
+      if (slot) { if (s.waiting === slot) delete s.waiting; r = slot.r; }
+      if (signal.aborted || s.timelineStopped || s.plan.state === 'ended') return true;
       this.generations(s.plan, r);
-      if (r.sequence <= s.sequence) return ack;
+      if (r.sequence <= s.sequence) return true;
       if (!Number.isFinite(r.positionSeconds) || r.positionSeconds < 0) fail('Invalid playback position');
       // The end of a part that is not the last moves the session on to the next one.
       const stack = s.stack;
       if (stack && stack.index < stack.parts.length - 1 && (r.state === 'ended' || r.positionSeconds >= partOffsets(stack.parts)[stack.index + 1]! - 0.5)) {
         await this.playPart(s, stack.index + 1, 0);
-        if (signal.aborted) return ack;
+        if (signal.aborted) return true;
         s.sequence = r.sequence; s.plan.state = 'playing'; s.plan.revision++;
         await this.timeline(s, 'playing');
-        return ack;
+        return true;
       }
       s.plan.positionSeconds = r.positionSeconds;
-      await this.timeline(s, r.state === 'ended' ? 'stopped' : r.state === 'buffering' ? 'buffering' : r.state);
-      if (signal.aborted) return ack;
+      // A command after it takes the position into its plan, posting it or not (a track or version change does
+      // not); a change from the state last posted is still sent.
+      const state = r.state === 'ended' ? 'stopped' : r.state;
+      const posts = !slot?.by || state !== s.posted;
+      if (posts) await this.timeline(s, state);
+      if (signal.aborted) return true;
       // A natural end is completion; a user's partial stop is only a timeline update.
       if (r.state === 'ended' && s.plan.titleId && !s.scrobbled) {
         await this.request('/:/scrobble', { key: s.metadata.ratingKey, identifier: 'com.plexapp.plugins.library' }, 'PUT', true, signal);
-        if (signal.aborted) return ack;
+        if (signal.aborted) return true;
         s.scrobbled = true;
       }
       if (r.state === 'ended') await this.stopTranscode(s.transcodeId ?? id, s.plan.media === 'audio', signal);
       s.sequence = r.sequence; s.plan.state = r.state === 'ended' ? 'ended' : r.state === 'paused' ? 'paused' : 'playing'; s.plan.revision++;
+      return posts;
+    });
+    // Without its own post it is answered by the timeline post that carries its progress, or as accepted once
+    // pagehide ends the session's work, also while that post is still pending.
+    const work = sent.then(async posts => {
+      if (!posts && !signal.aborted) {
+        let onAbort = () => {};
+        const aborted = new Promise<void>(resolve => { onAbort = () => resolve(); signal.addEventListener('abort', onAbort, { once: true }); });
+        // Detach on settle: the session's signal lives as long as the session and would otherwise collect one listener per folded report.
+        try { await Promise.race([slot!.by, aborted]); } finally { signal.removeEventListener('abort', onAbort); }
+      }
       return ack;
     }).catch(error => {
       if (signal.aborted) return ack;
       throw error;
     });
+    if (slot) s.waiting = Object.assign(slot, { work });
+    return work;
   }
   command(id: string, r: TransportCommand): Promise<V.PlaybackPlan> {
     return this.mutate(id, r, async (s, signal) => {
@@ -940,7 +1118,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
           s.plan.state = 'playing';
           break;
       }
-    });
+    }, true);
   }
 
   changeTracks(id: string, r: TrackCommand): Promise<V.PlaybackPlan> {
@@ -1071,26 +1249,47 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     id: string,
     r: V.SessionCommand,
     apply: (s: PlexSession, signal: AbortSignal) => Promise<void> | void,
+    posts = false,
   ): Promise<V.PlaybackPlan> {
     const s = this.session(id);
-    return this.serialize(s, async () => {
+    // A seek it will refuse, or a key it answers from its record or that another call still queued carries (which
+    // may yet record it), runs nothing: the waiting report keeps its post.
+    const queued = s.queued ??= new Map();
+    const runs = !s.mutations.has(r.idempotencyKey) && !queued.get(r.idempotencyKey) && !(r.kind === 'seek' && !(Number.isFinite(r.positionSeconds) && r.positionSeconds >= 0));
+    const w = runs && s.waiting?.r.sourceGeneration === r.sourceGeneration && s.waiting.r.seekGeneration === r.seekGeneration ? s.waiting : undefined;
+    queued.set(r.idempotencyKey, (queued.get(r.idempotencyKey) ?? 0) + 1);
+    let carry: ((post?: Promise<unknown>) => void) | undefined;
+    // A command that posts no timeline (a track, path or version change) takes the report's position into its plan
+    // and the report is answered at once; one that posts answers it with that post.
+    if (w) { w.by = posts ? new Promise(resolve => { carry = resolve; }) : Promise.resolve(); void w.by.catch(() => undefined); }
+    const work = this.serialize(s, async () => {
       const { signal } = s.sessionWork;
       if (signal.aborted) fail('Plex playback session ended', 'conflict');
       const saved = s.mutations.get(r.idempotencyKey);
       if (saved) return saved;
       this.generations(s.plan, r);
       if (s.plan.state === 'ended' || (s.timelineStopped && r.kind !== 'stop')) fail('Plex playback session ended', 'conflict');
-      await apply(s, signal);
+      s.carry = carry;
+      try { await apply(s, signal); } finally { delete s.carry; }
       signal.throwIfAborted();
       s.plan.revision++;
       const result = structuredClone(s.plan);
       s.mutations.set(r.idempotencyKey, result);
       return result;
     });
+    // A command that ended without its timeline post answers the report it took over as accepted.
+    void work.catch(() => undefined).then(() => {
+      const left = queued.get(r.idempotencyKey)! - 1;
+      if (left) queued.set(r.idempotencyKey, left); else queued.delete(r.idempotencyKey);
+      carry?.();
+    });
+    return work;
   }
 
-  // Commands and observations share one order, including the final stopped timeline.
+  // Commands and observations share one order, including the final stopped timeline. Anything queued after a
+  // waiting progress report ends it: no later report takes its place.
   private serialize<T>(s: PlexSession, run: () => Promise<T>): Promise<T> {
+    delete s.waiting;
     const work = s.pending.then(run);
     s.pending = work.catch(() => undefined);
     return work;

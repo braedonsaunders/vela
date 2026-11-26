@@ -302,21 +302,21 @@ describe('loadGuide projection', () => {
 
 describe('guideFocus', () => {
   test('places a timestamp by local day offset and minute', () => {
-    expect(guideFocus('2026-03-10T18:30:00Z', NOW)).toEqual({ day: 0, minute: 1110 });
-    expect(guideFocus('2026-03-12T00:15:00Z', NOW)).toEqual({ day: 2, minute: 15 });
+    expect(guideFocus('2026-03-10T18:30:00Z', NOW)).toEqual({ day: 0, minute: 1110, available: true });
+    expect(guideFocus('2026-03-12T00:15:00Z', NOW)).toEqual({ day: 2, minute: 15, available: true });
     expect(guideFocus('2026-03-16T23:59:00Z', NOW).day).toBe(6);
   });
 
   test('outside the week or unparseable is day -1', () => {
     expect(guideFocus('2026-03-17T00:00:00Z', NOW).day).toBe(-1);
     expect(guideFocus('2026-03-09T23:00:00Z', NOW).day).toBe(-1);
-    expect(guideFocus('not a date', NOW)).toEqual({ day: -1, minute: 0 });
+    expect(guideFocus('not a date', NOW)).toEqual({ day: -1, minute: 0, available: false });
   });
 
   test('uses the viewer zone', () => {
     const tokyo = JSON.stringify({ locale: 'en', formatLocale: 'en', resolvedLocale: 'en', timeZone: 'Asia/Tokyo', utcOffset: 540 });
     // 18:30 UTC on the 10th is 03:30 on the 11th in Tokyo, the day after Tokyo's "today".
-    expect(guideFocus('2026-03-10T18:30:00Z', NOW, tokyo)).toEqual({ day: 1, minute: 210 });
+    expect(guideFocus('2026-03-10T18:30:00Z', NOW, tokyo)).toEqual({ day: 1, minute: 210, available: true });
   });
 });
 
