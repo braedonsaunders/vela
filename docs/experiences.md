@@ -251,6 +251,10 @@ then deletes the code it replaces in the same release. There are no long-lived d
    `ListenSection` draws the library through `ExperienceView`. The audio dock opens the Now Playing and
    visualizer documents. Data comes from `vela.*` sources over the music API. The parity tools compare
    new document captures with the archived baselines recorded from `experiences/pre-listen`.
+
+   Android TV follow-up. On opening Now Playing, the first focus can land on Play or leave the
+   transport unfocused, depending on when the dock's focus guide and the page draw. Both outcomes
+   are covered by the reviewed parity case.
 3. **Read.** Library pages and a `reader` block with styleable chrome. The reader engine stays
    native.
 4. **Gallery.** A `timeline` grid, a `photoViewer` block, and albums and people pages.
