@@ -405,7 +405,7 @@ final class VelaTour: XCTestCase {
     guard let field = first(identifierPrefix: "connect-address") else { return note("no address field") }
     field.tap()
     // XCTest can drop repeated keys when typing faster than native input events settle.
-    let address = ProcessInfo.processInfo.environment["VELA_TOUR_SERVER"] ?? "http://192.168.68.65:32550"
+    let address = ProcessInfo.processInfo.environment["VELA_TOUR_SERVER"] ?? "http://192.168.68.84:32550"
     for character in address { field.typeText(String(character)); wait(0.12) }
     // Start above the keyboard; app.swipeUp() starts on the keyboard on an iPhone.
     drag(from: CGVector(dx: 0.5, dy: 0.49), to: CGVector(dx: 0.5, dy: 0.17))
