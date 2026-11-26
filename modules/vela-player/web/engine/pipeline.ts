@@ -571,7 +571,10 @@ export class SegmentPipeline {
         first = false;
       }
       if (first) {
-        this.video.currentTime = live ? Math.max(next.start, position) : position;
+        const start = live ? Math.max(next.start, position) : position;
+        // Assigning currentTime at zero still starts a media seek. Start-over media is
+        // already at zero, and a flush while its first frames are arriving can stall WebKit.
+        if (this.video.currentTime !== start) this.video.currentTime = start;
         first = false;
       }
       sequence++;
@@ -587,7 +590,7 @@ export class SegmentPipeline {
       // Tiny holes are stepped over; a live start jumps any hole in front of its first media
       // (gap-jump.ts). Later large gaps go through visible recovery.
       if (this.video.readyState >= 3 && !this.video.paused) played = true;
-      if (this.video.readyState < 3) {
+      if (!this.video.seeking && this.video.readyState < 3) {
         const to = gapJump(this.video.currentTime, timeRanges(this.video.buffered), live && !played);
         if (to !== null) this.video.currentTime = to;
       }

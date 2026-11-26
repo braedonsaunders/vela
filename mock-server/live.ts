@@ -34,6 +34,13 @@ export function archiveWindow(startSeq: number, endSeq: number | null) {
 }
 const headers = { 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-store' };
 
+// The muted browser gate exercises the video timeline with the generated video-only
+// CMAF ladder. GStreamer's muxed audio and video queues can deadlock on a seek flush.
+export const videoOnlyLive = process.env.VELA_MOCK_VIDEO_ONLY_LIVE === '1';
+function liveFile(resource: string): string {
+  return videoOnlyLive ? resource.replace(/^v(360|540|720)\//, 'video$1/') : resource;
+}
+
 // Rebase CMAF decode times when the synthetic ladder loops. This preserves a
 // continuous timeline without discontinuities or resetting the media sequence.
 function boxes(bytes: Uint8Array, begin: number, end: number, visit: (type: string, start: number, end: number) => void) {
@@ -87,7 +94,7 @@ async function rebase(resource: string, offsetSeconds: number): Promise<Uint8Arr
 /** One fixture segment for a sequence number, its decode times moved `shift` seconds earlier. */
 async function segmentBytes(variant: string, seq: number, shift: number): Promise<Uint8Array> {
   const k = ((seq % 15) + 15) % 15, cycle = Math.floor(seq / 15);
-  return rebase(`${variant}/seg-${String(k).padStart(3, '0')}.m4s`, cycle * 60 - shift);
+  return rebase(liveFile(`${variant}/seg-${String(k).padStart(3, '0')}.m4s`), cycle * 60 - shift);
 }
 
 /**
@@ -112,7 +119,7 @@ async function serveArchive(req: Request, startSeq: number, endSeq: number | nul
     const bytes = await segmentBytes(segment[1]!, seq, startSeq * 4);
     return new Response(req.method === 'HEAD' ? null : bytes.buffer as ArrayBuffer, { headers: { 'Content-Type': 'video/iso.segment', 'Cache-Control': 'no-store', 'Content-Length': String(bytes.length) } });
   }
-  return serveMedia(req, rest);
+  return serveMedia(req, liveFile(rest));
 }
 
 export async function serveLive(req: Request, resource: string): Promise<Response> {
@@ -122,7 +129,8 @@ export async function serveLive(req: Request, resource: string): Promise<Respons
     const text = await Bun.file(join(mediaRoot, resource)).text();
     // The generated video ladder already contains English audio. Avoid a second
     // independent audio timeline in the small mock live fixture.
-    return new Response(text.split('\n').filter(l => !l.startsWith('#EXT-X-MEDIA:')).map(l => l.replace(',AUDIO="audio"', '')).join('\n'), { headers });
+    const master = text.split('\n').filter(line => !line.startsWith('#EXT-X-MEDIA:')).map(line => line.replace(',AUDIO="audio"', '')).join('\n');
+    return new Response(videoOnlyLive ? master.replaceAll(',mp4a.40.2', '') : master, { headers });
   }
   const playlist = /^(v360|v540|v720)\/index\.m3u8$/.exec(resource);
   if (playlist) {
@@ -149,5 +157,5 @@ export async function serveLive(req: Request, resource: string): Promise<Respons
     const bytes = await segmentBytes(segment[1]!, seq, -liveFaults.mediaLeadSeconds);
     return new Response(req.method === 'HEAD' ? null : bytes.buffer as ArrayBuffer, { headers: { 'Content-Type': 'video/iso.segment', 'Cache-Control': 'no-store', 'Content-Length': String(bytes.length) } });
   }
-  return serveMedia(req, resource);
+  return serveMedia(req, liveFile(resource));
 }

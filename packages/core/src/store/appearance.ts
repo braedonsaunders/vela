@@ -60,7 +60,14 @@ export class Appearance {
     return this.appOrigin ?? this.origin;
   }
 
-  private reading?: { key: string; at: number; done: boolean; promise: Promise<void> };
+  private reading?: { key: string; at: number; done: boolean; controller: AbortController; promise: Promise<void> };
+
+  cancelLoad(): void {
+    const reading = this.reading;
+    if (!reading || reading.done) return;
+    this.reading = undefined;
+    reading.controller.abort();
+  }
 
   /** Read the selected server's appearance (or the local one). Callers that ask at once while the
    * app starts (start, the host, a session reset) share one read; a later call reads again. */
@@ -69,13 +76,14 @@ export class Appearance {
     const now = Date.now();
     const last = this.reading;
     if (last && last.key === key && (!last.done || now - last.at < APPEARANCE_REUSE_MS)) return last.promise;
-    const entry = { key, at: now, done: false, promise: Promise.resolve() };
-    entry.promise = this.read().finally(() => { entry.done = true; entry.at = Date.now(); });
+    this.cancelLoad();
+    const entry = { key, at: now, done: false, controller: new AbortController(), promise: Promise.resolve() };
+    entry.promise = this.read(entry.controller.signal).finally(() => { entry.done = true; entry.at = Date.now(); });
     this.reading = entry;
     return entry.promise;
   }
 
-  private async read(): Promise<void> {
+  private async read(signal: AbortSignal): Promise<void> {
     const epoch = this.session.epoch;
     this.box.update('appearance', refreshing);
     try {
@@ -83,15 +91,18 @@ export class Appearance {
       let appearance = LOCAL;
       if (adapter && hasAppearance(adapter)) {
         try {
-          appearance = await adapter.appearance();
+          appearance = await adapter.appearance(signal);
         } catch (error) {
           if (!missing(error)) throw error;
         }
       }
-      const model = appearanceModel(appearance, this.origin, await builtInDocuments(this.builtInOrigin, this.rendererVersion), this.builtInOrigin);
-      if (epoch === this.session.epoch) this.box.update('appearance', current => refreshed(current, model));
+      if (signal.aborted || epoch !== this.session.epoch) return;
+      const builtIns = await builtInDocuments(this.builtInOrigin, this.rendererVersion);
+      if (signal.aborted || epoch !== this.session.epoch) return;
+      const model = appearanceModel(appearance, this.origin, builtIns, this.builtInOrigin);
+      this.box.update('appearance', current => refreshed(current, model));
     } catch (error) {
-      if (epoch === this.session.epoch) this.box.update('appearance', appearance => failed(error, appearance));
+      if (!signal.aborted && epoch === this.session.epoch) this.box.update('appearance', appearance => failed(error, appearance));
     }
   }
 
