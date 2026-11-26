@@ -3,9 +3,9 @@ export function restoreRouteFocus(platform: string, tv: boolean): boolean {
   return tv || platform === 'web';
 }
 
-/** The shared navigation keeps the focus it already owns when Android TV opens All books. */
-export function readLibraryOpeningFocus(platform: string, tv: boolean, view: string | undefined): boolean {
-  return !(tv && platform === 'android' && view === 'all-books');
+/** The shared navigation keeps the focus it already owns when a TV opens All books. */
+export function readLibraryOpeningFocus(tv: boolean, view: string | undefined): boolean {
+  return !(tv && view === 'all-books');
 }
 
 /** The legacy Android TV series modal opens on its close button. */

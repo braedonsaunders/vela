@@ -21,7 +21,7 @@ export function ReadLibrary({ id, params }: { id: string; params: LibraryParams 
     <ReadLibraryExperience id={id} content={content} host={host} active={active} />
   ), [id]);
   return <DocumentScreen route="library" entry={id} page={page} sharedShell wrap={wrap}
-    libraryOpeningFocus={readLibraryOpeningFocus(Platform.OS, Platform.isTV, params.view)} />;
+    libraryOpeningFocus={readLibraryOpeningFocus(Platform.isTV, params.view)} />;
 }
 
 function ReadLibraryExperience({ id, content, host, active }: { id: string; content: ReactNode; host: SkinHost; active: boolean }) {

@@ -12,10 +12,13 @@ test('TV and web keep route opener focus restoration', () => {
   expect(restoreRouteFocus('web', false)).toBe(true);
 });
 
-test('Android TV Read keeps navigation focus on All books and starts the series modal on Close', () => {
-  expect(readLibraryOpeningFocus('android', true, 'all-books')).toBe(false);
-  expect(readLibraryOpeningFocus('android', true, 'series')).toBe(true);
-  expect(readLibraryOpeningFocus('ios', true, 'all-books')).toBe(true);
+test('Read All books leaves opening focus with TV navigation', () => {
+  expect(readLibraryOpeningFocus(true, 'all-books')).toBe(false);
+  expect(readLibraryOpeningFocus(true, 'series')).toBe(true);
+  expect(readLibraryOpeningFocus(false, 'all-books')).toBe(true);
+});
+
+test('Android TV Read starts the series modal on Close', () => {
   expect(readTitleOpeningFocus('android', true, 'series')).toBe('close');
   expect(readTitleOpeningFocus('android', true, 'book')).toBeUndefined();
   expect(readTitleOpeningFocus('android', false, 'series')).toBeUndefined();
