@@ -11,6 +11,7 @@ import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
 import { hasFlowHeader } from './resolve/inherit';
+import { MediaFrameViewport } from './blocks/media/viewport';
 import { isHeroControl, isHeroSegment } from './hero-pager';
 import { holdHero } from './hero-hold';
 import { androidHeroAfterTurn, androidHeroKeyDirection, androidHeroPageDirection, heroButtonRank, heroFocusCarry, type AndroidHeroKey } from './hero-focus';
@@ -1133,6 +1134,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       } else trackScroll?.(e);
     } : trackScroll;
     if (rowScroll) content = <RowScroll.Provider value={rowScroll}>{content}</RowScroll.Provider>;
+    const mediaViewport = env.route === 'title' && a11y.nativeID === `title-scroll-${env.entry}` ? use(MediaFrameViewport) : undefined;
     element = (
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
         contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
@@ -1140,7 +1142,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         StickyHeaderComponent={NativeStickyHeader}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
         {...(openingAtTop ? { onScrollBeginDrag: () => { openingMoved.current = true; } } : {})}
-        onLayout={onPagerLayout} onContentSizeChange={onPagerContent}
+        onLayout={mediaViewport?.onLayout ?? onPagerLayout} onContentSizeChange={onPagerContent}
         {...(web && horizontal && rowId ? { dataSet: { velaRow: rowId } } : {})}
         {...a11y} {...(web && route && (env.route === 'title' || env.route === 'person')
           // The page's main landmark is the screen wrapper (the skip link's target); a route

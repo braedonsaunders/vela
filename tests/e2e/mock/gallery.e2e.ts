@@ -19,7 +19,14 @@ describe('Gallery deterministic release gate', { session: 'mock-gallery', serial
     await expect(photo.getByRole('image', harbour)).toBeVisible();
     await expect(photo.getByRole('heading', harbour)).toBeVisible();
     await expect(photo.getByText('Photo', { exact: true })).toBeVisible();
-    await expect(photo.getByText('Nov 23, 2026', { exact: true })).toBeVisible();
+    const takenDay = photo.getByText('Nov 23, 2026', { exact: true });
+    await expect(takenDay).toBeVisible();
+    const frame = photo.getByTestId('detail-frame');
+    await expect.poll(async () => {
+      const bounds = await frame.boundingBox();
+      const caption = await takenDay.boundingBox();
+      return !!bounds && !!caption && caption.y + caption.height <= bounds.y + bounds.height;
+    }).toBe(true);
     await photo.getByText('North Quay', { exact: true }).scrollIntoView();
     await expect(photo.getByText('Place', { exact: true })).toBeVisible();
     await expect(photo.getByText('North Quay', { exact: true })).toBeVisible();

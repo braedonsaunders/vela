@@ -4,7 +4,9 @@ The Gallery photo document binds `photoViewer.props.item` to
 `{src.title.item}` from `vela.title`. The viewer uses the card’s thumbnail,
 backdrop or poster in that order and retains the selected image’s aspect ratio.
 The frame supplies its close control and scroll region. The block adds no TV
-focus targets.
+focus targets. The built-in title frame measures its viewport and the caption
+so the picture, name and taken date fit when the photo opens. Facts and plugin
+panels remain in the scroll region.
 
 | Part | Styles | Element |
 | --- | --- | --- |

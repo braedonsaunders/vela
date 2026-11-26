@@ -1,11 +1,12 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { router } from 'expo-router';
-import { View } from 'react-native';
+import { View, type LayoutChangeEvent } from 'react-native';
 import { useVelaState } from '@vela/core/react';
 import { ScreenActive, type SkinHost } from '@vela/skin';
 import { HostContext, useHost } from '@vela/skin/src/host';
 import { MediaActionsContext } from '@vela/skin/src/blocks/media/context';
 import { MediaFrame } from '@vela/skin/src/blocks/media/title';
+import { MediaFrameViewport } from '@vela/skin/src/blocks/media/viewport';
 import { MediaTitlePending } from '@vela/skin/src/blocks/media/title-pending';
 import { builtinHref, builtinScreenId } from '@vela/skin/src/resolve/builtin';
 import { ScreenView } from '@vela/skin/src/screen/host';
@@ -28,7 +29,21 @@ const target = { kind: 'screen', id: builtinScreenId('gallery'), page: 'photo' }
 const href = builtinHref('gallery', 'photo');
 const setParams = (params: Record<string, string>) => router.setParams(params);
 
-export function GalleryTitleScreen({ id, library, active, back }: Props) {
+export function GalleryTitleScreen(props: Props) {
+  const [height, setHeight] = useState<number>();
+  const onLayout = useCallback((event: LayoutChangeEvent) => {
+    const measured = event.nativeEvent.layout.height;
+    if (measured > 0) setHeight(measured);
+  }, []);
+  const viewport = useMemo(() => ({ height, onLayout }), [height, onLayout]);
+  return (
+    <MediaFrameViewport.Provider value={viewport}>
+      <GalleryTitleRoute {...props} />
+    </MediaFrameViewport.Provider>
+  );
+}
+
+function GalleryTitleRoute({ id, library, active, back }: Props) {
   const vela = useVela();
   const host = vela.host('title', id, library);
   const frame = vela.doc?.mediaTitleSlot;
