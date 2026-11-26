@@ -1,0 +1,254 @@
+diff --git a/android/src/main/java/expo/modules/image/CustomOptions.kt b/android/src/main/java/expo/modules/image/CustomOptions.kt
+index 6f76d8e..ae80785 100644
+--- a/android/src/main/java/expo/modules/image/CustomOptions.kt
++++ b/android/src/main/java/expo/modules/image/CustomOptions.kt
+@@ -3,11 +3,8 @@ package expo.modules.image
+ import com.bumptech.glide.load.Option
+ 
+ object CustomOptions {
+-  // To pass the tint color to the SVG decoder, we need to wrap it in a custom Glide option.
+-  val tintColor = Option.memory<Int>("ExpoTintColor")
+-
+   // Values for the CSS custom properties an SVG source refers to with `var()`.
+-  // Memory-only, like the tint color: the disk cache keeps the original document under a key that
++  // Memory-only: the disk cache keeps the original document under a key that
+   // ignores the variables, while the memory cache keys decoded pictures by them, so two different
+   // sets of variables share one download but can never be served for each other.
+   val svgVariables = Option.memory<Map<String, String>>("ExpoSVGVariables")
+diff --git a/android/src/main/java/expo/modules/image/ExpoImageView.kt b/android/src/main/java/expo/modules/image/ExpoImageView.kt
+index 423e3b7..c78e99b 100644
+--- a/android/src/main/java/expo/modules/image/ExpoImageView.kt
++++ b/android/src/main/java/expo/modules/image/ExpoImageView.kt
+@@ -7,16 +7,13 @@ import android.graphics.PorterDuff
+ import android.graphics.RectF
+ import android.graphics.drawable.BitmapDrawable
+ import android.graphics.drawable.Drawable
+-import android.os.Build
+ import android.util.Log
+-import android.view.ViewConfiguration
+ import androidx.appcompat.widget.AppCompatImageView
+ import androidx.core.graphics.transform
+ import androidx.core.view.isVisible
+ import com.facebook.react.common.annotations.UnstableReactNativeAPI
+ import expo.modules.image.enums.ContentFit
+ import expo.modules.image.records.ContentPosition
+-import expo.modules.image.svg.SVGPictureDrawable
+ 
+ @OptIn(UnstableReactNativeAPI::class)
+ @SuppressLint("ViewConstructor")
+@@ -74,7 +71,6 @@ class ExpoImageView(
+   override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+     super.onLayout(changed, left, top, right, bottom)
+ 
+-    updateImageRenderingLayer()
+     applyTransformationMatrix()
+   }
+ 
+@@ -123,35 +119,6 @@ class ExpoImageView(
+     scaleType = ScaleType.MATRIX
+   }
+ 
+-  override fun setImageDrawable(drawable: Drawable?) {
+-    super.setImageDrawable(drawable)
+-
+-    updateImageRenderingLayer()
+-  }
+-
+-  private fun updateImageRenderingLayer() {
+-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+-      // On older Android renderers, hardware drawing of the SVG PictureDrawable can appear blurry.
+-      // Large views cannot fit in a software layer and would otherwise render blank.
+-      // Recheck on layout and when a reused view receives a different image.
+-      val maximumDrawingCacheSize = ViewConfiguration.get(context).scaledMaximumDrawingCacheSize
+-
+-      val svgLayerType = if (
+-        drawable is SVGPictureDrawable &&
+-        width > 0 && height > 0 &&
+-        width.toLong() * height <= maximumDrawingCacheSize / 4 // Each pixel needs four bytes. Divide the limit to avoid overflowing the view area.
+-      ) {
+-        LAYER_TYPE_SOFTWARE
+-      } else {
+-        LAYER_TYPE_NONE
+-      }
+-
+-      if (layerType != svgLayerType) {
+-        setLayerType(svgLayerType, null)
+-      }
+-    }
+-  }
+-
+   // region Component Props
+   internal var contentFit: ContentFit = ContentFit.Cover
+     set(value) {
+diff --git a/android/src/main/java/expo/modules/image/ExpoImageViewWrapper.kt b/android/src/main/java/expo/modules/image/ExpoImageViewWrapper.kt
+index e0689c9..34357bd 100644
+--- a/android/src/main/java/expo/modules/image/ExpoImageViewWrapper.kt
++++ b/android/src/main/java/expo/modules/image/ExpoImageViewWrapper.kt
+@@ -35,7 +35,6 @@ import expo.modules.image.records.ImageLoadEvent
+ import expo.modules.image.records.ImageProgressEvent
+ import expo.modules.image.records.ImageTransition
+ import expo.modules.image.records.Source
+-import expo.modules.image.svg.SVGPictureDrawable
+ import expo.modules.kotlin.AppContext
+ import expo.modules.kotlin.tracing.beginAsyncTraceBlock
+ import expo.modules.kotlin.tracing.trace
+@@ -121,12 +120,7 @@ class ExpoImageViewWrapper(context: Context, appContext: AppContext) : ExpoView(
+   internal var tintColor: Int? = null
+     set(value) {
+       field = value
+-      // To apply the tint color to the SVG, we need to recreate the drawable.
+-      if (activeView.drawable is SVGPictureDrawable) {
+-        shouldRerender = true
+-      } else {
+-        activeView.setTintColor(value)
+-      }
++      activeView.setTintColor(value)
+     }
+ 
+   // `null` leaves SVG documents untouched. An empty map still resolves `var()` fallbacks.
+@@ -647,9 +641,6 @@ class ExpoImageViewWrapper(context: Context, appContext: AppContext) : ExpoView(
+         .format(decodeFormat.toGlideFormat())
+         .apply(propOptions)
+         .apply(options)
+-        .customize(tintColor) {
+-          apply(RequestOptions().set(CustomOptions.tintColor, it))
+-        }
+         .customize(svgVariables) {
+           apply(RequestOptions().set(CustomOptions.svgVariables, it))
+         }
+diff --git a/android/src/main/java/expo/modules/image/ImageLoadTask.kt b/android/src/main/java/expo/modules/image/ImageLoadTask.kt
+index 8274fb6..57fe02b 100644
+--- a/android/src/main/java/expo/modules/image/ImageLoadTask.kt
++++ b/android/src/main/java/expo/modules/image/ImageLoadTask.kt
+@@ -1,7 +1,6 @@
+ package expo.modules.image
+ 
+ import android.graphics.drawable.BitmapDrawable
+-import com.bumptech.glide.request.RequestOptions
+ import com.bumptech.glide.Glide
+ import expo.modules.image.records.DecodeFormat
+ import expo.modules.image.records.ImageLoadOptions
+@@ -34,9 +33,6 @@ open class ImageLoadTask(
+           .customize(`when` = options.maxWidth <= 0 && options.maxHeight <= 0) {
+             downsample(SafeDownsampleStrategy(DecodeFormat.ARGB_8888))
+           }
+-          .customize(options.tintColor) {
+-            apply(RequestOptions().set(CustomOptions.tintColor, it))
+-          }
+           .submit(options.maxWidth, options.maxHeight)
+           .get()
+       }
+diff --git a/android/src/main/java/expo/modules/image/events/GlideRequestListener.kt b/android/src/main/java/expo/modules/image/events/GlideRequestListener.kt
+index a469ff2..12ce3ce 100644
+--- a/android/src/main/java/expo/modules/image/events/GlideRequestListener.kt
++++ b/android/src/main/java/expo/modules/image/events/GlideRequestListener.kt
+@@ -17,7 +17,7 @@ import expo.modules.image.enums.ImageCacheType
+ import expo.modules.image.records.ImageErrorEvent
+ import expo.modules.image.records.ImageLoadEvent
+ import expo.modules.image.records.ImageSource
+-import expo.modules.image.svg.SVGPictureDrawable
++import expo.modules.image.svg.SVGBitmapDrawable
+ import kotlinx.coroutines.launch
+ import java.lang.ref.WeakReference
+ import java.util.Locale
+@@ -66,9 +66,9 @@ class GlideRequestListener(
+     dataSource: DataSource,
+     isFirstResource: Boolean
+   ): Boolean {
+-    val intrinsicWidth = (resource as? SVGPictureDrawable)?.svgIntrinsicWidth
++    val intrinsicWidth = (resource as? SVGBitmapDrawable)?.svgIntrinsicWidth
+       ?: resource.intrinsicWidth
+-    val intrinsicHeight = (resource as? SVGPictureDrawable)?.svgIntrinsicHeight
++    val intrinsicHeight = (resource as? SVGBitmapDrawable)?.svgIntrinsicHeight
+       ?: resource.intrinsicHeight
+ 
+     // Bundled resources are always instantly available, so treat them as memory hits for
+diff --git a/android/src/main/java/expo/modules/image/svg/SVGDrawableTranscoder.kt b/android/src/main/java/expo/modules/image/svg/SVGDrawableTranscoder.kt
+index 40c7fce..eb2baa9 100644
+--- a/android/src/main/java/expo/modules/image/svg/SVGDrawableTranscoder.kt
++++ b/android/src/main/java/expo/modules/image/svg/SVGDrawableTranscoder.kt
+@@ -1,49 +1,50 @@
+ package expo.modules.image.svg
+ 
+ import android.content.Context
+-import android.graphics.Picture
++import android.content.res.Resources
++import android.graphics.Bitmap
++import android.graphics.Canvas
++import android.graphics.drawable.BitmapDrawable
+ import android.graphics.drawable.Drawable
+-import android.graphics.drawable.PictureDrawable
+ import com.bumptech.glide.load.Options
+ import com.bumptech.glide.load.engine.Resource
+-import com.bumptech.glide.load.resource.SimpleResource
+ import com.bumptech.glide.load.resource.transcode.ResourceTranscoder
+ import com.caverock.androidsvg.SVG
+-import com.caverock.androidsvg.applyTintColor
+-import expo.modules.image.CustomOptions
++import kotlin.math.sqrt
+ 
+-/**
+- * We have to use the intrinsicWidth/Height from the Picture to render the image at a high enough resolution, but at the same time we want to return the actual
+- * preferred width and height of the SVG to JS. This class allows us to do that.
+- */
+-class SVGPictureDrawable(picture: Picture, val svgIntrinsicWidth: Int, val svgIntrinsicHeight: Int) : PictureDrawable(picture)
++internal class SVGBitmapDrawable(
++  resources: Resources,
++  bitmap: Bitmap,
++  val svgIntrinsicWidth: Int,
++  val svgIntrinsicHeight: Int
++) : BitmapDrawable(resources, bitmap)
+ 
+-/**
+- * Convert the [SVG]'s internal representation to an Android-compatible one ([Picture]).
+- *
+- * Copied from https://github.com/bumptech/glide/blob/10acc31a16b4c1b5684f69e8de3117371dfa77a8/samples/svg/src/main/java/com/bumptech/glide/samples/svg/SvgDrawableTranscoder.java
+- * and rewritten to Kotlin.
+- */
+-class SVGDrawableTranscoder(val context: Context) : ResourceTranscoder<SVG?, Drawable> {
++class SVGDrawableTranscoder(private val context: Context) : ResourceTranscoder<SVG?, Drawable> {
+   override fun transcode(toTranscode: Resource<SVG?>, options: Options): Resource<Drawable> {
+-    val svgData = toTranscode.get()
+-    // If the svg doesn't have a viewBox, we can't determine its intrinsic width and height, so we default to 512x512.
+-    // Same dimensions are used in the AndroidSVG library when the viewBox is not set.
+-    val intrinsicWidth = svgData.documentViewBox?.width()?.toInt() ?: 512
+-    val intrinsicHeight = svgData.documentViewBox?.height()?.toInt() ?: 512
++    val svg = toTranscode.get()
++    // The decoder sizes the document to the Glide request. Cap very large views and requests
++    // for the original size before allocating a software bitmap.
++    val width = svg.documentWidth.toDouble().takeIf { it.isFinite() && it > 0 } ?: 512.0
++    val height = svg.documentHeight.toDouble().takeIf { it.isFinite() && it > 0 } ?: 512.0
++    val scale = minOf(1.0, 4096.0 / maxOf(width, height), sqrt(4_194_304.0 / width / height))
++    val bitmap = Bitmap.createBitmap(
++      (width * scale).toInt().coerceAtLeast(1),
++      (height * scale).toInt().coerceAtLeast(1),
++      Bitmap.Config.ARGB_8888
++    )
++    bitmap.density = Bitmap.DENSITY_NONE
++    // Glide calls the transcoder on its decode worker. A scrolling view only draws the pixels.
++    svg.renderToCanvas(Canvas(bitmap))
++    bitmap.prepareToDraw()
+ 
+-    val tintColor = options.get(CustomOptions.tintColor)
+-    if (tintColor != null) {
+-      applyTintColor(svgData, tintColor)
++    val intrinsicWidth = svg.documentViewBox?.width()?.toInt() ?: 512
++    val intrinsicHeight = svg.documentViewBox?.height()?.toInt() ?: 512
++    val resources = context.resources
++    return object : Resource<Drawable> {
++      override fun getResourceClass(): Class<Drawable> = Drawable::class.java
++      override fun get(): Drawable = SVGBitmapDrawable(resources, bitmap, intrinsicWidth, intrinsicHeight)
++      override fun getSize(): Int = bitmap.allocationByteCount
++      override fun recycle() = Unit // An Image returned by loadAsync can also hold the bitmap.
+     }
+-
+-    val picture = SVGPictureDrawable(
+-      svgData.renderToPicture(),
+-      intrinsicWidth,
+-      intrinsicHeight
+-    )
+-    return SimpleResource(
+-      picture
+-    )
+   }
+ }
