@@ -73,15 +73,26 @@ export function readerLayout(width: number, height: number, fontSize = 100): Rea
   return { columns, gap, maxInlineSize, top: small ? 56 : 72, bottom: small ? 50 : 60 };
 }
 
+export const READER_HEADINGS = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
+export const READER_COLUMN_START = 'data-vela-reader-column-start';
+
 /** Reflowable pages are columns. Keep a heading with the start of the following block. */
 export function readerHeadingRules(flow: ReaderFlow): string {
   return flow === 'paginated' ? `
-    h1, h2, h3, h4, h5, h6, [role="heading"] {
+    ${READER_HEADINGS} {
       -webkit-column-break-after: avoid !important;
       break-after: avoid !important;
       break-inside: avoid !important;
     }
+    [${READER_COLUMN_START}] { break-before: column !important; }
   ` : '';
+}
+
+/** Compare the rendered column of the heading and of the next block's first line. */
+export function headingOrphaned(heading: number, following: number, origin: number, columnStride: number): boolean {
+  if (!(columnStride > 0)) return false;
+  const column = (position: number) => Math.floor((position - origin) / columnStride);
+  return column(heading) !== column(following);
 }
 
 // ── Taps ─────────────────────────────────────────────────────────────────────
