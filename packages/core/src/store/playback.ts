@@ -24,6 +24,7 @@ import { withPlaying } from './playing-release';
 import { serverEnd } from './server-end';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
 import { matchSeriesTracks } from '../series-tracks';
+import type { ArchiveRange } from '../live/timeshift';
 import type { SeriesTracks } from './series-tracks';
 import type { Session } from './session';
 import type { StateBox } from './state';
@@ -38,7 +39,7 @@ export type PlaybackTarget =
   | { kind: 'extra'; id: string }
   | { kind: 'channel'; id: string }
   /** A programme from the channel's archive (features.liveCatchUp): ended, or with `from: 'start'` on air from its start. */
-  | { kind: 'programme'; id: string; channelId: string; from?: 'start'; positionSeconds?: number }
+  | { kind: 'programme'; id: string; channelId: string; from?: 'start'; range?: ArchiveRange; positionSeconds?: number }
   | { kind: 'library-live'; id: string; libraryId: string; tab?: string };
 
 export type PlaybackPhase = 'idle' | 'starting' | 'preparing' | 'playing' | 'ended' | 'failed';
@@ -207,7 +208,8 @@ export class Playback {
           current.target.libraryId === target.libraryId &&
           current.target.tab === target.tab)) &&
         (target.kind !== 'programme' || (current.target.kind === 'programme' &&
-          current.target.channelId === target.channelId && current.target.from === target.from))) return;
+          current.target.channelId === target.channelId && current.target.from === target.from &&
+          current.target.range?.startAt === target.range?.startAt && current.target.range?.durationSeconds === target.range?.durationSeconds))) return;
     const stopping = this.stop();
     const run = {};
     this.run = run;
@@ -272,7 +274,7 @@ export class Playback {
         reply = await api.startLibraryLive(target.libraryId, { itemId: target.id, tab: target.tab, liveMode: 'adaptive', client: this.session.client, idempotencyKey: intent.key });
       } else reply = await api.startPlayback({
           ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id }
-            : target.kind === 'programme' ? { channelId: target.channelId, programmeId: target.id, ...(target.from ? { from: target.from } : {}) }
+            : target.kind === 'programme' ? { channelId: target.channelId, ...(target.range ?? { programmeId: target.id, ...(target.from ? { from: target.from } : {}) }) }
             : { titleId: target.id }),
           ...(position !== undefined ? { positionSeconds: position } : {}),
           ...(target.kind === 'title' && target.mediaSourceId ? { mediaSourceId: target.mediaSourceId } : {}),
@@ -725,11 +727,21 @@ export class Playback {
     return added ?? chosen;
   }
 
+  private pendingLiveTransport?: { sessionId: string; result: Promise<boolean> };
+
   liveTransport(sessionId: string, command: { kind: 'pause' | 'resume' | 'goLive' } | { kind: 'seek'; positionSeconds: number }): Promise<boolean> {
-    const plan = this.box.get().playback.plan;
-    if (!plan?.live || plan.sessionId !== sessionId) return Promise.resolve(false);
-    return this.command(sessionId, { ...command, sourceGeneration: plan.sourceGeneration,
-      seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() });
+    const queue = this.pendingLiveTransport?.sessionId === sessionId ? this.pendingLiveTransport.result : Promise.resolve();
+    const result = queue.then(() => {
+      const plan = this.box.get().playback.plan;
+      if (!plan?.live || plan.sessionId !== sessionId) return false;
+      return this.command(sessionId, { ...command, sourceGeneration: plan.sourceGeneration,
+        seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() });
+    });
+    this.pendingLiveTransport = { sessionId, result };
+    void result.then(() => {
+      if (this.pendingLiveTransport?.result === result) this.pendingLiveTransport = undefined;
+    });
+    return result;
   }
 
   /**
@@ -1303,7 +1315,7 @@ export class Playback {
 /** What a watch is of, whatever position or track a restart asks it again at. */
 function watchOf(target: PlaybackTarget): string {
   return JSON.stringify([target.kind, target.id,
-    target.kind === 'programme' ? [target.channelId, target.from ?? ''] : target.kind === 'library-live' ? [target.libraryId, target.tab ?? ''] : []]);
+    target.kind === 'programme' ? [target.channelId, target.from ?? '', target.range?.startAt, target.range?.durationSeconds] : target.kind === 'library-live' ? [target.libraryId, target.tab ?? ''] : []]);
 }
 
 function delay(ms: number, signal: AbortSignal): Promise<void> {

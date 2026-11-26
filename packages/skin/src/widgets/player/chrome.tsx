@@ -6,7 +6,7 @@
 import { FocusPressable as Pressable } from '../../focus';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View, Text } from 'react-native';
-import { clampSeek, LIVE_SLACK_SECONDS, msg } from '@vela/core';
+import { clampSeek, stepLandsLive, msg } from '@vela/core';
 import { useHost } from '../../host';
 import { BottomBar, TopBar, bottomFade, type Opened, type Reveal, type TickerToggle } from './bars';
 import { usePlayerChrome, type PlayerChromeState } from './context';
@@ -131,9 +131,9 @@ function Chrome({ state }: { state: PlayerChromeState }) {
 
   // A channel's rewind window bounds every seek; one that reaches the live edge goes back to live.
   const rewind = live.live && live.window?.seekable ? live.window : null;
-  const seek = (seconds: number) => {
+  const seek = (seconds: number, toLive = !!rewind && seconds >= rewind.edge - 0.5) => {
     if (rewind) {
-      if (!live.archive && seconds >= rewind.edge - LIVE_SLACK_SECONDS) {
+      if (!live.archive && toLive) {
         lastStep.current = null;
         live.backToLive();
         return;
@@ -150,7 +150,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     if (blocked) return;
     const from = recentStep() ?? (rewind ? rewind.position : view.position);
     const limit = rewind ? rewind.edge : view.duration > 0 ? view.duration : Number.POSITIVE_INFINITY;
-    seek(Math.max(rewind ? rewind.start : 0, Math.min(limit, from + delta)));
+    const toLive = !!rewind && stepLandsLive({ edge: rewind.edge, position: from }, delta);
+    seek(Math.max(rewind ? rewind.start : 0, Math.min(limit, from + delta)), toLive);
   };
   const toggle = (menu: Exclude<Opened, null>) => {
     // One version read per opening of the quality menu, never a poll while it stands open.

@@ -52,7 +52,7 @@ export interface LiveOptions {
   openWatch(channelId: string, replace: boolean): void;
   /** Open a programme from the channel's archive full screen (features.liveCatchUp): an ended one, or
    * with `from: 'start'` the one on air from its beginning. Absent: the host has no catch-up. */
-  openCatchUp?(channelId: string, programmeId: string, from: 'start' | undefined, replace: boolean): void;
+  openCatchUp?(channelId: string, programmeId: string, from: 'start' | undefined, replace: boolean, range?: import('@vela/core').ArchiveRange): void;
   /** What the server offers for catch-up and timeshift; absent: neither. */
   catchUp?: import('@vela/core').CatchUpOffer;
 }
@@ -256,7 +256,8 @@ export class LiveController {
   /** Play a programme from the channel's archive: an ended one (catch-up), or the one on air from its start. */
   playProgramme(channelId: string, programmeId: string, kind: 'catchUp' | 'startOver', replace = false): void {
     if (!channelId || !programmeId || !this.options.openCatchUp) return;
-    this.options.openCatchUp(channelId, programmeId, kind === 'startOver' ? 'start' : undefined, replace);
+    const range = this.guide?.channels.find(channel => channel.id === channelId)?.programmes.find(p => p.id === programmeId)?.archiveRange;
+    this.options.openCatchUp(channelId, programmeId, kind === 'startOver' ? 'start' : undefined, replace, range);
   }
 
   /** From a programme in the archive back to the channel live, in place. */

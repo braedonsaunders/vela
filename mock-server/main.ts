@@ -36,15 +36,26 @@ const archiveFixture: V.Programme[] = [
   return { id: `catchup:channel-1:${start}`, channelId: 'channel-1', name, summary: '', artwork: [],
     start: new Date(start).toISOString(), end: new Date(fixtureEpoch + end * 60_000).toISOString() };
 });
+const sportsArchiveFixture = ['channel-7', 'channel-29'].map(channelId => ({
+  ...archiveFixture[1]!, id: archiveFixture[1]!.id.replace('channel-1', channelId), channelId,
+}));
+const catchUpProgrammes = [...archiveFixture, ...sportsArchiveFixture];
+const catchUpChannels = new Set(catchUpProgrammes.map(p => p.channelId));
 const fixtureGuide = (from: number, until: number, ids: string[]) => {
   let programmes = (scaleFixture?.guide ?? defaultGuide)(from, until, ids);
   if (faults.catchUpFixture) {
-    programmes = programmes.filter(p => p.channelId !== 'channel-1');
-    if (!ids.length || ids.includes('channel-1')) programmes.push(...archiveFixture.filter(p => Date.parse(p.start) < until && Date.parse(p.end) > from));
+    programmes = programmes.filter(p => !catchUpChannels.has(p.channelId));
+    programmes.push(...catchUpProgrammes.filter(p => (!ids.length || ids.includes(p.channelId))
+      && Date.parse(p.start) < until && Date.parse(p.end) > from));
   }
   return programmes.map(p => flagProgramme(p, channelById.get(p.channelId)));
 };
-setWatchProgramme((channelId, eventStart) => eventProgramme(channelById.get(channelId), fixtureGuide(eventStart - 6 * 3600_000, eventStart + 3600_000, [channelId]), eventStart));
+setWatchProgramme((channelId, eventStart) => {
+  const channel = channelById.get(channelId);
+  const fixture = faults.catchUpFixture && sportsArchiveFixture.find(p => p.channelId === channelId);
+  if (fixture) return eventProgramme(channel, [fixture], Date.parse(fixture.start));
+  return eventProgramme(channel, fixtureGuide(eventStart - 6 * 3600_000, eventStart + 3600_000, [channelId]), eventStart);
+});
 const mockSeasonCount = Math.max(0, Math.floor(Number(process.env.VELA_MOCK_SEASONS) || 0));
 const gapChannels = new Set((process.env.VELA_MOCK_GUIDE_GAPS ?? '').split(','));
 const gapHour = Math.floor(Date.now() / 3600000) * 3600000;

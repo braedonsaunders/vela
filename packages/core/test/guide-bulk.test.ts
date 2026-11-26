@@ -117,3 +117,26 @@ test('scrolling keeps completed rows without fetching them again or crossing a r
   expect(refreshed.channels[0]?.listingsLoaded).toBe(false);
   expect(refreshed.channels[0]?.programmes).toEqual([]);
 });
+
+test('archive depth on the bulk row exposes distinct id-less listings as explicit ranges', async () => {
+  const iso = (minutes: number) => new Date(NOW + minutes * MINUTE).toISOString();
+  const programmes: Programme[] = [-60, -30].map(offset => ({
+    id: '', channelId: 'archive', name: String(offset), summary: '', artwork: [], start: iso(offset), end: iso(offset + 20),
+  }));
+  const api: GuideApi = {
+    channels: async () => ({
+      items: [{ id: 'archive', name: 'Archive', number: '1', kind: 'tv', artwork: [], favorite: false }],
+      continuation: 'exhausted',
+    }),
+    guide: async () => { throw new Error('Expected the bulk guide'); },
+    guideWindow: async q => ({ ...answer(q), channels: [{ channelId: 'archive', state: 'ready', archiveDays: 2, programmes }] }),
+  };
+  const guide = await loadGuide(api, 0, NOW, 'bulk-id-less-archive', undefined, undefined, ['archive'],
+    { from: 660, to: 840 }, { archive: true, archiveDays: 2 });
+  const cells = guide.channels[0]!.programmes;
+  expect(new Set(cells.map(cell => cell.id)).size).toBe(2);
+  expect(cells.map(cell => [cell.replay, cell.archiveRange])).toEqual([
+    ['catchUp', { startAt: iso(-60), durationSeconds: 1200 }],
+    ['catchUp', { startAt: iso(-30), durationSeconds: 1200 }],
+  ]);
+});

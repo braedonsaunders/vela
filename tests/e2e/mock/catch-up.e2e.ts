@@ -25,10 +25,22 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       const at = new Date(Date.parse(programme.start) + 5 * 60_000).toISOString();
       await app.open('/vela/live?' + new URLSearchParams({ ch: 'channel-1', prog: programme.id, at }));
     };
-    const stage = screen.getByTestId('watch-stage');
+    const stage = screen.getByTestId('player-stage-input');
     const close = screen.getByTestId('player-close');
     const toggle = screen.getByTestId('player-toggle');
     const timeline = screen.getByTestId('player-live-timeline');
+    const pause = async () => {
+      await waitForVideoReady(browser, screen);
+      await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });
+      await stage.press('k');
+      await expect(toggle).toHaveAttribute('aria-label', 'Play');
+    };
+    const closeWatch = async () => {
+      if (!await stage.isVisible()) return;
+      if (await toggle.getAttribute('aria-label') === 'Pause') await pause();
+      await close.tap();
+      await expect(stage).toBeHidden();
+    };
     try {
       expect(guide.catchUpFixture).toBe(true);
       expect(guide.programmes).toHaveLength(2);
@@ -39,7 +51,7 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });
       await expect(screen.getByTestId('player-scrub')).toBeVisible();
       await expect(timeline).toBeHidden();
-      await close.tap();
+      await closeWatch();
 
       await openProgramme(guide.programmes[1]!);
       await expect(screen.getByTestId('guide-start-over')).toBeVisible({ timeout: 30_000 });
@@ -47,8 +59,7 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       await screen.getByTestId('guide-start-over').tap();
       await expect(timeline).toBeVisible({ timeout: 35_000 });
       await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });
-      await toggle.tap();
-      await expect(toggle).toHaveAttribute('aria-label', 'Play');
+      await pause();
       await expect.poll(() => pausedReports).toBeGreaterThanOrEqual(2);
 
       const goLive = screen.getByTestId('player-go-live');
@@ -56,10 +67,9 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       await goLive.tap();
       await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });
       await expect(screen.getByTestId('player-live-mark')).toBeVisible();
-      await toggle.tap();
-      await expect(toggle).toHaveAttribute('aria-label', 'Play');
+      await pause();
       const seeks = commands.filter(kind => kind === 'seek').length;
-      await screen.getByTestId('player-scrub').press('Home');
+      await screen.getByTestId('player-scrub').press('PageDown');
       await expect.poll(() => commands.filter(kind => kind === 'seek').length).toBe(seeks + 1);
       await expect(screen.getByTestId('player-live-delay')).toHaveText(/ · -\d+:[0-5]\d$/, { timeout: 35_000 });
       await expect(toggle).toHaveAttribute('aria-label', 'Play');
@@ -71,16 +81,15 @@ describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
       await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });
       expect(commands.filter(kind => kind === 'goLive')).toHaveLength(2);
     } finally {
-      if (await stage.isVisible()) {
-        if (!await close.isVisible()) await stage.tap();
-        if (await close.isVisible()) await close.tap();
-      }
-      await browser.unroute(sessionRoute);
-      await browser.evaluate(async () => {
-        await fetch('/__admin/faults', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catchUpFixture: false }),
+      try { await closeWatch(); }
+      finally {
+        await browser.unroute(sessionRoute);
+        await browser.evaluate(async () => {
+          await fetch('/__admin/faults', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catchUpFixture: false }),
+          });
         });
-      });
+      }
     }
   });
 });

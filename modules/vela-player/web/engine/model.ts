@@ -77,6 +77,7 @@ export interface PlaybackSession {
   audioTrackId?: string;
   subtitleTrackId?: string;
   live?: boolean;
+  startOver?: boolean;
   liveWindowStart?: number;
   liveEdge?: number;
   liveMaxDrift?: number;

@@ -1,7 +1,7 @@
 import { readGuideWindow } from './bulk';
 import { guideRetry, guideRetryable } from './retry';
 import { guideWindows } from './window';
-import { programmeCatchUp, type CatchUpKind } from './timeshift';
+import { guideProgrammeKey, programmeCatchUp, type ArchiveRange, type CatchUpKind } from './timeshift';
 import { VelaError } from '../adapter/errors';
 import { artworkURL, type Images } from '../discovery/artwork';
 import { localeContext, minute, msg, number, time, withLocale } from '../i18n';
@@ -27,6 +27,7 @@ export interface GuideProgramme {
   /** Plays from the channel's archive if the server offers catch-up: ended (catchUp), or on air from its
    * start (startOver); '' otherwise. Projected with the clock, so a cached page moves along. */
   replay: CatchUpKind | '';
+  archiveRange?: ArchiveRange;
 }
 export interface GuideChannel {
   id: string; number: string; listingsUnavailable?: boolean; name: string; favorite: boolean; logo: string; group: string; listed: boolean; listingsLoaded: boolean;
@@ -116,7 +117,7 @@ function retainedListings(scope: string, id: string, from: number, until: number
     covered = Math.max(covered, piece.until);
     if (covered >= until) {
       const programmes = [...new Map(pieces.sort((a, b) => a.row.at - b.row.at).flatMap(p => p.row.lastReady ?? [])
-        .filter(p => Date.parse(p.end) > from && Date.parse(p.start) < until).map(p => [p.id, p])).values()].sort(byStart);
+        .filter(p => Date.parse(p.end) > from && Date.parse(p.start) < until).map(p => [guideProgrammeKey(p), p])).values()].sort(byStart);
       return { archiveDays: pieces.findLast(p => p.row.archiveDays !== undefined)?.row.archiveDays,
         programmes, ready: true, expires: Math.min(...pieces.map(p => p.row.expires)) };
     }
@@ -355,7 +356,7 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
   const windows = range ? await Promise.all(guideWindows(from, until, start, end).map(window =>
     listings(api, scope, window.from, window.until, now, channelIds, options?.revalidate))) : [await listings(api, scope, from, Math.max(from + MINUTE, until), now, channelIds, options?.revalidate)];
   const window = { channels: windows[0]?.channels ?? await channelMetadata(api, scope, now, options?.revalidate),
-    programmes: [...new Map(windows.flatMap(window => window.programmes).map(p => [p.id, p])).values()],
+    programmes: [...new Map(windows.flatMap(window => window.programmes).map(p => [guideProgrammeKey(p), p])).values()],
     loaded: new Set((windows[0]?.channels ?? []).filter(c => windows.every(w => w.loaded.has(c.id))).map(c => c.id)),
     unavailable: new Set(windows.flatMap(w => [...w.unavailable])),
     retryAt: Math.min(...windows.map(w => w.retryAt ?? Infinity)) };
@@ -370,7 +371,7 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
   const current = { programmes: currentParts.flatMap(part => part.programmes), retryAt: Math.min(...currentParts.map(part => part.retryAt ?? Infinity)) };
   const coverageEnd = !range && day === 0 ? end : currentWindows.at(-1)?.until ?? now;
   const grouped = group(window.programmes.filter(p => Date.parse(p.start) < end && Date.parse(p.end) > start));
-  const currentByChannel = group([...new Map([...window.programmes, ...current.programmes].map(p => [p.id, p])).values()].sort(byStart));
+  const currentByChannel = group([...new Map([...window.programmes, ...current.programmes].map(p => [guideProgrammeKey(p), p])).values()].sort(byStart));
   const project = (now: number): GuideModel => withLocale(localeJSON, () => {
     const day = Math.round((start - midnight(now, 0)) / DAY);
     const minutes = Math.round((end - start) / MINUTE);
@@ -416,21 +417,23 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
         id: channel.id, number: channel.number, name: channel.name, favorite: channel.favorite, group: channel.group ?? '',
         guideIds: [...new Set((channel.guides ?? []).map(g => g.id))],
         logo: channelLogo(channel, images), listingsUnavailable: window.unavailable.has(channel.id), listed: entries.length > 0, listingsLoaded: !loadedIds || loadedIds.has(channel.id),
-        now: airing?.name ?? '', next: next?.name ?? '', nowId: airing?.id ?? '',
+        now: airing?.name ?? '', next: next?.name ?? '', nowId: airing ? guideProgrammeKey(airing) : '',
         nowProgress: airing ? Math.round((now - airingStart) / (airingEnd - airingStart) * 1000) / 10 : 0,
         nowRemaining: airing ? left(airingEnd - now) : '',
         nextLabel: next ? msg('live.nextAt', { time: time(Date.parse(next.start)), programme: next.name }) : '',
         nowArt: airing ? picture(airing.artwork, ['still', 'backdrop', 'poster'], 640, 360, images) : '',
         nowEpisode: airing ? episodeLine(airing) : '', nowGenre: airing?.genres?.[0] ?? '',
         archiveDays: channel.archiveDays ?? 0,
-        nowStartOver: !!airing && programmeCatchUp(airing, channel.archiveDays, now, offer) === 'startOver',
+        nowStartOver: !!airing?.id && programmeCatchUp(airing, channel.archiveDays, now, offer) === 'startOver',
         programmes: entries.map(p => {
           const a = Date.parse(p.start), b = Date.parse(p.end);
           const onAir = a <= now && now < b;
+          const replay = programmeCatchUp(p, channel.archiveDays, now, offer);
+          const archiveRange = !p.id && replay === 'catchUp' ? { startAt: p.start, durationSeconds: (b - a) / 1000 } : undefined;
           const genre = p.genres?.[0] ?? '';
           const episode = episodeLine(p);
           return {
-            id: p.id, name: p.name, summary: p.summary, airing: onAir, ended: b <= now,
+            id: guideProgrammeKey(p), name: p.name, summary: p.summary, airing: onAir, ended: b <= now,
             startsInLabel: number(Math.max(0, Math.ceil((a - now) / MINUTE))), startLabel: time(a), endLabel: time(b),
             leftId: '', rightId: '', upId: '', downId: '',
             at: (Math.max(a, start) - start) / MINUTE, span: (Math.min(b, end) - Math.max(a, start)) / MINUTE,
@@ -440,7 +443,8 @@ async function projectGuide(api: GuideApi, day: number, now: number, scope: stri
               : a < tomorrow ? msg('live.startsAt', { time: time(a) }) : a < dayAfterTomorrow ? msg('live.startsTomorrow', { time: time(a) }) : msg('live.startsOn', { day: weekday.format(a), time: time(a) }),
             episode, rating: p.rating ?? '', genre, tone: tone(genre),
             art: picture(p.artwork, ['still', 'backdrop', 'poster'], 640, 360, images),
-            replay: programmeCatchUp(p, channel.archiveDays, now, offer) ?? '',
+            replay: replay && (p.id || archiveRange) ? replay : '',
+            ...(archiveRange ? { archiveRange } : {}),
           };
         }),
       };

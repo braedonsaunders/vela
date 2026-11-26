@@ -550,7 +550,7 @@ function PhoneActions({ look, state, view, blocked, live, overlay, seek, seekBy,
       {!timeline && !live.archive && live.startOver ? action('restart', msg('catchUp.startOver'), 'player-start-over', live.startOver, blocked) : null}
       {timeline && state.nextEpisode ? action('next', msg('player.nextEpisodeNamed', { name: state.nextEpisode.label }),
         'player-next-episode', state.nextEpisode.play) : null}
-      {(live.live || live.archive === 'catchUp') && (live.behind > 0 || live.window?.delayed || live.archive)
+      {(live.live || live.archive === 'catchUp') && (live.behind > 0 || live.window?.delayed || live.archive || (live.paused && !!live.window?.seekable))
         ? action('live', msg('catchUp.backToLive'), 'player-go-live', live.backToLive) : null}
       {!timeline && !live.archive && multiview && live.channelId ? action('tiles', msg('multiview.add'), 'player-multiview',
         () => multiview.open(live.channelId, { replace: true })) : null}

@@ -3,7 +3,7 @@
 // the watch route with `kind=channel`.
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import type { Vela as Store } from '@vela/core';
+import type { ArchiveRange, Vela as Store } from '@vela/core';
 import { sampleUIFrames } from '@vela/player';
 import { LiveController, liveSource } from '@vela/skin/src/widgets/guide';
 import { preferences } from './data/preferences';
@@ -14,8 +14,9 @@ function openWatch(channelId: string, replace: boolean): void {
   else router.push(target);
 }
 
-function openCatchUp(channelId: string, programmeId: string, from: 'start' | undefined, replace: boolean): void {
-  const target = { pathname: '/watch/[id]' as const, params: { id: programmeId, kind: 'programme', channelId, ...(from ? { from } : {}) } };
+function openCatchUp(channelId: string, programmeId: string, from: 'start' | undefined, replace: boolean, range?: ArchiveRange): void {
+  const target = { pathname: '/watch/[id]' as const, params: { id: programmeId, kind: 'programme', channelId, ...(from ? { from } : {}),
+    ...(range ? { startAt: range.startAt, durationSeconds: String(range.durationSeconds) } : {}) } };
   if (replace) router.replace(target);
   else router.push(target);
 }

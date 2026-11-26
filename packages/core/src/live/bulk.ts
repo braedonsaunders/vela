@@ -1,4 +1,5 @@
 import { VelaError } from '../adapter/errors';
+import { guideProgrammeKey } from './timeshift';
 import type { GuideApi } from './guide';
 import type { GuideWindowRequest, GuideWindowResponse } from '../wire';
 
@@ -17,7 +18,7 @@ function merge(query: GuideWindowRequest, answers: GuideWindowResponse[]): Guide
       const rows = answers.flatMap(answer => answer.channels.filter(row => row.channelId === channelId));
       const archiveDays = rows.findLast(row => row.archiveDays !== undefined)?.archiveDays;
       return { channelId, ...(archiveDays === undefined ? {} : { archiveDays }), state: rows.some(row => row.state === 'unavailable') ? 'unavailable' : 'ready',
-        programmes: [...new Map(rows.flatMap(row => row.programmes).map(p => [p.id, p])).values()]
+        programmes: [...new Map(rows.flatMap(row => row.programmes).map(p => [guideProgrammeKey(p), p])).values()]
           .sort((a, b) => Date.parse(a.start) - Date.parse(b.start) || a.id.localeCompare(b.id)) };
     }),
   };

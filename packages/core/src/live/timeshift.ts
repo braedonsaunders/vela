@@ -24,6 +24,13 @@ export function catchUpOffer(features: Partial<V.ServerCapabilities['features']>
 /** How a guide programme can play beyond live: from the archive once ended, from its start while on air. */
 export type CatchUpKind = 'catchUp' | 'startOver';
 
+export interface ArchiveRange { startAt: string; durationSeconds: number }
+
+/** An id-less listing still needs a stable cell key and a distinct cache entry. */
+export function guideProgrammeKey(programme: Pick<V.Programme, 'id' | 'channelId' | 'start'>): string {
+  return programme.id || `archive-range:${programme.channelId}:${programme.start}`;
+}
+
 /** Why a programme cannot play from the archive, for the programme panel's note. */
 export type CatchUpRefusal = 'no-archive' | 'too-old' | 'upcoming';
 
@@ -155,7 +162,7 @@ export function clampSeek(window: Pick<TimeshiftWindow, 'start' | 'edge'>, secon
 
 /** A step that would land within the stream's latency of the edge is a return to live instead. */
 export function stepLandsLive(window: Pick<TimeshiftWindow, 'edge' | 'position'>, seconds: number): boolean {
-  return window.position + seconds >= window.edge - LIVE_SLACK_SECONDS;
+  return seconds > 0 && window.position + seconds >= window.edge - LIVE_SLACK_SECONDS;
 }
 
 /** The playhead's share of the window, 0..1. */

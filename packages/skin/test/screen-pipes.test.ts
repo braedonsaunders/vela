@@ -155,5 +155,9 @@ describe('pipes', () => {
     const untimed = ctx(page({ sources: { game: { plays: [{ score: { mtl: 1 } }, { score: { mtl: 4 } }] } }, context: { pictureTime: '2026-11-24T19:00:00Z' } }));
     expect(draw('{src.game.plays|asOf:at,score.mtl}', {}, untimed)).toBe('4');
     expect(draw('{src.game.plays|asOf:at}', {}, untimed)).toBe('2');
+    const delayed = ctx(page({ sources: { game: { plays: [{ score: { mtl: 4 } }] } }, context: { delayed: true, pictureTime: '2026-11-24T19:00:00Z' } }));
+    expect(draw('{src.game.plays|asOf:at,score.mtl}', {}, delayed)).toBe('');
+    const sparse = ctx(page({ sources: { game: { plays: [...plays, { at: '2026-11-24T20:12:00Z' }] } }, context: { delayed: true, pictureTime: '2026-11-24T20:15:00Z' } }));
+    expect(draw('{src.game.plays|asOf:at,score.mtl}', {}, sparse)).toBe('2');
   });
 });

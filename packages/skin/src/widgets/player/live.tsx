@@ -101,6 +101,7 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
   const wentLive = useRef(0);
   const window = measured && measured.delayed && snapshot?.state !== 'paused' && now - wentLive.current < GO_LIVE_GRACE_MS ? { ...measured, delayed: false } : measured;
   const rewindable = !!window?.seekable;
+  const paused = snapshot?.state === 'paused';
   const behindSeconds = window ? window.behind
     : plan?.catchUp ? Math.max(0, (now - (catchUpPictureTime(plan, position) ?? now)) / 1000) : 0;
   // A deliberate rewind is no delivery trouble: the window tells the delay, not "N seconds behind".
@@ -137,12 +138,12 @@ export function useLiveWatchChrome(plan: PlaybackPlan | null, snapshot: Snapshot
     },
     archive: archived?.kind ?? null,
     window,
-    delay: window?.delayed || window?.startOver ? delayLabel(window.behind) : plan?.catchUp ? delayLabel(behindSeconds) : '',
+    delay: window && (window.delayed || window.startOver || (paused && rewindable)) ? delayLabel(window.behind) : plan?.catchUp ? delayLabel(behindSeconds) : '',
     behindSeconds,
     pictureAt,
     windowStartAt,
     windowEdgeAt: window?.edgeAt ?? now,
-    paused: snapshot?.state === 'paused',
+    paused,
     backToLive: () => {
       wentLive.current = Date.now();
       if (archived?.kind === 'catchUp') {

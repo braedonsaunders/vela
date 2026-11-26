@@ -144,6 +144,7 @@ describe('the rewind window', () => {
     expect(clampSeek({ start: 100, edge: 1000 }, 999)).toBe(985);
     expect(clampSeek({ start: 100, edge: 1000 }, 500)).toBe(500);
     expect(stepLandsLive({ edge: 1000, position: 980 }, 10)).toBe(true);
+    expect(stepLandsLive({ edge: 1000, position: 999 }, -10)).toBe(false);
     expect(stepLandsLive({ edge: 1000, position: 900 }, 10)).toBe(false);
     expect(windowFraction({ start: 100, edge: 300, position: 150 })).toBe(0.25);
     expect(windowFraction({ start: 100, edge: 100, position: 100 })).toBe(1);

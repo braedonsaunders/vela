@@ -20,6 +20,7 @@ export function sessionFromPlan(plan: PlaybackPlan, mediaBase: string = location
     duration: plan.durationSeconds,
     // A Live TV channel, or a library's live stream, which has no channel.
     live: !!plan.channelId || !!plan.live,
+    startOver: plan.live?.mode === 'startOver',
     livePolicy: plan.livePolicy,
     liveWindowStart: plan.live?.windowStartSeconds,
     liveEdge: plan.live?.liveEdgeSeconds,
