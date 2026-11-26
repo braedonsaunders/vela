@@ -83,7 +83,7 @@ test('explicit zero overrides server resume without publishing watch state befor
   await playback.stop();
 });
 
-test('an in-flight progress report and stop stay with the originating server across a switch', async () => {
+test.each([false, true])('stop respects the originating viewer after switching (viewer changed: %s)', async changed => {
   const calls: string[] = [];
   const progress = Promise.withResolvers<{ accepted: boolean }>();
   const plan = {
@@ -97,21 +97,26 @@ test('an in-flight progress report and stop stay with the originating server acr
     command: async () => { calls.push(`${name}:stop`); return { ...plan, state: 'ended' }; },
     detail: async () => { calls.push(`${name}:detail`); return { title: { watch: { positionSeconds: 30 } } }; },
   });
-  let active = adapter('origin');
+  const origin = adapter('origin');
+  let active = origin;
+  let viewer = 'original';
   const session = {
     epoch: 0, onReset() {},
     ready: async () => ({ adapter: active, plan: (value: PlaybackPlan) => value }),
     negotiate: async () => {}, client: {},
+    tokens: async ({ adapter }: { adapter: typeof origin }) => ({ viewer: { id: adapter === origin ? viewer : 'other-server' } }),
   };
   const box = new StateBox({ playback: initialPlayback } as VelaState);
   const playback = new Playback(box, session as unknown as Session,
     () => calls.push('publish'), () => calls.push('reconcile'));
   await playback.start({ kind: 'title', id: 't' });
   const reporting = playback.observe(plan.sessionId, { positionSeconds: 30, state: 'playing' } as never);
+  await Promise.resolve();
   const stopping = playback.stop();
   active = adapter('new');
   session.epoch++;
+  if (changed) viewer = 'different-profile';
   progress.resolve({ accepted: true });
   await Promise.all([reporting, stopping]);
-  expect(calls).toEqual(['origin:progress', 'origin:stop']);
+  expect(calls).toEqual(changed ? ['origin:progress'] : ['origin:progress', 'origin:stop']);
 });
