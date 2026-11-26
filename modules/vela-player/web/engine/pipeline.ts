@@ -7,7 +7,7 @@ import { parsePlaylist, playlistChanged, type Playlist } from './hls';
 import { cancelled, delay } from './session';
 import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 import { livePlaylistReloadDelayMs } from './core/source/reload';
-import { gapJump, liveSeekLanding, timeRanges } from './gap-jump';
+import { gapJump, liveSeekLanding, playableBufferAhead, timeRanges } from './gap-jump';
 import { fragmentStart, initFacts } from './init-codecs';
 import type { MediaFetch } from './media-auth';
 
@@ -385,9 +385,13 @@ export class SegmentPipeline {
         }
       }
       await this.audio?.applySelection(list, signal);
-      const ahead = bufferAhead(this.video);
+      // Finite playlists can have rounding gaps between fragments. Include the
+      // playable media beyond them so a paused playhead cannot fill the SourceBuffer.
+      const ahead = live ? bufferAhead(this.video)
+        : playableBufferAhead(this.video.currentTime, timeRanges(this.video.buffered));
       const target = live ? this.liveTargetSeconds + this.nominalSegmentSeconds * 2 : 30;
       if (seekingTo === null && (ahead >= target || !this.streamingAllowed)) {
+        if (!live && !first) this.jumpPlaybackGap(false);
         await delay(250, signal);
         continue;
       }
@@ -597,16 +601,18 @@ export class SegmentPipeline {
         await mutation(this.buffer, signal, () => this.buffer!.remove(0, this.video.currentTime - retain));
       }
       await this.audio?.evict(this.video.currentTime - retain, signal);
-      // Tiny holes are stepped over; a live start jumps any hole in front of its first media
-      // (gap-jump.ts). Later large gaps go through visible recovery.
       if (this.video.readyState >= 3 && !this.video.paused) played = true;
-      if (!this.video.seeking && this.video.readyState < 3) {
-        const to = gapJump(this.video.currentTime, timeRanges(this.video.buffered), live && !played);
-        if (to !== null) this.video.currentTime = to;
-      }
+      this.jumpPlaybackGap(live && !played);
       if (live && this.video.buffered.length) {
         this.video.playbackRate = this.livePlaybackRate;
       }
     }
+  }
+
+  private jumpPlaybackGap(liveStarting: boolean) {
+    // Live startup can also jump a large hole before its first media.
+    if (this.video.seeking || this.video.readyState >= 3) return;
+    const to = gapJump(this.video.currentTime, timeRanges(this.video.buffered), liveStarting);
+    if (to !== null) this.video.currentTime = to;
   }
 }

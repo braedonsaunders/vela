@@ -2,7 +2,7 @@ import type { PlaybackTarget } from '../store/playback';
 import type { PlaybackPlan } from '../wire';
 import { LIVE_SLACK_SECONDS } from './timeshift';
 
-export type LiveResume = { kind: 'programme'; seconds: number } | { kind: 'timeshift'; at: number } | { kind: 'edge' };
+export type LiveResume = { kind: 'programme'; seconds: number; startAt?: string } | { kind: 'timeshift'; at: number } | { kind: 'edge' };
 
 /** Capture the viewer's position before the old session and its timeline go away. */
 export function liveRestart(target: PlaybackTarget, plan: PlaybackPlan, position: number, atLive: boolean): {
@@ -19,7 +19,7 @@ export function liveRestart(target: PlaybackTarget, plan: PlaybackPlan, position
       : Number.isFinite(durationSeconds) && durationSeconds > 0
         ? { kind: 'programme' as const, id: programme.id, channelId: archive.channelId, range: { startAt: archive.startAt, durationSeconds } }
         : programme;
-    return { target: restart, resume: { kind: 'programme', seconds: position } };
+    return { target: restart, resume: { kind: 'programme', seconds: position, startAt: archive.startAt } };
   }
 
   if (target.kind !== 'channel' && target.kind !== 'programme') return;
@@ -36,8 +36,13 @@ export function liveRestart(target: PlaybackTarget, plan: PlaybackPlan, position
 /** Translate the saved point into the replacement session's coordinate system. */
 export function liveRestartSeek(resume: Exclude<LiveResume, { kind: 'edge' }>, plan: PlaybackPlan): number | 'evicted' {
   if (resume.kind === 'programme') {
+    const previousStart = Date.parse(resume.startAt ?? '');
+    const replacementStart = Date.parse(plan.catchUp?.startAt ?? '');
+    const offset = Number.isFinite(previousStart) && Number.isFinite(replacementStart)
+      ? (previousStart - replacementStart) / 1000 : 0;
+    const position = resume.seconds + offset;
     return Math.max(plan.live?.windowStartSeconds ?? 0,
-      Math.min(resume.seconds, plan.live?.liveEdgeSeconds ?? plan.durationSeconds ?? resume.seconds));
+      Math.min(position, plan.live?.liveEdgeSeconds ?? plan.durationSeconds ?? position));
   }
   const { live } = plan;
   const edgeAt = Date.parse(live?.edgeAt ?? '');
