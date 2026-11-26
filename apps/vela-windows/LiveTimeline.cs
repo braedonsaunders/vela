@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 namespace Vela.Windows;
 
 /// <summary>A live stream's window on the axis of the reported position (mpv time-pos + the path's timeline
@@ -28,12 +30,56 @@ internal static class LiveTimeline
     /// reading the stream (about 3 minutes at 8 Mbit/s); past that the reader waits, and a server whose
     /// playlist dropped those segments meanwhile continues from its oldest one. Start over reads its EVENT playlist from its first segment (FFmpeg otherwise joins
     /// three segments from the end), so position 0 is the programme's start.</summary>
-    internal static IEnumerable<KeyValuePair<string, string>> DemuxerOptions(JsonElement plan)
+    internal static IEnumerable<KeyValuePair<string, string>> DemuxerOptions(JsonElement plan, bool timeshiftStart = false)
     {
         bool live = IsLive(plan);
         yield return new("demuxer-max-bytes", live ? "192MiB" : "400MiB");
         yield return new("demuxer-max-back-bytes", live ? "128MiB" : "100MiB");
-        yield return new("demuxer-lavf-o", IsStartOver(plan) ? "live_start_index=0" : "");
+        yield return new("demuxer-lavf-o", timeshiftStart ? "prefer_x_start=1" : IsStartOver(plan) ? "live_start_index=0" : "");
+    }
+
+    internal sealed record Landing(double Offset, double SegmentStart, double Position);
+
+    // The playlist header is authoritative. A plan anchor can also date a segment still in the list.
+    internal sealed class Startup(JsonElement live, double? requested)
+    {
+        private Landing? landing;
+        internal Landing? Selected => Volatile.Read(ref landing);
+        internal DateTime OpenedAt { get; } = DateTime.UtcNow;
+        internal bool Placed { get; set; }
+        static double? Parse(string? value) =>
+            double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) && double.IsFinite(n) ? n : null;
+
+        internal string Apply(string playlist, string? headerSequence, string? headerStart)
+        {
+            if (Regex.IsMatch(playlist, @"(?m)^#EXT-X-ENDLIST\s*$")) return playlist;
+            var sequenceMatch = Regex.Match(playlist, @"(?m)^#EXT-X-MEDIA-SEQUENCE:[ \t]*(\d+)[ \t\r]*$");
+            double? sequence = sequenceMatch.Success ? Parse(sequenceMatch.Groups[1].Value) : 0;
+            var starts = new List<double> { 0 };
+            foreach (Match match in Regex.Matches(playlist, @"(?m)^#EXTINF:([\d.]+),"))
+            {
+                if (Parse(match.Groups[1].Value) is not double duration || duration <= 0) return playlist;
+                starts.Add(starts[^1] + duration);
+            }
+            int segments = starts.Count - 1;
+            var anchor = Get(live, "anchor");
+            bool hasHeaders = !string.IsNullOrWhiteSpace(headerSequence) && !string.IsNullOrWhiteSpace(headerStart);
+            double? mediaSequence = hasHeaders ? Parse(headerSequence) : Number(anchor, "mediaSequence");
+            double? windowStart = hasHeaders ? Parse(headerStart) : Number(anchor, "windowStartSeconds");
+            if (sequence is not double first || first < 0 || first > 9007199254740991 ||
+                mediaSequence is not double anchored || anchored > 9007199254740991 || windowStart is not double anchorStart) return playlist;
+            double index = anchored - first;
+            if (index < 0 || index >= segments || index != Math.Truncate(index)) return playlist;
+            double origin = anchorStart - starts[(int)index];
+            if (origin < 0) return playlist;
+            double position = requested is double cursor && cursor >= origin && cursor < origin + starts[^1] - 1
+                ? cursor : origin + starts[Math.Max(0, segments - 3)];
+            double offset = starts.FindLast(start => origin + start <= position);
+            var selected = new Landing(offset, origin + offset, position);
+            Interlocked.CompareExchange(ref landing, selected, null);
+            string tag = "#EXT-X-START:TIME-OFFSET=" + offset.ToString("F6", CultureInfo.InvariantCulture);
+            return Regex.Replace(playlist, @"(?m)^#EXT-X-START:[^\r\n]*\r?\n", "").Insert("#EXTM3U".Length, "\n" + tag);
+        }
     }
 
     /// <summary>How far behind the edge live normally plays: the plan's target (else 6 s), and never closer than
