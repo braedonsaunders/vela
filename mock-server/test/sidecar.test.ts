@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { PlaybackPlan } from '../../packages/protocol/types';
-import { answerTracks, sidecarFixture, withSidecar } from '../sessions';
+import { applyCommand, answerTracks, sidecarFixture, withSidecar, type Session } from '../sessions';
 
 const plan = () => ({
   sessionId: 's', revision: 1, sourceGeneration: 1, seekGeneration: 1, selectedPathId: 'direct', selectedSubtitleTrackId: null,
@@ -37,4 +37,24 @@ test('a track choice is a new source off the original file, as Ether answers it'
   p.selectedPathId = 'remux';
   answerTracks(p, { subtitleTrackId: 'sub-en' });
   expect([p.selectedSubtitleTrackId, p.sourceGeneration]).toEqual(['sub-en', 2]);
+});
+
+test('switching editions negotiates the same sidecar and transport as a fresh start', () => {
+  Object.assign(sidecarFixture, { enabled: true, versionSwitch: true });
+  const versions = [
+    { id: 'auto', label: 'Auto', availability: 'instant', recommended: false },
+    { id: 'original', label: 'Original', availability: 'instant', recommended: true },
+    { id: 'cached', label: 'Cached', availability: 'cached', recommended: false },
+  ] satisfies NonNullable<PlaybackPlan['versions']>;
+  const previous = { ...plan(), versions, selectedVersionId: 'original', playingVersionId: 'original' };
+  withSidecar(previous, '/sessions/media/s/t');
+  const session = { plan: previous, mediaToken: 't', history: [], sequence: 0, listeners: new Map() } as unknown as Session;
+  applyCommand(session, { kind: 'version', versionId: 'cached', sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'switch' });
+  const fresh = { ...plan(), versions, selectedVersionId: 'cached', playingVersionId: 'cached' };
+  withSidecar(fresh, '/sessions/media/s/t');
+  expect(session.plan.selectedSubtitleTrackId).toBe('sub-en-cached');
+  expect(session.plan.subtitleTracks).toEqual(fresh.subtitleTracks);
+  expect(session.plan.selectedPathId).toBe('remux');
+  expect(session.plan.paths.find(path => path.id === session.plan.selectedPathId)?.transport).toBe('hls');
+  expect(session.plan.selectedPathId).toBe(fresh.selectedPathId);
 });

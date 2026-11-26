@@ -792,7 +792,14 @@ export class Playback {
     }));
     const now = this.box.get().playback;
     // A restart (stall recovery) asks for the file now playing, not the one first asked for.
-    if (now.sessionId === sessionId) this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
+    if (now.sessionId === sessionId) {
+      // Track IDs and local choices belong to the previous version. Keep the negotiated
+      // selection through later snapshots and recovery, even when a track ID is reused.
+      this.localTracks = false;
+      this.audio = next.selectedAudioTrackId;
+      this.subtitle = next.selectedSubtitleTrackId;
+      this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
+    }
     return next;
   }
 
