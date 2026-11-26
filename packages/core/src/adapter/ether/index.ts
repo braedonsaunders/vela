@@ -274,8 +274,8 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
   }
 
-  async appearance() {
-    return this.http.request<V.Appearance>('GET', '/appearance', undefined, { cacheable: true, auth: !!(await this.credentials.get()) });
+  async appearance(signal?: AbortSignal) {
+    return this.http.request<V.Appearance>('GET', '/appearance', undefined, { cacheable: true, auth: !!(await this.credentials.get()), signal });
   }
 
   async skinDocument(path: string) {

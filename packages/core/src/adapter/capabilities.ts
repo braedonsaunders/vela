@@ -335,7 +335,7 @@ export interface EventStream {
 
 /** The server's chosen look and the skin documents it distributes. */
 export interface Appearance {
-  appearance(): Promise<V.Appearance>;
+  appearance(signal?: AbortSignal): Promise<V.Appearance>;
   /** A skin document by its appearance path (`/appearance/skins/...`). */
   skinDocument(path: string): Promise<SkinDocument>;
 }

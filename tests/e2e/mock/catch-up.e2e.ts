@@ -1,10 +1,12 @@
 import { expect } from 'e2e';
 import { describe, test } from '@e2e-dev/web';
 import { videoState, waitForVideoPlayback, waitForVideoReady } from './player-ready';
+import { signInMockViewer } from './sign-in';
 
-describe('Live TV catch-up release gate', { session: 'mock-catch-up' }, () => {
+describe('Live TV catch-up release gate', () => {
   test('the guide replays an archive and Start over can pause, rewind and return live', async ({ app, browser, screen }) => {
-    await app.open('/vela/');
+    // Full navigations rotate the grant. Give each repetition its own grant.
+    await signInMockViewer(app, screen);
     const guide = await browser.evaluate(async () => {
       const flags = await fetch('/__admin/faults', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catchUpFixture: true }),

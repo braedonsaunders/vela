@@ -331,8 +331,12 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       if (AppState.currentState === 'active') void store.downloads.replayProgress();
     }, 30_000);
     const visible = () => { if (document.visibilityState === 'visible') active(); };
+    const pageHidden = () => store.appearance.cancelLoad();
+    const pageRestored = (event: PageTransitionEvent) => { if (event.persisted) void store.appearance.load(); };
     if (Platform.OS === 'web') {
       window.addEventListener('online', active);
+      window.addEventListener('pagehide', pageHidden);
+      window.addEventListener('pageshow', pageRestored);
       document.addEventListener('visibilitychange', visible);
     }
     return () => {
@@ -340,6 +344,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       clearInterval(progressRetry);
       if (Platform.OS === 'web') {
         window.removeEventListener('online', active);
+        window.removeEventListener('pagehide', pageHidden);
+        window.removeEventListener('pageshow', pageRestored);
         document.removeEventListener('visibilitychange', visible);
       }
     };
