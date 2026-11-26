@@ -9,6 +9,7 @@ export interface Probe {
   kind: ServerKind | '';
   name: string;
   version: string;
+  machineIdentifier?: string;
   /** The address a record would keep: origin plus base path, no user-info, query or fragment. */
   url: string;
 }
@@ -63,12 +64,24 @@ export async function probeServer(input: string, device: PlexDevice, pageSecure:
       return { state: 'found', kind, name: text(jellyfin.ServerName), version: text(jellyfin.Version, 40), url: base };
     }
     const identity = plex?.MediaContainer as Record<string, unknown> | undefined;
-    if (identity && text(identity.machineIdentifier)) return { state: 'found', kind: 'plex', name: '', version: text(identity.version, 40), url: address.origin };
+    const machine = plexMachine(identity?.machineIdentifier);
+    if (machine) return { state: 'found', kind: 'plex', name: '', version: text(identity?.version, 40), url: address.origin, machineIdentifier: machine };
     // Any readable answer (even an error page) means the address is reachable but not a media server.
     if (await fetch(base, { method: 'HEAD', redirect: 'manual', credentials: 'same-origin', signal: timeoutSignal(PROBE_MS) }).then(() => true, () => false)) return { state: 'unsupported', kind: '', name: '', version: '', url: base };
   }
   if (blocked) return { state: 'insecure', kind: '', name: '', version: '', url: blocked };
   return { state: parsed ? 'unreachable' : 'invalid', kind: '', name: '', version: '', url: '' };
+}
+
+/** Identify a saved address without sending any Plex credentials. */
+export async function probePlexMachine(origin: string, device: PlexDevice, secure: boolean): Promise<string | undefined> {
+  if (secure && origin.startsWith('http:')) return undefined;
+  const body = await read(`${origin}/identity`, plexHeaders(device));
+  return plexMachine((body?.MediaContainer as { machineIdentifier?: unknown } | undefined)?.machineIdentifier);
+}
+
+function plexMachine(machine: unknown): string | undefined {
+  return typeof machine === 'string' && machine.length > 0 && machine.length <= 128 && !/\s/.test(machine) ? machine : undefined;
 }
 
 /** Detect a Vela endpoint without sending this server's credentials. */

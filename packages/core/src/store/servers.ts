@@ -5,7 +5,7 @@
 import type { Connection } from '../adapter/connection';
 import { hasPasswordSignIn, hasQuickConnectSignIn } from '../adapter/capabilities';
 import { PlexLink, type PlexLinkState, type PlexProfileChoice } from '../adapter/plex/link';
-import { probeEther, probeServer } from '../adapter/probe';
+import { probeEther, probePlexMachine, probeServer } from '../adapter/probe';
 import type * as V from '../wire';
 import { ServerCredentials, type ServerKind, type ServerRecord } from '../session/servers';
 import { msg, time } from '../i18n';
@@ -39,6 +39,7 @@ export interface ProbeResult {
   version: string;
   /** The address a record keeps: origin plus base path. */
   normalizedUrl: string;
+  machineIdentifier?: string;
   message: string;
 }
 
@@ -117,6 +118,50 @@ export class Servers {
   }
 
   private refreshRun = 0;
+  private readonly forgetting = new Map<string, Promise<void>>();
+  private readonly plexIdentity = new Map<string, Promise<string | undefined>>();
+
+  private async plexEntry(record: ServerRecord) {
+    const tokens = await this.session.tokens(this.session.connection(record.id));
+    let machine = record.machineIdentifier;
+    // Old address entry saved this generic row before authentication. Prove its identity before
+    // treating it as an alias: another Plex server can also have the default display name.
+    if (!machine && !tokens && record.name === kindLabel('plex')) {
+      let identity = this.plexIdentity.get(record.origin);
+      if (!identity) {
+        identity = probePlexMachine(record.origin, this.session.device, pageSecure(this.platform));
+        this.plexIdentity.set(record.origin, identity);
+        void identity.finally(() => this.plexIdentity.delete(record.origin));
+      }
+      machine = await identity;
+    }
+    return { record, machine, viewer: tokens?.viewer.id };
+  }
+
+  private async prunePlexAliases(records: ServerRecord[], selectedId: string, run: number): Promise<void> {
+    const plex = records.filter(record => record.kind === 'plex');
+    if (plex.length < 2 || !plex.some(record => record.machineIdentifier)) return;
+    const entries = await Promise.all(plex.map(record => this.plexEntry(record)));
+    // Prefer the selected record, then a signed-in record, then a record with a saved identity.
+    entries.sort((a, b) => Number(b.record.id === selectedId) - Number(a.record.id === selectedId)
+      || Number(!!b.viewer) - Number(!!a.viewer)
+      || Number(!!b.record.machineIdentifier) - Number(!!a.record.machineIdentifier));
+    const kept: typeof entries = [];
+    for (const entry of entries) {
+      if (run !== this.refreshRun || this.plexLink) break;
+      const duplicate = entry.record.id !== selectedId && entry.machine && kept.some(other =>
+        other.record.machineIdentifier === entry.machine && (!entry.viewer || other.viewer === entry.viewer));
+      if (!duplicate) {
+        kept.push(entry);
+        continue;
+      }
+      // Only clear local state. The surviving row may use the very same Plex credential.
+      const current = this.session.servers.read();
+      if (current.selectedId !== entry.record.id && current.servers.some(record => record.id === entry.record.id)) {
+        await this.forgetServer(entry.record.id);
+      }
+    }
+  }
 
   /** Re-read every server's status. Other servers' sessions are checked with a bounded wait. */
   async refresh(): Promise<void> {
@@ -128,7 +173,10 @@ export class Servers {
     const selected = this.session.selected();
     const registry = this.session.servers.read();
     this.patch({ selectedId: registry.selectedId });
-    const rows = await Promise.all(registry.servers.map(record => this.row(record, selected, registry.selectedId)));
+    await this.prunePlexAliases(registry.servers, registry.selectedId, run);
+    if (run !== this.refreshRun) return;
+    const records = this.session.servers.read().servers;
+    const rows = await Promise.all(records.map(record => this.row(record, selected, registry.selectedId)));
     if (run !== this.refreshRun) return;
     this.patch({ list: rows, selectedId: registry.selectedId });
   }
@@ -184,12 +232,15 @@ export class Servers {
       name: probe.name,
       version: probe.version,
       normalizedUrl: probe.url,
+      machineIdentifier: probe.machineIdentifier,
       message: note,
     };
   }
 
   async select(id: string): Promise<ServerResult> {
     try {
+      const forgetting = this.forgetting.get(id);
+      if (forgetting) await forgetting;
       this.session.select(id);
       await this.refresh();
       return { id, error: '' };
@@ -198,14 +249,18 @@ export class Servers {
     }
   }
 
-  async add(kind: ServerKind, name: string, url: string): Promise<ServerResult> {
+  async add(kind: ServerKind, name: string, url: string, machineIdentifier?: string): Promise<ServerResult> {
     try {
       const ether = kind === 'ether' && this.session.servers.standalone;
       if (kind !== 'jellyfin' && kind !== 'emby' && kind !== 'plex' && !ether) throw new Error(msg('server.probe.unsupported'));
       if (pageSecure(this.platform) && /^http:/i.test(url.trim())) {
         throw new Error(msg('server.probe.insecure', { url: url.trim() }));
       }
-      const record = this.session.servers.add(kind, name.trim() || kindLabel(kind), url);
+      const registry = this.session.servers;
+      const known = kind === 'plex' && machineIdentifier
+        ? registry.read().servers.find(record => record.machineIdentifier === machineIdentifier)
+        : undefined;
+      const record = known ?? registry.add(kind, name.trim() || kindLabel(kind), url, machineIdentifier);
       await this.refresh();
       return { id: record.id, error: '' };
     } catch (error) {
@@ -223,16 +278,26 @@ export class Servers {
       } catch {
         // Unreachable: the local session is still forgotten.
       }
-      await connection.credentials.set(null);
-      await this.downloads?.removeServer(id);
-      this.session.servers.remove(id);
-      this.session.forget(id);
+      await this.forgetServer(id);
       this.session.selected();
       await this.refresh();
       return { id, error: '' };
     } catch (error) {
       return { id: '', error: message(error, 'Server could not be removed') };
     }
+  }
+
+  private async forgetServer(id: string): Promise<void> {
+    const pending = this.forgetting.get(id);
+    if (pending) return pending;
+    const work = (async () => {
+      await this.session.connection(id).credentials.set(null);
+      await this.downloads?.removeServer(id);
+      this.session.servers.remove(id);
+      this.session.forget(id);
+    })();
+    this.forgetting.set(id, work);
+    try { await work; } finally { this.forgetting.delete(id); }
   }
 
   async signOut(id: string): Promise<ServerResult> {
@@ -354,35 +419,27 @@ export class Servers {
         this.plexCancel();
         return { id: record.id, error: '', ...(chosen.note ? { note: chosen.note } : {}) };
       }
-      if (!chosen.tokens) throw new Error('Plex returned no server session');
+      const tokens = chosen.tokens;
+      if (!tokens) throw new Error('Plex returned no server session');
       // A Plex record at the proven address, with the same machine identifier, or added by a typed
       // address (often the LAN one) becomes this server at its proven address without duplicating it.
       const registry = this.session.servers;
       const snapshot = registry.read();
-      const list = snapshot.servers;
-      const proven = list.find(s => s.kind === 'plex' && s.origin === chosen.origin);
-      const matched = !proven && chosen.machineIdentifier
-        ? list.find(s => s.kind === 'plex' && s.machineIdentifier === chosen.machineIdentifier)
-        : undefined;
-      let typed: ServerRecord | undefined;
-      for (const s of list) {
-        if (proven || matched || typed || s.kind !== 'plex' || !chosen.origins.includes(s.origin)) continue;
-        if (!(await this.session.tokens(this.session.connection(s.id)))) typed = s;
-      }
-      let record = proven ?? matched;
-      let originChanged = false;
-      if (proven && chosen.machineIdentifier && proven.machineIdentifier !== chosen.machineIdentifier) {
-        record = registry.relocate(proven.id, chosen.name, chosen.origin, chosen.machineIdentifier);
-      } else if (!proven && matched) {
-        originChanged = matched.origin !== chosen.origin;
-        record = registry.relocate(matched.id, chosen.name, chosen.origin, chosen.machineIdentifier);
-      } else if (!record && typed) {
-        originChanged = typed.origin !== chosen.origin;
-        record = registry.relocate(typed.id, chosen.name, chosen.origin, chosen.machineIdentifier);
-      }
-      if (!record) record = registry.add('plex', chosen.name, chosen.origin, chosen.machineIdentifier);
+      const plex = snapshot.servers.filter(s => s.kind === 'plex');
+      const proven = plex.find(s => s.origin === chosen.origin);
+      const entries = proven ? [] : await Promise.all(plex.map(record => this.plexEntry(record)));
+      if (this.plexLink !== link) throw new Error(msg('server.plex.again'));
+      const aliases = entries.filter(({ record, machine, viewer }) =>
+        machine ? machine === chosen.machineIdentifier
+          : !viewer && chosen.origins.includes(record.origin));
+      const existing = proven ?? aliases.find(({ record }) => record.id === snapshot.selectedId)?.record
+        ?? aliases.find(({ viewer }) => viewer === tokens.viewer.id)?.record ?? aliases[0]?.record;
+      const originChanged = !!existing && existing.origin !== chosen.origin;
+      const record = existing
+        ? registry.relocate(existing.id, chosen.name, chosen.origin, chosen.machineIdentifier)
+        : registry.add('plex', chosen.name, chosen.origin, chosen.machineIdentifier);
       const credentials = this.session.connection(record.id).credentials;
-      await credentials.set(chosen.tokens);
+      await credentials.set(tokens);
       // Kept so this device can switch Plex Home members later; it never reaches the server.
       if (credentials instanceof ServerCredentials) await credentials.setPlexAccount(chosen.accountToken ?? null);
       this.plexCancel();
