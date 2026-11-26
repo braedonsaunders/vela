@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { galleryOriginKey, galleryOriginParam, photoInfoFacts, photoNeighbours, photoSwipe } from '../src/blocks/gallery/viewer-nav-model';
+import { galleryOriginKey, galleryOriginParam, photoFullscreen, photoInfoFacts, photoNeighbours, photoSwipe } from '../src/blocks/gallery/viewer-nav-model';
 
 test('moves through the opening order, offers a next page at its edge, and never wraps', () => {
   const a = { id: 'a' }, b = { id: 'b' }, c = { id: 'c' };
@@ -34,4 +34,13 @@ test('the info panel drops a Taken fact that repeats the caption and keeps other
   expect(photoInfoFacts([taken, place], '2026-11-23')).toEqual([place]);
   expect(photoInfoFacts([taken, place], '')).toEqual([taken, place]);
   expect(photoInfoFacts([taken, place], '2026-11-24')).toEqual([taken, place]);
+});
+
+
+test('Back from fullscreen clears the info panel and restores the embedded controls', () => {
+  const shown = { fullscreen: false, chrome: true, info: true };
+  const fullscreen = photoFullscreen(shown, true);
+  expect(fullscreen).toEqual({ fullscreen: true, chrome: true, info: true });
+  expect(photoFullscreen({ ...fullscreen, chrome: false }, false))
+    .toEqual({ fullscreen: false, chrome: true, info: false });
 });

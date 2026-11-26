@@ -5,7 +5,7 @@ import type { Card, Vela } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { cardsOf } from '@vela/skin/src/blocks/listen/props';
 import { photoImage, type PhotoNavigation } from '@vela/skin/src/blocks/gallery/viewer-nav';
-import { galleryOriginKey, galleryOriginParam, photoNeighbours, type PhotoDirection } from '@vela/skin/src/blocks/gallery/viewer-nav-model';
+import { FIT_VIEWER, galleryOriginKey, galleryOriginParam, photoFullscreen, photoNeighbours, type PhotoDirection } from '@vela/skin/src/blocks/gallery/viewer-nav-model';
 import { orderTimelinePhotos } from '@vela/skin/src/blocks/gallery/timeline-layout';
 import { noteTitleNavigation } from '../title-origin';
 
@@ -61,9 +61,7 @@ export function useGallerySequence(initialId: string, library: string | undefine
   const store = useVela();
   const [id, setId] = useState(initialId);
   const [busy, setBusy] = useState(false);
-  const [fullscreen, setFullscreenState] = useState(false);
-  const [info, setInfo] = useState(false);
-  const [chrome, setChrome] = useState(true);
+  const [{ fullscreen, info, chrome }, setPresentation] = useState(FIT_VIEWER);
   const focused = useRef<string | null>(null);
   const focusedControl = useCallback(() => focused.current !== null, []);
   const reportFocus = useCallback((id: string, on: boolean) => {
@@ -79,9 +77,7 @@ export function useGallerySequence(initialId: string, library: string | undefine
 
   useEffect(() => {
     setId(initialId);
-    setFullscreenState(false);
-    setInfo(false);
-    setChrome(true);
+    setPresentation(FIT_VIEWER);
     setBusy(false);
     return () => { movement.current?.abort(); movement.current = null; };
   }, [initialId, pageKey]);
@@ -105,8 +101,14 @@ export function useGallerySequence(initialId: string, library: string | undefine
   }, [active, neighbours.previous, neighbours.next, store]);
 
   const setFullscreen = useCallback((on: boolean) => {
-    setFullscreenState(on);
-    setChrome(true);
+    setPresentation(current => photoFullscreen(current, on));
+  }, []);
+
+  const setInfo = useCallback((on: boolean) => {
+    setPresentation(current => current.info === on ? current : { ...current, info: on });
+  }, []);
+  const setChrome = useCallback((on: boolean) => {
+    setPresentation(current => current.chrome === on ? current : { ...current, chrome: on });
   }, []);
 
   const move = useCallback((direction: PhotoDirection) => {

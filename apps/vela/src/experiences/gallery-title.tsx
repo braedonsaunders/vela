@@ -19,6 +19,7 @@ import { useReaderActions } from '../media/reader-actions';
 import { DocumentScreen } from '../screen';
 import { useAppScreenActions } from '../screen-actions';
 import { useVela } from '../vela';
+import { useFullscreenPhotoToastDeferral } from '../surfaces';
 import { useGallerySequence } from './gallery-sequence';
 
 interface Props {
@@ -35,6 +36,7 @@ const setParams = (params: Record<string, string>) => router.setParams(params);
 
 export function GalleryTitleScreen({ id: initialId, library, galleryFrom, active, back }: Props) {
   const { id, navigation } = useGallerySequence(initialId, library, galleryFrom, active);
+  useFullscreenPhotoToastDeferral(active && navigation?.fullscreen === true);
   const [height, setHeight] = useState<number>();
   const onLayout = useCallback((event: LayoutChangeEvent) => {
     const measured = event.nativeEvent.layout.height;

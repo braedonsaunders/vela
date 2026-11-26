@@ -10,7 +10,7 @@ import { CardContextMenu, type CardMenuAnchor, type CardMenuOpenMode } from './w
 import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
-import { MediaFrameViewport } from './blocks/media/viewport';
+import { MediaFrameViewport, TitleChromeLayout } from './blocks/media/viewport';
 import { hasFlowHeader } from './resolve/inherit';
 import { isHeroControl, isHeroSegment } from './hero-pager';
 import { holdHero } from './hero-hold';
@@ -23,7 +23,7 @@ import { androidHeroAfterTurn, androidHeroKeyDirection, androidHeroPageDirection
 import MaskedView from '@react-native-masked-view/masked-view';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
-import type { ComponentType } from 'react';
+import type { ComponentRef, ComponentType } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Children, Fragment, memo, cloneElement, startTransition, createContext, forwardRef, use, useImperativeHandle, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useLayoutEffect, type ReactElement, type ReactNode } from 'react';
 import { Animated as RNAnimated, DeviceEventEmitter, Dimensions, findNodeHandle, Platform, Pressable, RefreshControl, StyleSheet, Text, TVFocusGuideView, View, type GestureResponderEvent, type HostInstance, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle, type ViewStyle } from 'react-native';
@@ -797,6 +797,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const reportNav = useContext(NavFit);
   const lead = useContext(RouteLead);
   const { env, viewport } = host;
+  const titleChrome = env.route === 'title' && (node.testId === 'detail-close' || node.testId === 'detail-back')
+    ? use(TitleChromeLayout) : undefined;
   const [cardMenu, setCardMenu] = useState<{ anchor: CardMenuAnchor; mode: CardMenuOpenMode } | null>(null);
   // Only the hero reads the hero's count and index: every other box redraws without them.
   const swipe = useHeroSwipe(!!hero, hero ? env.home?.hero.length ?? 0 : 0, hero ? env.heroIndex : 0, host.dispatch);
@@ -1257,6 +1259,12 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onLongPress={cardPrimary ? () => openAnchoredMenu(Platform.isTV ? 'tv' : 'touch') : undefined}
         {...(web && cardPrimary ? { onContextMenu: openPointerMenu } : {})}
         onPress={onPress}
+        onLayout={titleChrome ? () => {
+          const target = buttonRef.current as ComponentRef<typeof View> | null;
+          target?.measureInWindow((_x, y, _width, height) => {
+            if (height > 0 && y >= 0) titleChrome(y + height);
+          });
+        } : undefined}
         onFocus={event => {
           const visible = isFocusVisible(event.currentTarget);
           set('focus', visible);

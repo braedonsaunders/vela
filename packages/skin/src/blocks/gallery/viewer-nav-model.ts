@@ -1,5 +1,14 @@
 export type PhotoDirection = -1 | 1;
 
+interface PhotoPresentation { fullscreen: boolean; info: boolean; chrome: boolean }
+
+export const FIT_VIEWER: PhotoPresentation = { fullscreen: false, info: false, chrome: true };
+
+/** Opening fullscreen can carry the selected info. Back returns to a clear embedded photo. */
+export function photoFullscreen(state: PhotoPresentation, fullscreen: boolean): PhotoPresentation {
+  return { fullscreen, info: fullscreen && state.info, chrome: true };
+}
+
 export interface PhotoNeighbours<T> {
   previous?: T;
   next?: T;

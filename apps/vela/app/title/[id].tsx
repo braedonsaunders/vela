@@ -1,6 +1,8 @@
 import { router, useFocusEffect, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
 import { useCallback, useEffect } from 'react';
 import { BackHandler, Platform } from 'react-native';
+import { TitleChromeLayout } from '@vela/skin/src/blocks/media/viewport';
+import { useTitleToastChrome } from '../../src/surfaces';
 import { backFromNavigation, useBackHeld } from '@vela/skin/src/menu-key';
 import { DocumentScreen } from '../../src/screen';
 import { useVela } from '../../src/vela';
@@ -33,6 +35,7 @@ export default function Title() {
     else router.replace('/');
   }), [library, openedInApp]);
   const focused = useIsFocused();
+  const reportChrome = useTitleToastChrome(focused);
   useFocusEffect(useCallback(() => {
     if (Platform.OS !== 'web') {
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => { back(); return true; });
@@ -51,8 +54,12 @@ export default function Title() {
     window.addEventListener('click', onClick);
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('click', onClick); };
   }, [back]));
-  if (role === 'book' || role === 'series') return <ReadTitleScreen page={role} id={id ?? ''} library={library} active={focused} back={back} />;
-  if (role === 'photo') return <GalleryTitleScreen id={id ?? ''} library={library} galleryFrom={galleryFrom} active={focused} back={back} />;
-  if (mediaPage) return <MediaTitleScreen id={id ?? ''} library={library} active={focused} back={back} />;
-  return <DocumentScreen route="title" entry={id ?? ''} library={library} />;
+  const content = role === 'book' || role === 'series'
+    ? <ReadTitleScreen page={role} id={id ?? ''} library={library} active={focused} back={back} />
+    : role === 'photo'
+      ? <GalleryTitleScreen id={id ?? ''} library={library} galleryFrom={galleryFrom} active={focused} back={back} />
+      : mediaPage
+        ? <MediaTitleScreen id={id ?? ''} library={library} active={focused} back={back} />
+        : <DocumentScreen route="title" entry={id ?? ''} library={library} />;
+  return <TitleChromeLayout.Provider value={reportChrome}>{content}</TitleChromeLayout.Provider>;
 }

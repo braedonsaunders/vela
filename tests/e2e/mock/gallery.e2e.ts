@@ -41,6 +41,7 @@ describe('Gallery deterministic release gate', { session: 'mock-gallery', serial
     await expect(exit).toBeVisible();
     await surface.press('Escape');
     await expect(fullscreen).toBeHidden();
+    await expect(info).toBeHidden();
     await close.tap();
     await expect(harbour).toBeVisible();
     await expect.poll(() => focused('gallery-photo-photo-harbour-at-dawn')).toBe(true);
@@ -96,5 +97,36 @@ describe('Gallery deterministic release gate', { session: 'mock-gallery', serial
     await expect(photo.getByText('North Quay', { exact: true })).toBeVisible();
     await expect(photo.getByText('Taken', { exact: true })).toBeVisible();
     await expect(photo.getByText('2026-11-23', { exact: true })).toBeVisible();
+  });
+
+  test('title alerts clear the controls and arrive after fullscreen closes', async ({ app, browser, screen }) => {
+    await app.open('/vela/library/photos');
+    await screen.getByRole('button', 'Harbour at dawn').tap();
+    const alerts = screen.getByTestId('live-alerts');
+    const controls = screen.getByTestId('gallery-photo-controls');
+    const postAlert = (eventId: string) => browser.evaluate(async id => (await fetch('/__admin/sports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alert: { kind: 'close', eventId: id } }),
+    })).status, eventId);
+
+    await expect(controls).toBeVisible({ timeout: 30_000 });
+    expect(await postAlert('sports:sports:nhl-tor-mtl')).toBe(200);
+    await expect(alerts).toBeVisible();
+    await expect.poll(async () => {
+      const toast = await alerts.boundingBox();
+      const bar = await controls.boundingBox();
+      return !!toast && !!bar && toast.y >= bar.y + bar.height + 8;
+    }).toBe(true);
+
+    await screen.getByRole('button', 'Full screen').tap();
+    const stage = screen.getByTestId('gallery-photo-stage');
+    await expect(stage).toBeVisible();
+    await expect(alerts).toBeHidden();
+    expect(await postAlert('sports:sports:nfl-nyg-phi')).toBe(200);
+    await expect(alerts).toBeHidden();
+    await stage.press('Escape');
+    await expect(alerts.getByText(/Giants.*Eagles/)).toBeVisible();
+    await expect(screen.getByTestId('gallery-photo-info-panel')).toBeHidden();
   });
 });
