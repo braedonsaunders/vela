@@ -3,7 +3,7 @@ import { FlatList, Platform, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { localeContext, msg, number, plural, type Card } from '@vela/core';
 import { useScreenBusy } from '@vela/core/react';
-import { notePress, trackButton } from '../../escape';
+import { focusTarget, notePress, trackButton } from '../../escape';
 import { FocusPressable } from '../../focus';
 import { useHost } from '../../host';
 import type { Props } from '../rich';
@@ -116,7 +116,9 @@ export function GalleryGridBlock({ props, items, pageKey, directory = false }: {
     <View style={{ flex: 1, minHeight: 0, paddingHorizontal: look.gutter }}>
       <View ref={root} onLayout={event => setWidth(event.nativeEvent.layout.width)} style={{ flex: 1, minHeight: 0 }} testID={directoryKind ? `gallery-${directoryKind}` : 'gallery-timeline'}>
         {size > 0 ? <FlatList
-          ref={list} style={{ flex: 1, marginHorizontal: -focusRoom }}
+          // Native ScrollView already grows and shrinks. The shorthand gives it a zero
+          // basis in the native scene and can collapse the viewport to one pixel.
+          ref={list} style={{ ...(Platform.OS === 'web' ? { flex: 1 } : {}), marginHorizontal: -focusRoom }}
           contentContainerStyle={{ paddingHorizontal: focusRoom, paddingVertical: focusRoom }}
           data={rows} keyExtractor={row => row.key}
           getItemLayout={(_rows, index) => layout[index]!} initialNumToRender={12} windowSize={7}
@@ -179,16 +181,19 @@ function GalleryTile({ card, size, focusRoom, row, column, preferred, labelHeigh
   const radius = directory === 'people' ? size / 2 : directory ? m.box({ 'border-radius': '$ui.radiusCard' }).borderRadius : 0;
   const button = useRef<ComponentRef<typeof FocusPressable>>(null);
   const pressKey = `gallery:${directory ?? 'photo'}:${card.id}`;
+  const id = `gallery-${directory === 'people' ? 'person' : directory === 'albums' ? 'album' : 'photo'}-${card.id}`;
   const connect = useCallback((target: ComponentRef<typeof FocusPressable> | null) => {
     button.current = target;
-    return trackButton(target, pressKey);
-  }, [pressKey]);
+    const untrack = trackButton(target, pressKey);
+    const unfocus = focusTarget(id)(target);
+    return () => { untrack?.(); unfocus?.(); };
+  }, [id, pressKey]);
   const label = count ? `${card.name}, ${count}` : card.name;
   // A focused TV photo grows within half the gap. Directory labels keep their fixed size.
   const scale = Platform.isTV && focusRoom && !directory && state.focus && !host.env.still ? 1 + focusRoom / size : 1;
   return (
     <FocusPressable ref={connect} {...handlers} accessibilityRole="button" accessibilityLabel={label}
-      testID={`gallery-${directory === 'people' ? 'person' : directory === 'albums' ? 'album' : 'photo'}-${card.id}`}
+      nativeID={id} testID={id}
       hasTVPreferredFocus={Platform.isTV && preferred}
       {...(Platform.OS === 'web' ? { dataSet: { galleryRow: row, galleryColumn: column } } : {})}
       onPress={() => { notePress(button.current, pressKey); onPress(); }}

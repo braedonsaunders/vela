@@ -27,6 +27,8 @@ export interface ExperienceViewProps {
   actions: ScreenAppActions;
   /** Inline experience over content whose hosting route already supplies the header and scroll. */
   content?: ReactNode;
+  /** A bounded page supplies this at its children slot and owns its own scrolling. */
+  pageHeader?: ReactNode;
   /** Drawn when the experience has no shell (or the page none and no home): the app's fallback. */
   missing?: ReactNode;
   /** The shell document's local state for app code: `shell.current?.toggle('queue', { clear: ['sound'] })`. */
@@ -41,7 +43,7 @@ export function drawnPlace(experience: string, place: ExperiencePlace): Experien
   return builtinDocument(builtinHref(experience, place.page)) ? place : HOME_PLACE;
 }
 
-export function ExperienceView({ experience, libraryId, place: asked, go, host, active, actions, content, missing = null, shell }: ExperienceViewProps) {
+export function ExperienceView({ experience, libraryId, place: asked, go, host, active, actions, content, pageHeader, missing = null, shell }: ExperienceViewProps) {
   const screen = builtinScreenId(experience);
   const place = drawnPlace(experience, asked);
   const key = placeKey(place);
@@ -63,9 +65,10 @@ export function ExperienceView({ experience, libraryId, place: asked, go, host, 
   const shellTarget = useMemo(() => ({ kind: 'screen' as const, id: screen, page: 'shell' }), [screen]);
   const pageTarget = useMemo(() => ({ kind: 'screen' as const, id: screen, page: place.page }), [screen, place.page]);
   const inline = content !== undefined;
-  const pageHost = useMemo(() => inline ? { ...host, children: content } : host, [content, host, inline]);
+  const pageChildren = content ?? pageHeader;
+  const pageHost = useMemo(() => pageChildren === undefined ? host : { ...host, children: pageChildren }, [pageChildren, host]);
   const page = (
-    <ScreenView key={key} target={pageTarget} href={builtinHref(experience, place.page)} params={pageParams} host={pageHost} active={active} route={!inline}
+    <ScreenView key={key} target={pageTarget} href={builtinHref(experience, place.page)} params={pageParams} host={pageHost} active={active} route={!inline && pageHeader === undefined}
       actions={pageActions} scrollKey={`${experience}:${libraryId}:${key}`} />
   );
   // The shell draws the page where its document puts the `children` slot.

@@ -827,6 +827,7 @@
   "media.ui.album": "Album",
   "media.ui.artist": "Artist",
   "media.ui.songs": "Songs",
+  "gallery.allPhotos": "All photos",
   "gallery.dateTaken": "Date taken",
   "gallery.empty": "No photos",
   "gallery.empty.albums": "No albums",

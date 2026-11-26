@@ -124,11 +124,11 @@ const videoLibraries: V.Library[] = labPreset ? [
   { ...fixtureLibraries[1]!, id: '2', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
   { ...fixtureLibraries[1]!, id: '4', name: 'Anime Shows', browse: { ...fixtureLibraries[1]!.browse, filters: { ...fixtureLibraries[1]!.browse.filters, genres: undefined } } },
 ] : fixtureLibraries;
-// Gallery parity uses the original catalogue unless the feature fixture is selected.
-if (mediaEnabled && process.env.VELA_MOCK_GALLERY_FEATURES === '1') {
-  enableGalleryFixtures(Number(process.env.VELA_MOCK_GALLERY_SCALE));
-} else if (mediaEnabled && process.env.VELA_MOCK_GALLERY_PARITY === '1') {
+// Parity captures retain the original catalogue and can seed its recommended rows.
+if (mediaEnabled && process.env.VELA_MOCK_GALLERY_PARITY === '1') {
   seedGalleryParity(process.env.VELA_MOCK_GALLERY_ROWS === '1');
+} else if (mediaEnabled && process.env.VELA_MOCK_GALLERY_FEATURES !== '0') {
+  enableGalleryFixtures(Number(process.env.VELA_MOCK_GALLERY_SCALE));
 }
 const libraries: V.Library[] = [...videoLibraries.map(library => experiencesEnabled ? { ...library, experience: library.kind === 'live' ? 'live' : 'watch' } : library),
   ...(mediaEnabled ? mediaLibraries.map(({ experience, ...library }) => experiencesEnabled ? { ...library, experience } : library).map(library => levelsEnabled ? library

@@ -244,6 +244,12 @@ subtitle tracks; the synthetic remux/transcode paths stay behind it as the fallb
 `"video": {…}` overrides probed `originalVideo` facts (a Dolby Vision profile ffprobe cannot see in a
 raw-muxed file), and `"selectSubtitle": true` selects the first embedded subtitle track.
 
+Photos has timeline, album and subject fixtures by default. Set
+`VELA_MOCK_GALLERY_SCALE=5000` for a large library or
+`VELA_MOCK_GALLERY_FEATURES=0` for the stock eight-photo catalogue. For
+stock Gallery parity, start the mock with `VELA_MOCK_GALLERY_PARITY=1` and
+build Vela with `EXPO_PUBLIC_VELA_GALLERY_STOCK=1` to use the stock grid.
+
 Dense live-guide fixtures are opt-in. From the repository root, run:
 
 ```sh
