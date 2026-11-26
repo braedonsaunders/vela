@@ -2,7 +2,7 @@
 // where a book opens, how its pages are laid out at a window size, which part of a page a tap
 // lands in, and what the position line says (never "NaN").
 import { msg, number, percent } from '@vela/core';
-import type { ReaderLocation } from './reader-engine';
+import type { ReaderFlow, ReaderLocation } from './reader-engine';
 
 // ── Where a book opens ───────────────────────────────────────────────────────
 
@@ -71,6 +71,17 @@ export function readerLayout(width: number, height: number, fontSize = 100): Rea
   const area = Math.min(w, maxInlineSize * columns + gutter);
   const gap = `${(Math.round(gutter / (area + gutter) * 1000) / 10).toFixed(1)}%`;
   return { columns, gap, maxInlineSize, top: small ? 56 : 72, bottom: small ? 50 : 60 };
+}
+
+/** Reflowable pages are columns. Keep a heading with the start of the following block. */
+export function readerHeadingRules(flow: ReaderFlow): string {
+  return flow === 'paginated' ? `
+    h1, h2, h3, h4, h5, h6, [role="heading"] {
+      -webkit-column-break-after: avoid !important;
+      break-after: avoid !important;
+      break-inside: avoid !important;
+    }
+  ` : '';
 }
 
 // ── Taps ─────────────────────────────────────────────────────────────────────

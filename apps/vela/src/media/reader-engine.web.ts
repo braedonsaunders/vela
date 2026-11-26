@@ -4,7 +4,7 @@
 // come back as page turns and the controls' toggle.
 import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings, TocItem } from '@vela/skin/src/blocks/read/reader-engine';
 import { READER_THEMES } from '@vela/skin/src/blocks/read/reader-engine';
-import { isTap, readerLayout, safeFraction, startTarget, swipeTurn, tapZone, type Landmark, type SectionInfo } from '@vela/skin/src/blocks/read/reader-layout';
+import { isTap, readerHeadingRules, readerLayout, safeFraction, startTarget, swipeTurn, tapZone, type Landmark, type SectionInfo } from '@vela/skin/src/blocks/read/reader-layout';
 
 type Input = 'next' | 'previous' | 'toggle-chrome' | 'show-chrome' | 'escape';
 interface FoliateTocItem { label?: string; href?: string; subitems?: FoliateTocItem[] }
@@ -72,6 +72,7 @@ export function readerCss(settings: ReaderSettings): string {
     body { color: inherit !important; background: transparent !important; }
     ${face ? `body, p, li, blockquote, dd, div, span { font-family: ${face} !important; }` : ''}
     p, li, blockquote, dd { line-height: ${settings.lineHeight} !important; text-align: justify; hyphens: auto; -webkit-hyphens: auto; widows: 2; orphans: 2; }
+    ${readerHeadingRules(settings.flow)}
     [align="left"] { text-align: left; } [align="right"] { text-align: right; } [align="center"] { text-align: center; }
     a:link, a:visited { color: ${theme.link} !important; }
     pre { white-space: pre-wrap !important; }
