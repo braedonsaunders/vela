@@ -47,7 +47,7 @@ function shownStyle(look: PlayerLook, visible: boolean, from: number): ViewStyle
     opacity: visible ? 1 : 0,
     transform: [{ translateY: visible || look.still || look.tv ? 0 : from }],
     transitionProperty: ['opacity', 'transform'],
-    transitionDuration: look.tv ? 0 : look.still ? 160 : 420,
+    transitionDuration: look.tv || look.still ? 0 : 420,
     // Native Reanimated takes a bezier only as cubicBezier(): easing() converts the CSS text.
     transitionTimingFunction: easing('cubic-bezier(0.16, 1, 0.3, 1)'),
   } as ViewStyle;

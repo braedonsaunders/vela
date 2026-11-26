@@ -78,6 +78,18 @@ describe('boxes', () => {
   test('TV sizes follow the player look', () => {
     expect(overlayBox('topLeft', { ...desk, width: 1920, height: 1080, size: px => Math.round(px * 1.4) }).left).toBe(56);
   });
+  test('a short player leaves room for wrapped corner content below the controls', () => {
+    const landscape = { ...desk, width: 669, height: 300, chrome: true, top: 54 };
+    expect(overlayBox('topLeft', landscape)).toEqual({ left: 40, top: 30, maxWidth: 440, maxHeight: 120, shift: 24 });
+    expect(overlayBox('topLeft', { ...landscape, height: 140 }).maxHeight).toBe(86);
+  });
+  test('opposing corners share the width of the safe pane, including on phones', () => {
+    const frame = { ...desk, width: 360, small: true, opposingCorners: true };
+    const left = overlayBox('topLeft', frame);
+    const right = overlayBox('topRight', frame);
+    expect(left.maxWidth).toBe(156);
+    expect(frame.width - left.left! - left.maxWidth - right.maxWidth - right.right!).toBe(16);
+  });
   test('the band lifts the bottom edge by its drawn height, never past its box', () => {
     expect(bandLift(36, { height: 900 })).toBe(36);
     expect(bandLift(0, { height: 900 })).toBe(0);
