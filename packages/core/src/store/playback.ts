@@ -927,6 +927,9 @@ export class Playback {
       this.subtitle = next.selectedSubtitleTrackId;
       this.audioChoice = trackChoice(next, next.audioTracks, this.audio);
       this.subtitleChoice = trackChoice(next, next.subtitleTracks, this.subtitle ?? undefined);
+      // An Off chosen on the previous version is not the viewer's on this one; its reports start from its own selection.
+      this.subtitleOff = false;
+      this.subtitleReported = undefined;
       this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
     }
     return next;

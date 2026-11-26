@@ -33,9 +33,9 @@ interface Lab {
 
 /** A store whose sessions play `queue` in order; `refuse` makes the server refuse a track command (once the promise it returns settles);
  * `answer` holds back the answer to a track command it takes until the promise it returns settles; `series` is the viewer's
- * remembered choice for the series of every title. */
+ * remembered choice for the series of every title; `versions` are the files a version switch can move a session to, by version id. */
 async function lab(queue: File[], body: (lab: Lab) => Promise<void>, refuse: (command: any) => boolean | Promise<unknown> = () => false,
-  answer: (command: any) => Promise<unknown> | undefined = () => undefined, series?: SeriesTrackPreference): Promise<void> {
+  answer: (command: any) => Promise<unknown> | undefined = () => undefined, series?: SeriesTrackPreference, versions?: Record<string, File>): Promise<void> {
   const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout;
   const timers = new Map<number, { fire: () => unknown; ms: number }>();
   let sequence = 0;
@@ -66,6 +66,8 @@ async function lab(queue: File[], body: (lab: Lab) => Promise<void>, refuse: (co
       sessionSnapshot: async (id: string) => ({ plan: plan(id) }),
       changeTracks: async (id: string, c: any) => tracks(id, c),
       command: async (id: string, c: any) => { if (c.kind === 'stop') { stops.push(id); stopCommands.push({ sessionId: id, ...c }); } return c.kind === 'tracks' ? tracks(id, c) : plan(id); },
+      ...(versions ? { titleVersions: async () => [], clearVersionChoice: async () => {},
+        switchVersion: async (id: string, c: any) => { files.set(id, versions[c.versionId]!); return plan(id); } } : {}),
     };
     const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p, record: { id: 'server' } }), negotiate: async () => {}, key: () => 'key', client: { audioCodecs: [] },
       ...(series ? { tokens: async () => ({ viewer: { id: 'viewer' } }) } : {}) };
@@ -650,4 +652,55 @@ test('a subtitle the player reports after a remembered series Off equal to the s
     expect(box.get().playback.sessionId).toBe('s2');
     expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('3');
   }, () => false, () => undefined, { subtitle: null, updatedAt: 1 });
+});
+
+test('of several tracks in the chosen language on a new file, the one with the chosen region is carried', async () => {
+  // The series remembers en-US subtitles: the episode plays en-US 4; the replacement file has en-US 4 and a generic en 7, which the server selected.
+  await lab([
+    { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('4', 'en-US')], selectedAudioTrackId: '1' },
+    { source: 'b', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('4', 'en-US'), subtitle('7', 'en')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '7' },
+  ], async ({ playback, box, run }) => {
+    await playback.start({ kind: 'title', id: 'episode', showId: 'show' });
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('4');
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('4');
+  }, () => false, () => undefined, { subtitle: { language: 'en-us' }, updatedAt: 1 });
+  // A choice the server took is asked for by that id too.
+  const commands = await recoverOnto(
+    { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('4', 'en-US')], selectedAudioTrackId: '1' },
+    { audioTrackId: '1', subtitleTrackId: '4' },
+    { source: 'b', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('4', 'en-US'), subtitle('7', 'en')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '7' });
+  expect(commands.map(c => c.subtitleTrackId)).toEqual(['4']);
+});
+
+test('after a version switch, an Off the new version selected itself is not carried as the viewer\'s', async () => {
+  // Off chosen on version A; version B already selects no subtitle and reports it; B fails onto file C, whose default is forced 9.
+  await lab([
+    { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    { source: 'c', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('9', 'eng', { forced: true })], selectedAudioTrackId: '1', selectedSubtitleTrackId: '9' },
+  ], async ({ playback, box, commands, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    await playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' });
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    await playback.switchVersion('s1', 'b');
+    expect(box.get().playback.plan?.sourceGeneration).toBe(1);
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', sourceGeneration: 1, audioTrackId: '1', subtitleTrackId: null });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').slice(1)).toEqual([]);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('9');
+  }, () => false, () => undefined, undefined,
+  { b: { source: 'b', generation: 1, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('5', 'eng')], selectedAudioTrackId: '1' } });
+});
+
+test('of several tracks in the chosen language, region and flags on a new file, the codec alone does not pick one', async () => {
+  // English AAC dialogue 4 is chosen; the new file already plays English AC-3 dialogue 4 and has an English AAC commentary 7.
+  const commands = await recoverOnto(
+    { source: 'a', audioTracks: [audio('4', 'eng', { default: true }), audio('7', 'eng')], subtitleTracks: [], selectedAudioTrackId: '4' },
+    { audioTrackId: '4', subtitleTrackId: null },
+    { source: 'b', audioTracks: [audio('4', 'eng', { codec: 'ac3', default: true }), audio('7', 'eng')], subtitleTracks: [], selectedAudioTrackId: '4' });
+  expect(commands).toEqual([]);
 });

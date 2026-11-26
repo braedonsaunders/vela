@@ -1,13 +1,14 @@
 // A viewer's audio or subtitle choice carried into a replacement session (playback.ts recovery).
 // A track id names a stream of one file: on the same file it is reused as is, on another file it
 // may be another language or a commentary. There the choice goes by what the track was, its
-// language (any code for it: 'en', 'eng') and its forced and hearing-impaired flags, and only when
-// exactly one track fits.
+// language (any code for it: 'en', 'eng') and its forced and hearing-impaired flags; when several
+// fit, the one in the same region as series-tracks.ts picks it, or none (the codec does not decide).
 // Without a file identity on either plan the id is reused when the track it names there is the
 // same language (or both have none) with the same flags; otherwise the choice goes by what the track was,
 // and a track its own plan did not list is not carried.
 import type * as V from '../wire';
 import { sameLanguage } from '../subtitle-languages';
+import { matchTrack, trackChoiceOf } from '../series-tracks';
 
 /** A chosen track: the file it was chosen on (the selected path's `sourceId`) and the track there. */
 export interface TrackChoice { source: string | undefined; track: V.Track | undefined }
@@ -30,7 +31,13 @@ export function carriedTrack(id: string, choice: TrackChoice | undefined, plan: 
   if ((!before || !now) && same && was && (fits(same, was) || (!languageOf(same) && !languageOf(was) && alike(same, was)))) return id;
   if (!was || !languageOf(was)) return undefined;
   const found = tracks.filter(track => fits(track, was));
-  return found.length === 1 ? found[0]!.id : undefined;
+  if (found.length < 2) return found[0]?.id;
+  // Several fit: the one in the chosen region, as a remembered series choice is matched at the start of an
+  // episode; the codec family does not decide (it could move dialogue to a commentary), the server's stays.
+  const traits = trackChoiceOf(was);
+  if (!traits) return undefined;
+  const { codecFamily: _, ...region } = traits;
+  return matchTrack(found, region, was.kind)?.id;
 }
 
 /** `track` is in the language `was` was in (both named) and has its forced and hearing-impaired flags. */
