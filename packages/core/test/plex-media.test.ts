@@ -1169,4 +1169,74 @@ describe('Plex progress beside commands on a slow server', () => {
     expect(await repeated).toEqual(resumed);
     expect(posts()).toEqual(['playing 0', 'playing 17']);
   });
+
+  test('a failed post for a command that took over the waiting reports fails each of them', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'x', positionSeconds: 0 } as never);
+    const first = adapter.reportObservation(plan.sessionId, at(1, 17));
+    await settle();
+    const waiting = [adapter.reportObservation(plan.sessionId, at(2, 18)), adapter.reportObservation(plan.sessionId, at(3, 19))];
+    const paused = adapter.command(plan.sessionId, { kind: 'pause', idempotencyKey: 'x1', sourceGeneration: 0, seekGeneration: 0 });
+    server.failing = true;
+    server.release();
+    expect(await first).toEqual({ accepted: true });
+    const settled = await Promise.allSettled([...waiting, paused]);
+    expect(settled.map(r => r.status === 'rejected' && r.reason instanceof VelaError)).toEqual([true, true, true]);
+    expect(posts()).toEqual(['playing 17', 'paused 19']);
+  });
+
+  test('a command repeated with its key while it is still in flight does not take the waiting report\'s post', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'w', positionSeconds: 0 } as never);
+    const resume = { kind: 'resume' as const, idempotencyKey: 'w1', sourceGeneration: 0, seekGeneration: 0 };
+    const resumed = adapter.command(plan.sessionId, resume);
+    await settle();
+    const report = adapter.reportObservation(plan.sessionId, at(1, 19));
+    const repeated = adapter.command(plan.sessionId, resume);
+    server.release();
+    expect(await report).toEqual({ accepted: true });
+    expect(await repeated).toEqual(await resumed);
+    expect(posts()).toEqual(['playing 0', 'playing 19']);
+  });
+
+  /** Answers `status` to each request matching `method path` from here on. */
+  const refuse = (method: string, path: string, status: number) => {
+    const routed = globalThis.fetch;
+    globalThis.fetch = Object.assign(async (input: string | URL | Request, init?: RequestInit) =>
+      (init?.method ?? 'GET') === method && new URL(String(input)).pathname === path ? new Response('', { status }) : routed(input, init), { preconnect: () => {} }) as typeof fetch;
+  };
+
+  test('a track change that fails on its own request after taking the waiting report\'s post still accepts the report', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 't', positionSeconds: 0 } as never);
+    const first = adapter.reportObservation(plan.sessionId, at(1, 17));
+    await settle();
+    const report = adapter.reportObservation(plan.sessionId, at(2, 19));
+    refuse('PUT', '/library/parts/3', 404);
+    const tracks = adapter.changeTracks(plan.sessionId, { kind: 'tracks', subtitleTrackId: '32', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 't1' });
+    server.release();
+    expect(await first).toEqual({ accepted: true });
+    const settled = await Promise.allSettled([report, tracks]);
+    expect(settled.map(r => r.status === 'fulfilled' ? r.value : r.reason instanceof VelaError && r.reason.status)).toEqual([{ accepted: true }, 404]);
+    expect(posts()).toEqual(['playing 17']);
+  });
+
+  test('a stop whose timeline is accepted accepts the report it took over though its transcode stop fails', async () => {
+    const { server, posts } = slow();
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'c', positionSeconds: 0 } as never);
+    const first = adapter.reportObservation(plan.sessionId, at(1, 17));
+    await settle();
+    const report = adapter.reportObservation(plan.sessionId, at(2, 19));
+    refuse('GET', '/video/:/transcode/universal/stop', 500);
+    const stopped = adapter.command(plan.sessionId, { kind: 'stop', idempotencyKey: 'c1', sourceGeneration: 0, seekGeneration: 0 });
+    server.release();
+    expect(await first).toEqual({ accepted: true });
+    const settled = await Promise.allSettled([report, stopped]);
+    expect(settled.map(r => r.status === 'fulfilled' ? r.value : r.reason instanceof VelaError && r.reason.status)).toEqual([{ accepted: true }, 500]);
+    expect(posts()).toEqual(['playing 17', 'stopped 19']);
+  });
 });
