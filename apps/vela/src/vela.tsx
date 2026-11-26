@@ -199,8 +199,10 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   }, [store, homeReady, libraryIds, auth.revision]);
 
   const serverSwitch = useMemo(
-    () => ({ servers, actions: store.servers, brandingName: state.appearance.value?.branding?.name, consoleUrl, openConnect: () => router.push('/connect') }),
-    [servers, store, state.appearance.value?.branding?.name, consoleUrl],
+    () => ({ servers, actions: store.servers, brandingName: state.appearance.value?.branding?.name, consoleUrl, openConnect: () => router.push('/connect'),
+      ...(state.downloads.supported ? { openDownloads: () => router.push('/downloads') } : {}),
+    }),
+    [servers, store, state.appearance.value?.branding?.name, consoleUrl, state.downloads.supported],
   );
 
   // The providers wrap the app whether or not they have a value: wrapping on sign-in would remount

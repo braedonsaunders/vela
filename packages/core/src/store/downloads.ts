@@ -527,6 +527,12 @@ export class Downloads {
     }
   }
 
+  async canDownload(): Promise<boolean> {
+    if (!this.port || this.box.get().auth.phase !== 'signed-in') return false;
+    const { adapter } = this.session.selected();
+    return hasMediaDownloads(adapter) && (await adapter.downloadsAvailable?.() ?? true);
+  }
+
   /** Hydrate the index, outbox and free space from the native downloads host once at startup. */
   hydrate(): Promise<void> {
     if (!this.port) return Promise.resolve();

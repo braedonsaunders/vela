@@ -64,6 +64,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
           testID={`server-${server.id}`}
         />{server.etherOrigin ? <Row label="Ether available" testID={`server-ether-${server.id}`} onPress={() => void (async () => { const result = await switcher.actions.add('ether', server.name, server.etherOrigin!); if (result.error) setError(result.error); else { const selected = await switcher.actions.select(result.id); if (selected.error) setError(selected.error); } })()} /> : null}</View>
       ))}
+      {switcher.openDownloads ? <Row label="Downloads" testID="server-downloads" onPress={switcher.openDownloads} disabled={busy} /> : null}
       <Row label={params.addLabel || msg('connect.add')} onPress={switcher.openConnect} disabled={busy} testID="server-add" />
       {switcher.consoleUrl && Platform.OS === 'web' ? (
         <Row label={msg('server.backToEther')} href={switcher.consoleUrl} testID="back-to-ether" />

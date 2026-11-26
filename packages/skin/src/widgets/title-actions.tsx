@@ -1,12 +1,13 @@
 // Capability-backed title mutations shown on every built-in title surface.
-import { msg, type TitleActions as Actions } from '@vela/core';
-import { useVela } from '@vela/core/react';
+import { isPlayableDownload, msg, type TitleActions as Actions } from '@vela/core';
+import { useVela, useVelaState } from '@vela/core/react';
 import { useCallback, useEffect, useState, type ComponentRef } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { FocusPressable } from '../focus';
 import { useHost } from '../host';
 import { holdBack } from '../menu-key';
-import { Glyph } from './common/controls';
+import { useServerSwitch } from './auth/servers';
+import { Glyph, Pill } from './common/controls';
 import { SheetModal } from './common/sheet-modal';
 import { useLook } from './common/look';
 import type { TitleVersions, VersionItem } from '@vela/core';
@@ -101,7 +102,9 @@ export function TitleActions() {
     return () => { live = false; };
   }, [vela, id]);
   const hasWatchActions = !!actions && (actions.watched || actions.favorite || actions.watchlist);
-  if (!title || (!hasWatchActions && !host.env.canPlaylists)) return null;
+  const supportsDownloads = useVelaState(state => state.downloads.supported);
+  const downloadTitle = supportsDownloads && (title?.kind === 'movie' || title?.kind === 'episode');
+  if (!title || (!hasWatchActions && !host.env.canPlaylists && !downloadTitle)) return null;
 
   const change = async (value: { played?: boolean; favorite?: boolean; watchlisted?: boolean }) => {
     if (busy) return;
@@ -138,9 +141,53 @@ export function TitleActions() {
           icon="playlist-add" active={false} label={msg('cardMenu.addToPlaylist')}
           run={() => host.dispatch('addToPlaylist', `${id}|${title.kind}`)} /> : null}
       </View>
+      {downloadTitle ? <TitleDownload id={id} /> : null}
       {error ? <Text accessibilityRole="alert" style={look.text({ 'font-size': '13px', color: '$ui.accent' })}>{error}</Text> : null}
     </View>
   );
+}
+
+function TitleDownload({ id }: { id: string }) {
+  const vela = useVela();
+  const switcher = useServerSwitch();
+  const look = useLook();
+  const supported = useVelaState(state => state.downloads.supported);
+  const revision = useVelaState(state => state.auth.revision);
+  const item = useVelaState(state => state.downloads.items.find(item => item.titleId === id));
+  const error = useVelaState(state => state.downloads.error);
+  const [allowed, setAllowed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [showError, setShowError] = useState(false);
+  useEffect(() => {
+    let current = true;
+    setAllowed(false);
+    if (supported) void vela.downloads.canDownload().then(value => {
+      if (current) setAllowed(value);
+    }).catch(() => {});
+    return () => { current = false; };
+  }, [vela, supported, revision]);
+  if (!supported || (!allowed && !item)) return null;
+  const download = async () => {
+    setBusy(true);
+    setShowError(true);
+    try {
+      const versions = await vela.catalogue.titleVersions(id).catch(() => null);
+      if (vela.getState().auth.revision === revision) {
+        await vela.downloads.enqueue(id, { versionId: versions?.selectedVersionId ?? undefined });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+  const status = item?.status;
+  const label = isPlayableDownload(item) ? 'Downloaded' : status ? {
+    completed: 'Downloaded', queued: 'Queued', downloading: 'Downloading', paused: 'Download paused', failed: 'Download failed',
+  }[status] : busy ? 'Preparing download…' : 'Download';
+  return <View style={{ alignSelf: 'flex-start', maxWidth: '100%', gap: 4 }}>
+    <Pill label={label} height={44} testID="detail-download" disabled={busy || (!!item && !switcher?.openDownloads)}
+      onPress={() => item ? switcher?.openDownloads?.() : void download()} />
+    {showError && error ? <Text accessibilityRole="alert" style={look.text({ 'font-size': '13px', color: '$ui.accent' })}>{error}</Text> : null}
+  </View>;
 }
 
 function ActionButton({ label, icon, active, testID, run, disabled }: {
