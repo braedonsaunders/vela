@@ -17,7 +17,7 @@ import { useVela } from './vela';
 import { surfaceToastPlacement } from './surface-toast-placement';
 
 interface ToastChrome {
-  title?: { path: string; bottom: number };
+  title?: { path: string; controls: Record<string, number> };
   photosFullscreen: number;
 }
 const ToastChromeState = createContext<ToastChrome>({ photosFullscreen: 0 });
@@ -30,10 +30,12 @@ export function useTitleToastChrome(active: boolean) {
     if (!active) return;
     return () => set?.(current => current.title?.path === path ? { ...current, title: undefined } : current);
   }, [active, path, set]);
-  return useCallback((bottom: number) => {
+  return useCallback((control: string, bottom: number) => {
     if (!active || !(bottom > 0)) return;
-    set?.(current => current.title?.path === path && current.title.bottom === bottom
-      ? current : { ...current, title: { path, bottom } });
+    set?.(current => {
+      const controls = current.title?.path === path ? current.title.controls : {};
+      return controls[control] === bottom ? current : { ...current, title: { path, controls: { ...controls, [control]: bottom } } };
+    });
   }, [active, path, set]);
 }
 
@@ -105,7 +107,7 @@ function Placed({ pathname }: { pathname: string }) {
     pathname,
     sectionTop: safeTop + (look.small ? 64 : look.size(100)),
     titleFallbackBottom: safeTop + (look.small ? 124 : Math.max((viewport?.height ?? 0) * 0.04, look.size(100)) + look.size(74)),
-    titleControlsBottom: chrome.title?.path === pathname ? chrome.title.bottom : undefined,
+    titleControlsBottom: chrome.title?.path === pathname ? Math.max(...Object.values(chrome.title.controls)) : undefined,
     clearance: Math.max(12, look.size(14)),
     photoFullscreen: chrome.photosFullscreen > 0,
   });

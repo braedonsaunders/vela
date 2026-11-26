@@ -1262,7 +1262,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onLayout={titleChrome ? () => {
           const target = buttonRef.current as ComponentRef<typeof View> | null;
           target?.measureInWindow((_x, y, _width, height) => {
-            if (height > 0 && y >= 0) titleChrome(y + height);
+            if (height > 0 && y >= 0) titleChrome(node.testId!, y + height);
           });
         } : undefined}
         onFocus={event => {

@@ -13,6 +13,7 @@ import { dayLabel } from '../media/day';
 import { MediaGlyph } from '../media/icons';
 import { useMediaLook } from '../media/parts';
 import { FactList, Facts } from '../media/title';
+import { TitleChromeLayout } from '../media/viewport';
 import { PhotoTouchSurface } from './photo-touch';
 import { photoInfoFacts, type PhotoDirection } from './viewer-nav-model';
 
@@ -48,7 +49,7 @@ const web = Platform.OS === 'web';
 export function PhotoViewerTopBar() {
   const navigation = useContext(PhotoNavigationContext);
   if (!navigation || navigation.fullscreen) return null;
-  return <PhotoDisplayControls navigation={navigation} />;
+  return <PhotoDisplayControls navigation={navigation} titleBar />;
 }
 
 export function PhotoViewerNavigation({ navigation, card, ratio, children }: {
@@ -175,11 +176,18 @@ function PhotoButton({ id, icon, label, onPress, visible = true, disabled = fals
   );
 }
 
-function PhotoDisplayControls({ navigation, back, reveal }: { navigation: PhotoNavigation; back?: () => void; reveal?: () => void }) {
+function PhotoDisplayControls({ navigation, back, reveal, titleBar }: {
+  navigation: PhotoNavigation; back?: () => void; reveal?: () => void; titleBar?: boolean;
+}) {
   const { info, fullscreen, setFullscreen, setInfo } = navigation;
   const transport = usePart('photoViewer.transport');
+  const reportChrome = useContext(TitleChromeLayout);
+  const bar = useRef<ComponentRef<typeof View>>(null);
   return (
-    <View testID="gallery-photo-controls" style={[{ flexDirection: 'row', alignItems: 'center', gap: 8 }, transport.box]}>
+    <View ref={bar} testID="gallery-photo-controls" style={[{ flexDirection: 'row', alignItems: 'center', gap: 8 }, transport.box]}
+      onLayout={titleBar && reportChrome ? () => bar.current?.measureInWindow((_x, y, _width, height) => {
+        if (height > 0 && y >= 0) reportChrome('gallery-photo-controls', y + height);
+      }) : undefined}>
       <PhotoButton id="gallery-photo-info" icon="info" label={msg(info ? 'gallery.hideInfo' : 'gallery.showInfo')} active={info} onPress={() => { reveal?.(); setInfo(!info); }} />
       {back ? <PhotoButton id="gallery-photo-exit-fullscreen" icon="collapse" label={msg('gallery.exitFullscreen')} onPress={back} />
         : <PhotoButton id={FULLSCREEN_ID} icon={fullscreen ? 'collapse' : 'expand'} label={msg('gallery.fullscreen')} onPress={() => setFullscreen(true)} />}

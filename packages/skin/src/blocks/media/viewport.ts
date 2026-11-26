@@ -13,4 +13,4 @@ export const MediaFrameViewport = createContext<MediaFrameViewport | undefined>(
 export const MediaContentHeight = createContext<number | undefined>(undefined);
 
 /** Reports the bottom of the active title controls in window coordinates. */
-export const TitleChromeLayout = createContext<((bottom: number) => void) | undefined>(undefined);
+export const TitleChromeLayout = createContext<((control: string, bottom: number) => void) | undefined>(undefined);
