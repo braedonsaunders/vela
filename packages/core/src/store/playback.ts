@@ -175,6 +175,9 @@ export class Playback {
   private beforeProvisional: CursorState | undefined;
   /** The source generation the cursor's seek state belongs to: a newer source ends it. */
   private cursorSource = 0;
+  /** The session and version a `switchVersion` call still waiting for its reply asked for, until a plan on that
+   * session or the reply brings it; each call has its own marker, and a new session ends it. */
+  private switching: { sessionId: string; versionId: string } | undefined;
   private liveCursor?: { sessionId: string; sourceGeneration: number; seekGeneration: number; seconds: number };
   private liveTransportIntent?: { sessionId: string; atLive: boolean };
   private liveRecoveryNotice?: { sessionId: string; text: string };
@@ -516,6 +519,7 @@ export class Playback {
     this.cursorSource = plan.sourceGeneration;
     this.cursorFollowsSeek = false;
     this.provisional.clear();
+    this.switching = undefined;
     if (intent.liveResume && plan.live?.timeshift) {
       this.liveTransportIntent = { sessionId: plan.sessionId, atLive: evicted || intent.liveResume.kind === 'edge' };
     }
@@ -798,6 +802,7 @@ export class Playback {
     this.watch = { target: watchOf(current.target), session: '', restarts: attempt + 1 };
     this.stall = undefined;
     this.recovering = true;
+    this.switching = undefined;
     this.follow?.abort();
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = undefined;
@@ -985,7 +990,7 @@ export class Playback {
       const connection = await this.session.ready();
       const plan = await this.send(connection.adapter, sessionId, command, origin);
       answered(plan);
-      if (seek && this.provisional.has(seek)) this.provisional.clear();
+      if (seek && this.provisional.has(seek)) this.settle(seek);
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
         // A late reply behind the plan already shown on its generations (a newer seek's, a version switch's)
         // is not published and moves nothing. One behind it only on revision is not published either, but
@@ -1015,10 +1020,10 @@ export class Playback {
       answered(null);
       // A plan published at the target of a seek the server refused did not answer it (a track change at that
       // position): the cursor goes to the target of the newest seek still matched or, once none is, back to where
-      // it was before the first match. A lost reply (no answer from the server) says nothing against the plan,
-      // so it ends the matches as an accepted reply does.
+      // it was before the first match or to the seek accepted since. A lost reply (no answer from the server)
+      // says nothing against the plan, so it settles its seek as an accepted reply does.
       if (seek && this.provisional.has(seek)) {
-        if (!serverRefused(error)) this.provisional.clear();
+        if (!serverRefused(error)) this.settle(seek);
         else {
           this.provisional.delete(seek);
           const newest = [...this.provisional].at(-1);
@@ -1040,11 +1045,23 @@ export class Playback {
     if (!plan) throw new Error('Playback session is unavailable');
     const connection = await this.session.ready();
     if (!hasVersions(connection.adapter)) throw new Error('Versions are unavailable');
-    const next = connection.plan(await connection.adapter.switchVersion(sessionId, {
-      kind: 'version', versionId, ...(positionSeconds !== undefined ? { positionSeconds } : {}),
-      sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
-      idempotencyKey: this.session.key(),
-    }));
+    // Until the reply comes, a published plan on this session naming this version is the one the viewer chose.
+    const switching = { sessionId, versionId };
+    this.switching = switching;
+    let next: V.PlaybackPlan;
+    try {
+      next = connection.plan(await connection.adapter.switchVersion(sessionId, {
+        kind: 'version', versionId, ...(positionSeconds !== undefined ? { positionSeconds } : {}),
+        sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+        idempotencyKey: this.session.key(),
+      }));
+    } catch (error) {
+      if (this.switching === switching) this.switching = undefined;
+      throw error;
+    }
+    // No published plan has been taken as this version yet: the reply is, also when its source is already shown.
+    const unseen = this.switching === switching;
+    if (unseen) this.switching = undefined;
     const now = this.box.get().playback;
     // A restart (stall recovery) asks for the file now playing, not the one first asked for.
     if (now.sessionId === sessionId) {
@@ -1054,7 +1071,7 @@ export class Playback {
       this.localTracks = false;
       this.audio = next.selectedAudioTrackId;
       this.subtitle = next.selectedSubtitleTrackId;
-      this.followSource(next, true);
+      this.followSource(next, true, unseen);
       this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
     }
     return next;
@@ -1089,12 +1106,18 @@ export class Playback {
   }
 
   /** A plan on a newer source generation than the cursor's ends the old source's waiting seeks (except one
-   * this plan answers, at its target and past its seek generation). Only a version the viewer chose (`chosen`)
-   * ends the provisional matches and starts the cursor from the new plan's position, and only when it was
-   * following a seek or a waiting seek was dropped; otherwise the player's last report or the accepted seek
-   * stands, and a refused match still goes back. Returns the cursor from before. */
-  private followSource(plan: V.PlaybackPlan, chosen = false): CursorState | undefined {
-    if (!(plan.sourceGeneration > this.cursorSource)) return undefined;
+   * this plan answers, at its target and past its seek generation). Only a version the viewer chose (`chosen`:
+   * the switch reply, or a plan on its session naming the version a switch still waits for) ends the provisional
+   * matches and starts the cursor from the new plan's position, and only when it was following a seek, a waiting
+   * seek was dropped or a published plan still matches a seek; otherwise the player's last report or the accepted seek stands, and a refused match still goes
+   * back. A switch reply whose version no plan has brought yet (`unseen`) does so also when its source is
+   * already shown. Returns the cursor from before. */
+  private followSource(plan: V.PlaybackPlan, chosen = false, unseen = false): CursorState | undefined {
+    if (!(plan.sourceGeneration > this.cursorSource || unseen && plan.sourceGeneration === this.cursorSource)) return undefined;
+    if (this.switching?.sessionId === plan.sessionId && plan.selectedVersionId === this.switching.versionId) {
+      chosen = true;
+      this.switching = undefined;
+    }
     const before = { cursor: this.cursor, cursorSeek: this.cursorSeek, followsSeek: this.cursorFollowsSeek };
     let dropped = false;
     for (const seek of this.seeking) {
@@ -1105,7 +1128,7 @@ export class Playback {
       }
     }
     this.cursorSource = plan.sourceGeneration;
-    if (chosen && (this.cursorFollowsSeek || dropped)) this.cursor = plan.positionSeconds;
+    if (chosen && (this.cursorFollowsSeek || dropped || this.provisional.size)) this.cursor = plan.positionSeconds;
     if (chosen) this.provisional.clear();
     this.cursorFollowsSeek = false;
     return before;
@@ -1133,6 +1156,17 @@ export class Playback {
     this.cursorSeek = plan.seekGeneration;
     this.cursor = plan.positionSeconds;
     this.cursorFollowsSeek = true;
+  }
+
+  /** An accepted seek settles its own match and the earlier ones it overtook; later matches stay provisional,
+   * and a refusal of them comes back to this seek's target. */
+  private settle(seek: WaitingSeek): void {
+    for (const match of this.provisional) {
+      this.provisional.delete(match);
+      if (match === seek) break;
+    }
+    this.beforeProvisional = { cursor: seek.seconds, cursorSeek: this.cursorSeek, followsSeek: true };
+    this.cursor = [...this.provisional].at(-1)?.seconds ?? seek.seconds;
   }
 
   private offersPath(sessionId: string, pathId: string): boolean {
@@ -1205,6 +1239,8 @@ export class Playback {
       }
       if (plan.state === 'ended' || plan.sourceGeneration <= (failedSourceGeneration ?? before.sourceGeneration)) return 'gone';
       this.followSource(plan);
+      // The reopened source is where playback is: a matched seek refused later does not go back past it.
+      this.provisional.clear();
       this.cursor = plan.positionSeconds;
       this.lastPosition = { sessionId, seconds: plan.positionSeconds, ended: false };
       this.patch({ plan, phase: 'playing', error: '', errorCode: '', errorClass: '' });
@@ -1560,6 +1596,7 @@ export class Playback {
     this.cursorSource = 0;
     this.cursorFollowsSeek = false;
     this.provisional.clear();
+    this.switching = undefined;
     this.liveCursor = undefined;
     this.liveTransportIntent = undefined;
     this.localTracks = false;
