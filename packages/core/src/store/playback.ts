@@ -158,6 +158,10 @@ export class Playback {
   /** The file `audio` and `subtitle` were chosen on and what those tracks were there (track-match.ts). */
   private audioChoice: TrackChoice | undefined;
   private subtitleChoice: TrackChoice | undefined;
+  /** `subtitle` is null because the viewer turned subtitles off, not because none was ever on. */
+  private subtitleOff = false;
+  /** What the player last reported for subtitles on the current source; undefined before its first report there. */
+  private subtitleReported: string | null | undefined;
   private externalId: string | undefined;
   private follow: AbortController | undefined;
   /** Read the followed session's snapshot now (servers without an event stream), not at the next poll. */
@@ -311,13 +315,19 @@ export class Playback {
     // A replacement session that already carries the viewer's tracks needs no command, and a live
     // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
     // refuse track commands. Only choices that name a track in the new plan are carried, by id on
-    // the same file and by what the track is on another (track-match.ts).
+    // the same file and by what the track is on another (track-match.ts), and only those the new
+    // plan has not selected already. Subtitles that were never on are no choice: the server's stand.
     const live = target.kind === 'channel' || target.kind === 'library-live' || (target.kind === 'programme' && target.from === 'start');
-    const audio = this.audio !== undefined ? carriedTrack(this.audio, this.audioChoice, plan, plan.audioTracks) : undefined;
-    const subtitle = this.subtitle === null ? null : this.subtitle !== undefined ? carriedTrack(this.subtitle, this.subtitleChoice, plan, plan.subtitleTracks) : undefined;
-    const differs = (audio !== undefined && audio !== plan.selectedAudioTrackId)
-      || (subtitle !== undefined && subtitle !== (plan.selectedSubtitleTrackId ?? null));
-    if (this.recovering && !live && differs) {
+    const { audio: carriedAudio, subtitle: carriedSubtitle } = this.carried(plan);
+    const audio = carriedAudio !== plan.selectedAudioTrackId ? carriedAudio : undefined;
+    const subtitle = carriedSubtitle !== (plan.selectedSubtitleTrackId ?? null) ? carriedSubtitle : undefined;
+    if (this.recovering) {
+      // An earlier recovery's local tracks are not this session's, and the new source's reports
+      // are measured against its own selection. The choice stays until that player reports.
+      this.localTracks = false;
+      this.subtitleReported = undefined;
+    }
+    if (this.recovering && !live && (audio !== undefined || subtitle !== undefined)) {
       try {
         plan = connection.plan(await this.send(connection, plan.sessionId, {
           kind: 'tracks', audioTrackId: audio, subtitleTrackId: subtitle,
@@ -333,10 +343,12 @@ export class Playback {
             seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() }).catch(() => undefined)
           : undefined;
         // Some servers leave track selection to the engines. Their plan still describes the
-        // available tracks, so carry the viewer's choices into the new engine session.
-        if (this.run === run) {
+        // available tracks, so carry the viewer's choices, as matched on the new file, into the new engine session; not when
+        // the server took Off on its own, which leaves selection with it.
+        if (this.run === run && off) plan = connection.plan(off);
+        else if (this.run === run) {
           this.localTracks = true;
-          plan = this.withLocalTracks(off ? connection.plan(off) : plan);
+          plan = this.withLocalTracks(plan);
         }
       }
       if (this.run !== run) {
@@ -480,9 +492,19 @@ export class Playback {
 
   private withLocalTracks(plan: V.PlaybackPlan): V.PlaybackPlan {
     if (!this.localTracks) return plan;
+    const { audio, subtitle } = this.carried(plan);
     return { ...plan,
-      ...(this.audio && plan.audioTracks.some(track => track.id === this.audio) ? { selectedAudioTrackId: this.audio } : {}),
-      ...(this.subtitle === null || plan.subtitleTracks.some(track => track.id === this.subtitle) ? { selectedSubtitleTrackId: this.subtitle ?? null } : {}),
+      ...(audio !== undefined ? { selectedAudioTrackId: audio } : {}),
+      ...(subtitle !== undefined ? { selectedSubtitleTrackId: subtitle } : {}),
+    };
+  }
+
+  /** The viewer's choices as ids in `plan` (track-match.ts); undefined leaves the plan's own selection. */
+  private carried(plan: V.PlaybackPlan): { audio: string | undefined; subtitle: string | null | undefined } {
+    return {
+      audio: this.audio !== undefined ? carriedTrack(this.audio, this.audioChoice, plan, plan.audioTracks) : undefined,
+      subtitle: this.subtitle === null ? (this.subtitleOff ? null : undefined)
+        : this.subtitle !== undefined ? carriedTrack(this.subtitle, this.subtitleChoice, plan, plan.subtitleTracks) : undefined,
     };
   }
 
@@ -654,7 +676,11 @@ export class Playback {
       const connection = await this.session.ready();
       const plan = await this.send(connection, sessionId, command, origin);
       answered(plan);
-      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: connection.plan(plan) });
+      if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
+        // Subtitles off the viewer asked for are carried to a replacement; a subtitle asked for ends that.
+        if (origin === 'viewer' && command.kind === 'tracks' && command.subtitleTrackId !== undefined) this.subtitleOff = command.subtitleTrackId === null;
+        this.patch({ plan: connection.plan(plan) });
+      }
     } catch (error) {
       answered(null);
       const words = commandFailure(command, error, origin);
@@ -790,6 +816,11 @@ export class Playback {
         this.audioChoice = trackChoice(current.plan, current.plan?.audioTracks, this.audio);
       }
       if (snapshot.subtitleTrackId !== undefined) {
+        // Off is the viewer's once a subtitle was on this source: reported, or before any report selected by the plan.
+        // A report supersedes the choice; none on a source that selected none leaves no choice.
+        const before = this.subtitleReported !== undefined ? this.subtitleReported : current.plan?.selectedSubtitleTrackId ?? null;
+        this.subtitleOff = snapshot.subtitleTrackId === null && (this.subtitleOff || before !== null);
+        this.subtitleReported = snapshot.subtitleTrackId;
         this.subtitle = snapshot.subtitleTrackId;
         this.subtitleChoice = trackChoice(current.plan, current.plan?.subtitleTracks, this.subtitle ?? undefined);
       }
@@ -995,6 +1026,8 @@ export class Playback {
     this.subtitle = undefined;
     this.audioChoice = undefined;
     this.subtitleChoice = undefined;
+    this.subtitleOff = false;
+    this.subtitleReported = undefined;
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = undefined;
     this.externalId = undefined;
@@ -1128,7 +1161,12 @@ export class Playback {
   }
 
   private patch(change: Partial<PlaybackState>): void {
-    if (change.plan) this.refreshHeld(change.plan);
+    if (change.plan) {
+      this.refreshHeld(change.plan);
+      // A new source of the session (a version, a part): its own subtitle selection is what its reports are measured against.
+      const before = this.box.get().playback.plan;
+      if (before?.sessionId === change.plan.sessionId && before.sourceGeneration !== change.plan.sourceGeneration) this.subtitleReported = undefined;
+    }
     this.box.update('playback', playback => ({ ...playback, ...change }));
   }
 

@@ -134,7 +134,7 @@ test('subtitles off stay off on a new file', async () => {
     { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('2', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '2' },
     { audioTrackId: '1', subtitleTrackId: null },
     { source: 'b', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('2', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '2' });
-  expect(commands.map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([['1', null]]);
+  expect(commands.map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([[undefined, null]]);
 });
 
 test('the same file, or a file of unknown identity, keeps the chosen ids', async () => {
@@ -254,4 +254,270 @@ test('a refusal that settles after the title was opened again sends nothing more
     expect(files.get('s2')!.selectedSubtitleTrackId).toBe('2');
     expect(box.get().playback.sessionId).toBe('s3');
   }, c => c.audioTrackId !== undefined ? refusal : false);
+});
+
+test('language codes that name the same language carry the choice to a new file', async () => {
+  // A tags its English audio 'en' and its French subtitle 'fre'; B uses 'eng' and 'fra' under other ids.
+  await lab([
+    { source: 'a', audioTracks: [audio('4', 'fre'), audio('7', 'en')], subtitleTracks: [subtitle('5', 'fre')], selectedAudioTrackId: '4' },
+    { source: 'b', audioTracks: [audio('4', 'eng'), audio('7', 'fra')], subtitleTracks: [subtitle('5', 'eng'), subtitle('6', 'fra')], selectedAudioTrackId: '7' },
+  ], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '7', subtitleTrackId: '5' });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([['4', '6']]);
+    expect(files.get('s2')!.selectedAudioTrackId).toBe('4');
+    expect(files.get('s2')!.selectedSubtitleTrackId).toBe('6');
+  });
+});
+
+test('main audio and a commentary in one language under two codes leave the server\'s choice', async () => {
+  // The choice was 'en'; B's main audio is 'eng' and its commentary 'en': two tracks fit.
+  await lab([
+    { source: 'a', audioTracks: [audio('1', 'en')], subtitleTracks: [], selectedAudioTrackId: '1' },
+    { source: 'b', audioTracks: [audio('1', 'eng', { default: true }), audio('2', 'en', { name: 'Commentary' })], subtitleTracks: [], selectedAudioTrackId: '1' },
+  ], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '1', subtitleTrackId: null });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks')).toEqual([]);
+    expect(files.get('s2')!.selectedAudioTrackId).toBe('1');
+  });
+});
+
+test('subtitles never turned on are not sent as off with a carried audio choice', async () => {
+  // Subtitles were off from the start; B numbers French differently and selects its forced subtitle itself.
+  await lab([
+    { source: 'a', audioTracks: [audio('4', 'fra'), audio('7', 'eng')], subtitleTracks: [subtitle('3', 'fra', { forced: true })], selectedAudioTrackId: '7' },
+    { source: 'b', audioTracks: [audio('4', 'eng'), audio('7', 'fra')], subtitleTracks: [subtitle('3', 'fra', { forced: true })], selectedAudioTrackId: '4', selectedSubtitleTrackId: '3' },
+  ], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '4', subtitleTrackId: null });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([['7', undefined]]);
+    expect(files.get('s2')!.selectedAudioTrackId).toBe('7');
+    expect(files.get('s2')!.selectedSubtitleTrackId).toBe('3');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('3');
+  });
+});
+
+test('after subtitles off went through on their own, the server\'s later selection is shown', async () => {
+  const a = { source: 'a', audioTracks: [audio('4', 'fra')], subtitleTracks: [subtitle('2', 'eng')], selectedAudioTrackId: '4', selectedSubtitleTrackId: '2' };
+  const b = { source: 'b', audioTracks: [audio('1', 'eng'), audio('9', 'fra')], subtitleTracks: [subtitle('2', 'eng'), subtitle('8', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '2' };
+  await lab([a, b], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '4', subtitleTrackId: null });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([['9', null], [undefined, null]]);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    // The server then selects subtitle 8 (a downloaded subtitle, another version); the next poll shows it.
+    files.set('s2', { ...files.get('s2')!, selectedSubtitleTrackId: '8' });
+    await run(5000);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('8');
+  }, c => c.audioTrackId !== undefined);
+});
+
+test('a file without subtitles in between does not turn off the forced subtitle of the next', async () => {
+  // A plays French subtitles; B has none and reports none; C selects its forced subtitle.
+  await lab([
+    { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'fra')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    { source: 'b', audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' },
+    { source: 'c', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('4', 'eng', { forced: true })], selectedAudioTrackId: '1', selectedSubtitleTrackId: '4' },
+  ], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '1', subtitleTrackId: '3' });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    playback.snapshot({ sessionId: 's2', live: null, position: 61, state: 'playing', audioTrackId: '1', subtitleTrackId: null });
+    playback.recover('s2');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s3');
+    expect(commands.filter(c => c.kind === 'tracks')).toEqual([]);
+    expect(files.get('s3')!.selectedSubtitleTrackId).toBe('4');
+  });
+});
+
+test('a new source of the session without subtitles does not turn off the forced subtitle of the next file', async () => {
+  // The session moves on from A (French subtitles) to B (none, a new source generation); a recovery lands on C.
+  const b = { source: 'b', generation: 1, audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' };
+  await lab([
+    { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'fra')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    { source: 'c', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('4', 'eng', { forced: true })], selectedAudioTrackId: '1', selectedSubtitleTrackId: '4' },
+  ], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', sourceGeneration: 0, audioTrackId: '1', subtitleTrackId: '3' });
+    files.set('s1', b);
+    await run(5000);
+    expect(box.get().playback.plan?.sourceGeneration).toBe(1);
+    playback.snapshot({ sessionId: 's1', live: null, position: 61, state: 'playing', sourceGeneration: 1, audioTrackId: '1', subtitleTrackId: null });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks')).toEqual([]);
+    expect(files.get('s2')!.selectedSubtitleTrackId).toBe('4');
+  });
+});
+
+test('a subtitle chosen before a new source of the same file that fails before reporting is carried', async () => {
+  // French is chosen on the part; a quality switch raises the source generation, the server selects English, and the new stream fails while loading.
+  const file = { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('2', 'eng', { default: true }), subtitle('3', 'fra')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '2' };
+  await lab([file, file], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', sourceGeneration: 0, audioTrackId: '1', subtitleTrackId: '3' });
+    files.set('s1', { ...file, generation: 1 });
+    await run(5000);
+    expect(box.get().playback.plan?.sourceGeneration).toBe(1);
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([[undefined, '3']]);
+    expect(files.get('s2')!.selectedSubtitleTrackId).toBe('3');
+  });
+});
+
+test('a subtitle is carried past a file without subtitles that fails before reporting', async () => {
+  // A plays French subtitles; B has none and fails before any report; C offers French again.
+  await lab([
+    { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'fra')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    { source: 'b', audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' },
+    { source: 'c', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('4', 'eng'), subtitle('5', 'fra')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '4' },
+  ], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '1', subtitleTrackId: '3' });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    playback.recover('s2');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s3');
+    expect(commands.filter(c => c.kind === 'tracks').map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([[undefined, '5']]);
+    expect(files.get('s3')!.selectedSubtitleTrackId).toBe('5');
+  });
+});
+
+test('subtitles turned off by command before the first player report stay off after a recovery', async () => {
+  const file = { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('2', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '2' };
+  await lab([file, file], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    await playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' });
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '1', subtitleTrackId: null });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').slice(1).map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([[undefined, null]]);
+    expect(files.get('s2')!.selectedSubtitleTrackId).toBeNull();
+  });
+});
+
+test('a subtitle the server selects while the player still reports none is not taken for off', async () => {
+  const file = { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('2', 'eng')], selectedAudioTrackId: '1' };
+  await lab([file, { ...file, selectedSubtitleTrackId: '2' }], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '1', subtitleTrackId: null });
+    files.set('s1', { ...file, selectedSubtitleTrackId: '2' });
+    await run(5000);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('2');
+    // The player has not taken up subtitle 2 yet.
+    playback.snapshot({ sessionId: 's1', live: null, position: 61, state: 'playing', audioTrackId: '1', subtitleTrackId: null });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks')).toEqual([]);
+    expect(files.get('s2')!.selectedSubtitleTrackId).toBe('2');
+  });
+});
+
+test('a subtitle in one script is not carried to the other script of its language', async () => {
+  await lab([
+    { source: 'a', audioTracks: [audio('1', 'zh')], subtitleTracks: [subtitle('5', 'zh-Hant')], selectedAudioTrackId: '1' },
+    { source: 'b', audioTracks: [audio('1', 'zh')], subtitleTracks: [subtitle('6', 'zh-Hans')], selectedAudioTrackId: '1' },
+  ], async ({ playback, box, commands, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '1', subtitleTrackId: '5' });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks')).toEqual([]);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+  });
+});
+
+test('a recovery after one that kept the tracks locally shows the server\'s later selection', async () => {
+  // On B the server takes neither track command; on C it takes Off on its own, then selects subtitle 8.
+  const a = { source: 'a', audioTracks: [audio('4', 'fra')], subtitleTracks: [subtitle('2', 'eng')], selectedAudioTrackId: '4', selectedSubtitleTrackId: '2' };
+  const b = { source: 'b', audioTracks: [audio('1', 'eng'), audio('9', 'fra')], subtitleTracks: [subtitle('2', 'eng'), subtitle('8', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '2' };
+  let refuseOff = true;
+  await lab([a, b, b], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '4', subtitleTrackId: null });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    refuseOff = false;
+    playback.recover('s2');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s3');
+    expect(commands.filter(c => c.kind === 'tracks').map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([['9', null], [undefined, null], ['9', null], [undefined, null]]);
+    expect(files.get('s3')!.selectedSubtitleTrackId).toBeNull();
+    files.set('s3', { ...files.get('s3')!, selectedSubtitleTrackId: '8' });
+    await run(5000);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('8');
+  }, c => c.audioTrackId !== undefined || refuseOff);
+});
+
+test('a subtitle the server refuses on a new file is kept locally by its id there, not the old one', async () => {
+  // Old id 4 is the full English subtitle; on the new file 4 is the forced one and the full one is 7.
+  await lab([
+    { source: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng', { forced: true }), subtitle('4', 'eng')], selectedAudioTrackId: '1' },
+    { source: 'b', audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('4', 'eng', { forced: true }), subtitle('7', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '4' },
+  ], async ({ playback, box, commands, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '1', subtitleTrackId: '4' });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([[undefined, '7']]);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('7');
+    await run(5000);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('7');
+  }, () => true);
+});
+
+test('a choice the new file cannot place is left to its own selection when the server refuses the others', async () => {
+  // French is 2 on the old file; the new file has two French tracks and 2 is English there.
+  await lab([
+    { source: 'a', audioTracks: [audio('1', 'eng'), audio('2', 'fra')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '2', selectedSubtitleTrackId: '3' },
+    { source: 'b', audioTracks: [audio('2', 'eng'), audio('5', 'fra'), audio('6', 'fra')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '5', selectedSubtitleTrackId: '3' },
+  ], async ({ playback, box, commands, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '2', subtitleTrackId: null });
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([[undefined, null]]);
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('5');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+  }, () => true);
+});
+
+test('an id reused where a file identity is missing must name the same kind of track', async () => {
+  const first = (source?: string) => ({ ...(source ? { source } : {}), audioTracks: [audio('1', 'eng')], selectedAudioTrackId: '1',
+    subtitleTracks: [subtitle('3', 'eng', { forced: true }), subtitle('4', 'eng')] });
+  const second = (source?: string) => ({ ...(source ? { source } : {}), audioTracks: [audio('1', 'eng')], selectedAudioTrackId: '1',
+    subtitleTracks: [subtitle('4', 'eng', { forced: true }), subtitle('7', 'eng')], selectedSubtitleTrackId: '4' });
+  for (const [before, after] of [[undefined, 'b'], ['a', undefined], [undefined, undefined]] as const) {
+    const commands = await recoverOnto(first(before), { audioTrackId: '1', subtitleTrackId: '4' }, second(after));
+    expect(commands.map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([[undefined, '7']]);
+  }
 });
