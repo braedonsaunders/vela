@@ -10,7 +10,7 @@ import { VelaError } from '../adapter/errors';
  * `onPlan` after `present` validates it for the server it came from. Resolves when the server
  * closes the stream; an unknown or malformed event rejects, so a retry starts with a new snapshot.
  * The live event on air (a live channel showing a game) goes to `onLiveEvent`, from the snapshot
- * and from the stream's `liveEvent` events.
+ * and from the stream's `liveEvent` events. `onActivity` hears the stream open and every chunk on it.
  */
 export async function followSession(
   api: ServerAdapter & EventStream,
@@ -19,6 +19,7 @@ export async function followSession(
   onPlan: (plan: PlaybackPlan) => void,
   signal?: AbortSignal,
   onLiveEvent?: (liveEvent: LiveEventRef | null) => void,
+  onActivity?: () => void,
 ): Promise<void> {
   let snapshot: SessionSnapshot = await api.sessionSnapshot(sessionId);
   let revision = snapshot.revision;
@@ -57,7 +58,7 @@ export async function followSession(
     }
     revision = snapshot.revision;
     onPlan(present(snapshot.plan));
-  }, signal);
+  }, signal, onActivity);
 }
 
 /** A wire `liveEvent` value: an `{id, feed}` reference, or null for none (malformed reads as none). */

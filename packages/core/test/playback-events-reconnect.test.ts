@@ -9,7 +9,9 @@ import { readEvents } from '../src/protocol/sse';
 import { EtherAdapter } from '../src/adapter/ether';
 import { FakeCredentials, restoreFetch } from './helpers';
 
-type Connect = (emit: (event: unknown) => Promise<void>, attempt: number) => Promise<void>;
+type Connect = (emit: (event: unknown) => Promise<void>, attempt: number, heartbeat: () => void) => Promise<void>;
+/** Takes over the stream request numbered `request` (1 is the first) when it returns a promise. */
+type Request = (request: number, signal: AbortSignal | undefined, activity: (() => void) | undefined) => Promise<void> | undefined;
 
 /**
  * An Ether-like server whose events stream behaves as `connect` says, under a deterministic
@@ -25,7 +27,8 @@ async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title
   const settle = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
   const restore = () => { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; Date.now = originalNow; };
   const starts: unknown[] = [], stops: string[] = [], cursors: string[] = [];
-  let snapshotFailure: (() => Error) | null = null, snapshotWait = 0, snapshotHang = false, connections = 0;
+  let snapshotFailure: (() => Error) | null = null, snapshotWait = 0, snapshotHang = false, streamHang = false, connections = 0;
+  let request: Request | null = null;
   const plan = (id: string, extra: Partial<PlaybackPlan> = {}) => ({ sessionId: id, state: 'playing', positionSeconds: 0, audioTracks: [], subtitleTracks: [], sourceGeneration: 1, seekGeneration: 1, ...extra } as PlaybackPlan);
   const server: { plan: PlaybackPlan; cursor: number; liveEvent?: LiveEventRef } = { plan: plan('s1'), cursor: 1 };
   const adapter = {
@@ -41,11 +44,16 @@ async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title
       return { plan: server.plan, revision: server.cursor, cursor: String(server.cursor), publishedRanges: [], ...(server.liveEvent ? { liveEvent: server.liveEvent } : {}) };
     },
     streamViewerEvents: async () => {},
-    streamSession: async (id: string, cursor: string, emit: (event: unknown) => Promise<void>, signal?: AbortSignal) => {
+    streamSession: async (id: string, cursor: string, emit: (event: unknown) => Promise<void>, signal?: AbortSignal, activity?: () => void) => {
       cursors.push(cursor);
-      if (id !== 's1') return new Promise<void>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      const own = request?.(cursors.length, signal, activity);
+      if (own) return own;
+      // A stream request that never answers: no response, no bytes.
+      if (id !== 's1' || streamHang) return new Promise<void>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      // The stream opened; every frame and heartbeat comment is activity on it.
+      activity?.();
       // Like Ether, only what follows the requested cursor is sent.
-      return connect(async frame => { const { id: at } = frame as { id?: string }; if (!at || Number(at) > Number(cursor)) await emit(frame); }, ++connections);
+      return connect(async frame => { activity?.(); const { id: at } = frame as { id?: string }; if (!at || Number(at) > Number(cursor)) await emit(frame); }, ++connections, () => activity?.());
     },
     reportObservation: async () => ({}),
     command: async (id: string, c: { kind: string }) => { if (c.kind === 'stop') stops.push(id); return plan(id); },
@@ -87,6 +95,8 @@ async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title
     connections: () => connections,
     failSnapshots: (failure: (() => Error) | null, afterMs = 0) => { snapshotFailure = failure; snapshotWait = afterMs; },
     hangSnapshots: (hang: boolean) => { snapshotHang = hang; },
+    hangStreams: (hang: boolean) => { streamHang = hang; },
+    requests: (take: Request) => { request = take; },
   };
 }
 
@@ -281,12 +291,12 @@ test('time spent reading snapshots that fail does not count as a connection that
   } finally { h.restore(); }
 });
 
-test('the attempts start over after a connection held 30 s from its first event, not after 29 s', async () => {
+test('the attempts start over after a connection held 30 s from opening, not after 29 s', async () => {
   for (const [held, over] of [[29_000, false], [30_000, true]] as const) {
     const h = await harness(async (emit, attempt) => {
       if (attempt < 6) return;
       if (attempt > 6) await new Promise(() => {});
-      await emit(planFrame(2));
+      // No plan event: only the stream's opening starts the clock.
       await new Promise(resolve => setTimeout(resolve, held));
     });
     try {
@@ -435,5 +445,85 @@ test('Stop during the backoff ends the watch with nothing left behind', async ()
     expect(h.connections()).toBe(1);
     expect(h.starts).toHaveLength(1);
     expect(h.timers.size).toBe(0);
+  } finally { h.restore(); }
+});
+
+test('a reconnection whose stream request never answers counts as failed, so a paused film is recovered', async () => {
+  const h = await harness(async () => {});
+  try {
+    // Paused: no media is read, so the stall watchdog does not step in.
+    h.media.paused = true;
+    // The snapshot answers; the events request that follows it never does.
+    h.hangStreams(true);
+    // Five reconnections (1, 2, 4, 4 and 4 s apart), each given up 10 s after it started.
+    await h.advance(60_000);
+    expect(h.starts).toHaveLength(1);
+    expect(h.box.get().playback.sessionId).toBe('s1');
+    await h.advance(10_000);
+    expect(h.cursors.slice(0, 6)).toEqual(['1', '1', '1', '1', '1', '1']);
+    expect(h.starts).toHaveLength(2);
+    expect(h.stops).toEqual(['s1']);
+    await h.playback.stop();
+  } finally { h.restore(); }
+});
+
+test('a quiet stream open for 31 s with only heartbeats starts its backoff over', async () => {
+  let drops = 0;
+  const h = await harness(async (_emit, _attempt, heartbeat) => {
+    drops++;
+    // No plan event: a heartbeat comment every 5 s, then the network drops the connection after 31 s.
+    for (let at = 5000; at <= 30_000; at += 5000) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      heartbeat();
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  });
+  try {
+    await h.advance(10 * 33_000);
+    expect(drops).toBeGreaterThan(8);
+    expect(h.starts).toHaveLength(1);
+    expect(h.stops).toEqual([]);
+    await h.playback.stop();
+  } finally { h.restore(); }
+});
+
+test('an open events stream reports activity for heartbeat comments, not only for events', async () => {
+  let beats = 0;
+  globalThis.fetch = Object.assign(async () => new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(': heartbeat\n\n'));
+      controller.enqueue(new TextEncoder().encode(': heartbeat\n\n'));
+      controller.close();
+    },
+  }), { headers: { 'Content-Type': 'text/event-stream' } }), { preconnect: () => {} }) as typeof fetch;
+  try {
+    const events: unknown[] = [];
+    const api = new EtherAdapter('https://ether.example', new FakeCredentials(), '');
+    await api.streamSession('s1', '1', event => { events.push(event); }, undefined, () => { beats++; });
+    expect(events).toEqual([]);
+    // Opened, then each heartbeat.
+    expect(beats).toBeGreaterThanOrEqual(2);
+  } finally { restoreFetch(); }
+});
+
+test('an attempt given up on that opens late does not cut short the next one', async () => {
+  const h = await harness(async (_emit, attempt) => { if (attempt > 4) await new Promise(() => {}); });
+  try {
+    h.requests((request, signal, activity) => {
+      // The fourth reconnection (at 11 s) never answers and is given up at 21 s; its request still opens 4.5 s later.
+      if (request === 5) return new Promise<void>((_, reject) => signal?.addEventListener('abort', () => {
+        setTimeout(() => activity?.(), 4500);
+        reject(signal.reason);
+      }, { once: true }));
+      // The fifth (at 25 s) opens after 1.5 s and stays up.
+      if (request === 6) return new Promise<void>(resolve => setTimeout(resolve, 1500)).then(() => { activity?.(); return new Promise<void>(() => {}); });
+      return undefined;
+    });
+    await h.advance(60_000);
+    expect(h.starts).toHaveLength(1);
+    expect(h.stops).toEqual([]);
+    expect(h.box.get().playback.phase).toBe('playing');
+    expect(h.cursors).toHaveLength(6);
+    await h.playback.stop();
   } finally { h.restore(); }
 });

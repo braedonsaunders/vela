@@ -574,9 +574,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.bytes(`/sessions/${segment(sessionId)}/trickplay/${offer.width}/${index}.jpg`, etag, signal);
   }
 
-  streamSession(sessionId: string, cursor: string, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+  streamSession(sessionId: string, cursor: string, onEvent: EventHandler, signal?: AbortSignal, onActivity?: () => void): Promise<void> {
     const path = `/sessions/${segment(sessionId)}/events`;
-    return this.http.stream(path, { 'Last-Event-ID': cursor }, onEvent, signal);
+    return this.http.stream(path, { 'Last-Event-ID': cursor }, onEvent, signal, onActivity);
   }
 
   createAudioFallback(sessionId: string, request: V.AudioFallbackRequest, signal?: AbortSignal) {

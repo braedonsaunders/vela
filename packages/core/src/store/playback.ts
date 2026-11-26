@@ -118,12 +118,12 @@ const POLL_SECONDS = 5;
 /**
  * A session's events stream that drops while its media plays on is followed again after these
  * many seconds (together they span Ether's 15 s disconnect grace) before the session is restarted.
- * A connection up for `REFOLLOW_HELD_SECONDS` from its first event starts them over.
+ * A connection up for `REFOLLOW_HELD_SECONDS` from the stream's opening starts them over, events or not.
  */
 const REFOLLOW_SECONDS = [1, 2, 4, 4, 4];
 const REFOLLOW_HELD_SECONDS = 30;
-/** A reconnection whose snapshot read has not answered within this many seconds counts as failed. */
-const REFOLLOW_SNAPSHOT_SECONDS = 10;
+/** A reconnection whose snapshot read and stream have not both answered within this many seconds counts as failed. */
+const REFOLLOW_OPEN_SECONDS = 10;
 /** A plan offered with placeholder versions is read once more this long after it starts. */
 const COLD_VERSIONS_SECONDS = 4;
 /** A server that offers scrub thumbnails only once a session streams is asked again this often, while the viewer scrubs. */
@@ -459,15 +459,12 @@ export class Playback {
             const attempt = new AbortController();
             const abort = () => attempt.abort();
             controller.signal.addEventListener('abort', abort, { once: true });
-            // The first plan is the snapshot read before connecting; the next is the stream's first event,
-            // from which the connection counts as up. Followed again after a drop, an end the player never
-            // reached in that snapshot means the server let the session go while its events were down
-            // (Ether's disconnect grace): it is restarted, not finished. Once the snapshot showed the
-            // session alive, an end on the stream is the server's own and takes the end path.
+            // The first plan is the snapshot read before connecting. Followed again after a drop, an end
+            // the player never reached in that snapshot means the server let the session go while its events
+            // were down (Ether's disconnect grace): it is restarted, not finished. Once the snapshot showed
+            // the session alive, an end on the stream is the server's own and takes the end path.
             const onPlan = (plan: V.PlaybackPlan) => {
               const index = plans++;
-              if (index === 0) clearTimeout(deadline);
-              if (index === 1) connected = Date.now();
               if (resumed && index === 0 && plan.state === 'ended' && !(this.lastPosition?.sessionId === sessionId && this.lastPosition.ended)) {
                 lost = true;
                 throw new Error('Session ended while its events were down');
@@ -478,10 +475,16 @@ export class Playback {
               if (this.run !== run || controller.signal.aborted) return;
               const current = this.box.get().playback.liveEvent;
               if (current?.id !== liveEvent?.id || current?.feed !== liveEvent?.feed) this.patch({ liveEvent });
+            }, () => {
+              // The stream opened (or sent anything, a heartbeat included): the connection counts as up.
+              // An attempt already given up on that answers late is not this connection.
+              if (connected || attempt.signal.aborted) return;
+              connected = Date.now();
+              clearTimeout(deadline);
             });
-            // A reconnection's snapshot read that never answers would otherwise leave a paused viewer waiting for ever.
+            // A reconnection whose snapshot read or stream never answers would otherwise leave a paused viewer waiting for ever.
             const timeout = resumed ? new Promise<never>((_, reject) => {
-              deadline = setTimeout(() => reject(new Error('Session snapshot did not answer')), REFOLLOW_SNAPSHOT_SECONDS * 1000);
+              deadline = setTimeout(() => reject(new Error('Session events did not answer')), REFOLLOW_OPEN_SECONDS * 1000);
             }) : undefined;
             try {
               await (timeout ? Promise.race([follow, timeout]) : follow);

@@ -10,8 +10,11 @@ export interface StreamEvent {
 
 export type EventHandler = (event: StreamEvent) => void | Promise<void>;
 
-/** Read a `text/event-stream` body to its end, handing each event to `onEvent` in order. */
-export async function readEvents(response: Response, onEvent: EventHandler, signal?: AbortSignal): Promise<void> {
+/**
+ * Read a `text/event-stream` body to its end, handing each event to `onEvent` in order.
+ * `onActivity` hears that the stream opened and every chunk after, heartbeat comments included.
+ */
+export async function readEvents(response: Response, onEvent: EventHandler, signal?: AbortSignal, onActivity?: () => void): Promise<void> {
   if (!response.body) throw new Error('This platform cannot stream server events');
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -19,9 +22,11 @@ export async function readEvents(response: Response, onEvent: EventHandler, sign
   const abort = () => void reader.cancel().catch(() => {});
   signal?.addEventListener('abort', abort, { once: true });
   try {
+    onActivity?.();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      onActivity?.();
       for (const event of parser.push(decoder.decode(value, { stream: true }))) {
         signal?.throwIfAborted();
         await onEvent(event);
