@@ -4,7 +4,9 @@ import type { HostContext } from './state';
 import { saveVolume } from './platform';
 import { endPlayback } from './session';
 import { recoverPlayback } from './recovery';
-import { publishHostState } from './events';
+import { emitHostEvent, publishHostState } from './events';
+import { readPosition } from './position';
+import { originalEndedEarly, originalLostResponse } from '../original-lost';
 export function detachMedia(context: HostContext) {
   for (const remove of context.lifecycle.listeners) remove();
   context.lifecycle.listeners = [];
@@ -50,6 +52,13 @@ export function bindMedia(context: HostContext, token: Generation) {
         context.playback.status = 'buffering';
     },
     ended: () => {
+      const session = context.session.current;
+      if (context.media.source?.original && session && originalEndedEarly(readPosition(context), session.duration)) {
+        context.playback.status = 'loading';
+        emitHostEvent(context, { type: 'session-refresh', sessionId: session.id,
+          reason: 'original_lost', positionSeconds: readPosition(context), sourceGeneration: token.source });
+        return;
+      }
       endPlayback(context);
     },
     error: () => {
@@ -74,6 +83,13 @@ export function bindMedia(context: HostContext, token: Generation) {
               headers: { Range: 'bytes=0-0' }, signal: AbortSignal.any([generation.signal, AbortSignal.timeout(5000)]),
             });
             void response.body?.cancel();
+            if (originalLostResponse(response) && context.session.current) {
+              context.playback.status = 'loading';
+              emitHostEvent(context, { type: 'session-refresh', sessionId: context.session.current.id,
+                reason: 'original_lost', positionSeconds: readPosition(context), sourceGeneration: generation.source });
+              publishHostState(context, true);
+              return;
+            }
             if (!response.ok) { message = `HTTP ${response.status}: ${message}`; failureKind = 'network'; }
           } catch (error) {
             if (generation.signal.aborted) return;

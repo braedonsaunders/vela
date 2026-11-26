@@ -9,6 +9,12 @@ internal fun mediaFailureMessage(code: Int) = if (transientMediaFailure(code)) {
   "This media could not be played. Please try again."
 }
 
+internal fun originalLostResponse(status: Int, marker: String?) =
+  status == 409 && marker == "original_lost"
+
+internal fun originalEndedEarly(positionSeconds: Double, durationSeconds: Double?) =
+  durationSeconds != null && durationSeconds.isFinite() && durationSeconds > 2 && positionSeconds < durationSeconds - 2
+
 
 /** Extractors can omit an unsupported video stream while retaining perfectly playable audio. */
 internal fun missingSupportedVideo(hasTracks: Boolean, hasVideo: Boolean, supportedVideo: Boolean, expectsVideo: Boolean) =

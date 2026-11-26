@@ -110,6 +110,12 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     state: view.state, started: !!sessionId && playedSession.current === sessionId,
     menuOpen: opened !== null, active, failed: !!failed,
   }));
+  useEffect(() => {
+    if (!state.offerVersions) return;
+    state.refreshVersions?.();
+    setOpened('quality');
+    idle.wake();
+  }, [state.offerVersions]);
   const chromeUp = idle.visible || !!failed;
   const surfaces = usePlayerSurfaces({
     channelId: live.live ? live.channelId : '', eventId: live.live ? liveEvent?.id ?? '' : '', feed: live.live ? liveEvent?.feed : undefined,

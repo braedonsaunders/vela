@@ -88,7 +88,7 @@ qualities=[]; TS is not offered to the fMP4 MSE pipeline or added to normal plan
 GET/POST `/__admin/faults` reads/patches:
 
 ```json
-{"rangeFailSeconds":0,"bandwidthBps":0,"failEvery":0,"truncateEvery":0,"stallMs":0,"fallbackUnavailable":false,"capacityExhausted":false,"refreshFailSeconds":0,"refreshFailStatus":500,"refreshStallMs":0,"refreshAbandonMs":0,"audioStartPending":0,"videoStartPending":0,"startStoppedSession":0}
+{"rangeFailSeconds":0,"bandwidthBps":0,"failEvery":0,"truncateEvery":0,"stallMs":0,"fallbackUnavailable":false,"capacityExhausted":false,"originalLost409":0,"originalLostTruncate":0,"originalLostVersionUnavailable":false,"refreshFailSeconds":0,"refreshFailStatus":500,"refreshStallMs":0,"refreshAbandonMs":0,"audioStartPending":0,"videoStartPending":0,"startStoppedSession":0}
 ```
 
 Session faults: `refreshFailSeconds` makes `POST /vela/v0/auth/refresh` fail for that
@@ -114,6 +114,11 @@ stopped session, its state shown as `ready` (Ether rc.15's broker reused one). Q
 Zero disables each numeric fault. Bandwidth applies per response (bits/s).
 failEvery/truncateEvery affect every Nth requested CMAF media segment globally;
 failed segments return 502; truncated bodies abort after half the advertised bytes.
+`originalLost409` makes the next original range return Ether's 409
+`X-Ether-Playback-Error: original_lost`; `originalLostTruncate` closes it halfway
+through instead. Both publish the replacement release, grant and source generation.
+With `originalLostVersionUnavailable`, the plan instead keeps its generation and
+reports `sourceFailure: version_unavailable` for a pinned release.
 stallMs delays first media bytes (capped sixty seconds). Query overrides of the
 four numeric fields also work on media URLs. Faults snapshot per request.
 Capacity blocks new playback and transcode switch attempts. Unavailable fallback

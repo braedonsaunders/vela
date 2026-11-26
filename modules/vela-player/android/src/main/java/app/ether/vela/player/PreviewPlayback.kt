@@ -113,7 +113,7 @@ internal class PreviewPlayback(
         if (state.finished) stop()
       }
     }
-    client.onFailure = { code, _ -> fail("The preview could not be played (Media3 $code)") }
+    client.onFailure = { code, _, _ -> fail("The preview could not be played (Media3 $code)") }
     host.surface?.let { client.attach(it) }
     client.volume(0f)
     client.load(url, null, preview.startSeconds, preview.loop)

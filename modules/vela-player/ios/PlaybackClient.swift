@@ -14,6 +14,7 @@ final class PlaybackClient {
         case endFile(reason: Int32, error: Int32)
         case seekDone
         case refused(status: Int)
+        case originalLost(position: Double)
         case shutdown
     }
     var onProperty: ((String, Any?) -> Void)?
@@ -252,8 +253,12 @@ final class PlaybackClient {
                     case .paused: self.emit("pause", true)
                     case .ended:
                         if self.retainPausedPicture { self.freezePicture() }
-                        self.emit("eof-reached", true)
-                        self.onEvent?(.endFile(reason: 0, error: 0))
+                        if self.received.originalLost {
+                            self.onEvent?(.originalLost(position: self.properties["time-pos"] as? Double ?? self.start))
+                        } else {
+                            self.emit("eof-reached", true)
+                            self.onEvent?(.endFile(reason: 0, error: 0))
+                        }
                         if self.loops { self.load(url) }
                     // @Published delivers before assigning. Stop after that setter returns,
                     // otherwise its error assignment can overwrite stop()'s idle state.
@@ -523,6 +528,13 @@ final class PlaybackClient {
     }
     private func failPath() {
         guard !dead, !failed, !reconnecting else { return }
+        if received.originalLost {
+            start = (properties["time-pos"] as? Double) ?? start
+            failed = true
+            engine?.stop()
+            onEvent?(.originalLost(position: start))
+            return
+        }
         // The volume ran out even inside the budget (other apps wrote meanwhile): play on from here with a
         // smaller cache rather than ask the server for a transcode, which needs the same disk.
         if let failure = engine?.errorInfo, failure.kind.rawValue == "storageExhausted", cacheShrink > 0.3, let url {

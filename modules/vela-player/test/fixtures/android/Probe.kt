@@ -84,6 +84,12 @@ fun main() {
   check(!missingSupportedVideo(false, false, false, true))
   check(!missingSupportedVideo(true, true, true, true))
   check(!missingSupportedVideo(true, false, false, false))
+  check(originalLostResponse(409, "original_lost"))
+  check(!originalLostResponse(409, "other"))
+  check(!originalLostResponse(410, "original_lost"))
+  check(originalEndedEarly(120.0, 300.0))
+  check(!originalEndedEarly(299.5, 300.0))
+  check(!originalEndedEarly(120.0, null))
   check(PlanPath.from(mapOf("id" to "file", "kind" to "direct", "transport" to "file", "readiness" to "ready", "originalVideo" to mapOf("codec" to "ffv1")))!!.expectsVideo)
   listOf(503, 429, 2000, 2001, 2002).forEach { check(transientMediaFailure(it)) }
   listOf(3001, 4005, 403).forEach { check(!transientMediaFailure(it)) }
@@ -154,6 +160,12 @@ fun main() {
     }
     if (request.requestURI.path == "/media/refused") {
       request.sendResponseHeaders(403, -1)
+    } else if (request.requestURI.path == "/media/original-lost") {
+      request.responseHeaders.add("X-Ether-Playback-Error", "original_lost")
+      request.sendResponseHeaders(409, -1)
+    } else if (request.requestURI.path == "/media/truncated") {
+      request.sendResponseHeaders(200, 10)
+      request.responseBody.write("01234".toByteArray())
     } else if (request.requestURI.path == "/media/range") {
       val bytes = "3456".toByteArray()
       request.responseHeaders.add("Content-Range", "bytes 3-6/10")
@@ -202,6 +214,15 @@ fun main() {
     check(read("/media/range", 3, 4) == "3456")
     check(runCatching { read("/media/bad-range", 3, 4) }.exceptionOrNull()?.message == "Media request failed")
     check((runCatching { read("/media/refused") }.exceptionOrNull() as MediaHttpFailure).status == 403)
+    check((runCatching { read("/media/original-lost") }.exceptionOrNull() as MediaHttpFailure).originalLost)
+    check(runCatching {
+      val source = ScopedMediaDataSource(grant, isOriginal = { true })
+      try {
+        source.open(DataSpec(Uri.parse(origin + "/media/truncated")))
+        val bytes = ByteArray(20)
+        while (source.read(bytes, 0, bytes.size) >= 0) { }
+      } finally { source.close() }
+    }.exceptionOrNull() is OriginalLostFailure)
     val beforeLoop = seen.size
     check(runCatching { read("/media/loop") }.isFailure)
     check(seen.size - beforeLoop == 9)

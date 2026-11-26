@@ -58,6 +58,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   qualityPick.current = pendingQualityId;
   const [pendingVersionId, setPendingVersionId] = useState<string>();
   const [versionMessage, setVersionMessage] = useState('');
+  const [offerVersions, setOfferVersions] = useState(0);
+  const offeredSourceFailure = useRef('');
   const versionAttempt = useRef(0);
   const versionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const position = useRef(0);
@@ -201,6 +203,13 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const plan = playback.target?.id === id && playback.target.kind === kind ? playback.plan : null;
   const sessionId = plan?.sessionId ?? '';
   useEffect(() => {
+    if (plan?.sourceFailure !== 'version_unavailable') return;
+    const failure = `${sessionId}:${plan.revision}`;
+    if (offeredSourceFailure.current === failure) return;
+    offeredSourceFailure.current = failure;
+    setOfferVersions(value => value + 1);
+  }, [sessionId, plan?.revision, plan?.sourceFailure]);
+  useEffect(() => {
     versionAttempt.current++;
     if (versionTimer.current) clearTimeout(versionTimer.current);
     setPendingVersionId(undefined); setVersionMessage('');
@@ -310,6 +319,14 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     // An expired grant or a stale reply: core re-reads the session's authoritative plan; a gone session starts over.
     onSessionRefresh: event => {
       if (event.sessionId !== sessionId) return;
+      if (event.reason === 'original_lost') {
+        const held = Number.isFinite(event.positionSeconds) ? Math.max(0, event.positionSeconds!) : position.current;
+        position.current = held;
+        void vela.playback.originalLost(event.sessionId, held, event.sourceGeneration).then(result => {
+          if (result === 'gone') startOver(event.sessionId);
+        });
+        return;
+      }
       void vela.playback.refresh(event.sessionId).then(live => {
         if (!live) startOver(event.sessionId);
       });
@@ -342,6 +359,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       pendingQualityId,
       pendingVersionId,
       versionMessage,
+      offerVersions,
       send,
       switchVersion,
       refreshVersions,
