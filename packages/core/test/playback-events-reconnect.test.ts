@@ -28,12 +28,13 @@ async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title
   const restore = () => { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; Date.now = originalNow; };
   const starts: unknown[] = [], stops: string[] = [], cursors: string[] = [];
   let snapshotFailure: (() => Error) | null = null, snapshotWait = 0, snapshotHang = false, streamHang = false, connections = 0;
+  let startFailure: (() => Error) | null = null;
   let request: Request | null = first, held: (() => void)[] | null = null, answer: ((id: string) => PlaybackPlan) | null = null;
   const snapshotSignals: (AbortSignal | undefined)[] = [];
   const plan = (id: string, extra: Partial<PlaybackPlan> = {}) => ({ sessionId: id, state: 'playing', positionSeconds: 0, audioTracks: [], subtitleTracks: [], sourceGeneration: 1, seekGeneration: 1, ...extra } as PlaybackPlan);
   const server: { plan: PlaybackPlan; cursor: number; liveEvent?: LiveEventRef } = { plan: plan('s1'), cursor: 1 };
   const adapter = {
-    startPlayback: async (request: unknown) => { starts.push(request); return plan(`s${starts.length}`); },
+    startPlayback: async (request: unknown) => { if (startFailure) throw startFailure(); starts.push(request); return plan(`s${starts.length}`); },
     sessionSnapshot: async (id: string, signal?: AbortSignal) => {
       if (id === 's1') snapshotSignals.push(signal);
       if (snapshotHang && id === 's1') return new Promise(() => {});
@@ -68,10 +69,13 @@ async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title
   const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'key', client: {} };
   const box = new StateBox({ playback: initialPlayback, auth: { phase: 'signed-in' } } as VelaState);
   const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
-  let position = 100;
-  const media = { moving: true, paused: false };
+  let position = 100, received = 0;
+  /** `trickle`: not moving, but bytes keep arriving (an engine reloading or refreshing its playlist behind a frozen picture). */
+  const media = { moving: true, paused: false, trickle: false };
   const play = () => playback.snapshot(media.paused
     ? { sessionId: 's1', live: null, position, state: 'paused' }
+    : media.trickle
+    ? { sessionId: 's1', live: null, position, state: 'loading', loadProgress: received += 4000 }
     : media.moving
     ? { sessionId: 's1', live: null, position: position += 1, state: 'playing' }
     : { sessionId: 's1', live: null, position, state: 'buffering' });
@@ -101,6 +105,7 @@ async function harness(connect: Connect, target: PlaybackTarget = { kind: 'title
     box, playback, media, starts, stops, cursors, server, advance, settle, restore, plan, timers, snapshotSignals,
     connections: () => connections,
     failSnapshots: (failure: (() => Error) | null, afterMs = 0) => { snapshotFailure = failure; snapshotWait = afterMs; },
+    failStarts: (failure: (() => Error) | null) => { startFailure = failure; },
     hangSnapshots: (hang: boolean) => { snapshotHang = hang; },
     hangStreams: (hang: boolean) => { streamHang = hang; },
     requests: (take: Request) => { request = take; },
@@ -442,6 +447,60 @@ test('media that stalls during the outage still recovers', async () => {
     expect(h.stops).toEqual(['s1']);
     await h.playback.stop();
     expect(h.timers.size).toBe(0);
+  } finally { h.restore(); }
+});
+
+test('a network drop that also froze the media restarts it once the network is back, however many bytes trickle in', async () => {
+  // 0.2.74 regression: the events stream and the media reads went down together for 12 s. The engine's own
+  // reload came back loading behind a frozen picture while refreshing its playlist, so neither the refollow
+  // (which assumed the media played on) nor the stall watchdog (which counted the bytes) restarted the session.
+  const h = await harness(async (_emit, attempt) => {
+    // The first connection is dropped by the network; later ones hold.
+    if (attempt === 1) throw new TypeError('network connection was lost');
+    await new Promise(() => {});
+  });
+  try {
+    const down = () => new TypeError('network is unreachable');
+    h.failSnapshots(down);
+    h.failStarts(down);
+    // The picture plays out its buffer for 3 s, then freezes while the engine keeps loading.
+    await h.advance(3000);
+    h.media.moving = false;
+    h.media.trickle = true;
+    await h.advance(9000);
+    // The network returns at 12 s.
+    h.failSnapshots(null);
+    h.failStarts(null);
+    await h.advance(1000);
+    expect(h.box.get().playback.phase).not.toBe('failed');
+    // 10 s without play after the picture froze: restarted, its start answered within a few seconds.
+    await h.advance(3000);
+    expect(h.starts).toHaveLength(2);
+    expect(h.box.get().playback.phase).toBe('playing');
+    expect(h.box.get().playback.sessionId).toBe('s2');
+    await h.playback.stop();
+  } finally { h.restore(); }
+});
+
+test('media that plays on through an events drop is not restarted, and the drop is over once both are back', async () => {
+  const h = await harness(async (_emit, attempt) => {
+    if (attempt === 1) throw new TypeError('network connection was lost');
+    await new Promise(() => {});
+  });
+  try {
+    h.failSnapshots(() => new TypeError('network is unreachable'));
+    // The events are down for 12 s while the media plays on.
+    await h.advance(12_000);
+    h.failSnapshots(null);
+    await h.advance(5000);
+    expect(h.connections()).toBe(2);
+    // Later, the engine loads for a while (bytes arriving): the ordinary slow-start allowance applies again.
+    h.media.moving = false;
+    h.media.trickle = true;
+    await h.advance(30_000);
+    expect(h.starts).toHaveLength(1);
+    expect(h.stops).toEqual([]);
+    await h.playback.stop();
   } finally { h.restore(); }
 });
 

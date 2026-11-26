@@ -1300,9 +1300,14 @@ async function dispatch(req: Request): Promise<Response> {
       return json(revised.map(s => ({ sessionId: s.plan.sessionId, revision: s.plan.revision, sourceGeneration: s.plan.sourceGeneration })));
     }
     // A dropped connection leaves the watch intact. Expiry also makes its next snapshot read return 404.
-    const sessionFault = /^\/__admin\/sessions\/([^/]+)\/(drop-events|expire)$/.exec(url.pathname);
+    // freeze-media leaves the session and its playlists alone; its media segments stop answering.
+    const sessionFault = /^\/__admin\/sessions\/([^/]+)\/(drop-events|expire|freeze-media)$/.exec(url.pathname);
     if (req.method === 'POST' && sessionFault) {
       const session = sessions.get(sessionFault[1]!);
+      if (sessionFault[2] === 'freeze-media') {
+        if (session) session.mediaFrozen = true;
+        return json({ frozen: !!session });
+      }
       const expired = !!session && sessionFault[2] === 'expire';
       if (expired) session.expires = Date.now();
       const listeners = [...(session?.listeners.values() ?? [])];
@@ -1349,6 +1354,10 @@ async function dispatch(req: Request): Promise<Response> {
     if (truncateOriginal) {
       faults.originalLostTruncate--;
       originalLost(s, faults.originalLostVersionUnavailable);
+    }
+    if (s.mediaFrozen && /\.(m4s|ts)$/.test(media[3])) {
+      await new Promise<void>(resolve => { if (req.signal.aborted) resolve(); else req.signal.addEventListener('abort', () => resolve(), { once: true }); });
+      return new Response(null, { status: 499 });
     }
     const response = await (media[3].startsWith('live/') ? serveLive(req, media[3].slice(5)) : serveMedia(req, media[3], truncateOriginal));
     if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
