@@ -3403,6 +3403,121 @@
           "templates": [],
           "tv": "Not drawn on TV (the TV shell floats the mini player). Reads the audio position once a second."
         },
+        "bookCover": {
+          "doc": "A book’s cover with a spine and the page edges.",
+          "parts": [
+            "bookCover.root"
+          ],
+          "props": {
+            "item": {
+              "doc": "The book or series as an item: record or a vela.title value.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "No focus."
+        },
+        "bookFacts": {
+          "doc": "The metadata labels and values for a book.",
+          "parts": [
+            "bookFacts.root"
+          ],
+          "props": {
+            "item": {
+              "doc": "The book or series as an item: record or a vela.title value.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "No focus."
+        },
+        "bookHero": {
+          "doc": "A book’s cover, series, title, author, format facts, reading progress and action.",
+          "parts": [
+            "bookHero.title",
+            "bookHero.author",
+            "bookHero.series",
+            "bookHero.progress"
+          ],
+          "props": {
+            "action": {
+              "default": "true",
+              "doc": "Include the reading action slot.",
+              "type": "boolean"
+            },
+            "cover": {
+              "default": "true",
+              "doc": "Include the cover slot.",
+              "type": "boolean"
+            },
+            "item": {
+              "doc": "The book or series as an item: record or a vela.title value.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templateScope": {
+            "bookHero.action": [],
+            "bookHero.cover": []
+          },
+          "templates": [
+            "bookHero.cover",
+            "bookHero.action"
+          ],
+          "tv": "Focusable series and author links. The reading action becomes a quiet line on TV."
+        },
+        "bookReadAction": {
+          "doc": "The Read, Continue reading or Read again button; a quiet explanation on TV.",
+          "parts": [
+            "bookReadAction.button",
+            "bookReadAction.message"
+          ],
+          "props": {
+            "item": {
+              "doc": "The book or series as an item: record or a vela.title value.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "No focus on TV."
+        },
+        "bookSeriesList": {
+          "doc": "The other books in a book’s series, or the ordered books on the series’ page.",
+          "parts": [
+            "bookSeriesList.root"
+          ],
+          "props": {
+            "item": {
+              "doc": "The book or series as an item: record or a vela.title value.",
+              "required": true,
+              "type": "value"
+            },
+            "items": {
+              "doc": "The children as item: records, from vela.children.",
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "Each book is one focus target."
+        },
+        "bookSummary": {
+          "doc": "A book or series synopsis in serif type.",
+          "parts": [
+            "bookSummary.root"
+          ],
+          "props": {
+            "item": {
+              "doc": "The book or series as an item: record or a vela.title value.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "No focus."
+        },
         "byline": {
           "doc": "A title's byline: the artist (opening their page) and facts after it.",
           "parts": [],
@@ -3832,6 +3947,26 @@
           "templates": [],
           "tv": "Rows are single focus targets; the rail is one focus column."
         },
+        "reader": {
+          "doc": "The full-screen book reader, driven by Vela’s reader session.",
+          "parts": [
+            "reader.page",
+            "reader.toolbar",
+            "reader.title",
+            "reader.progress",
+            "reader.button",
+            "reader.panel"
+          ],
+          "props": {
+            "item": {
+              "doc": "The book or series as an item: record or a vela.title value.",
+              "required": true,
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "The reader is offered on phones, tablets, web and desktop."
+        },
         "recap": {
           "doc": "Rewind: the listening recap for a period with its charts (section-B recap block).",
           "parts": [],
@@ -3883,6 +4018,26 @@
           "props": {},
           "templates": [],
           "tv": "As the page."
+        },
+        "seriesHero": {
+          "doc": "A fan of series covers, title, author, and the link to start or resume the series.",
+          "parts": [
+            "seriesHero.title",
+            "seriesHero.author"
+          ],
+          "props": {
+            "item": {
+              "doc": "The book or series as an item: record or a vela.title value.",
+              "required": true,
+              "type": "value"
+            },
+            "items": {
+              "doc": "The children as item: records, from vela.children.",
+              "type": "value"
+            }
+          },
+          "templates": [],
+          "tv": "A reading action becomes a quiet line on TV. Playable audio and video links remain focusable."
         },
         "spokenAbout": {
           "doc": "About: the summary and the facts table (a show's summary is in spokenItems).",
@@ -4462,6 +4617,12 @@
             "artistHero",
             "artistLiked",
             "bar",
+            "bookCover",
+            "bookFacts",
+            "bookHero",
+            "bookReadAction",
+            "bookSeriesList",
+            "bookSummary",
             "byline",
             "collectionHeader",
             "continueListening",
@@ -4480,10 +4641,12 @@
             "queue",
             "quickTiles",
             "rail",
+            "reader",
             "recap",
             "recentSearches",
             "searchField",
             "searchResults",
+            "seriesHero",
             "spokenAbout",
             "spokenCollectionShelf",
             "spokenCredits",

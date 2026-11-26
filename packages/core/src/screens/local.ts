@@ -286,8 +286,10 @@ export class LocalSources {
         const detail = loaded?.value;
         const card = detail?.title[0];
         if (!detail || !card) return { error: loadableError(loaded) };
+        const seriesId = card.media?.parents.find(parent => parent.role === 'series')?.id;
         const value: TitleValue = {
           item: ref(itemKey(card.id)),
+          ...(seriesId ? { seriesId } : {}),
           canPlay: detail.canPlay,
           resumeSeconds: detail.resumeSeconds,
           mediaFacts: detail.mediaFacts,

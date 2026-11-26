@@ -33,7 +33,9 @@ import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '../widgets/media/pla
 import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './listen/bar';
 import { ListenLookProvider, usePart, type ListenLook } from './listen/look';
 import { fillParts } from './listen/part-style';
-import { asCard, barPresses, parseBool, parseEnum, parseNumber, propDefault, tableTracks } from './listen/props';
+import { asCard, barPresses, cardOf, cardsOf, parseBool, parseEnum, parseNumber, propDefault, tableTracks } from './listen/props';
+import { BookCover, BookFacts, BookHero, BookReadAction, BookSeriesList, BookSummary, SeriesHero } from './read/book';
+import { ReaderBlock } from './read/reader';
 import { TrackList, type TrackListOptions } from './listen/track-table';
 
 /** A rich block node as resolved (resolve.ts). */
@@ -108,6 +110,30 @@ export function RichBlock({ node, ctx }: { node: RichNode; ctx: Ctx }) {
     case 'player': drawn = <PlayerRichBlock props={props} press={host.screenPress} />; break;
     case 'visualizer': drawn = <VisualizerBlock mode={props.enum('mode', ['background', 'fullscreen'] as const)} sceneId={props.text('sceneId') || undefined}
       fallback={node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : undefined} />; break;
+    case 'reader':
+    case 'bookCover':
+    case 'bookHero':
+    case 'bookReadAction':
+    case 'bookSummary':
+    case 'bookFacts':
+    case 'bookSeriesList':
+    case 'seriesHero': {
+      const read = scoped.screen?.record ?? (() => undefined);
+      const card = cardOf(props.value('item'), read);
+      const fallback = node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : null;
+      if (node.block === 'reader') drawn = <ReaderBlock card={card?.media?.role === 'book' ? card : undefined} fallback={fallback} />;
+      else if (!card || (card.media?.role !== 'book' && card.media?.role !== 'series')) drawn = fallback;
+      else switch (node.block) {
+        case 'bookCover': drawn = <BookCover card={card} />; break;
+        case 'bookHero': drawn = card.media.role === 'book' ? <BookHero card={card} cover={props.bool('cover')} action={props.bool('action')} /> : fallback; break;
+        case 'bookReadAction': drawn = card.media.role === 'book' ? <BookReadAction card={card} /> : fallback; break;
+        case 'bookSummary': drawn = <BookSummary card={card} />; break;
+        case 'bookFacts': drawn = <BookFacts card={card} />; break;
+        case 'bookSeriesList': drawn = <BookSeriesList card={card} items={cardsOf(props.value('items'), read)} />; break;
+        case 'seriesHero': drawn = card.media.role === 'series' ? <SeriesHero card={card} items={cardsOf(props.value('items'), read)} /> : fallback; break;
+      }
+      break;
+    }
     default: drawn = isPageBlock(node.block)
       ? <PageBlock name={node.block} props={props} read={scoped.screen?.record ?? (() => undefined)} template={part => look.template && look.templates?.has(part) ? look.template(part, undefined, {}, 0) : null} press={host.screenPress} />
       : node.fallback && runtime ? runtime.renderNode(node.fallback, ctx) : null;

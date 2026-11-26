@@ -5,14 +5,14 @@
 // these in place of the document's title page; each takes the document's `ui` look.
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Platform, Text, View } from 'react-native';
-import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, localeContext, msg, number, opensMediaPage, percent, plural, podcastOrder, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
+import { Text, View } from 'react-native';
+import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, localeContext, msg, number, opensMediaPage, plural, podcastOrder, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useHost } from '../../host';
 import { useMediaActions } from './context';
 import { Cover, CoverTile, ListRow, PillButton, Progress, SectionHeading, Segmented, TextLink, TileGrid, useMediaLook, VideoTile, type MediaLook } from './parts';
 import { Buttons, Eyebrow, FactList, Facts, Hero, MediaFrame as Frame, openByline, Summary, tilesPerRow, Title } from '../../blocks/media/title';
-import { seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart } from './series';
+import { BookHero, BookSeriesList, BookSummary, SeriesHero } from '../../blocks/read/book';
 
 /** The card kinds this page draws (core's opensMediaPage); anything else, a video show among
  * them, stays with the document's title page. */
@@ -290,126 +290,27 @@ function useChildrenItems(id: string): Card[] {
 }
 const EMPTY: Card[] = [];
 
-// ── Book ─────────────────────────────────────────────────────────────────────
-
-/** Books are read on phones, tablets, the web and desktop. A TV offers no Read at all: a book's page
- * there is its details, with a quiet line saying where reading is. */
-const READS_HERE = !Platform.isTV;
-
-/** On a TV, in place of Read: the reader's own words for where books are read. */
-function ReadElsewhere() {
-  const m = useMediaLook();
-  return <Text testID="media-read-elsewhere" style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.reader.unsupported')}</Text>;
-}
-
-function readLabel(card: Card): string {
-  const fraction = card.media?.readingFraction ?? 0;
-  if (card.played || fraction >= 0.98) return msg('media.ui.readAgain');
-  return fraction > 0 ? msg('media.ui.continueReading') : msg('media.ui.read');
-}
-
+// The legacy frame still supplies these pieces until the Read documents take over the route.
 function BookPage({ card }: { card: Card }) {
-  const m = useMediaLook();
-  const store = useVela();
-  const actions = useMediaActions();
-  const media = card.media!;
-  const series = media.parents.find(parent => parent.role === 'series');
-  const canRead = !!media.readingFormat && store.media.features().reading.includes(media.readingFormat);
-  const fraction = media.readingFraction;
-  const size = m.small ? Math.min(230, m.width - m.gutter * 2 - 60) : m.wide ? 280 : 230;
+  const seriesId = card.media?.parents.find(parent => parent.role === 'series')?.id;
+  const books = useChildren(seriesId)?.value?.items ?? EMPTY;
   return (
     <View>
-      <Hero cover={<View style={{ paddingRight: 6, paddingBottom: 6 }}><Cover uri={card.poster} shape="book" size={size} title={card.name} byline={media.byline} accent={card.accent} lift={1.7} /></View>}>
-        {series ? <TextLink label={media.index ? msg('media.ui.bookOf', { index: number(media.index), series: series.name }) : series.name}
-          onPress={() => actions.openTitle({ id: series.id, kind: 'series' })} testID="media-series"
-          style={m.text({ 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.2em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })} />
-          : <Eyebrow>{msg('media.ui.book')}</Eyebrow>}
-        <Title>{card.name}</Title>
-        {media.byline ? <TextLink label={msg('media.ui.by', { name: media.byline })} onPress={openByline(card, actions)} testID="media-byline"
-          style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', 'font-style': 'italic', color: '$ui.ink' })} /> : null}
-        <Facts items={[card.yearLabel, media.pages ? msg(`media.pages.${media.pages === 1 ? 'one' : 'other'}`, { count: number(media.pages) }) : '',
-          media.readingFormat ? msg(`media.ui.format.${media.readingFormat}`) : '', card.genres.slice(0, 2).join(', ')]} />
-        {fraction > 0 && fraction < 0.98 ? (
-          <View style={{ gap: 8, maxWidth: 420, marginTop: 4 }} testID="media-reading-progress">
-            <Progress fraction={fraction} height={5} />
-            <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{[msg('media.ui.readProgress', { percent: percent(fraction) }), media.readingLabel].filter(Boolean).join(' · ')}</Text>
-          </View>
-        ) : card.played || fraction >= 0.98 ? <Text style={m.text({ 'font-size': '13px', color: '$ui.accent', 'font-weight': '600' })}>{msg('media.ui.finished')}</Text> : null}
-        {READS_HERE ? <Buttons>
-          <PillButton primary icon="book" label={readLabel(card)} onPress={() => actions.read(card)} disabled={!canRead} testID="media-read" nativeID="media-primary" />
-        </Buttons> : null}
-        {READS_HERE && !canRead ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{msg('media.ui.cannotRead')}</Text> : null}
-        {READS_HERE ? null : <ReadElsewhere />}
-      </Hero>
-      {card.summary ? <View style={{ marginBottom: 44 }}><Summary text={card.summary} serif /></View> : null}
+      <BookHero card={card} />
+      <BookSummary card={card} />
       <FactList card={card} />
-      {series ? <SeriesShelf seriesId={series.id} name={series.name} current={card.id} /> : null}
+      <BookSeriesList card={card} items={books} />
     </View>
   );
 }
-
-function SeriesShelf({ seriesId, name, current }: { seriesId: string; name: string; current: string }) {
-  const m = useMediaLook();
-  const actions = useMediaActions();
-  const books = useChildrenItems(seriesId).filter(book => book.id !== current);
-  if (!books.length) return null;
-  const { size, gap } = tilesPerRow(m, m.small ? 120 : 160);
-  return (
-    <View style={{ marginBottom: 32 }}>
-      <SectionHeading title={msg('media.ui.moreIn', { name })} />
-      <TileGrid gap={gap}>
-        {books.map(book => <CoverTile key={book.id} card={book} size={size} subtitle={book.media?.indexLabel || book.yearLabel}
-          progress={book.media?.readingFraction} onPress={() => actions.openTitle(book)} testID={`media-book-${book.id}`} />)}
-      </TileGrid>
-    </View>
-  );
-}
-
-// ── Series ───────────────────────────────────────────────────────────────────
 
 function SeriesPage({ card }: { card: Card }) {
-  const m = useMediaLook();
-  const store = useVela();
-  const actions = useMediaActions();
-  const bookItems = useChildrenItems(card.id);
-  const books = useMemo(() => seriesOrder(bookItems), [bookItems]);
-  const next = books.find(book => !book.played && (book.media?.readingFraction ?? 0) < 0.98) ?? books[0];
-  const canStart = seriesCanStart(next, store.media.features());
-  const start = next ? seriesStart(next) : null;
-  const fan = books.slice(0, 3);
-  const size = m.small ? 150 : 190;
-  const byline = card.media?.byline || books[0]?.media?.byline || '';
-  const { size: tile, gap } = tilesPerRow(m, m.small ? 130 : 170);
-  const copy = seriesCopy(seriesKind(books, card), books.length || card.media?.childCount || 0);
+  const books = useChildrenItems(card.id);
   return (
     <View>
-      <Hero cover={
-        <View style={{ width: size + (fan.length - 1) * size * 0.32, height: size * 1.5 + 12 }} accessibilityElementsHidden>
-          {(fan.length ? fan : [card]).map((book, i, all) => (
-            <View key={book.id} style={{ position: 'absolute', left: i * size * 0.32, top: (all.length - 1 - i) * 4, zIndex: all.length - i,
-              transform: [{ rotate: `${(i - (all.length - 1) / 2) * 3}deg` }] }}>
-              <Cover uri={book.poster} shape="book" size={size} title={book.name} byline={book.media?.byline} accent={book.accent} lift={1.3} />
-            </View>
-          )).reverse()}
-        </View>}>
-        <Eyebrow>{msg('media.ui.series')}</Eyebrow>
-        <Title>{card.name}</Title>
-        {byline ? <TextLink label={msg('media.ui.by', { name: byline })} onPress={openByline(books[0] ?? card, actions)}
-          style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': '22px', 'font-style': 'italic', color: '$ui.ink' })} /> : null}
-        <Facts items={[copy.count, card.genres.slice(0, 2).join(', ')]} />
-        <Buttons>
-          {next && start && (READS_HERE || start.icon !== 'book') ? <PillButton primary icon={start.icon} label={start.label}
-            onPress={() => actions.openTitle(next)} disabled={!canStart} testID="media-play" nativeID="media-primary" /> : null}
-        </Buttons>
-        {start && !canStart && (READS_HERE || start.icon !== 'book') ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkQuiet' })}>{start.unavailable}</Text> : null}
-        {start && !READS_HERE && start.icon === 'book' ? <ReadElsewhere /> : null}
-      </Hero>
-      {card.summary ? <View style={{ marginBottom: 40 }}><Summary text={card.summary} serif /></View> : null}
-      <SectionHeading title={copy.heading} />
-      <TileGrid gap={gap}>
-        {books.map(book => <CoverTile key={book.id} card={book} size={tile} subtitle={[book.media?.indexLabel, book.yearLabel].filter(Boolean).join(' · ')}
-          progress={book.media?.readingFraction} onPress={() => actions.openTitle(book)} testID={`media-book-${book.id}`} />)}
-      </TileGrid>
+      <SeriesHero card={card} items={books} />
+      <BookSummary card={card} />
+      <BookSeriesList card={card} items={books} />
     </View>
   );
 }

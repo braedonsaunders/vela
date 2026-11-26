@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
-import { ScrollView, Text, View, type ViewStyle } from 'react-native';
+import { ScrollView, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { msg, type Card } from '@vela/core';
 import { useHost } from '../../host';
 import { useMediaActions, type MediaActions } from './context';
@@ -53,15 +53,15 @@ export function Hero({ cover, children }: { cover: ReactNode; children: ReactNod
   );
 }
 
-export function Eyebrow({ children }: { children: string }) {
+export function Eyebrow({ children, style }: { children: string; style?: TextStyle }) {
   const m = useMediaLook();
-  return <Text style={m.text({ 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.2em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' })}>{children}</Text>;
+  return <Text style={[m.text({ 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.2em', 'text-transform': 'uppercase', color: '$ui.inkSecondary' }), style]}>{children}</Text>;
 }
 
-export function Title({ children }: { children: string }) {
+export function Title({ children, style }: { children: string; style?: TextStyle }) {
   const m = useMediaLook();
   const size = m.small ? 36 : m.wide ? (children.length > 28 ? 52 : 64) : 46;
-  return <Text accessibilityRole="header" style={m.text({ 'font-family': '$ui.fontDisplay', 'font-size': `${size}px`, 'line-height': '1.02', 'letter-spacing': '-0.015em', color: '$ui.ink' })}>{children}</Text>;
+  return <Text accessibilityRole="header" style={[m.text({ 'font-family': '$ui.fontDisplay', 'font-size': `${size}px`, 'line-height': '1.02', 'letter-spacing': '-0.015em', color: '$ui.ink' }), style]}>{children}</Text>;
 }
 
 export function Facts({ items }: { items: string[] }) {
@@ -70,11 +70,11 @@ export function Facts({ items }: { items: string[] }) {
   return line ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{line}</Text> : null;
 }
 
-export function Summary({ text, serif = false }: { text: string; serif?: boolean }) {
+export function Summary({ text, serif = false, style }: { text: string; serif?: boolean; style?: TextStyle }) {
   const m = useMediaLook();
   if (!text) return null;
-  return <Text style={m.text({ 'font-size': serif ? '17px' : '15px', 'line-height': '1.6', color: '$ui.inkSecondary', 'max-width': '760px',
-    ...(serif ? { 'font-family': '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif' } : {}) })}>{text}</Text>;
+  return <Text style={[m.text({ 'font-size': serif ? '17px' : '15px', 'line-height': '1.6', color: '$ui.inkSecondary', 'max-width': '760px',
+    ...(serif ? { 'font-family': '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif' } : {}) }), style]}>{text}</Text>;
 }
 
 export function Buttons({ children }: { children: ReactNode }) {
@@ -95,12 +95,12 @@ export function tilesPerRow(m: MediaLook, min: number): { size: number; gap: num
   return { size: Math.floor((inner - gap * (count - 1)) / count), gap };
 }
 
-export function FactList({ card }: { card: Card }) {
+export function FactList({ card, style }: { card: Card; style?: ViewStyle }) {
   const m = useMediaLook();
   const facts = card.media?.facts ?? [];
   if (!facts.length) return null;
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 40, rowGap: 14, marginBottom: 48 }}>
+    <View style={[{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 40, rowGap: 14, marginBottom: 48 }, style]}>
       {facts.map(fact => (
         <View key={fact.label} style={{ gap: 3, minWidth: 140 }}>
           <Text style={m.text({ 'font-size': '11px', 'font-weight': '700', 'letter-spacing': '0.16em', 'text-transform': 'uppercase', color: '$ui.inkQuiet' })}>{fact.label}</Text>

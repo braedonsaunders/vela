@@ -92,8 +92,9 @@ export function Cover({ uri, shape, size, title, byline, accent, lift = 1 }: {
 }
 
 /** A pill: primary in the document's accent, secondary as a glass control. */
-export function PillButton({ label, icon, primary = false, onPress, testID, nativeID, disabled = false, compact = false }: {
+export function PillButton({ label, icon, primary = false, onPress, testID, nativeID, disabled = false, compact = false, style, labelStyle }: {
   label: string; icon?: string; primary?: boolean; onPress(): void; testID?: string; nativeID?: string; disabled?: boolean; compact?: boolean;
+  style?: ViewStyle | ((state: { hover: boolean; focus: boolean }) => ViewStyle | undefined); labelStyle?: TextStyle;
 }) {
   const { ui, text, box } = useMediaLook();
   const { state, handlers } = useInteraction();
@@ -108,9 +109,9 @@ export function PillButton({ label, icon, primary = false, onPress, testID, nati
         backgroundColor: primary ? (lit ? ui.inkHover : ui.accent) : lit ? ui.controlHover : ui.control,
         opacity: disabled ? 0.45 : 1, transform: [{ scale: state.pressed ? 0.97 : 1 }],
       }, state.focus ? box({ 'box-shadow': `0px 0px 0px 3px ${ui.focusHalo}, 0px 0px 0px 1.5px ${primary ? ui.accent : ui.ink}` }) : {},
-      web ? ({ transitionProperty: 'background-color, transform', transitionDuration: '160ms' } as ViewStyle) : {}]}>
+      web ? ({ transitionProperty: 'background-color, transform', transitionDuration: '160ms' } as ViewStyle) : {}, typeof style === 'function' ? style(state) : style]}>
       {icon ? <MediaGlyph name={icon} size={compact ? 16 : 18} color={primary && lit ? ui.inkInverse : ink} /> : null}
-      <Text numberOfLines={1} style={text({ 'font-size': compact ? '13px' : '15px', 'font-weight': '650', color: primary && lit ? ui.inkInverse : ink })}>{label}</Text>
+      <Text numberOfLines={1} style={[text({ 'font-size': compact ? '13px' : '15px', 'font-weight': '650', color: primary && lit ? ui.inkInverse : ink }), labelStyle]}>{label}</Text>
     </Pressable>
   );
 }

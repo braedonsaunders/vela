@@ -150,6 +150,8 @@ export interface ListValue { items: RecordRef[]; more: boolean; total?: number }
 
 export interface TitleValue {
   item: RecordRef;
+  /** The book’s series id for a dependent vela.children source, when present. */
+  seriesId?: string;
   canPlay: boolean;
   resumeSeconds: number;
   /** Format, quality and runtime facts ("FLAC · 24-bit"). */
