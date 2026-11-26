@@ -6,6 +6,7 @@ import { useMediaActions } from '../media/context';
 import { Cover, CoverTile, PillButton, Progress, SectionHeading, TextLink, TileGrid, useMediaLook } from '../media/parts';
 import { Buttons, Eyebrow, FactList, Facts, Hero, openByline, Summary, tilesPerRow, Title } from '../media/title';
 import { usePart, usePartStyler, useListenLook } from '../listen/look';
+import { readingChapterLabel } from './book-layout';
 import { seriesCanStart, seriesCopy, seriesKind, seriesOrder, seriesStart } from './series';
 
 /** Books are read on phones, tablets, the web and desktop. A TV offers no Read at all: a book's page
@@ -52,7 +53,7 @@ export function BookHero({ card, cover = true, action = true }: { card: Card; co
       {fraction > 0 && fraction < 0.98 ? (
         <View style={[{ gap: 8, maxWidth: 420, marginTop: 4 }, progress.box]} testID="media-reading-progress">
           <Progress fraction={fraction} height={5} />
-          <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), progress.text]}>{[msg('media.ui.readProgress', { percent: percent(fraction) }), media.readingLabel].filter(Boolean).join(' · ')}</Text>
+          <Text style={[m.text({ 'font-size': '13px', color: '$ui.inkQuiet' }), progress.text]}>{[msg('media.ui.readProgress', { percent: percent(fraction) }), readingChapterLabel(media.readingLabel)].filter(Boolean).join(' · ')}</Text>
         </View>
       ) : card.played || fraction >= 0.98 ? <Text style={[m.text({ 'font-size': '13px', color: '$ui.accent', 'font-weight': '600' }), progress.text]}>{msg('media.ui.finished')}</Text> : null}
       {action ? template('bookHero.action', <BookReadAction card={card} />) : null}

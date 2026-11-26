@@ -13,7 +13,7 @@ describe('Read deterministic release gate', { session: 'mock-read', serial: true
     const progress = book.getByTestId('media-reading-progress');
     const read = book.getByTestId('media-read');
     await expect(title).toBeVisible();
-    await expect(progress).toHaveText('34% read · Chapter 3 · 34%');
+    await expect(progress).toHaveText('34% read · Chapter 3');
     await expect(read).toHaveText('Continue reading');
 
     await screen.getByTestId('media-series').tap();
@@ -56,7 +56,7 @@ describe('Read deterministic release gate', { session: 'mock-read', serial: true
 
     // The mock acknowledges reader writes while preserving the seeded progress for reopening.
     await app.open('/vela/title/book-harbour-of-bells?library=books');
-    await expect(progress).toHaveText('34% read · Chapter 3 · 34%');
+    await expect(progress).toHaveText('34% read · Chapter 3');
 
     await app.open('/vela/title/book-field-guide-imaginary-birds?library=books');
     const pdf = screen.getByRole('dialog', 'A Field Guide to Imaginary Birds');
