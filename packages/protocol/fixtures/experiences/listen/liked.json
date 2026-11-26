@@ -23,6 +23,9 @@
    "role": "track",
    "class": "music",
    "library": "{param.library}"
+  },
+  "queue": {
+   "from": "vela.queue"
   }
  },
  "tree": {
@@ -159,6 +162,23 @@
   "tv": {
    "padding-bottom": "48px",
    "padding-right": "32px"
-  }
+  },
+  "states": [
+   {
+    "when": [
+     {
+      "test": "env.form",
+      "is": "eq",
+      "value": "small"
+     },
+     {
+      "test": "src.queue.current"
+     }
+    ],
+    "style": {
+     "padding-bottom": "110px"
+    }
+   }
+  ]
  }
 }

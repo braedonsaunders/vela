@@ -28,6 +28,9 @@
    "placement": "library",
    "libraryId": "{param.library}",
    "lazy": true
+  },
+  "queue": {
+   "from": "vela.queue"
   }
  },
  "tree": {
@@ -262,6 +265,23 @@
       ]
      }
     ]
+   }
+  ],
+  "states": [
+   {
+    "when": [
+     {
+      "test": "env.form",
+      "is": "eq",
+      "value": "small"
+     },
+     {
+      "test": "src.queue.current"
+     }
+    ],
+    "style": {
+     "padding-bottom": "110px"
+    }
    }
   ]
  }
