@@ -64,6 +64,12 @@ export function useGallerySequence(initialId: string, library: string | undefine
   const [fullscreen, setFullscreenState] = useState(false);
   const [info, setInfo] = useState(false);
   const [chrome, setChrome] = useState(true);
+  const focused = useRef<string | null>(null);
+  const focusedControl = useCallback(() => focused.current !== null, []);
+  const reportFocus = useCallback((id: string, on: boolean) => {
+    if (on) focused.current = id;
+    else if (focused.current === id) focused.current = null;
+  }, []);
   const movement = useRef<AbortController | null>(null);
   const origin = useMemo(() => pageKey ? contextOf(store, pageKey, library) : undefined, [store, pageKey, library]);
   const raw = useVelaState(state => origin && pageKey ? state.screens.pages[pageKey]?.sources[origin.source] : undefined);
@@ -128,7 +134,7 @@ export function useGallerySequence(initialId: string, library: string | undefine
 
   const navigation: PhotoNavigation | null = origin ? {
     active, previous: !!neighbours.previous, next: !!neighbours.next || neighbours.more, busy,
-    fullscreen, info, chrome, move, setFullscreen, setInfo, setChrome,
+    fullscreen, info, chrome, move, setFullscreen, setInfo, setChrome, focusedControl, reportFocus,
   } : null;
   return { id: current, navigation };
 }

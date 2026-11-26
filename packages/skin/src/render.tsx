@@ -10,6 +10,7 @@ import { CardContextMenu, type CardMenuAnchor, type CardMenuOpenMode } from './w
 import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
+import { MediaFrameViewport } from './blocks/media/viewport';
 import { hasFlowHeader } from './resolve/inherit';
 import { isHeroControl, isHeroSegment } from './hero-pager';
 import { holdHero } from './hero-hold';
@@ -1133,6 +1134,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       } else trackScroll?.(e);
     } : trackScroll;
     if (rowScroll) content = <RowScroll.Provider value={rowScroll}>{content}</RowScroll.Provider>;
+    const mediaViewport = env.route === 'title' && fill(node.id, ctx, env) === `title-scroll-${env.entry}`
+      ? use(MediaFrameViewport) : undefined;
     element = (
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
         contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
@@ -1140,7 +1143,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         StickyHeaderComponent={NativeStickyHeader}
         showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={!horizontal && !Platform.isTV} onScroll={onScroll} scrollEventThrottle={64}
         {...(openingAtTop ? { onScrollBeginDrag: () => { openingMoved.current = true; } } : {})}
-        onLayout={onPagerLayout} onContentSizeChange={onPagerContent}
+        onLayout={mediaViewport?.onLayout ?? onPagerLayout} onContentSizeChange={onPagerContent}
         {...(web && horizontal && rowId ? { dataSet: { velaRow: rowId } } : {})}
         {...a11y} {...(web && route && (env.route === 'title' || env.route === 'person')
           // The page's main landmark is the screen wrapper (the skip link's target); a route
@@ -1901,6 +1904,7 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const surfaceSlots = useContext(SurfaceSlots);
   // Apple TV searches on the system's search screen (the shell's Search opens it): no field here.
   if (fx.hidden || (node.slot === 'searchField' && SYSTEM_SEARCH)) return null;
+  if (node.slot === 'mediaTitleActions') return <>{host.mediaTitleActions}</>;
   if (node.slot !== 'children' && node.slot !== 'searchField') {
     // A plugin slot draws the surfaces filling it (the app's view), or nothing.
     const Surfaces = surfaceSlots?.slot;

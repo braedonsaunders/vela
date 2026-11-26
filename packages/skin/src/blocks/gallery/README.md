@@ -16,8 +16,14 @@ photo links keep the standalone photo and its facts.
 | `photoViewer.title` | Text | Photo name |
 | `photoViewer.date` | Text | Taken day or year |
 | `photoViewer.facts` | Box | Optional labels and values supplied by the server |
-| `photoViewer.transport` | Box | Navigation and display controls |
-| `photoViewer.control` | Box, text | Each control and its label |
+| `photoViewer.transport` | Box | Info and fullscreen controls beside Close or in the fullscreen overlay |
+| `photoViewer.control` | Box | Round chevron, info and fullscreen buttons |
 
 The document places the `gallery.photo.panel` plugin slot after the viewer
 and passes its title record as context. The block exposes part styles.
+
+When a photo opens from a grid, the frame contributes Info and Full screen
+beside Close. Previous and Next overlay the image and appear only when their
+neighbour exists. The image's aspect ratio and the measured caption determine
+its height. Fullscreen uses the same controls and hides them after three idle
+seconds. Pointer, touch, keyboard and remote input reveal them again.

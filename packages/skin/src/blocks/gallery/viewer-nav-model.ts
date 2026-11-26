@@ -31,3 +31,8 @@ export function galleryOriginParam(pageKey: string): string {
 export function galleryOriginKey(param: string): string {
   return param.replace(/~[~p]/g, escape => escape === '~p' ? '%' : '~');
 }
+
+/** A Taken fact identical to the caption's date would repeat it in raw server form. */
+export function photoInfoFacts<T extends { label: string; value: string }>(facts: readonly T[], airDate: string): T[] {
+  return facts.filter(fact => !(airDate && /^taken$/i.test(fact.label.trim()) && fact.value.trim() === airDate));
+}

@@ -1,13 +1,15 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { router } from 'expo-router';
-import { View } from 'react-native';
+import { View, type LayoutChangeEvent } from 'react-native';
 import { useVelaState } from '@vela/core/react';
 import { ScreenActive, type SkinHost } from '@vela/skin';
 import { HostContext, useHost } from '@vela/skin/src/host';
-import { PhotoNavigationContext } from '@vela/skin/src/blocks/gallery/viewer-nav';
+import { PhotoNavigationContext, PhotoViewerTopBar } from '@vela/skin/src/blocks/gallery/viewer-nav';
 import { MediaActionsContext } from '@vela/skin/src/blocks/media/context';
 import { MediaFrame } from '@vela/skin/src/blocks/media/title';
+import { MediaFrameViewport } from '@vela/skin/src/blocks/media/viewport';
 import { MediaTitlePending } from '@vela/skin/src/blocks/media/title-pending';
+import { withInlineMediaTitleActions } from '@vela/skin/src/resolve/media-title';
 import { builtinHref, builtinScreenId } from '@vela/skin/src/resolve/builtin';
 import { ScreenView } from '@vela/skin/src/screen/host';
 import { FocusBoundary } from '../focus-boundary';
@@ -33,18 +35,26 @@ const setParams = (params: Record<string, string>) => router.setParams(params);
 
 export function GalleryTitleScreen({ id: initialId, library, galleryFrom, active, back }: Props) {
   const { id, navigation } = useGallerySequence(initialId, library, galleryFrom, active);
+  const [height, setHeight] = useState<number>();
+  const onLayout = useCallback((event: LayoutChangeEvent) => {
+    const measured = event.nativeEvent.layout.height;
+    if (measured > 0) setHeight(measured);
+  }, []);
+  const viewport = useMemo(() => ({ height, onLayout }), [height, onLayout]);
   const vela = useVela();
   const host = vela.host('title', id, library);
   const frame = vela.doc?.mediaTitleSlot;
+  const frameWithControls = useMemo(() => frame && withInlineMediaTitleActions(frame), [frame]);
   const actions = useMediaPageActions(library, back, useMediaPlayerActions(), useReaderActions(library));
   const page = useCallback((current: SkinHost): SkinHost => ({
     ...current,
     // The modal's route still owns Back and focus, while the frame describes the selected photo.
     env: host?.env ?? current.env,
+    mediaTitleActions: navigation ? <PhotoViewerTopBar /> : undefined,
     children: <GalleryTitlePage id={id} library={library} active={active} back={back} framed />,
-  }), [host, id, library, active, back]);
+  }), [host, id, library, active, back, !!navigation]);
   const body = frame ? (
-    <DocumentScreen route="title" entry={initialId} library={library} node={frame} page={page} />
+    <DocumentScreen route="title" entry={initialId} library={library} node={navigation ? frameWithControls : frame} page={page} />
   ) : host ? (
     <ScreenActive.Provider value={active}>
       <FocusBoundary active={active} enterWhenReady style={{ flex: 1 }} accessibilityViewIsModal>
@@ -55,9 +65,11 @@ export function GalleryTitleScreen({ id: initialId, library, galleryFrom, active
     </ScreenActive.Provider>
   ) : <View style={{ flex: 1 }} />;
   return (
-    <PhotoNavigationContext.Provider value={navigation}>
-      <MediaActionsContext.Provider value={actions}>{body}</MediaActionsContext.Provider>
-    </PhotoNavigationContext.Provider>
+    <MediaFrameViewport.Provider value={navigation ? viewport : undefined}>
+      <PhotoNavigationContext.Provider value={navigation}>
+        <MediaActionsContext.Provider value={actions}>{body}</MediaActionsContext.Provider>
+      </PhotoNavigationContext.Provider>
+    </MediaFrameViewport.Provider>
   );
 }
 
@@ -69,7 +81,7 @@ function GalleryTitlePage({ framed, id, library, active, back }: Props & { frame
   const params = useMemo(() => ({ id, library: library ?? '' }), [id, library]);
   const actions = useAppScreenActions({ host: pageHost, back, setParams });
   return (
-    <MediaFrame framed={framed} accent={card?.accent ?? ''} backdrop={card?.poster ?? ''} wideArt={false}>
+    <MediaFrame framed={framed} titleActions={!framed ? <PhotoViewerTopBar /> : undefined} accent={card?.accent ?? ''} backdrop={card?.poster ?? ''} wideArt={false}>
       {card
         ? <ScreenView target={target} href={href} params={params} host={pageHost} active={active} actions={actions} route={false} />
         : <MediaTitlePending load={detail ?? { load: 'loading', error: '' }} id={id} />}
