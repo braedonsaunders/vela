@@ -25,6 +25,11 @@ export function sourceOf(plan: V.PlaybackPlan | null | undefined): string | unde
   return plan.paths?.find(path => path.id === plan.selectedPathId)?.sourceId || version || undefined;
 }
 
+/** The file a plan plays when something more than its version row names it (`sourceOf`), else undefined. */
+export function fileOf(plan: V.PlaybackPlan | null | undefined): string | undefined {
+  return plan && !rowOnly(plan) ? sourceOf(plan) : undefined;
+}
+
 /** Only the plan's version row names its file: no `sourceId` and no release playing. */
 function rowOnly(plan: V.PlaybackPlan): boolean {
   return !plan.paths?.find(path => path.id === plan.selectedPathId)?.sourceId && plan.playingVersionId === undefined;

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { VelaError } from '../src/adapter/errors';
 import { Playback, initialPlayback } from '../src/store/playback';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
@@ -10,10 +11,14 @@ import type { SeriesTracks } from '../src/store/series-tracks';
 const audio = (id: string, language: string, more: Partial<Track> = {}): Track => ({ id, kind: 'audio', language, name: '', codec: 'aac', ...more });
 const subtitle = (id: string, language: string, more: Partial<Track> = {}): Track => ({ id, kind: 'subtitle', language, name: '', codec: 'srt', ...more });
 
-interface File { source?: string; version?: string; generation?: number; revision?: number; transcode?: boolean; audioTracks: Track[]; subtitleTracks: Track[]; selectedAudioTrackId?: string; selectedSubtitleTrackId?: string | null }
+/** `ether`: as on Ether, a track command must name the file's current generations and advances both. */
+interface File { source?: string; version?: string; generation?: number; seek?: number; revision?: number; ether?: boolean; transcode?: boolean; audioTracks: Track[]; subtitleTracks: Track[]; selectedAudioTrackId?: string; selectedSubtitleTrackId?: string | null }
+
+const stale = (file: File) => new VelaError({ class: 'conflict', code: 'stale_generation', message: 'stale generation',
+  currentGenerations: { sourceGeneration: file.generation ?? 0, seekGeneration: file.seek ?? 0 }, retry: { allowed: false } } as never, 409);
 
 const planOf = (sessionId: string, file: File): PlaybackPlan => ({
-  sessionId, revision: file.revision ?? 1, state: 'playing', positionSeconds: 0, sourceGeneration: file.generation ?? 0, seekGeneration: 0, chapters: [], fallback: { state: 'unsupported' },
+  sessionId, revision: file.revision ?? 1, state: 'playing', positionSeconds: 0, sourceGeneration: file.generation ?? 0, seekGeneration: file.seek ?? 0, chapters: [], fallback: { state: 'unsupported' },
   paths: [{ id: 'p', ...(file.transcode ? { kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl' } as const : { kind: 'direct', transport: 'file', mimeType: 'video/mp4' } as const), readiness: 'ready', url: 'https://media.test/f', qualities: [], boundaries: [], ...(file.source ? { sourceId: file.source } : {}) }],
   selectedPathId: 'p', audioTracks: file.audioTracks, subtitleTracks: file.subtitleTracks,
   ...(file.selectedAudioTrackId ? { selectedAudioTrackId: file.selectedAudioTrackId } : {}), selectedSubtitleTrackId: file.selectedSubtitleTrackId ?? null,
@@ -22,6 +27,8 @@ const planOf = (sessionId: string, file: File): PlaybackPlan => ({
 
 interface Lab {
   playback: Playback; box: StateBox<VelaState>; commands: any[];
+  /** The start requests sent. */
+  starts: any[];
   /** The sessions a stop was sent to. */
   stops: string[];
   /** The stop commands sent, with the session each went to. */
@@ -35,8 +42,10 @@ interface Lab {
 }
 
 /** A store whose sessions play `queue` in order; `refuse` makes the server refuse a track command (once the promise it returns settles);
- * `answer` holds back the answer to a track command it takes until the promise it returns settles; `series` is the viewer's
- * remembered choice for the series of every title; `versions` are the files a version switch can move a session to, by version id. */
+ * `answer` holds back the answer to a track command it takes until the promise it returns settles, and answers with the file that
+ * promise gives, if any (the server took the command before it moved on); `series` is the viewer's
+ * remembered choice for the series of every title; `versions` are the files a version switch can move a session to, by version id
+ * (a switch must name the file's current generations; one to a version not listed is refused). */
 async function lab(queue: File[], body: (lab: Lab) => Promise<void>, refuse: (command: any) => boolean | Promise<unknown> = () => false,
   answer: (command: any) => Promise<unknown> | undefined = () => undefined, series?: SeriesTrackPreference, versions?: Record<string, File>): Promise<void> {
   const originalSet = globalThis.setTimeout, originalClear = globalThis.clearTimeout;
@@ -46,6 +55,7 @@ async function lab(queue: File[], body: (lab: Lab) => Promise<void>, refuse: (co
   globalThis.clearTimeout = ((id: number) => { timers.delete(id); }) as never;
   try {
     const commands: any[] = [];
+    const starts: any[] = [];
     const stops: string[] = [];
     const stopCommands: any[] = [];
     let n = 0, switchHeld: Promise<unknown> | undefined;
@@ -56,8 +66,20 @@ async function lab(queue: File[], body: (lab: Lab) => Promise<void>, refuse: (co
       const refused = refuse(c);
       if (refused instanceof Promise) { await refused; throw new Error('refused'); }
       if (refused) throw new Error('refused');
+      const now = files.get(id)!;
+      if (now.ether) {
+        // The server takes it at once; the answer may be held back.
+        if (c.sourceGeneration !== (now.generation ?? 0) || c.seekGeneration !== (now.seek ?? 0)) throw stale(now);
+        const taken = { ...now, generation: (now.generation ?? 0) + 1, seek: (now.seek ?? 0) + 1, revision: (now.revision ?? 1) + 1,
+          ...(c.audioTrackId !== undefined ? { selectedAudioTrackId: c.audioTrackId } : {}),
+          ...(c.subtitleTrackId !== undefined ? { selectedSubtitleTrackId: c.subtitleTrackId } : {}) };
+        files.set(id, taken);
+        await answer(c);
+        return planOf(id, taken);
+      }
       const held = answer(c);
-      if (held) await held;
+      const answered = held ? await held : undefined;
+      if (answered && typeof answered === 'object' && 'audioTracks' in answered) return planOf(id, answered as File);
       const file = files.get(id)!;
       files.set(id, { ...file, revision: (file.revision ?? 1) + 1,
         ...(c.audioTrackId !== undefined ? { selectedAudioTrackId: c.audioTrackId } : {}),
@@ -65,12 +87,17 @@ async function lab(queue: File[], body: (lab: Lab) => Promise<void>, refuse: (co
       return plan(id);
     };
     const adapter = {
-      startPlayback: async () => { const id = `s${++n}`; files.set(id, queue[n - 1]!); return plan(id); },
+      startPlayback: async (request: any) => { starts.push(request); const id = `s${++n}`; files.set(id, queue[n - 1]!); return plan(id); },
       sessionSnapshot: async (id: string) => ({ plan: plan(id) }),
       changeTracks: async (id: string, c: any) => tracks(id, c),
       command: async (id: string, c: any) => { if (c.kind === 'stop') { stops.push(id); stopCommands.push({ sessionId: id, ...c }); } return c.kind === 'tracks' ? tracks(id, c) : plan(id); },
       ...(versions ? { titleVersions: async () => [], clearVersionChoice: async () => {},
-        switchVersion: async (id: string, c: any) => { files.set(id, versions[c.versionId]!); const reply = plan(id); await switchHeld; return reply; } } : {}),
+        switchVersion: async (id: string, c: any) => {
+          const now = files.get(id)!;
+          if (c.sourceGeneration !== (now.generation ?? 0) || c.seekGeneration !== (now.seek ?? 0)) throw stale(now);
+          if (!versions[c.versionId]) throw new Error('refused');
+          files.set(id, versions[c.versionId]!); const reply = plan(id); await switchHeld; return reply;
+        } } : {}),
     };
     const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter, plan: (p: PlaybackPlan) => p, record: { id: 'server' } }), negotiate: async () => {}, key: () => 'key', client: { audioCodecs: [] },
       ...(series ? { tokens: async () => ({ viewer: { id: 'viewer' } }) } : {}) };
@@ -81,7 +108,7 @@ async function lab(queue: File[], body: (lab: Lab) => Promise<void>, refuse: (co
       for (const [id, timer] of [...timers]) if (timers.has(id) && (ms === undefined || timer.ms === ms)) { timers.delete(id); await timer.fire(); }
       for (let i = 0; i < 20; i++) await Promise.resolve();
     };
-    await body({ playback, box, commands, stops, stopCommands, files, run, holdSwitch: until => { switchHeld = until; } });
+    await body({ playback, box, commands, starts, stops, stopCommands, files, run, holdSwitch: until => { switchHeld = until; } });
     await playback.stop();
   } finally { globalThis.setTimeout = originalSet; globalThis.clearTimeout = originalClear; }
 }
@@ -881,4 +908,445 @@ test('a version row alone that is the same on both plans does not keep a reused 
     { audioTrackId: '4', subtitleTrackId: null },
     { version: 'auto', audioTracks: [audio('4', 'fra'), audio('7', 'eng')], subtitleTracks: [], selectedAudioTrackId: '4' });
   expect(commands.map(c => c.audioTrackId)).toEqual(['7']);
+});
+
+/** File C of the tests below: one English audio track and a forced English subtitle, id 9, that it selects. */
+const forcedNine: File = { source: 'c', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('9', 'eng', { forced: true })], selectedAudioTrackId: '1', selectedSubtitleTrackId: '9' };
+
+test('a track reply older than the version shown does not replace it or carry its choice', async () => {
+  // Off is taken on version A (source generation 1) and published, but its reply is held; the switch to version B, which selects
+  // forced 5, comes in first (generation 2); A's reply arrives, then B fails onto file C, whose default is forced 9.
+  let release = () => {};
+  const reply = new Promise<void>(resolve => { release = resolve; });
+  await lab([
+    { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    forcedNine,
+  ], async ({ playback, box, commands, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    const off = playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' });
+    await run(5000);
+    expect(box.get().playback.plan?.sourceGeneration).toBe(1);
+    await playback.switchVersion('s1', 'b');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('5');
+    release();
+    await off;
+    expect(box.get().playback.plan?.sourceGeneration).toBe(2);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('5');
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').slice(1)).toEqual([]);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('9');
+  }, () => false, c => c.idempotencyKey === 'off' ? reply : undefined, undefined,
+  { b: { source: 'b', version: 'b', ether: true, generation: 2, seek: 2, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('5', 'eng', { forced: true })], selectedAudioTrackId: '1', selectedSubtitleTrackId: '5' } });
+});
+
+test('a track command of the previous version that the server finds stale is not sent again to the new version', async () => {
+  // Off chosen on version A reaches the server after the switch to version B (forced 5) moved it to generation 2, and is
+  // refused as stale; B then fails onto file C, whose default is forced 9.
+  let refuse = (_: Error) => {};
+  const refused = new Promise<never>((_, reject) => { refuse = reject; });
+  refused.catch(() => undefined);
+  await lab([
+    { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    forcedNine,
+  ], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    const off = playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' });
+    await playback.switchVersion('s1', 'b');
+    refuse(new VelaError({ class: 'conflict', code: 'stale_generation', message: 'stale generation',
+      currentGenerations: { sourceGeneration: 2, seekGeneration: 2 }, retry: { allowed: false } } as never, 409));
+    expect(await off).toBe(false);
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['off']);
+    expect(files.get('s1')!.selectedSubtitleTrackId).toBe('5');
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').slice(1)).toEqual([]);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('9');
+  }, c => c.idempotencyKey === 'off' ? refused : false, () => undefined, undefined,
+  { b: { source: 'b', version: 'b', ether: true, generation: 2, seek: 2, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('5', 'eng', { forced: true })], selectedAudioTrackId: '1', selectedSubtitleTrackId: '5' } });
+});
+
+test('recovery after the session published the version asked for, before the switch reply, requests that version', async () => {
+  // Pinned to version A; the switch reply to version B is held while the session publishes B; B fails before the reply.
+  let release = () => {};
+  const a = { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' };
+  const b = { source: 'b', version: 'b', ether: true, generation: 1, seek: 1, audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' };
+  await lab([a, { ...b, generation: 0, seek: 0 }], async ({ playback, box, starts, holdSwitch, run }) => {
+    holdSwitch(new Promise<void>(resolve => { release = resolve; }));
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'a' });
+    const switching = playback.switchVersion('s1', 'b');
+    await run(5000);
+    expect(box.get().playback.plan?.selectedVersionId).toBe('b');
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(starts.map(request => request.versionId)).toEqual(['a', 'b']);
+    release();
+    await switching;
+  }, () => false, () => undefined, undefined, { b });
+});
+
+test('a choice the server took is kept when its reply comes after the same file was reopened', async () => {
+  // Off is taken on file A and published (source generation 1), but its reply is held; the session reopens the same file
+  // (generation 2); the reply arrives, then the session fails onto file C, whose default is forced 9.
+  let release = () => {};
+  const reply = new Promise<void>(resolve => { release = resolve; });
+  await lab([
+    { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    forcedNine,
+  ], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    const off = playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' });
+    await run(5000);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    files.set('s1', { ...files.get('s1')!, generation: 2, seek: 2 });
+    await run(5000);
+    expect(box.get().playback.plan?.sourceGeneration).toBe(2);
+    release();
+    await off;
+    expect(box.get().playback.plan?.sourceGeneration).toBe(2);
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').slice(1).map(c => c.subtitleTrackId)).toEqual([null]);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+  }, () => false, c => c.idempotencyKey === 'off' ? reply : undefined);
+});
+
+test('a choice the server took is kept when the answer to a later pick on the same file comes first', async () => {
+  // Off is taken on file A (source generation 1) but its reply is held; French audio, picked next, is taken after it (generation 2)
+  // and answered first; Off's reply arrives, then the session fails onto file C, whose default is forced 9.
+  let release = () => {};
+  const reply = new Promise<void>(resolve => { release = resolve; });
+  await lab([
+    { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng'), audio('2', 'fra')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    forcedNine,
+  ], async ({ playback, box, commands, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    const off = playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' });
+    expect(await playback.command('s1', { kind: 'tracks', audioTrackId: '2', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'fra' })).toBe(true);
+    expect(box.get().playback.plan?.sourceGeneration).toBe(2);
+    release();
+    await off;
+    expect(box.get().playback.plan?.sourceGeneration).toBe(2);
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').at(-1)?.subtitleTrackId).toBeNull();
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+  }, () => false, c => c.idempotencyKey === 'off' ? reply : undefined);
+});
+
+test('subtitles off the session published before the reply stay off when it fails', async () => {
+  // Off is taken on file A and published, but no reply comes; the session fails onto file C, whose default is forced 9, at once
+  // or after a version switch the server refuses.
+  for (const refusedSwitch of [false, true]) {
+    await lab([
+      { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+      forcedNine,
+    ], async ({ playback, box, commands, run }) => {
+      await playback.start({ kind: 'title', id: 'movie' });
+      void playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' });
+      await run(5000);
+      expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+      if (refusedSwitch) expect(await playback.switchVersion('s1', 'x').catch(() => 'refused')).toBe('refused');
+      playback.recover('s1');
+      await run();
+      expect(box.get().playback.sessionId).toBe('s2');
+      expect(commands.filter(c => c.kind === 'tracks').slice(1).map(c => c.subtitleTrackId)).toEqual([null]);
+      expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    }, () => false, c => c.idempotencyKey === 'off' ? new Promise(() => {}) : undefined, undefined, {});
+  }
+});
+
+test('a track command refused as stale is not sent again after Auto moved the session to another release', async () => {
+  // French is 4 on the release Auto plays (A); the server fails over to release B, where 4 is English and French is 7, and
+  // refuses the pick as stale.
+  let refuse = (_: Error) => {};
+  const refused = new Promise<never>((_, reject) => { refuse = reject; });
+  refused.catch(() => undefined);
+  await lab([
+    { source: 'a', version: 'auto', ether: true, audioTracks: [audio('4', 'fra'), audio('7', 'eng')], subtitleTracks: [], selectedAudioTrackId: '7' },
+  ], async ({ playback, box, commands, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    const pick = playback.command('s1', { kind: 'tracks', audioTrackId: '4', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'pick' });
+    files.set('s1', { source: 'b', version: 'auto', ether: true, generation: 1, seek: 1, audioTracks: [audio('4', 'eng'), audio('7', 'fra')], subtitleTracks: [], selectedAudioTrackId: '7' });
+    await run(5000);
+    expect(box.get().playback.plan?.sourceGeneration).toBe(1);
+    refuse(stale(files.get('s1')!));
+    expect(await pick).toBe(false);
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['pick']);
+    expect(files.get('s1')!.selectedAudioTrackId).toBe('7');
+  }, c => c.idempotencyKey === 'pick' ? refused : false);
+});
+
+test('a track command refused as stale is not sent again after a switch to another version and back', async () => {
+  // Off chosen on version A reaches the server after switches to version B and back to A, and is refused as stale.
+  let refuse = (_: Error) => {};
+  const refused = new Promise<never>((_, reject) => { refuse = reject; });
+  refused.catch(() => undefined);
+  const a = { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' };
+  await lab([a], async ({ playback, commands, files }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    const off = playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' });
+    await playback.switchVersion('s1', 'b');
+    await playback.switchVersion('s1', 'a');
+    refuse(stale(files.get('s1')!));
+    expect(await off).toBe(false);
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['off']);
+    expect(files.get('s1')!.selectedSubtitleTrackId).toBe('3');
+  }, c => c.idempotencyKey === 'off' ? refused : false, () => undefined, undefined,
+  { b: { source: 'b', version: 'b', ether: true, generation: 1, seek: 1, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('5', 'eng', { forced: true })], selectedAudioTrackId: '1', selectedSubtitleTrackId: '5' },
+    a: { ...a, generation: 2, seek: 2 } });
+});
+
+test('a switch reply that comes in while the session is recovered is not taken', async () => {
+  // Pinned to version A, the viewer turns subtitles off and the server confirms it; the switch to version B (forced 5) is sent
+  // and the session fails, before or after B is published; the switch reply comes in during the recovery. The replacement plays
+  // file C, whose default is forced 9: it keeps Off and asks for A when B was not published, and asks for B when it was.
+  for (const published of [false, true]) {
+    let release = () => {};
+    await lab([
+      { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+      forcedNine,
+    ], async ({ playback, box, starts, holdSwitch, run }) => {
+      holdSwitch(new Promise<void>(resolve => { release = resolve; }));
+      await playback.start({ kind: 'title', id: 'movie', versionId: 'a' });
+      expect(await playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' })).toBe(true);
+      const switching = playback.switchVersion('s1', 'b');
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+      if (published) {
+        await run(5000);
+        expect(box.get().playback.plan?.selectedVersionId).toBe('b');
+      }
+      playback.recover('s1');
+      release();
+      await switching;
+      expect(box.get().playback.plan).toBeNull();
+      await run();
+      expect(box.get().playback.sessionId).toBe('s2');
+      expect(starts.map(request => request.versionId)).toEqual(['a', published ? 'b' : 'a']);
+      expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe(published ? '9' : null);
+    }, () => false, () => undefined, undefined,
+    { b: { source: 'b', version: 'b', ether: true, generation: 2, seek: 2, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('5', 'eng', { forced: true })], selectedAudioTrackId: '1', selectedSubtitleTrackId: '5' } });
+  }
+});
+
+test('a track taken on the version published before the switch reply stays when the reply comes in', async () => {
+  // The session publishes version B (English 4) while the switch reply is held; French 7 is taken on B; the older reply comes in;
+  // B fails onto file C, where French is 4.
+  let release = () => {};
+  await lab([
+    { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' },
+    { source: 'c', ether: true, audioTracks: [audio('4', 'fra'), audio('7', 'eng')], subtitleTracks: [], selectedAudioTrackId: '7' },
+  ], async ({ playback, box, commands, holdSwitch, run }) => {
+    holdSwitch(new Promise<void>(resolve => { release = resolve; }));
+    await playback.start({ kind: 'title', id: 'movie' });
+    const switching = playback.switchVersion('s1', 'b');
+    await run(5000);
+    expect(box.get().playback.plan?.selectedVersionId).toBe('b');
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('4');
+    expect(await playback.command('s1', { kind: 'tracks', audioTrackId: '7', sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'fra' })).toBe(true);
+    release();
+    await switching;
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('7');
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').slice(1).map(c => c.audioTrackId)).toEqual(['4']);
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('4');
+  }, () => false, () => undefined, undefined,
+  { b: { source: 'b', version: 'b', ether: true, generation: 1, seek: 1, audioTracks: [audio('4', 'eng'), audio('7', 'fra')], subtitleTracks: [], selectedAudioTrackId: '4' } });
+});
+
+test('a plan republished with the selection it already showed does not confirm a pending track command', async () => {
+  // The player plays a track the plan does not show (subtitle 3 while the plan shows Off, or French 4 while it shows English 1);
+  // the viewer asks for what the plan shows, the session republishes its unchanged selection, the server refuses the command and
+  // the session fails onto the same file again: the track the player played is restored.
+  for (const kind of ['subtitle', 'audio'] as const) {
+    let refuse = () => {};
+    const refused = new Promise<void>(resolve => { refuse = resolve; });
+    const a: File = { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng'), audio('4', 'fra')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: null };
+    await lab([a, a], async ({ playback, box, files, run }) => {
+      await playback.start({ kind: 'title', id: 'movie' });
+      playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', ...(kind === 'subtitle' ? { subtitleTrackId: '3' } : { audioTrackId: '4' }) });
+      const pick = playback.command('s1', { kind: 'tracks', ...(kind === 'subtitle' ? { subtitleTrackId: null } : { audioTrackId: '1' }), sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'pick' });
+      files.set('s1', { ...files.get('s1')!, revision: 2 });
+      await run(5000);
+      expect(box.get().playback.plan?.revision).toBe(2);
+      refuse();
+      expect(await pick).toBe(false);
+      playback.recover('s1');
+      await run();
+      expect(box.get().playback.sessionId).toBe('s2');
+      if (kind === 'subtitle') expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('3');
+      else expect(box.get().playback.plan?.selectedAudioTrackId).toBe('4');
+    }, c => c.idempotencyKey === 'pick' ? refused : false);
+  }
+});
+
+test('a plan of an older source generation does not confirm a pending track command', async () => {
+  // Off is taken on file A (source generation 1); subtitle 3, asked for next, awaits its reply while a refresh shows the older
+  // generation 0, where 3 is selected; the session republishes generation 1 with Off, the server refuses 3 and the session
+  // fails onto file C, whose default is forced 9.
+  let refuse = () => {};
+  const refused = new Promise<void>(resolve => { refuse = resolve; });
+  const a: File = { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' };
+  await lab([a, forcedNine], async ({ playback, box, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    expect(await playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' })).toBe(true);
+    const taken = files.get('s1')!;
+    const pick = playback.command('s1', { kind: 'tracks', subtitleTrackId: '3', sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'pick' });
+    files.set('s1', a);
+    expect(await playback.refresh('s1')).toBe(true);
+    expect(box.get().playback.plan?.sourceGeneration).toBe(0);
+    files.set('s1', taken);
+    await run(5000);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    refuse();
+    expect(await pick).toBe(false);
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+  }, c => c.idempotencyKey === 'pick' ? refused : false);
+});
+
+test('a plan of another file at the same source generation does not confirm a pending track command', async () => {
+  // Auto plays release A, where the player reports Spanish 2; English 4, asked for next, awaits its reply while the server fails
+  // over to release B at the same source generation, whose default is English 4; the server refuses the pick and the session
+  // fails onto file C, where Spanish is 2 and English 4 is the default.
+  let refuse = () => {};
+  const refused = new Promise<void>(resolve => { refuse = resolve; });
+  await lab([
+    { source: 'a', version: 'auto', ether: true, audioTracks: [audio('1', 'eng'), audio('2', 'spa')], subtitleTracks: [], selectedAudioTrackId: '1' },
+    { source: 'c', ether: true, audioTracks: [audio('2', 'spa'), audio('4', 'eng')], subtitleTracks: [], selectedAudioTrackId: '4' },
+  ], async ({ playback, box, files, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '2' });
+    const pick = playback.command('s1', { kind: 'tracks', audioTrackId: '4', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'pick' });
+    files.set('s1', { source: 'b', version: 'auto', ether: true, revision: 2, audioTracks: [audio('4', 'eng'), audio('5', 'spa')], subtitleTracks: [], selectedAudioTrackId: '4' });
+    await run(5000);
+    expect(box.get().playback.plan?.revision).toBe(2);
+    refuse();
+    expect(await pick).toBe(false);
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('2');
+  }, c => c.idempotencyKey === 'pick' ? refused : false);
+});
+
+test('a later audio pick does not drop the pending subtitles-off command the session then publishes', async () => {
+  // Off is taken on file A but no reply comes; French audio, asked for next, awaits its reply; the session publishes Off and
+  // fails onto file C, whose default is forced 9.
+  await lab([
+    { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng'), audio('2', 'fra')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    forcedNine,
+  ], async ({ playback, box, commands, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    void playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' });
+    void playback.command('s1', { kind: 'tracks', audioTrackId: '2', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'fra' });
+    await run(5000);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').slice(2).map(c => c.subtitleTrackId)).toEqual([null]);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+  }, c => c.idempotencyKey === 'fra' ? new Promise(() => {}) : false, c => c.idempotencyKey === 'off' ? new Promise(() => {}) : undefined);
+});
+
+test('a subtitle chosen and confirmed locally while subtitles off await their reply is not replaced when the session publishes the off', async () => {
+  // On HLS, Off is asked for the embedded subtitle 3 but no reply comes; the viewer then picks French sidecar 7 locally and the
+  // player confirms it; the session publishes the earlier Off and fails onto file C, whose default is forced 9, before the reply.
+  const french = (url: string) => subtitle('7', 'fra', { delivery: { kind: 'external', format: 'webvtt', url } });
+  await lab([
+    { source: 'a', version: 'a', ether: true, transcode: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng', { delivery: { kind: 'embedded' } }), french('https://media.test/a7.vtt')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    { ...forcedNine, transcode: true, subtitleTracks: [subtitle('9', 'eng', { forced: true }), french('https://media.test/c7.vtt')] },
+  ], async ({ playback, box, commands, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    void playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' });
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is sent.
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', sourceGeneration: 0, audioTrackId: '1', subtitleTrackId: '7' });
+    playback.rememberTrack('s1', 'subtitle', '7');
+    await run(5000);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').slice(1).map(c => c.subtitleTrackId)).toEqual(['7']);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('7');
+  }, () => false, c => c.idempotencyKey === 'off' ? new Promise(() => {}) : undefined);
+});
+
+test('an audio track chosen and confirmed locally while another awaits its reply is not replaced when the session publishes that one', async () => {
+  // French audio 2 is asked for but no reply comes; the viewer then picks German 4 locally and the player confirms it; the session
+  // publishes French and fails onto file C before the reply.
+  const tracks = [audio('1', 'eng'), audio('2', 'fra'), audio('4', 'deu')];
+  await lab([
+    { source: 'a', version: 'a', ether: true, audioTracks: tracks, subtitleTracks: [], selectedAudioTrackId: '1' },
+    { source: 'c', ether: true, audioTracks: tracks, subtitleTracks: [], selectedAudioTrackId: '1' },
+  ], async ({ playback, box, commands, run }) => {
+    await playback.start({ kind: 'title', id: 'movie' });
+    void playback.command('s1', { kind: 'tracks', audioTrackId: '2', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'fra' });
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is sent.
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', sourceGeneration: 0, audioTrackId: '4', subtitleTrackId: null });
+    playback.rememberTrack('s1', 'audio', '4');
+    await run(5000);
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('2');
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.filter(c => c.kind === 'tracks').slice(1).map(c => c.audioTrackId)).toEqual(['4']);
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('4');
+  }, () => false, c => c.idempotencyKey === 'fra' ? new Promise(() => {}) : undefined);
+});
+
+test('a version switch of the failed session does not stop the replacement retrying a stale track command', async () => {
+  // The switch from A to version B gets no reply; the session fails onto file C, which moves to a new source before Off,
+  // chosen on C, reaches the server and is refused as stale.
+  await lab([
+    { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+    { source: 'c', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('3', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '3' },
+  ], async ({ playback, box, commands, files, holdSwitch, run }) => {
+    holdSwitch(new Promise(() => {}));
+    await playback.start({ kind: 'title', id: 'movie' });
+    void playback.switchVersion('s1', 'b');
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    files.set('s2', { ...files.get('s2')!, generation: 1, seek: 1 });
+    expect(await playback.command('s2', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'off' })).toBe(true);
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.subtitleTrackId)).toEqual([null, null]);
+    expect(files.get('s2')!.selectedSubtitleTrackId).toBeNull();
+  }, () => false, () => undefined, undefined,
+  { b: { source: 'b', version: 'b', ether: true, generation: 1, seek: 1, audioTracks: [audio('1', 'eng')], subtitleTracks: [subtitle('5', 'eng', { forced: true })], selectedAudioTrackId: '1', selectedSubtitleTrackId: '5' } });
+});
+
+test('a switch reply that comes in while the session is recovered sets the version a later recovery asks for', async () => {
+  // Pinned to version A, the switch to version B is sent and the session fails before B is published; the reply comes in during
+  // the backoff; the replacement fails too.
+  let release = () => {};
+  const a: File = { source: 'a', version: 'a', ether: true, audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' };
+  await lab([a, a, a], async ({ playback, box, starts, holdSwitch, run }) => {
+    holdSwitch(new Promise<void>(resolve => { release = resolve; }));
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'a' });
+    const switching = playback.switchVersion('s1', 'b');
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    playback.recover('s1');
+    release();
+    await switching;
+    expect(box.get().playback.plan).toBeNull();
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    playback.recover('s2');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s3');
+    expect(starts.map(request => request.versionId)).toEqual(['a', 'a', 'b']);
+  }, () => false, () => undefined, undefined,
+  { b: { source: 'b', version: 'b', ether: true, generation: 1, seek: 1, audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' } });
 });
