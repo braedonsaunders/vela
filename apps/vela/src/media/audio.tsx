@@ -133,7 +133,11 @@ export function AudioDock({ children }: { children: ReactNode }) {
   const audio = useVelaState(state => state.audio);
   const pathname = usePathname();
   const host = vela.host('home', '');
-  const insets = useSafeAreaInsets();
+  const { top, right, bottom: safeBottom, left } = useSafeAreaInsets();
+  // The dock covers the window on both phones. Android's route host has already consumed the bars.
+  const nowPlayingHost = useMemo(() => host && (Platform.OS === 'android' || Platform.OS === 'ios') && !Platform.isTV
+    ? { ...host, viewport: { ...host.viewport, insets: { top, right, bottom: safeBottom, left } } }
+    : host, [host, top, right, safeBottom, left]);
   const ui = host?.doc.document.ui;
   const pageColor = useMemo(() => resolveUi(ui).page, [ui]);
   const [open, setOpen] = useState(false);
@@ -246,8 +250,8 @@ export function AudioDock({ children }: { children: ReactNode }) {
   const screens = Platform.isTV
     ? <FocusBoundary active={routeActive} style={screenStyle}>{children}</FocusBoundary>
     : children;
-  if (!host) return <>{screens}</>;
-  const bottom = Math.max(14, insets.bottom + 10);
+  if (!host || !nowPlayingHost) return <>{screens}</>;
+  const bottom = Math.max(14, safeBottom + 10);
   const still = host.env.still;
   // Now Playing rises out of the mini player and sinks back into it: its top starts and ends at the
   // bar's top edge while the bar fades out under it, then in again (presence.tsx).
@@ -260,11 +264,11 @@ export function AudioDock({ children }: { children: ReactNode }) {
       <TVFocusTrap open={nowPlayingOpen} playTarget={guideTarget} guideAction={guideAction}>
         <View collapsable={false} style={[fill, visuals && { backgroundColor: pageColor }]} testID={fullscreen ? 'visualizer-page' : undefined} accessibilityViewIsModal>
           <ListenDockContext.Provider value={dock}>
-            <ScreenView target={NOW_PLAYING_TARGET} href={builtinHref('listen', 'nowPlaying')} params={nowPlayingParams} host={host} active={nowPlayingOpen}
+            <ScreenView target={NOW_PLAYING_TARGET} href={builtinHref('listen', 'nowPlaying')} params={nowPlayingParams} host={nowPlayingHost} active={nowPlayingOpen}
               actions={screenActions} route={false} quiet />
             {fullscreen ? <View style={fill}><ScreenView target={VISUALIZER_TARGET} href={builtinHref('listen', 'visualizer')} host={host} active actions={screenActions} route={false} quiet /></View> : null}
           </ListenDockContext.Provider>
-          {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: insets.top + 16, left: insets.left + 20, borderRadius: 24, backgroundColor: pageColor }}>
+          {fullscreen && !Platform.isTV ? <View style={{ position: 'absolute', top: top + 16, left: left + 20, borderRadius: 24, backgroundColor: pageColor }}>
             <RoundButton icon="back" label={msg('visualizer.close')} testID="visualizer-close" onPress={leaveVisualizer} />
           </View> : null}
         </View>

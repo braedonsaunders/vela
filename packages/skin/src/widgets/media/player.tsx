@@ -421,7 +421,13 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
       <Chip label={msg('music.sound')} selected={list === 'sound'} onPress={() => setList('sound')} testID="now-playing-sound-tab" />
     </View>
   );
-  const top = Math.max(14, host.viewport.insets.top + 10);
+  const insets = host.viewport.insets;
+  const top = Math.max(14, insets.top + 10);
+  const headerSafeArea = launcherByTitle ? {
+    paddingTop: top,
+    paddingLeft: m.gutter - 6 + insets.left,
+    paddingRight: m.gutter - 6 + insets.right,
+  } : undefined;
   return (
     <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: onOpenVisualizer ? 'transparent' : m.ui.page }} testID="now-playing" accessibilityViewIsModal accessibilityLabel={msg('media.player.nowPlaying')}>
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden',
@@ -432,7 +438,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
         {background ? <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>{background}</View> : null}
         <View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, m.box({ 'background-image': `linear-gradient(180deg, ${washTop} 0%, ${alpha(m.ui.page, 0.7)} 60%, ${m.ui.page} 100%)` }), tintPart.box]} />
       </View>
-      <View style={[{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }, headerPart.box]}>
+      <View style={[{ flexDirection: 'row', alignItems: 'center', paddingTop: top, paddingHorizontal: m.gutter - 6, gap: 12 }, headerPart.box, headerSafeArea]}>
         <View style={{ width: headerSide, alignItems: 'flex-start' }}>
           <RoundButton icon="down" label={msg('media.player.close')} onPress={onClose} testID="now-playing-close" nativeID="now-playing-close" size={42} />
         </View>
