@@ -29,7 +29,9 @@ export const GALLERY_VIEWS: GalleryView[] = [
   { name: 'square-no-facts', path: photo('first-snow'), ready: 'media-photo-page', description: 'Square photo without facts', document: 'photo' },
 ];
 
-export const GALLERY_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [];
+export const GALLERY_REVIEWED: { viewports: RegExp; views: string[]; reason: string }[] = [
+  { viewports: /^androidtv$/, views: ['square'], reason: 'The Android TV square photo opens with Close focused in the Gallery document. The legacy capture sometimes omits the Close ring, which accounts for the entire 0.074% difference.' },
+];
 
 export function galleryReviewed(view: { name: string; review?: string }, viewport: string): string | undefined {
   return GALLERY_REVIEWED.find(entry => entry.viewports.test(viewport) && entry.views.includes(view.name))?.reason ?? view.review;

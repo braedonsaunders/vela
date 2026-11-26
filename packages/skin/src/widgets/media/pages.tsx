@@ -1,6 +1,6 @@
 // Purpose-built pages for media titles (docs/media-kinds.md): an album with its tracklist, an
-// artist with songs and albums, an audiobook with chapters or parts, a podcast with its episodes,
-// and a photo. Read handles books and series. A track opens its album, a part its audiobook and
+// artist with songs and albums, an audiobook with chapters or parts, and a podcast with its
+// episodes. Read handles books and series. Gallery handles photos. A track opens its album, a part its audiobook and
 // a podcast episode its show. The app draws one of
 // these in place of the document's title page; each takes the document's `ui` look.
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -9,7 +9,6 @@ import { childrenKey, childSectionLabel, childSections, childSectionsWait, settl
 import { useVela, useVelaState } from '@vela/core/react';
 import { dayLabel } from '../../blocks/media/day';
 import { heroCover, MediaTitlePending } from '../../blocks/media/title-pending';
-import { PhotoViewer } from '../../blocks/gallery/photo';
 import { useMediaActions } from './context';
 import { Cover, CoverTile, ListRow, PillButton, Progress, SectionHeading, Segmented, TextLink, TileGrid, useMediaLook, VideoTile, type MediaLook } from './parts';
 import { Buttons, Eyebrow, FactList, Facts, Hero, MediaFrame as Frame, openByline, Summary, tilesPerRow, Title } from '../../blocks/media/title';
@@ -27,7 +26,6 @@ export function MediaTitlePage({ id, framed = false, marked = '' }: { id: string
   return (
     <Frame framed={framed} accent={card?.accent ?? ''} backdrop={card ? (role === 'artist' && card.backdrop !== card.poster ? card.backdrop : card.poster) : ''} wideArt={role === 'artist' && !!card && card.backdrop !== card.poster}>
       {!card ? <MediaTitlePending load={detail} id={id} />
-        : cls === 'photo' ? <PhotoViewer card={card} />
         : cls === 'podcast' ? <PodcastPage card={card} marked={marked} />
         : role === 'album' ? <AlbumPage card={card} detail={detail.value!} />
         : role === 'artist' ? <ArtistPage card={card} />
