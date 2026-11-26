@@ -54,6 +54,8 @@ export interface PlaybackState {
   /** The plan the player receives (`plan` prop), every media URL validated for its server. */
   plan: V.PlaybackPlan | null;
   sessionId: string;
+  /** The saved broadcast instant for a replacement's accepted timeshift seek. */
+  timeshiftRecovery?: { sessionId: string; seekGeneration: number; at: number };
   error: string;
   errorCode: string;
   /** The v0 error class (`capacity` when every stream is in use, `auth`, `transient`, …), or ''. */
@@ -162,6 +164,8 @@ export class Playback {
   private liveCursor?: { sessionId: string; sourceGeneration: number; seekGeneration: number; seconds: number };
   private liveTransportIntent?: { sessionId: string; atLive: boolean };
   private liveRecoveryNotice?: { sessionId: string; text: string };
+  /** The live owner can detach and reattach a replacement before its engine sees the startup seek. */
+  private pendingTimeshiftRecovery?: PlaybackState['timeshiftRecovery'];
   private localTracks = false;
   private audio: string | undefined;
   private subtitle: string | null | undefined;
@@ -267,6 +271,7 @@ export class Playback {
 
   /** Follow a live owner's existing plan without taking responsibility for stopping it. */
   async attach(target: PlaybackTarget, existing: V.PlaybackPlan): Promise<void> {
+    const recovery = this.pendingTimeshiftRecovery;
     this.end();
     const run = {};
     this.run = run;
@@ -282,7 +287,8 @@ export class Playback {
     // The live owner can take over a replacement while its recovery notice is still showing.
     const notice = this.liveRecoveryNotice;
     const error = notice?.sessionId === plan.sessionId ? notice.text : '';
-    this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId, error });
+    this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId, error,
+      timeshiftRecovery: recovery?.sessionId === plan.sessionId ? recovery : undefined });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
   }
@@ -367,6 +373,7 @@ export class Playback {
     }
     this.hold(connection.adapter, plan, viewerId ? { connection, viewer: viewerId } : undefined);
     let evicted = false;
+    let timeshiftRecovery: PlaybackState['timeshiftRecovery'];
     if (intent.liveResume) {
       const resume = intent.liveResume;
       const command = async (transport: { kind: 'goLive' } | { kind: 'seek'; positionSeconds: number }) =>
@@ -383,6 +390,7 @@ export class Playback {
           else if (resume.kind === 'timeshift' || position !== plan.positionSeconds) {
             try {
               plan = await command({ kind: 'seek', positionSeconds: position });
+              if (resume.kind === 'timeshift') timeshiftRecovery = { sessionId: plan.sessionId, seekGeneration: plan.seekGeneration, at: resume.at };
             } catch (error) {
               const code = error instanceof VelaError ? error.detail.code : undefined;
               evicted = resume.kind === 'timeshift' &&
@@ -488,15 +496,10 @@ export class Playback {
     }
     const notice = evicted ? msg('catchUp.recoveredLive') : '';
     if (notice) this.liveRecoveryNotice = { sessionId: plan.sessionId, text: notice };
-    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: notice, errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, versions: null });
+    this.pendingTimeshiftRecovery = timeshiftRecovery;
+    this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, timeshiftRecovery, error: notice, errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, versions: null });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
-    if (notice) {
-      setTimeout(() => {
-        if (this.liveRecoveryNotice?.sessionId === plan.sessionId) this.liveRecoveryNotice = undefined;
-        const { playback } = this.box.get();
-        if (playback.sessionId === plan.sessionId && playback.error === notice) this.patch({ error: '' });
-      }, 5000);
-    }
+    if (notice) this.clearLiveRecoveryNotice(plan.sessionId, notice);
     this.followSession(run, connection, plan.sessionId);
     // Placeholder versions (Play pressed before the title's release search finished) are read
     // again once, shortly after the start; opening the quality menu reads them again too.
@@ -1153,12 +1156,30 @@ export class Playback {
     return sent;
   }
 
+  private clearLiveRecoveryNotice(sessionId: string, notice: string): void {
+    setTimeout(() => {
+      if (this.liveRecoveryNotice?.sessionId === sessionId) this.liveRecoveryNotice = undefined;
+      const { playback } = this.box.get();
+      if (playback.sessionId === sessionId && playback.error === notice) this.patch({ error: '' });
+    }, 5000);
+  }
+
   /** A player snapshot: live status (reconnecting, delivery, drift) when the engine observes it. */
-  snapshot(snapshot: LiveObservation & StallSample & { seekTarget?: number | null; audioTrackId?: string | null; subtitleTrackId?: string | null }): void {
+  snapshot(snapshot: LiveObservation & StallSample & { seekTarget?: number | null; audioTrackId?: string | null; subtitleTrackId?: string | null; timeshiftRecoveryEvicted?: boolean | null }): void {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;
     if (snapshot.position !== undefined) this.cursor = snapshot.position;
     const { plan } = current;
+    if (snapshot.timeshiftRecoveryEvicted && plan?.live?.timeshift
+      && current.timeshiftRecovery?.sessionId === plan.sessionId && current.timeshiftRecovery.seekGeneration === plan.seekGeneration
+      && snapshot.sourceGeneration === plan.sourceGeneration && snapshot.seekGeneration === plan.seekGeneration) {
+      const notice = msg('catchUp.recoveredLive');
+      this.liveTransportIntent = { sessionId: plan.sessionId, atLive: true };
+      this.liveRecoveryNotice = { sessionId: plan.sessionId, text: notice };
+      this.pendingTimeshiftRecovery = undefined;
+      this.patch({ error: notice, timeshiftRecovery: undefined });
+      this.clearLiveRecoveryNotice(plan.sessionId, notice);
+    }
     if ((plan?.catchUp || plan?.live?.timeshift) && snapshot.state !== 'loading' && snapshot.state !== 'idle' && snapshot.state !== 'failed'
       && snapshot.seekTarget == null && snapshot.position !== undefined && Number.isFinite(snapshot.position)
       && snapshot.sourceGeneration === plan.sourceGeneration && snapshot.seekGeneration === plan.seekGeneration) {
