@@ -513,13 +513,14 @@ function AppHost({ store, state, live, children }: AppHostProps) {
     });
     const key = `${route}:${entry}:${library ?? ''}`;
     const routeViewport = route === 'watch' ? viewport : contentViewport;
-    const inputs = [resolved.doc, env, routeViewport, dispatch, image, setQuery, view.setFlag, loadMore];
+    const inputs = [resolved.doc, env, routeViewport, dispatch, image, setQuery, view.setFlag, loadMore, view.stepHero];
     const previous = hosts.current.get(key);
     if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.host;
     const result: SkinHost = {
       doc: resolved.doc,
       env,
       viewport: routeViewport,
+      stepHero: view.stepHero,
       dispatch: previous && inputs.slice(3).every((v, i) => v === previous.inputs[i + 3])
         ? previous.host.dispatch : (action, arg) => dispatch({ route, entry, library }, action, arg),
       // A route's tree redraws whole when its host's functions change; keep them while what they read is the same.

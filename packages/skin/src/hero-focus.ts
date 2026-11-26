@@ -26,13 +26,13 @@ function heroVisualOrder(rank: number): number {
 const HERO_TURN_WINDOW_MS = 2000;
 
 export interface HeroFocusCarry<T> {
+  /** The currently mounted hero actions, left to right. */
+  visualTargets(): T[];
   /** A hero button is on screen (again: a button only redrawn is no loss). */
   add(target: T, rank: number): void;
   /** Focus came to (`on`) or left a hero button (`now`: when, in milliseconds). */
   focused(target: T, on: boolean, now?: number): void;
-  /** The hero button holding focus, and since when (milliseconds). */
   current(): { target: T; since: number } | undefined;
-  /** The hero's buttons on screen. */
   targets(): T[];
   /** A hero button left. True when focus was on it and must be handed on once the redraw is done. */
   remove(target: T): boolean;
@@ -53,6 +53,9 @@ export function heroFocusCarry<T>(): HeroFocusCarry<T> {
   let lost: T | undefined;
   let pendingTurn: { direction: -1 | 1; at: number } | undefined;
   return {
+    visualTargets() {
+      return [...buttons].sort((a, b) => heroVisualOrder(a[1]) - heroVisualOrder(b[1])).map(([target]) => target);
+    },
     add(target, rank) {
       buttons.set(target, rank);
       if (lost === undefined || target !== lost) return;
@@ -120,58 +123,33 @@ export function heroFocusCarry<T>(): HeroFocusCarry<T> {
   };
 }
 
-/** Android TV: tracks hardware left/right key-down and key-up focus snapshots (emitted from
- * MainActivity.dispatchKeyEvent before native focus moves) alongside hero button focus reports, so
- * an inward press that moved focus between buttons never turns the page regardless of how long the
- * key was held, and a deliberate edge press turns immediately without waiting out a settle timer. */
-export interface HeroEdgeKeyGate {
-  /** A hardware left/right key event arrived (`down`: ACTION_DOWN, false: ACTION_UP). */
-  key(direction: -1 | 1, down: boolean, focus: string | undefined, now?: number): void;
-  /** Native focus moved onto a hero button. */
-  focused(now?: number): void;
-  /** Whether the press finishing at `pressedAt` in `direction` stayed on the same button throughout
-   * (never moved focus). Falls back to `settledMs` when no key-down/up pair was observed. */
-  stayed(direction: -1 | 1, pressedAt: number, focusedSince: number, settledMs: number): boolean;
+export interface AndroidHeroKey {
+  eventType?: string;
+  eventKeyAction?: number;
+  repeatCount?: number;
+  heroTag?: number;
+  withinHero?: boolean;
 }
 
-const KEY_HOLD_STALE_MS = 1500;
-const KEY_MATCH_WINDOW_MS = 250;
-const LATE_FOCUS_WINDOW_MS = 200;
+export function androidHeroKeyDirection(event: AndroidHeroKey): -1 | 1 | undefined {
+  if (event.heroTag === undefined || event.eventKeyAction !== 0 || event.repeatCount !== 0) return;
+  if (event.eventType === 'left') return -1;
+  if (event.eventType === 'right') return 1;
+}
 
-export function heroEdgeKeyGate(): HeroEdgeKeyGate {
-  let active: { direction: -1 | 1; focus: string | undefined; at: number; moved: boolean } | undefined;
-  let last: { direction: -1 | 1; stayed: boolean; at: number } | undefined;
-  return {
-    key(direction, down, focus, now = Date.now()) {
-      if (down) {
-        // Ignore auto-repeat key-downs while a press in the same direction is already active, so
-        // the original pre-move focus and `moved` flag are preserved until key-up.
-        if (!active || active.direction !== direction || now - active.at > KEY_HOLD_STALE_MS) {
-          active = { direction, focus, at: now, moved: false };
-        }
-        return;
-      }
-      if (active && active.direction === direction) {
-        const sameFocus = active.focus !== 'none' && active.focus === focus;
-        last = { direction, stayed: !active.moved && sameFocus, at: now };
-        active = undefined;
-        return;
-      }
-      active = undefined;
-      last = undefined;
-    },
-    focused(now = Date.now()) {
-      if (active) {
-        active.moved = true;
-      } else if (last && now - last.at <= LATE_FOCUS_WINDOW_MS) {
-        last.stayed = false;
-      }
-    },
-    stayed(direction, pressedAt, focusedSince, settledMs) {
-      if (last && last.direction === direction && Math.abs(pressedAt - last.at) <= KEY_MATCH_WINDOW_MS) {
-        return last.stayed;
-      }
-      return pressedAt - focusedSince >= settledMs;
-    },
-  };
+
+/** Android navigation uses the native focus search before the key can move focus. */
+export function androidHeroPageDirection(event: AndroidHeroKey): -1 | 1 | undefined {
+  return event.withinHero === false ? androidHeroKeyDirection(event) : undefined;
+}
+
+/** Replay distinct presses that arrived while a page turn was rendering against the new buttons. */
+export function androidHeroAfterTurn(count: number, edge: -1 | 1, keys: readonly (-1 | 1)[]) {
+  let focus = edge < 0 ? 0 : count - 1;
+  for (const [index, direction] of keys.entries()) {
+    const next = focus + direction;
+    if (next < 0 || next >= count) return { focus, turn: direction, remaining: keys.slice(index + 1) };
+    focus = next;
+  }
+  return { focus };
 }

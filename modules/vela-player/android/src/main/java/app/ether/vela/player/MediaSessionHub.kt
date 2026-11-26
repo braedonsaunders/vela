@@ -12,6 +12,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingSimpleBasePlayer
+import androidx.media3.common.Timeline
+import androidx.media3.exoplayer.source.ForwardingTimeline
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.CommandButton
@@ -50,6 +52,7 @@ internal data class SessionInfo(val title: String, val artist: String, val album
 internal interface SessionOwner {
   /** The player whose state (position, playing, duration) the system shows. Main-looper ExoPlayer. */
   val sessionPlayer: Player?
+  val sessionIsOnDemandVideo: Boolean get() = false
   val sessionStyle: SessionStyle
   val sessionMetadata: MediaMetadata?
   /** play, pause, next, previous, seek (to `seconds`), skip (by `seconds`). */
@@ -84,6 +87,7 @@ internal object MediaSessionHub {
   fun owns(owner: SessionOwner): Boolean = this.owner === owner
 
   internal fun command(command: String, seconds: Double?) { owner?.sessionCommand(command, seconds) }
+  internal val onDemandVideo: Boolean get() = owner?.sessionIsOnDemandVideo == true
   internal val style: SessionStyle get() = owner?.sessionStyle ?: SessionStyle.MUSIC
   internal val metadata: MediaMetadata? get() = owner?.sessionMetadata
 
@@ -147,6 +151,21 @@ internal object MediaSessionHub {
  * the system sends handed to the owner instead of the player.
  */
 internal class SessionPlayer(val context: Context, player: Player) : ForwardingSimpleBasePlayer(player) {
+  private var sourceTimeline: Timeline? = null
+  private var onDemandTimeline: Timeline? = null
+
+  private fun sessionTimeline(timeline: Timeline): Timeline {
+    if (!MediaSessionHub.onDemandVideo) return timeline
+    if (sourceTimeline !== timeline) {
+      sourceTimeline = timeline
+      onDemandTimeline = object : ForwardingTimeline(timeline) {
+        override fun getWindow(index: Int, window: Timeline.Window, projectionUs: Long): Timeline.Window =
+          super.getWindow(index, window, projectionUs).apply { liveConfiguration = null }
+      }
+    }
+    return checkNotNull(onDemandTimeline)
+  }
+
   fun follow(next: Player) {
     if (next.applicationLooper != applicationLooper) return
     setPlayer(next)
@@ -167,7 +186,12 @@ internal class SessionPlayer(val context: Context, player: Player) : ForwardingS
       .setAvailableCommands(commands.build())
       .setSeekBackIncrementMs((style.back * 1000).toLong())
       .setSeekForwardIncrementMs((style.forward * 1000).toLong())
-    MediaSessionHub.metadata?.let { builder.setPlaylist(state.timeline, state.currentTracks, it) }
+    // An in-progress VOD remux can start with an open HLS playlist. ExoPlayer calls that live,
+    // so Media3's platform bridge publishes an unknown position and zero speed on every event.
+    // Keep the source timeline and position suppliers intact for playback. Only the session
+    // sees an on-demand window, so Media3 can publish position and elapsed-realtime on seeks,
+    // discontinuities and playback rate/state changes.
+    MediaSessionHub.metadata?.let { builder.setPlaylist(sessionTimeline(state.timeline), state.currentTracks, it) }
     return builder.build()
   }
 

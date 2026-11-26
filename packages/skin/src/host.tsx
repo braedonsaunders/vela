@@ -18,6 +18,7 @@ export interface SkinHost {
   env: Env;
   viewport: Viewport;
   dispatch(action: Action, arg: string): void;
+  stepHero?(direction: -1 | 1): void;
   /** Screens (renderer 19): a press inside a screen or surface document, its arguments filled.
    * When present it receives every press drawn with a screen scope instead of `dispatch`. */
   screenPress?(press: ScreenPress): void;
