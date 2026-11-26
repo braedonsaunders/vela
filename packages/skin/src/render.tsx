@@ -856,7 +856,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     host.setFlag('keep-page-scrolled', on);
   };
   useEffect(() => () => { if (route && scrolled.current) host.setFlag('keep-page-scrolled', false); }, []);
-  const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY) : null), [route]);
+  const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY, viewport.height) : null), [route, viewport.height]);
   const inHero = useContext(HeroInteraction) || !!hero;
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
@@ -1148,7 +1148,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     // The button registers under the box's id, so Escape's returnFocus can land on it.
     const press = node.press;
     const heroButton = Platform.isTV && heroAction;
-    const registerButton = focusTarget(a11y.nativeID);
+    const registerButton = focusTarget(a11y.nativeID, reveal ?? undefined);
     const bindButton = (target: Focusable | null) => {
       // React Native Web's merged refs discard callback return values and detach with null.
       // Native React can call the returned cleanup instead. Both paths must release registrations.

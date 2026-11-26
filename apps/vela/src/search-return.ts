@@ -23,7 +23,7 @@ export function useSearchReturn(store: Vela, active: boolean, query: string | un
     if (!active || !pending || query !== pending.query) return;
     let frame: number;
     const focus = () => {
-      if (viewerPressedSince(pending.at) || Date.now() - pending.at > 6000 || focusElement(pending.id)) {
+      if (viewerPressedSince(pending.at) || Date.now() - pending.at > 6000 || focusElement(pending.id, true)) {
         setPending(undefined);
       } else frame = requestAnimationFrame(focus);
     };

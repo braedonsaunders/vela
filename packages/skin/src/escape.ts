@@ -31,7 +31,7 @@ interface Scope {
 }
 
 const scopes = new Set<Scope>();
-const targets = new Map<string, Focusable>();
+const targets = new Map<string, { view: Focusable; reveal?: (view: Focusable, full: boolean) => void }>();
 const openers = new Map<string, Focusable>();
 /** Press buttons that are drawn now, by what they do (`action:arg`), and the one pressed last (the
  * opener of the route on top). A row that refreshes while a route is over it (Continue Watching
@@ -45,10 +45,12 @@ let unlisten: (() => void) | undefined;
 
 /** Move focus to the press button with this element id, or on the web to any focusable element
  * with that id (a widget's own field, such as vela-search); false when none is drawn. */
-export function focusElement(id: string): boolean {
-  const target = targets.get(id) ?? domElement(id);
+export function focusElement(id: string, reveal = false): boolean {
+  const registered = targets.get(id);
+  const target = registered?.view ?? domElement(id);
   if (!target) return false;
   focusOn(target);
+  if (reveal) registered?.reveal?.(target, true);
   return true;
 }
 
@@ -63,12 +65,13 @@ function domElement(id: string): Focusable | undefined {
 }
 
 /** A ref callback that registers a press button under its element id while it is mounted. */
-export function focusTarget(id: string | undefined) {
+export function focusTarget(id: string | undefined, reveal?: (view: Focusable, full: boolean) => void) {
   return (target: Focusable | null) => {
     if (!id || !target) return;
-    targets.set(id, target);
+    const registered = { view: target, reveal };
+    targets.set(id, registered);
     return () => {
-      if (targets.get(id) === target) targets.delete(id);
+      if (targets.get(id) === registered) targets.delete(id);
     };
   };
 }
