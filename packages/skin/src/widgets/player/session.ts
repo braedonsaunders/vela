@@ -57,6 +57,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   /** The viewer's quality pick awaiting the engine, read synchronously when the engine asks the server. */
   const qualityPick = useRef<string | undefined>(undefined);
   qualityPick.current = pendingQualityId;
+  /** Deliberate audio/subtitle picks awaiting engine confirmation before remembering for the series. */
+  const pendingAudio = useRef<{ commandId: number; sessionId: string; trackId: string } | null>(null);
+  const pendingSubtitle = useRef<{ commandId: number; sessionId: string; trackId: string | null } | null>(null);
   const [pendingVersionId, setPendingVersionId] = useState<string>();
   const [versionMessage, setVersionMessage] = useState('');
   const [offerVersions, setOfferVersions] = useState(0);
@@ -71,6 +74,11 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const external = owner !== undefined;
   const ownedPlan = owner?.plan;
   const ownedId = ownedPlan?.sessionId ?? '';
+
+  const plan = playback.target?.id === id && playback.target.kind === kind ? playback.plan : null;
+  const sessionId = plan?.sessionId ?? '';
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
 
   useEffect(() => {
     if (!external || !ownedPlan) return;
@@ -89,6 +97,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       setRefused('');
       pendingQuality.current = 0;
       setPendingQualityId(undefined);
+      pendingAudio.current = null;
+      pendingSubtitle.current = null;
       const from = (kind === 'title' || kind === 'programme') && positionSeconds !== undefined ? { positionSeconds } : {};
       void vela.playback.start({ ...target, ...from } as PlaybackTarget);
     },
@@ -169,6 +179,11 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     if (input.type === 'pause') viewerPaused.current = true;
     else if (input.type === 'play' || input.type === 'catchUp') viewerPaused.current = false;
     if (input.type === 'quality') { pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }
+    if (input.type === 'audio' && sessionIdRef.current) {
+      pendingAudio.current = { commandId: nextId.current, sessionId: sessionIdRef.current, trackId: input.trackId };
+    } else if (input.type === 'subtitle' && sessionIdRef.current) {
+      pendingSubtitle.current = { commandId: nextId.current, sessionId: sessionIdRef.current, trackId: input.trackId };
+    }
     setCommand({ ...input, id: nextId.current } as Command);
   }, []);
 
@@ -201,8 +216,6 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     else begin(position.current > 0 ? position.current : undefined);
   }, [failure, playback.plan, send, begin, external]);
 
-  const plan = playback.target?.id === id && playback.target.kind === kind ? playback.plan : null;
-  const sessionId = plan?.sessionId ?? '';
   useEffect(() => {
     if (plan?.sourceFailure !== 'version_unavailable') return;
     const failure = `${sessionId}:${plan.revision}`;
@@ -214,6 +227,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     versionAttempt.current++;
     if (versionTimer.current) clearTimeout(versionTimer.current);
     setPendingVersionId(undefined); setVersionMessage('');
+    pendingAudio.current = null;
+    pendingSubtitle.current = null;
     return () => { versionAttempt.current++; if (versionTimer.current) clearTimeout(versionTimer.current); };
   }, [sessionId]);
   const switchVersion = useCallback((versionId: string) => {
@@ -261,7 +276,13 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   useEffect(() => {
     if (pendingQualityId && qualityReached(pendingQualityId, snapshot, plan)) setPendingQualityId(undefined);
   }, [pendingQualityId, snapshot, plan]);
-  useEffect(() => { if (playback.error) setPendingQualityId(undefined); }, [playback.error]);
+  useEffect(() => {
+    if (playback.error) {
+      setPendingQualityId(undefined);
+      pendingAudio.current = null;
+      pendingSubtitle.current = null;
+    }
+  }, [playback.error]);
 
   useEffect(() => {
     if (!sessionId || !resumePaused.current) return;
@@ -278,6 +299,21 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       if (belongs(next, plan)) {
         position.current = next.position;
         paused.current = next.state === 'paused';
+        if (pendingAudio.current && pendingAudio.current.sessionId === sessionId && !next.pendingAudioTrackId && next.audioTrackId === pendingAudio.current.trackId) {
+          const chosen = pendingAudio.current;
+          pendingAudio.current = null;
+          vela.playback.rememberTrack(chosen.sessionId, 'audio', chosen.trackId);
+        }
+        if (pendingSubtitle.current && pendingSubtitle.current.sessionId === sessionId && !next.pendingSubtitleTrackId) {
+          const activeSub = next.subtitleTrackId || null;
+          if (activeSub === pendingSubtitle.current.trackId && !next.subtitleError) {
+            const chosen = pendingSubtitle.current;
+            pendingSubtitle.current = null;
+            vela.playback.rememberTrack(chosen.sessionId, 'subtitle', chosen.trackId);
+          } else if (next.subtitleError) {
+            pendingSubtitle.current = null;
+          }
+        }
         const asleep = sleepRef.current;
         // The end came first: an end-of-item sleep has done its work (nothing follows), a timer has none left.
         if (asleep.mode !== 'off' && next.state === 'ended') setSleepState(AWAKE);
@@ -290,11 +326,15 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     },
     onError: error => {
       setPendingQualityId(undefined);
+      pendingAudio.current = null;
+      pendingSubtitle.current = null;
       if (error.kind === 'network' || error.kind === 'source') vela.playback.recover(sessionId);
       else setFailure(error);
     },
     onCommand: event => {
       if (!event.ok && event.id === pendingQuality.current) setPendingQualityId(undefined);
+      if (!event.ok && pendingAudio.current?.commandId === event.id) pendingAudio.current = null;
+      if (!event.ok && pendingSubtitle.current?.commandId === event.id) pendingSubtitle.current = null;
       if (!event.ok && event.failure) setRefused(event.failure.message);
     },
     onObservation: event => {

@@ -27,19 +27,19 @@ function heading(detail: DetailModel | undefined): string {
   return title.name;
 }
 
-function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?: string, channelId?: string, from?: string): PlaybackTarget {
+function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?: string, channelId?: string, from?: string, showId?: string): PlaybackTarget {
   if (kind === 'channel') return { kind: 'channel', id };
   // A programme from the channel's archive: ended (catch-up), or on air from its start.
   if (kind === 'programme' && channelId) return { kind: 'programme', id, channelId, ...(from === 'start' ? { from: 'start' as const } : {}) };
   if (kind === 'extra') return { kind: 'extra', id };
   if (kind === 'library-live' && libraryId) return { kind: 'library-live', id, libraryId, tab };
-  return { kind: 'title', id };
+  return { kind: 'title', id, ...(showId ? { showId } : {}) };
 }
 
 export default function Watch() {
-  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string }>();
+  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string; showId?: string }>();
   const { host, openTitle, store } = useVela();
-  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from]);
+  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from, showId), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId]);
   const live = useLiveContext();
   const liveView = useLiveView();
   // A channel's session is the live controller's: its plan, its refusal (or a retry on the
@@ -81,8 +81,8 @@ export default function Watch() {
   const next = useNextEpisode(target.kind === 'title' ? skin?.env.detail?.title[0] : undefined);
   const nextEpisode = useMemo<NextEpisode | null>(() => next ? {
     label: episodeLabel(next),
-    play: () => router.setParams({ id: next.id, kind: undefined, positionSeconds: undefined, mediaSourceId: undefined, audioTrackId: undefined, versionId: undefined }),
-  } : null, [next]);
+    play: () => router.setParams({ id: next.id, kind: undefined, positionSeconds: undefined, mediaSourceId: undefined, audioTrackId: undefined, versionId: undefined, showId: next.showId ?? showId }),
+  } : null, [next, showId]);
 
   const { stop } = session;
   const close = useCallback(() => {
