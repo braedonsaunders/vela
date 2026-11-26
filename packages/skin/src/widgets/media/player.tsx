@@ -288,8 +288,10 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   const sideBySide = nowPlayingSideBySide(m.width, m.height);
   const coverSize = sideBySide ? Math.min(480, m.height - 360, (m.width - m.gutter * 2) * 0.42) : Math.min(m.width - m.gutter * 2 - 24, m.height * 0.42, 420);
   const tint = item.accent || m.ui.accent;
+  // Android TV's artwork wash starts at the tinted gradient stop when no visualizer is showing.
+  const artworkWash = Platform.OS === 'android' && Platform.isTV && !onOpenVisualizer;
   // Keep the header legible over pale covers and the lightest visualizer frames.
-  const washTop = alpha(m.ui.page, onOpenVisualizer ? 0.82 : 0.72);
+  const washTop = artworkWash ? alpha(tint, 0.3) : alpha(m.ui.page, onOpenVisualizer ? 0.82 : 0.72);
   const parentId = item.media?.parent?.id;
   const chapterIndex = [...audio.chapters].reverse().find(c => c.startSeconds <= audio.positionSeconds);
   const chapterAt = chapterIndex ? audio.chapters.indexOf(chapterIndex) : -1;
@@ -383,7 +385,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
   return (
     <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: onOpenVisualizer ? 'transparent' : m.ui.page }} testID="now-playing" accessibilityViewIsModal accessibilityLabel={msg('media.player.nowPlaying')}>
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden',
-        backgroundColor: onOpenVisualizer ? 'transparent' : alpha(tint, 0.3) }}>
+        backgroundColor: onOpenVisualizer || artworkWash ? 'transparent' : alpha(tint, 0.3) }}>
         {/* Native image blur (expo-image on Android and iOS) stops far short of 90: the cover's own
             lettering showed through behind the title and transport. There the wash is the colour alone. */}
         {!onOpenVisualizer && item.poster && Platform.OS === 'web' ? <Image source={host.image(item.poster)} contentFit="cover" blurRadius={90} style={{ position: 'absolute', top: -120, left: -120, right: -120, bottom: -120, opacity: 0.5 } as never} /> : null}
