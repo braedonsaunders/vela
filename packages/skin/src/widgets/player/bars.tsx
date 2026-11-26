@@ -14,12 +14,15 @@ import { LiveDial, LiveMark, LiveMultiview, LiveStatusLine, LiveZap, type LiveWa
 import type { CommandInput, PlayerChromeState } from './context';
 import type { OverlaySwitch } from '../../surfaces/player';
 import type { PlayerLook } from './look';
-import { MenuPanel } from './menu';
+import { PHONE_CONTROL_GAP, PHONE_PLAY_WIDTH } from './phone-layout';
+import { MenuAction, MenuPanel } from './menu';
 import { AudioMenu, qualityMenuRows, SleepMenu, SpeedMenu, SubtitlesMenu, type MenuName } from './menus';
 import type { PlayerView } from './present';
 import { Scrubber } from './scrubber';
 import { Volume } from './volume';
 import type { Focusable } from '../../escape';
+import type { PlayerIconName } from './icons';
+import { useMultiview } from '../multiview/context';
 
 /** TV: focus to a control once the one it replaces has left the tree. */
 function focusLater(target: { current: Focusable | null }): void {
@@ -27,7 +30,7 @@ function focusLater(target: { current: Focusable | null }): void {
   requestAnimationFrame(() => target.current?.requestTVFocus?.());
 }
 
-export type Opened = MenuName | 'chapters' | null;
+export type Opened = MenuName | 'chapters' | 'more' | null;
 /** Where a TV chrome's focus lands as it comes up. */
 export type Reveal = 'toggle' | 'timeline';
 
@@ -60,17 +63,18 @@ interface TopProps {
   look: PlayerLook;
   title: string;
   visible: boolean;
+  bleed?: ViewStyle;
   onClose(): void;
 }
 
-export function TopBar({ look, title, visible, onClose }: TopProps) {
-  const fade = look.small ? 72 : look.size(140);
+export function TopBar({ look, title, visible, bleed, onClose }: TopProps) {
+  const fade = look.small ? (look.short ? 44 : 72) : look.size(140);
   return (
     <Animated.View pointerEvents={visible ? 'box-none' : 'none'} style={shownStyle(look, visible, -14)}>
       <LinearGradient
         colors={[look.scrim, look.scrim, clear(look.scrim)]}
         locations={[0, 0.55, 1]}
-        style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+        style={[{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }, bleed]}
         pointerEvents="none"
       />
       <FocusZone visible={visible}>
@@ -79,7 +83,7 @@ export function TopBar({ look, title, visible, onClose }: TopProps) {
             flexDirection: 'row',
             alignItems: 'center',
             gap: look.size(look.small ? 14 : 20),
-            paddingTop: look.small ? 18 : look.size(30),
+            paddingTop: look.small ? (look.short ? 4 : 18) : look.size(30),
             paddingHorizontal: look.gutter,
             paddingBottom: fade,
           }}
@@ -126,6 +130,7 @@ interface BottomProps {
   opened: Opened;
   info: boolean;
   menuHeight: number;
+  bleed?: ViewStyle;
   send(command: CommandInput): void;
   seek(seconds: number): void;
   seekBy(seconds: number): void;
@@ -143,15 +148,17 @@ interface BottomProps {
 /** The chrome's button for a `toggle` player overlay (surfaces/player.tsx). */
 export interface TickerToggle { available: boolean; ticker: boolean; toggleTicker(): void; /** The overlay's name (its setting's label). */ label: string }
 
+export const bottomFade = (look: PlayerLook) => look.small ? (look.short ? 48 : 80) : look.size(150);
+
 export function BottomBar(props: BottomProps) {
-  const { look, state, view, visible, blocked, opened } = props;
-  const fade = look.small ? 80 : look.size(150);
+  const { look, state, view, visible, blocked, opened, bleed } = props;
+  const fade = bottomFade(look);
   return (
     <Animated.View pointerEvents={visible ? 'box-none' : 'none'} style={shownStyle(look, visible, 18)}>
       <LinearGradient
         colors={[clear(look.scrim), look.scrim, look.scrim]}
         locations={[0, 0.45, 1]}
-        style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+        style={[{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }, bleed]}
         pointerEvents="none"
       />
       <FocusZone visible={visible}>
@@ -159,7 +166,7 @@ export function BottomBar(props: BottomProps) {
           style={{
             paddingTop: fade,
             paddingHorizontal: look.gutter,
-            paddingBottom: look.small ? 18 : look.size(30),
+            paddingBottom: look.small ? (look.short ? 6 : 18) : look.size(30),
             gap: look.size(look.small ? 10 : 14),
           }}
         >
@@ -168,13 +175,15 @@ export function BottomBar(props: BottomProps) {
               {state.actionError}
             </Text>
           ) : null}
-          {Platform.OS === 'web' && opened === 'chapters' && view.chapters.length ? (
+          {Platform.OS === 'web' && !look.small && opened === 'chapters' && view.chapters.length ? (
             <ChapterStrip look={look} view={view} disabled={blocked} onSeek={props.seek} />
           ) : null}
           {props.live.live ? (
             <View style={{ alignItems: look.small || props.live.window?.seekable ? 'stretch' : 'flex-start', gap: look.size(10) }}>
               <LiveDial channelId={props.live.channelId} small={look.small} still={look.still} />
               <LiveStatusLine look={look} watch={props.live} />
+              {look.small && !props.live.window?.seekable && !props.live.archive && props.live.behind <= 0
+                ? <LiveMark look={look} watch={props.live} /> : null}
               {props.live.window?.seekable ? <LiveTimeline {...props} /> : null}
             </View>
           ) : (
@@ -243,32 +252,33 @@ function LiveTimeline({ look, view, blocked, seek, onActive, visible, reveal, st
   );
 }
 
-function Controls({
-  state,
-  look,
-  view,
-  blocked,
-  opened,
-  info,
-  menuHeight,
-  send,
-  seekBy,
-  seek,
-  toggle,
-  closeMenu,
-  toggleInfo,
-  onActive,
-  live,
-  visible,
-  reveal,
-  overlay,
-  overlaySwitches,
-}: BottomProps) {
+function Controls(props: BottomProps) {
+  const {
+    state,
+    look,
+    view,
+    blocked,
+    opened,
+    info,
+    menuHeight,
+    send,
+    seekBy,
+    seek,
+    toggle,
+    closeMenu,
+    toggleInfo,
+    onActive,
+    live,
+    visible,
+    reveal,
+    overlay,
+    overlaySwitches,
+  } = props;
   // A channel plays at the live edge: channel up and down and the LIVE mark take the place of
   // the ten-second steps; no speed, no chapters. A rewind window brings the steps back.
   const timeline = !live.live;
   const rewind = live.live && !!live.window?.seekable;
-  const gap = look.size(look.small ? 4 : 8);
+  const gap = look.size(look.small ? PHONE_CONTROL_GAP : 8);
   const anchorRef = useRef<ComponentRef<typeof View>>(null);
   // Back to live leaves as it takes the picture to the edge (the LIVE mark is not a control): focus
   // goes to the play toggle, not wherever the engine finds next (the top bar's Close on Android TV).
@@ -280,10 +290,13 @@ function Controls({
     speed: msg('player.speed'),
     sleep: msg('player.sleep'),
     chapters: msg('ui.chapters'),
+    more: msg('ui.playbackSettings'),
   };
-  const menu = opened === 'chapters' && Platform.OS === 'web' ? null : opened;
+  const menu = opened === 'chapters' && Platform.OS === 'web' && !look.small ? null : opened;
   const contents = (name: Exclude<Opened, null>): ReactNode => {
     switch (name) {
+      case 'more':
+        return <PhoneActions {...props} timeline={timeline} rewind={rewind} />;
       case 'chapters':
         return <ChapterStrip look={look} view={view} disabled={blocked} onSeek={seek} />;
       case 'subtitles':
@@ -302,50 +315,77 @@ function Controls({
         return state.sleep ? <SleepMenu look={look} sleep={state.sleep} episode={!!state.episode} /> : null;
     }
   };
-  // Phones put the screening controls on a line of their own when the transport leaves no room.
-  const cluster: ViewStyle = look.small
-    ? { flexGrow: 1, flexDirection: 'row', justifyContent: 'flex-end', gap }
-    : { flex: 1, minWidth: 0, flexDirection: 'row', justifyContent: 'flex-end', gap };
-  // Each TV button is a native focus destination. The play toggle claims focus once on
-  // reveal/readiness; menus and position reports never reclaim it.
-  const Row = View;
-  return (
-    <Row ref={anchorRef} collapsable={false}
-      style={{ flexDirection: 'row', flexWrap: look.small ? 'wrap' : 'nowrap', alignItems: 'center', gap }}
-    >
+  const cluster: ViewStyle = { flex: 1, minWidth: 0, flexDirection: 'row', justifyContent: 'flex-end', gap };
+  const panel = menu ? (
+    <MenuPanel look={look} name={names[menu]} maxHeight={menuHeight} wide={menu === 'quality' && !!state.plan?.versions?.length} anchorRef={anchorRef} onClose={closeMenu}>
+      {contents(menu)}
+    </MenuPanel>
+  ) : null;
+  // Each TV button is a native focus destination. The play toggle claims focus once on reveal.
+  const play = (
+    <ChromeButton
+      key={Platform.isTV && visible && !blocked ? 'focus-ready' : 'inactive'}
+      look={look}
+      primary
+      preferred={Platform.isTV && visible && !blocked && (reveal === 'toggle' || (!timeline && !rewind))}
+      icon={view.playing ? 'pause' : 'play'}
+      label={view.ended ? msg('ui.finished') : view.playing ? msg('ui.pause') : msg('ui.play')}
+      disabled={blocked}
+      size={look.small ? PHONE_PLAY_WIDTH : 52}
+      testID="player-toggle"
+      buttonRef={toggleRef}
+      onPress={() => { if (view.playing) live.leftLive(); send({ type: view.playing ? 'pause' : 'play' }); }}
+    />
+  );
+  const steps = (
+    <>
       <ChromeButton
-        key={Platform.isTV && visible && !blocked ? 'focus-ready' : 'inactive'}
         look={look}
-        primary
-        preferred={Platform.isTV && visible && !blocked && (reveal === 'toggle' || (!timeline && !rewind))}
-        icon={view.playing ? 'pause' : 'play'}
-        label={view.ended ? msg('ui.finished') : view.playing ? msg('ui.pause') : msg('ui.play')}
+        icon="skipBack"
+        label={msg('ui.back10Seconds')}
         disabled={blocked}
-        size={look.small ? 48 : 52}
-        testID="player-toggle"
-        buttonRef={toggleRef}
-        onPress={() => { if (view.playing) live.leftLive(); send({ type: view.playing ? 'pause' : 'play' }); }}
+        testID="player-back-10"
+        onPress={() => seekBy(-10)}
       />
-      {timeline || rewind ? (
-        <>
-          <ChromeButton
-            look={look}
-            icon="skipBack"
-            label={msg('ui.back10Seconds')}
-            disabled={blocked}
-            testID="player-back-10"
-            onPress={() => seekBy(-10)}
-          />
-          <ChromeButton
-            look={look}
-            icon="skipForward"
-            label={msg('ui.forward10Seconds')}
-            disabled={blocked || (rewind ? !live.window?.delayed && !live.window?.startOver : view.duration <= 0)}
-            testID="player-forward-10"
-            onPress={() => seekBy(10)}
-          />
-        </>
-      ) : null}
+      <ChromeButton
+        look={look}
+        icon="skipForward"
+        label={msg('ui.forward10Seconds')}
+        disabled={blocked || (rewind ? !live.window?.delayed && !live.window?.startOver : view.duration <= 0)}
+        testID="player-forward-10"
+        onPress={() => seekBy(10)}
+      />
+    </>
+  );
+  const captions = (
+    <ChromeButton look={look} icon={view.subtitleId ? 'captionsOn' : 'captions'}
+      compact label={names.subtitles} selected={opened === 'subtitles'}
+      testID="player-cc-button" onPress={() => toggle('subtitles')} />
+  );
+  const volume = <Volume look={look} view={view} send={send} onActive={onActive} />;
+  const channels = <LiveZap look={look} watch={live} disabled={!live.canZap} />;
+  if (look.small) {
+    return (
+      <View ref={anchorRef} collapsable={false} testID="player-phone-controls"
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap }}>
+          {play}
+          {look.showSteps ? (timeline || rewind ? steps : channels) : null}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap }}>
+          {volume}
+          {captions}
+          <ChromeButton look={look} icon="more" compact label={names.more} selected={opened === 'more'}
+            testID="player-more-button" onPress={() => toggle('more')} />
+        </View>
+        {panel}
+      </View>
+    );
+  }
+  return (
+    <View ref={anchorRef} collapsable={false} style={{ flexDirection: 'row', alignItems: 'center', gap }}>
+      {play}
+      {timeline || rewind ? steps : null}
       {timeline ? <ChromeButton look={look} icon="restart" label={msg('ui.startOver')}
         disabled={blocked} testID="player-start-over" onPress={() => seek(0)} /> : null}
       {/* An episode's next one, at any time, and after it ends (where it takes TV focus). */}
@@ -356,33 +396,31 @@ function Controls({
         disabled={blocked} testID="player-start-over" onPress={() => seek(live.window!.start)} /> : null}
       {!timeline && !live.archive && live.startOver ? <ChromeButton look={look} icon="restart" text={msg('catchUp.startOver')} label={msg('catchUp.startOver')}
         disabled={blocked} testID="player-start-over" onPress={live.startOver} /> : null}
-      {timeline ? null : <LiveZap look={look} watch={live} disabled={!live.canZap} />}
+      {timeline ? null : channels}
       {timeline || live.archive ? null : <LiveMultiview look={look} watch={live} />}
-      <Volume look={look} view={view} send={send} onActive={onActive} />
+      {volume}
       {timeline && live.archive !== 'catchUp' ? null : <LiveMark look={look} watch={live} onLeave={() => focusLater(toggleRef)} />}
       <View style={cluster}>
-        {look.small ? null : (
-          <Text
-            numberOfLines={1}
-            testID="player-quality"
-            style={[
-              look.text(11, 600, look.inkSecondary),
-              {
-                alignSelf: 'center',
-                flexShrink: 1,
-                letterSpacing: look.size(0.4),
-                paddingHorizontal: look.size(10),
-                paddingVertical: look.size(4),
-                borderWidth: 1,
-                borderColor: look.glassEdge,
-                borderRadius: look.size(6),
-                marginRight: look.size(6),
-              },
-            ]}
-          >
-            {view.quality || view.path}
-          </Text>
-        )}
+        <Text
+          numberOfLines={1}
+          testID="player-quality"
+          style={[
+            look.text(11, 600, look.inkSecondary),
+            {
+              alignSelf: 'center',
+              flexShrink: 1,
+              letterSpacing: look.size(0.4),
+              paddingHorizontal: look.size(10),
+              paddingVertical: look.size(4),
+              borderWidth: 1,
+              borderColor: look.glassEdge,
+              borderRadius: look.size(6),
+              marginRight: look.size(6),
+            },
+          ]}
+        >
+          {view.quality || view.path}
+        </Text>
         {!timeline && overlay?.available ? (
           <ChromeButton
             look={look}
@@ -394,15 +432,7 @@ function Controls({
             onPress={overlay.toggleTicker}
           />
         ) : null}
-        <ChromeButton
-          look={look}
-          icon={view.subtitleId ? 'captionsOn' : 'captions'}
-          compact
-          label={names.subtitles}
-          selected={opened === 'subtitles'}
-          testID="player-cc-button"
-          onPress={() => toggle('subtitles')}
-        />
+        {captions}
         <ChromeButton
           look={look}
           icon="audio"
@@ -485,11 +515,58 @@ function Controls({
           />
         ) : null}
       </View>
-      {menu ? (
-        <MenuPanel look={look} name={names[menu]} maxHeight={menuHeight} wide={menu === 'quality' && !!state.plan?.versions?.length} anchorRef={anchorRef} onClose={closeMenu}>
-          {contents(menu)}
-        </MenuPanel>
-      ) : null}
-    </Row>
+      {panel}
+    </View>
+  );
+}
+
+function PhoneActions({ look, state, view, blocked, live, overlay, seek, seekBy, send, toggle, closeMenu, timeline, rewind }: BottomProps & {
+  timeline: boolean;
+  rewind: boolean;
+}) {
+  const multiview = useMultiview();
+  const action = (icon: PlayerIconName, label: string, testID: string, onPress: () => void, disabled = false) => (
+    <MenuAction look={look} icon={icon} label={label} testID={testID} disabled={disabled}
+      onPress={() => { closeMenu(); onPress(); }} />
+  );
+  const submenu = (icon: PlayerIconName, label: string, id: Exclude<Opened, null>, testID: string, disabled = false) => (
+    <MenuAction look={look} icon={icon} label={label} testID={testID} disabled={disabled} onPress={() => toggle(id)} />
+  );
+  const atStart = live.archive === 'startOver' && live.window?.start;
+  return (
+    <>
+      {!look.showSteps && (timeline || rewind) ? <>
+        {action('skipBack', msg('ui.back10Seconds'), 'player-back-10', () => seekBy(-10), blocked)}
+        {action('skipForward', msg('ui.forward10Seconds'), 'player-forward-10', () => seekBy(10),
+          blocked || (rewind ? !live.window?.delayed && !live.window?.startOver : view.duration <= 0))}
+      </> : null}
+      {!timeline && (rewind || !look.showSteps) ? <>
+        {action('channelUp', msg('live.channelUp'), 'player-channel-up', () => live.zap(-1), !live.canZap)}
+        {action('channelDown', msg('live.channelDown'), 'player-channel-down', () => live.zap(1), !live.canZap)}
+      </> : null}
+      {timeline || typeof atStart === 'number' ? action('restart', msg('ui.startOver'), 'player-start-over',
+        () => seek(typeof atStart === 'number' ? atStart : 0), blocked) : null}
+      {!timeline && !live.archive && live.startOver ? action('restart', msg('catchUp.startOver'), 'player-start-over', live.startOver, blocked) : null}
+      {timeline && state.nextEpisode ? action('next', msg('player.nextEpisodeNamed', { name: state.nextEpisode.label }),
+        'player-next-episode', state.nextEpisode.play) : null}
+      {(live.live || live.archive === 'catchUp') && (live.behind > 0 || live.window?.delayed || live.archive)
+        ? action('live', msg('catchUp.backToLive'), 'player-go-live', live.backToLive) : null}
+      {!timeline && !live.archive && multiview && live.channelId ? action('tiles', msg('multiview.add'), 'player-multiview',
+        () => multiview.open(live.channelId, { replace: true })) : null}
+      {!timeline && overlay?.available ? action(overlay.ticker ? 'tickerOn' : 'ticker',
+        msg(overlay.ticker ? 'player.hideOverlay' : 'player.showOverlay', { name: overlay.label }), 'player-ticker-button', overlay.toggleTicker) : null}
+      {submenu('audio', msg('ui.audio'), 'audio', 'player-audio-button')}
+      {submenu('quality', msg('ui.quality'), 'quality', 'player-quality-button')}
+      {timeline ? <>
+        {submenu('speed', msg('player.speed'), 'speed', 'player-speed-button')}
+        {submenu('chapters', msg('ui.chapters'), 'chapters', 'player-chapters-button', !view.chapters.length)}
+        {state.sleep ? submenu('moon', msg('player.sleep'), 'sleep', 'player-sleep-button') : null}
+      </> : null}
+      {state.picture ? action(state.picture.fill ? 'pictureFill' : 'pictureFit',
+        msg(state.picture.fill ? 'player.picture.fit' : 'player.picture.fill'), 'player-picture-button',
+        () => state.picture?.set(!state.picture.fill)) : null}
+      {view.pip ? action('pip', msg('ui.pictureInPicture'), 'player-pip-button', () => send({ type: 'pip' })) : null}
+      {view.fullscreen ? action('fullscreen', msg('ui.fullscreen'), 'player-fullscreen-button', () => send({ type: 'fullscreen' })) : null}
+    </>
   );
 }

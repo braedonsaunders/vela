@@ -36,12 +36,13 @@ export interface LiveSessionOwner {
   updatePlan(plan: PlaybackPlan): void;
 }
 
-/** Phones and tablets choose whether the picture fits the screen or fills it; TVs and the web fit. */
+/** Native phones and tablets offer both picture modes. The watch route opts in on compact web. */
 const PICTURE_CHOICE = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
 
 /** `shownAway`: whether the player's picture stays on screen while the app is in the background (Android's
  * picture-in-picture window), read as the app leaves the foreground; the watch then goes on. */
-export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner, shownAway?: () => boolean): PlaybackSession {
+export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOwner, shownAway?: () => boolean, webPicture = false): PlaybackSession {
+  const pictureChoice = PICTURE_CHOICE || webPicture;
   const vela = useVela();
   const playback = useVelaState(state => state.playback);
   const settings = useVelaState(state => state.playerSettings);
@@ -271,7 +272,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const view: VelaPlayerProps = {
     plan: plan ?? undefined,
     command,
-    videoFill: PICTURE_CHOICE && settings.picture === 'fill',
+    videoFill: pictureChoice && settings.picture === 'fill',
     onSnapshot: next => {
       setSnapshot(next);
       if (belongs(next, plan)) {
@@ -338,7 +339,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     [settings.streaming, settings.metered, setStreaming]);
   const sleepTimer = useMemo(() => ({ value: sleep, set: setSleep }), [sleep, setSleep]);
   const setPicture = useCallback((fill: boolean) => vela.playerSettings.setPicture(fill ? 'fill' : 'fit'), [vela]);
-  const picture = useMemo(() => (PICTURE_CHOICE ? { fill: settings.picture === 'fill', set: setPicture } : undefined), [settings.picture, setPicture]);
+  const picture = useMemo(() => (pictureChoice ? { fill: settings.picture === 'fill', set: setPicture } : undefined), [pictureChoice, settings.picture, setPicture]);
 
   const chromeTarget: ChromeTarget = target.kind === 'programme' ? { kind, id, channelId: target.channelId, ...(target.from ? { from: target.from } : {}) } : { kind, id };
   const owned = owner && !ownedPlan ? owner : undefined;
