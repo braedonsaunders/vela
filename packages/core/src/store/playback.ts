@@ -139,10 +139,10 @@ export class Playback {
   private readonly stoppedSessions: string[] = [];
   /**
    * Sessions this client opened and has not finished stopping, each with the adapter that opened it
-   * and its latest plan: what a page being unloaded stops (`stopOnUnload`). One leaves once its stop
-   * was answered (or failed), or the server ended it. An attached session is its owner's, never held.
+   * and its latest plan: what a page being unloaded stops (`stopOnUnload`). A failed stop stays
+   * eligible for cleanup. An attached session is its owner's, never held.
    */
-  private readonly held = new Map<string, { adapter: ServerAdapter; plan: V.PlaybackPlan }>();
+  private readonly held = new Map<string, { adapter: ServerAdapter; plan: V.PlaybackPlan; epoch: number; owner?: { connection: Connection; viewer: string } }>();
   /** Progress of the current session (stall.ts): when it is stalled, and how many restarts it has had. */
   private stall: StallWatch | undefined;
   /**
@@ -195,11 +195,15 @@ export class Playback {
     private readonly seriesTracks?: SeriesTracks,
   ) {
     this.trickplay.subscribe(() => this.trickplayChanged());
-    session.onReset(() => {
-      this.end();
-      this.watch = undefined;
+    session.onReset(kind => {
+      const plan = this.box.get().playback.plan ?? this.abandoned;
+      if (kind === 'server' && !this.externalId && plan && this.held.has(plan.sessionId)) void this.stop();
+      else {
+        this.end();
+        this.watch = undefined;
+        this.box.update('playback', () => initialPlayback);
+      }
       this.media = undefined;
-      this.box.update('playback', () => initialPlayback);
     });
   }
 
@@ -267,8 +271,9 @@ export class Playback {
       const api = connection.adapter;
       await this.session.negotiate(api);
       if (this.run !== run) return;
+      viewerId = (await this.session.tokens?.(connection))?.viewer.id ?? '';
+      if (this.run !== run) return;
       if (this.seriesTracks && target.kind === 'title' && !target.audio) {
-        viewerId = (await this.session.tokens?.(connection))?.viewer.id ?? '';
         initialShowId = target.showId || this.cachedShowId(target.id);
         const serverId = connection.record?.id ?? '';
         if (!this.recovering && !initialShowId && serverId && viewerId && this.seriesTracks.hasForViewer(serverId, viewerId)) {
@@ -323,7 +328,7 @@ export class Playback {
       this.startedDead(intent, plan, attempt, preparation);
       return;
     }
-    this.hold(connection.adapter, plan);
+    this.hold(connection.adapter, plan, viewerId ? { connection, viewer: viewerId } : undefined);
     // A replacement session that already carries the viewer's tracks needs no command, and a live
     // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
     // refuse track commands. Only choices that name a track in the new plan are carried.
@@ -339,7 +344,7 @@ export class Playback {
         plan = this.withLocalTracks(plan);
       } else {
         try {
-          plan = connection.plan(await this.send(connection, plan.sessionId, {
+          plan = connection.plan(await this.send(connection.adapter, plan.sessionId, {
             kind: 'tracks', audioTrackId: audio, subtitleTrackId: subtitle,
             sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
             idempotencyKey: this.session.key(),
@@ -640,7 +645,7 @@ export class Playback {
         try {
           const connection = await this.session.ready();
           if (this.run !== intent.run) return;
-          await this.send(connection, old.sessionId, { kind: 'stop', sourceGeneration: old.sourceGeneration,
+          await this.send(connection.adapter, old.sessionId, { kind: 'stop', sourceGeneration: old.sourceGeneration,
             seekGeneration: old.seekGeneration, idempotencyKey: `recover-stop-${old.sessionId}` });
           this.held.delete(old.sessionId);
         } catch { /* Missing sessions are already released; retry cleanup after connectivity returns. */ }
@@ -668,7 +673,7 @@ export class Playback {
     },
     command: async (sessionId: string, command: V.SessionCommand): Promise<V.PlaybackPlan> => {
       const connection = await this.session.ready();
-      const plan = connection.plan(await this.send(connection, sessionId, command));
+      const plan = connection.plan(await this.send(connection.adapter, sessionId, command));
       if (command.kind === 'stop') this.held.delete(sessionId);
       else this.refreshHeld(plan);
       return plan;
@@ -751,7 +756,7 @@ export class Playback {
     };
     try {
       const connection = await this.session.ready();
-      const plan = await this.send(connection, sessionId, command, origin);
+      const plan = await this.send(connection.adapter, sessionId, command, origin);
       answered(plan);
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
         let nextPlan = connection.plan(plan);
@@ -802,8 +807,8 @@ export class Playback {
     return next;
   }
 
-  private async send(connection: Connection, sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<V.PlaybackPlan> {
-    const api = connection.adapter;
+  private async send(api: ServerAdapter, sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer',
+    canRetry?: () => Promise<boolean>): Promise<V.PlaybackPlan> {
     try {
       return await sendCommand(api, sessionId, command);
     } catch (error) {
@@ -818,6 +823,7 @@ export class Playback {
       const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks'].includes(command.kind);
       const wanted = command.kind === 'switch' && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
       if ((!absolute && !wanted) || !generations) throw error;
+      if (canRetry && !(await canRetry())) throw error;
       return sendCommand(api, sessionId, { ...command, ...generations, idempotencyKey: this.session.key() });
     }
   }
@@ -924,7 +930,14 @@ export class Playback {
     const ended = observation.state === 'ended';
     this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
     // Known as in flight at once, so a stop issued right after (an advance, Stop) waits for it.
-    const sent = this.session.ready().then(connection => connection.adapter.reportObservation(sessionId, observation));
+    const held = this.held.get(sessionId);
+    const sent = (async () => {
+      if (held?.owner && (await this.session.tokens(held.owner.connection))?.viewer.id !== held.owner.viewer) {
+        throw new Error('Playback viewer changed');
+      }
+      const adapter = held?.adapter ?? (await this.session.ready()).adapter;
+      return adapter.reportObservation(sessionId, observation);
+    })();
     this.reporting = sent.catch(() => undefined);
     // A session may go on past the player's end (a multi-part title's next part): show its plan at once.
     if (ended) void sent.then(() => this.followNow?.(sessionId), () => undefined);
@@ -1080,32 +1093,46 @@ export class Playback {
 
   /** Release a session that played, then publish the resume state the server kept for it. */
   private async finish(plan: V.PlaybackPlan, target: PlaybackTarget | null, phase: PlaybackPhase, last: LastPosition | undefined, reported: Promise<V.Ack | undefined>, handedOver = false): Promise<void> {
+    const held = this.held.get(plan.sessionId);
+    const epoch = held?.epoch ?? this.session.epoch;
+    const release = () => {
+      if (this.held.get(plan.sessionId) === held) this.held.delete(plan.sessionId);
+    };
+    const owner = held?.owner;
+    let viewerChanged = false;
+    const canStop = owner && (async () => {
+      if ((await this.session.tokens(owner.connection))?.viewer.id === owner.viewer) return true;
+      viewerChanged = true;
+      release();
+      return false;
+    });
     let confirmedPosition: number | undefined;
     try {
+      const adapter = held?.adapter ?? (await this.session.ready()).adapter;
       const ack = await reported;
-      const connection = await this.session.ready();
+      if (canStop && !(await canStop())) return;
       const endedOnHandover = handedOver && last?.ended && ack?.accepted;
       if (!endedOnHandover) {
         this.stopped(plan.sessionId);
-        await this.send(connection, plan.sessionId, {
+        await this.send(adapter, plan.sessionId, {
           kind: 'stop',
           sourceGeneration: plan.sourceGeneration,
           seekGeneration: plan.seekGeneration,
           idempotencyKey: `stop-${plan.sessionId}-${plan.sourceGeneration}-${plan.seekGeneration}`,
-        });
+        }, 'viewer', canStop);
       }
-      this.held.delete(plan.sessionId);
+      release();
       const titleId = plan.titleId ?? (target?.kind === 'title' ? target.id : '');
-      if (titleId && plan.purpose !== 'preview') {
+      if (epoch === this.session.epoch && titleId && plan.purpose !== 'preview') {
         // Some servers return the raw session cursor even though their resume policy drops
         // it. Read the persisted watch state before publishing any resume UI.
-        const detail = await connection.adapter.detail(titleId, true);
+        const detail = await adapter.detail(titleId, true);
         confirmedPosition = detail.title.watch?.positionSeconds;
       }
     } catch {
       // Keep a failed stop eligible for pagehide cleanup.
     }
-    if (phase !== 'ended') this.afterWatching(plan, target, confirmedPosition, last, reported);
+    if (!viewerChanged && epoch === this.session.epoch && phase !== 'ended') this.afterWatching(plan, target, confirmedPosition, last, reported);
   }
 
   /**
@@ -1123,7 +1150,8 @@ export class Playback {
     // 5%). Publish only its answer, never a local position that will immediately disappear.
     if (confirmedPosition !== undefined) this.watched(watched);
     const media = target?.kind === 'title' ? target.media : undefined;
-    void reported.then(() => this.reconcile(watched, media));
+    const epoch = this.session.epoch;
+    void reported.then(() => { if (epoch === this.session.epoch) this.reconcile(watched, media); });
   }
 
   private end(): void {
@@ -1277,8 +1305,8 @@ export class Playback {
   }
 
   /** A session this client opened, held until its stop is answered (`held`). */
-  private hold(adapter: ServerAdapter, plan: V.PlaybackPlan): void {
-    this.held.set(plan.sessionId, { adapter, plan });
+  private hold(adapter: ServerAdapter, plan: V.PlaybackPlan, owner?: { connection: Connection; viewer: string }): void {
+    this.held.set(plan.sessionId, { adapter, plan, epoch: this.session.epoch, owner });
   }
 
   /** A held session's newer plan (its generations, or the server ending it) replaces the one held. */
