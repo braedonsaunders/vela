@@ -111,11 +111,20 @@ export async function loadSession(context: HostContext, session: PlaybackSession
     session.seekGeneration >= pending.seek &&
     session.seekGeneration <= pending.seek + 1 &&
     (session.sourceGeneration > pending.source || session.seekGeneration > pending.seek);
-  const position = handoff ? Math.max(pending.position, readPosition(context)) : (session.position ?? 0);
+  const newSession = session.id !== context.session.current?.id;
+  const initialLiveSeek = newSession && session.timeshift && (session.seekGeneration ?? 0) > 0;
+  const at = handoff ? Math.max(pending.position, readPosition(context)) : (session.position ?? 0);
+  // A recovered Go live plan can name the published edge itself. Join with enough media to play.
+  const position = initialLiveSeek && session.liveEdge !== undefined && at >= session.liveEdge
+    ? Math.max(session.liveWindowStart ?? 0, session.liveEdge - context.live.targetSeconds)
+    : at;
   const recovery = !!handoff && pending.recovery;
   context.session.pendingSwitch = undefined;
   context.session.droppedSwitch = undefined;
-  if (session.id !== context.session.current?.id) context.session.pendingSeek = undefined;
+  if (newSession) {
+    // A replacement timeshift session can arrive with its initial seek already authorized.
+    context.session.pendingSeek = initialLiveSeek ? { position, startedAt: performance.now(), authorized: true } : undefined;
+  }
   else if (context.session.pendingSeek && session.seekGeneration !== context.session.controller.seek)
     context.session.pendingSeek = {
       ...context.session.pendingSeek,

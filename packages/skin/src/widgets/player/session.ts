@@ -10,7 +10,7 @@ import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
-import { belongs, qualityReached, restartAt, viewCommand } from './present';
+import { belongs, qualityReached, restartAt } from './present';
 import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
@@ -51,9 +51,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const [failure, setFailure] = useState<Failure | null>(null);
   const [refused, setRefused] = useState('');
   // A quiet (lab or development) build starts muted: the view takes this as its first command.
-  // The latest command and the session it was sent on, set together so no render pairs one with the other's successor.
-  const [sent, setSent] = useState<{ command: Command | undefined; on: string }>(() => ({ command: quietPlayback() ? { id: 1, type: 'mute', muted: true } as Command : undefined, on: '' }));
+  const [command, setCommand] = useState<Command | undefined>(() => (quietPlayback() ? { id: 1, type: 'mute', muted: true } as Command : undefined));
   const nextId = useRef(quietPlayback() ? 1 : 0);
+  const commandSession = useRef('');
   const pendingQuality = useRef(0);
   const [pendingQualityId, setPendingQualityId] = useState<string>();
   /** The viewer's quality pick awaiting the engine, read synchronously when the engine asks the server. */
@@ -163,11 +163,11 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const restarted = useRef('');
   const resumePaused = useRef(false);
   const startOver = useCallback(
-    (gone: string) => {
+    (gone: string, livePosition?: number) => {
       if (restarted.current === gone) return;
       restarted.current = gone;
       resumePaused.current = paused.current;
-      vela.playback.recover(gone);
+      vela.playback.recover(gone, undefined, livePosition);
     },
     [vela],
   );
@@ -190,7 +190,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
         void vela.playback.liveTransport(current.sessionId, transport).then(accepted => {
           if (!accepted || current.sessionId !== sessionIdRef.current || transport.kind === 'seek') return;
           viewerPaused.current = transport.kind === 'pause';
-          setSent({ command: { id: ++nextId.current, type: viewerPaused.current ? 'pause' : 'play' }, on: current.sessionId });
+          commandSession.current = current.sessionId;
+          setCommand({ id: ++nextId.current, type: viewerPaused.current ? 'pause' : 'play' });
         });
         return;
       }
@@ -205,7 +206,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     } else if (input.type === 'subtitle' && sessionIdRef.current) {
       pendingSubtitle.current = { commandId: nextId.current, sessionId: sessionIdRef.current, trackId: input.trackId };
     }
-    setSent({ command: { ...input, id: nextId.current } as Command, on: sessionIdRef.current });
+    commandSession.current = sessionIdRef.current;
+    setCommand({ ...input, id: nextId.current } as Command);
   }, [vela]);
 
   // The sleep timer (core sleep.ts, as spoken audio has it): an ordinary pause after some minutes, or at
@@ -313,7 +315,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
 
   const view: VelaPlayerProps = {
     plan: plan ?? undefined,
-    command: viewCommand(sent.command, sent.on, sessionId, kind),
+    // A queued transport command belongs to the engine that received it.
+    command: command && ['play', 'pause', 'seek', 'seekBy', 'catchUp'].includes(command.type) && commandSession.current !== sessionId ? undefined : command,
     videoFill: pictureChoice && settings.picture === 'fill',
     onSnapshot: next => {
       setSnapshot(next);
@@ -386,7 +389,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
         const held = Number.isFinite(event.positionSeconds) ? Math.max(0, event.positionSeconds!) : position.current;
         position.current = held;
         void vela.playback.originalLost(event.sessionId, held, event.sourceGeneration).then(result => {
-          if (result === 'gone') startOver(event.sessionId);
+          if (result === 'gone') startOver(event.sessionId, held);
         });
         return;
       }

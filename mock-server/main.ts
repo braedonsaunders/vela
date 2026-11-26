@@ -1297,6 +1297,16 @@ async function dispatch(req: Request): Promise<Response> {
       }
       return json(revised.map(s => ({ sessionId: s.plan.sessionId, revision: s.plan.revision, sourceGeneration: s.plan.sourceGeneration })));
     }
+    // A dropped connection leaves the watch intact. Expiry also makes its next snapshot read return 404.
+    const sessionFault = /^\/__admin\/sessions\/([^/]+)\/(drop-events|expire)$/.exec(url.pathname);
+    if (req.method === 'POST' && sessionFault) {
+      const session = sessions.get(sessionFault[1]!);
+      const expired = !!session && sessionFault[2] === 'expire';
+      if (expired) session.expires = Date.now();
+      const listeners = [...(session?.listeners.values() ?? [])];
+      for (const disconnect of listeners) disconnect();
+      return json({ dropped: listeners.length, expired });
+    }
     if (req.method === 'GET' && url.pathname === '/__admin/catch-up-fixture') return json(archiveFixture);
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; if ('refreshAbandonMs' in data) { abandonedRefreshKeys.clear(); refreshAbandonArmed = faults.refreshAbandonMs > 0; } return json(faults); }

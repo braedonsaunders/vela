@@ -2,9 +2,9 @@
 // clock, the timeline, the choosable tracks, qualities, speeds and chapters, and the playback
 // facts for the info card. Pure: no React, no clock. A value the engine has not reported stays
 // empty rather than estimated.
-import { msg, number, playingRelease, second, type PlaybackTarget } from '@vela/core';
+import { msg, number, playingRelease, second } from '@vela/core';
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../modules/vela-player/web/engine/video-info';
-import type { Command, PlaybackPlan, Snapshot } from '@vela/player-api';
+import type { PlaybackPlan, Snapshot } from '@vela/player-api';
 import { formatLines, type FormatLines } from './format';
 
 type Path = PlaybackPlan['paths'][number];
@@ -409,13 +409,6 @@ export function belongs(snapshot: Snapshot | null, plan: PlaybackPlan | null): s
     snapshot.sourceGeneration === plan.sourceGeneration &&
     snapshot.seekGeneration === plan.seekGeneration
   );
-}
-
-/** The command a view is handed: a seek names a place on the session it was sent on (`sentOn`), so a view
- * mounted for a title's replacement session, which opens where the viewer was, does not replay it there.
- * An archived programme's or an extra's replacement does not open there, so it is still handed the seek. */
-export function viewCommand(command: Command | undefined, sentOn: string, sessionId: string, kind: PlaybackTarget['kind']): Command | undefined {
-  return command && (command.type === 'seek' || command.type === 'seekBy') && sentOn !== sessionId && kind === 'title' ? undefined : command;
 }
 
 /** Where Try again or a return to the foreground starts the session again: the last reported position, a zero

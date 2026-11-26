@@ -1,10 +1,11 @@
 import { expect } from 'e2e';
 import { describe, test } from '@e2e-dev/web';
 import { waitForVideoReady } from './player-ready';
+import { signInMockViewer } from './sign-in';
 
-describe('Sports deterministic release gate', { session: 'mock-sports' }, () => {
+describe('Sports deterministic release gate', () => {
   test('Tonight opens a game and its stream starts only once', async ({ app, browser, screen }) => {
-    await app.open('/vela/');
+    await signInMockViewer(app, screen);
     const tonight = screen.getByTestId('sports-tonight');
     await expect(screen.getByRole('link', 'Home')).toBeVisible({ timeout: 30_000 });
     await browser.mouse.move(720, 700);
@@ -47,9 +48,9 @@ describe('Sports deterministic release gate', { session: 'mock-sports' }, () => 
   });
 });
 
-describe('Sports catch-up release gate', { session: 'mock-sports-catch-up' }, () => {
+describe('Sports catch-up release gate', () => {
   test('Watch from start shows only scores available at the picture time', async ({ app, browser, screen }) => {
-    await app.open('/vela/');
+    await signInMockViewer(app, screen);
     const setFixture = (enabled: boolean) => browser.evaluate(async catchUpFixture => {
       const reply = await fetch('/__admin/faults', { method: 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catchUpFixture }) });

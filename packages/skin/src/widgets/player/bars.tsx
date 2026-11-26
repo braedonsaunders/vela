@@ -227,7 +227,7 @@ function Timeline({ look, state, view, blocked, seek, onActive, visible, reveal,
  * time on the left and the live edge clock on the right.
  * Positions are the window's own; the scrubber works in seconds from its start.
  */
-function LiveTimeline({ look, view, blocked, seek, onActive, visible, reveal, stepFrom, live }: BottomProps) {
+function LiveTimeline({ look, state, view, blocked, seek, onActive, visible, reveal, stepFrom, live }: BottomProps) {
   const window = live.window!;
   const span = Math.max(0, window.edge - window.start);
   const relative = { ...view, position: window.position - window.start, duration: span, buffered: [], chapters: [] };
@@ -235,6 +235,7 @@ function LiveTimeline({ look, view, blocked, seek, onActive, visible, reveal, st
   return (
     <View testID="player-live-timeline">
       <Scrubber
+        key={`${state.plan?.sessionId}:${state.plan?.sourceGeneration}`}
         look={look}
         view={relative}
         preferred={Platform.isTV && visible && !blocked && reveal === 'timeline'}

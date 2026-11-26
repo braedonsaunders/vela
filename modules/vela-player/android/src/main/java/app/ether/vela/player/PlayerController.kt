@@ -186,7 +186,7 @@ internal class PlayerController(
     // (the oldest segment). Later recovery/reloads must keep explicit positions. A start-over
     // plan's playlist begins at the programme's start, where it is joined (its plan position).
     val firstJoin = next.live && startedLiveSession != next.sessionId
-    val initialLiveJoin = firstJoin && !next.startOver && next.positionSeconds <= 0.0
+    val initialLiveJoin = firstJoin && !next.startOver && next.seekGeneration == 0 && next.positionSeconds <= 0.0
     if (next.live) startedLiveSession = next.sessionId
     start(next, path, url, source, if (initialLiveJoin) null else next.positionSeconds)
     if (firstJoin && next.startOver) pendingLiveStart = next.positionSeconds
