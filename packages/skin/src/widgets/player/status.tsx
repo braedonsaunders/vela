@@ -97,8 +97,10 @@ function FailureCard({
     >
       <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: look.glass }]} />
-      <PlayerIcon name="alert" size={look.size(26)} color={look.accent} />
-      <Text style={[look.display(30), { textAlign: 'center' }]}>{msg('ui.playbackInterrupted')}</Text>
+      <PlayerIcon name={failed.unreleased ? 'clock' : 'alert'} size={look.size(26)} color={look.accent} />
+      <Text accessibilityRole="header" style={[look.display(30), { textAlign: 'center' }]}>
+        {msg(failed.unreleased ? 'release.notOutYet' : 'ui.playbackInterrupted')}
+      </Text>
       {failed.message ? (
         <Text style={[look.text(14, 400, look.inkSecondary), { textAlign: 'center', lineHeight: look.size(22) }]}>
           {failed.message}

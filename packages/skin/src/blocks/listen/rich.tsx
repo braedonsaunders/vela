@@ -124,6 +124,8 @@ function TrackTableBlock({ props, ctx, empty }: { props: Props; ctx: Ctx; empty?
   const { tracks, entryIds } = limit ? { tracks: all.tracks.slice(0, limit), entryIds: all.entryIds.slice(0, limit) } : all;
   const playlistId = props.text('playlist');
   const sourceId = props.text('sourceId');
+  const sourceKind = props.enum('sourceKind', ['title', 'playlist', 'favorites'] as const);
+  const title = sourceId && sourceKind === 'title' ? asCard(read(`item:${sourceId}`)?.value) : undefined;
   const options: TrackListOptions = {
     covers: props.bool('covers'),
     album: props.bool('album'),
@@ -131,7 +133,8 @@ function TrackTableBlock({ props, ctx, empty }: { props: Props; ctx: Ctx; empty?
     header: props.bool('header'),
     discs: props.bool('discs'),
     reorder: props.bool('reorder'),
-    ...(sourceId ? { source: { id: sourceId, name: props.text('sourceName'), kind: props.enum('sourceKind', ['title', 'playlist', 'favorites'] as const) } } : {}),
+    ...(title?.media?.role === 'album' ? { albumAirDate: title.airDate } : {}),
+    ...(sourceId ? { source: { id: sourceId, name: props.text('sourceName'), kind: sourceKind } } : {}),
     ...(playlistId && entryIds.some(Boolean) ? { playlist: { id: playlistId, entryIds } } : {}),
   };
   // A stable list while the same tracks are named (the engine's progressive drawing keys on it).

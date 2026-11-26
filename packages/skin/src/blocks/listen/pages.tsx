@@ -274,7 +274,7 @@ function AlbumView({ card }: { card: Card }) {
           <Heart card={card} size={44} iconSize={26} />
           <MoreButton card={card} />
         </ActionBar>
-        <TrackList tracks={tracks} options={{ source }} />
+        <TrackList tracks={tracks} options={{ source, albumAirDate: card.airDate }} />
         <View style={{ paddingVertical: 28, gap: 4 }}>
           {card.airDate ? <Text style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{new Date(card.airDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })}</Text> : null}
           {card.media?.facts.filter(f => f.label === 'Label').map(f => <Text key={f.label} style={m.text({ 'font-size': '12px', color: '$ui.inkQuiet' })}>© {f.value}</Text>)}

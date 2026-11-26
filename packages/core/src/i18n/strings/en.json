@@ -1034,6 +1034,7 @@
   "listening.showAllPeople": "All books",
   "music.showAll": "Show all",
   "music.seeAll": "See all",
+  "release.notOutYet": "Not out yet",
   "release.outOn": "Out {date}",
   "release.comesOutOn": "This comes out on {date}",
   "release.unreleased": "This hasn't been released yet",

@@ -26,6 +26,8 @@ export interface TrackListOptions {
   covers?: boolean;
   /** Show the album column. */
   album?: boolean;
+  /** The date already shown in the album's action row. */
+  albumAirDate?: string;
   /** Number by position instead of track number. */
   position?: boolean;
   /** Where these tracks are listed, for Now Playing's "Playing from". */
@@ -144,15 +146,18 @@ function TrackRow({ track, index, tracks, options, wide, disc, drag }: { track: 
   const playing = current && (phase === 'playing' || phase === 'buffering' || phase === 'loading');
   const more = useRef<ComponentRef<typeof View>>(null);
   const entry = options.playlist?.entryIds[index] ? { playlistId: options.playlist.id, entryId: options.playlist.entryIds[index]! } : undefined;
-  const release = releaseLabel(track.airDate);
+  const airDate = track.airDate || options.albumAirDate;
+  const unreleased = isUnreleased(airDate);
+  const release = airDate === options.albumAirDate ? '' : releaseLabel(airDate);
+  const menuCard = airDate && airDate !== track.airDate ? { ...track, airDate } : track;
   const play = () => {
-    const audio = tracks.filter(t => t.media?.audio && !isUnreleased(t.airDate));
+    const audio = tracks.filter(t => t.media?.audio && !isUnreleased(t.airDate || options.albumAirDate));
     const at = audio.indexOf(track);
     if (at >= 0) app.play(audio, at, options.source);
   };
-  const openMenu: MenuOpen = (anchor, mode, opener) => app.menu({ card: track, anchor, mode, opener, entry });
+  const openMenu: MenuOpen = (anchor, mode, opener) => app.menu({ card: menuCard, anchor, mode, opener, entry });
   const openFromMore = () => more.current?.measureInWindow((x: number, y: number, width: number, height: number) =>
-    app.menu({ card: track, anchor: { kind: 'card', rect: { left: x, top: y, right: x + width, bottom: y + height } }, mode: 'pointer', entry }));
+    app.menu({ card: menuCard, anchor: { kind: 'card', rect: { left: x, top: y, right: x + width, bottom: y + height } }, mode: 'pointer', entry }));
   const album = track.media?.parents.find(p => p.role === 'album');
   const artist = track.media?.byline;
   const recordingId = track.media?.recordingId;
@@ -172,28 +177,28 @@ function TrackRow({ track, index, tracks, options, wide, disc, drag }: { track: 
   const durationPart = usePart('trackTable.duration').text;
   const marker = drag && drag.dragging >= 0 && drag.over === index && drag.dragging !== index ? (drag.dragging < index ? 'bottom' : 'top') : '';
   const row = (
-    <Surface onPress={!release && (touch || tv) ? play : undefined} onDoubleClick={!release && !touch && !tv ? play : undefined} onMenu={openMenu} focusId={track.id} testID={`music-track-${track.id}`} selected={current}
-      label={[track.name, artist, release || track.media?.clockLabel].filter(Boolean).join(', ')}
+    <Surface onPress={!unreleased && (touch || tv) ? play : undefined} onDoubleClick={!unreleased && !touch && !tv ? play : undefined} onMenu={openMenu} focusId={track.id} testID={`music-track-${track.id}`} selected={current}
+      label={[track.name, artist, release || (unreleased ? msg('release.notOutYet') : track.media?.clockLabel)].filter(Boolean).join(', ')}
       style={(lit, focus) => [{ height: tv ? 72 : release || options.covers ? 60 : 52, borderRadius: tv ? 12 : 8, backgroundColor: lit ? m.ui.control : current ? alpha(m.ui.accent, 0.1) : 'transparent',
         transform: [{ scale: tv && focus ? 1.02 : 1 }] },
         focus ? (tv ? { borderWidth: 2, borderColor: m.ui.ink } : m.box({ 'box-shadow': `inset 0px 0px 0px 1.5px ${m.ui.ink}` })) : tv ? { borderWidth: 2, borderColor: 'transparent' } : {}, transition('background-color, transform', 120),
         rowStyle?.({ hover: lit, focus }), drag?.dragging === index ? { opacity: 0.5 } : null]}
       contentStyle={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: touch ? 12 : 16, paddingHorizontal: touch ? 8 : 16 }}>
-      {lit => templated && !release ? look.template!('trackTable.row', track, { index, number: numberLabel, active: current, playing, disc, lit }, index) : (
+      {lit => templated && !unreleased ? look.template!('trackTable.row', track, { index, number: numberLabel, active: current, playing, disc, lit }, index) : (
         <>
           <View style={{ width: 28, alignItems: 'center' }} pointerEvents="box-none">
-            {lit && !tv && !release ? (
+            {lit && !tv && !unreleased ? (
               <Pressable onPress={() => (current ? app.toggle() : play())} accessibilityRole="button" accessibilityLabel={playing ? msg('media.player.pause') : `${msg('media.ui.play')} ${track.name}`} style={NO_RING}>
                 <MediaGlyph name={playing ? 'pause' : 'play'} size={16} color={m.ui.ink} />
               </Pressable>
-            ) : playing ? <Meter /> : (
+            ) : playing && !unreleased ? <Meter /> : (
               <Text style={[m.text({ 'font-size': '15px', color: current ? m.ui.accent : '$ui.inkQuiet', 'font-variant-numeric': 'tabular-nums' }), numberPart]}>{numberLabel}</Text>
             )}
           </View>
           <View pointerEvents="none" style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             {options.covers ? <Cover uri={track.poster} shape="square" size={42} title={track.name} accent={track.accent} lift={0.3} /> : null}
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={[m.text({ 'font-size': tv ? '20px' : '15px', 'font-weight': '550', color: current ? m.ui.accent : '$ui.ink' }), titlePart, rowText]}>{track.name}</Text>
+              <Text numberOfLines={1} style={[m.text({ 'font-size': tv ? '20px' : '15px', 'font-weight': '550', color: current ? m.ui.accent : '$ui.ink' }), titlePart, rowText, unreleased && m.text({ color: '$ui.inkQuiet' })]}>{track.name}</Text>
               {release ? <Text style={m.text({ 'font-size': '13px', color: '$ui.inkSecondary' })}>{release}</Text> : null}
               {artist || (duplicatesAvailable && recordingId && !m.small) ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
