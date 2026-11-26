@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { groupIntoMap, groupIntoObject, installGroupBy } from '../../../apps/vela/src/media/group-by';
+import { groupIntoMap, groupIntoObject, installGroupBy, withResolvers } from '../../../apps/vela/src/media/group-by';
 
 describe('groupBy for older web views (foliate-js EPUB parsing)', () => {
   test('groups into a null-prototype object in encounter order, passing the index', () => {
@@ -23,5 +23,16 @@ describe('groupBy for older web views (foliate-js EPUB parsing)', () => {
     expect(fakeObject.groupBy).toBe(groupIntoObject);
     expect(fakeMap.groupBy).toBe(native);
     expect(Object.keys(fakeObject)).toEqual([]);
+  });
+  test('Promise.withResolvers settles the promise it returns, and is installed only where missing', async () => {
+    const { promise, resolve } = withResolvers<number>();
+    resolve(7);
+    expect(await promise).toBe(7);
+    const failed = withResolvers<number>();
+    failed.reject(new Error('no'));
+    await expect(failed.promise).rejects.toThrow('no');
+    const fakePromise: Record<string, unknown> = {};
+    installGroupBy({}, {}, fakePromise);
+    expect(fakePromise.withResolvers).toBe(withResolvers);
   });
 });
