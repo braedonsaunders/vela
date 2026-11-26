@@ -1,10 +1,12 @@
 import { useCallback, useMemo } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { useVelaState } from '@vela/core/react';
 import { ScreenActive, type SkinHost } from '@vela/skin';
 import { HostContext, useHost } from '@vela/skin/src/host';
 import { MediaActionsContext } from '@vela/skin/src/blocks/media/context';
 import { MediaFrame } from '@vela/skin/src/blocks/media/title';
+import { inlineMediaTitleCloseTargets } from '@vela/skin/src/resolve/media-title';
+import { readTitleOpeningFocus } from '@vela/skin/src/route-focus-policy';
 import { FocusBoundary } from '../focus-boundary';
 import { DocumentScreen } from '../screen';
 import { useVela } from '../vela';
@@ -26,6 +28,8 @@ export function ReadTitleScreen(props: Props) {
   const vela = useVela();
   const host = vela.host('title', id, library);
   const framed = vela.doc?.mediaTitleSlot;
+  const openingFocus = readTitleOpeningFocus(Platform.OS, Platform.isTV, props.page);
+  const initialTVFocus = useMemo(() => framed && openingFocus === 'close' ? inlineMediaTitleCloseTargets(framed) : undefined, [framed, openingFocus]);
   const actions = useMediaPageActions(library, back, useMediaPlayerActions(), useReaderActions(library));
   const page = useCallback((current: SkinHost): SkinHost => ({
     ...current,
@@ -33,7 +37,7 @@ export function ReadTitleScreen(props: Props) {
   }), [id, props.page, library, active, back]);
   if (framed) return (
     <MediaActionsContext.Provider value={actions}>
-      <DocumentScreen route="title" entry={id} library={library} node={framed} page={page} />
+      <DocumentScreen route="title" entry={id} library={library} node={framed} page={page} initialTVFocus={initialTVFocus} />
     </MediaActionsContext.Provider>
   );
   if (!host) return <View style={{ flex: 1 }} />;

@@ -4,7 +4,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveDocument, type RNode } from '../src/resolve';
-import { mediaTitleTree, TITLE_SCROLL_ID } from '../src/resolve/media-title';
+import { inlineMediaTitleCloseTargets, mediaTitleTree, TITLE_SCROLL_ID } from '../src/resolve/media-title';
 import { cinematicDoc } from '../../protocol/fixtures/skins/cinematic';
 import type { Node, SkinDocument } from '../../protocol/skin';
 
@@ -69,7 +69,8 @@ test('the inline media slot preserves modal framing and close controls for the a
     const slotCount = (tree: RNode) => find(tree, node => node.kind === 'slot' && node.slot === 'children').length;
     expect(slotCount(mediaTitleSlot!), name).toBe(slotCount(mediaTitle!) + 1);
     expect(find(mediaTitleSlot!, node => node.kind === 'widget' && node.widget === 'mediaPage')).toEqual([]);
-    expect(find(mediaTitleSlot!, node => ['detail-close', 'detail-back'].includes(testId(node))))
-      .toEqual(find(mediaTitle!, node => ['detail-close', 'detail-back'].includes(testId(node))));
+    const closeControls = (tree: RNode) => find(tree, node => ['detail-close', 'detail-back'].includes(testId(node)));
+    expect(closeControls(mediaTitleSlot!).map(testId)).toEqual(closeControls(mediaTitle!).map(testId));
+    expect(inlineMediaTitleCloseTargets(mediaTitleSlot!).length, name).toBeGreaterThan(0);
   }
 });

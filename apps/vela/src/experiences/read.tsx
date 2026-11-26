@@ -2,7 +2,9 @@
 // shared library route vocabulary. The Watch migration replaces that projection.
 import { router } from 'expo-router';
 import { useCallback, type ReactNode } from 'react';
+import { Platform } from 'react-native';
 import type { SkinHost } from '@vela/skin';
+import { readLibraryOpeningFocus } from '@vela/skin/src/route-focus-policy';
 import { ExperienceView } from '@vela/skin/src/screen/experience';
 import { HOME_PLACE, type ExperiencePlace } from '@vela/skin/src/screen/experience-route';
 import type { LibraryParams } from '../browse/library-query';
@@ -18,7 +20,8 @@ export function ReadLibrary({ id, params }: { id: string; params: LibraryParams 
   const wrap = useCallback((content: ReactNode, host: SkinHost, active: boolean) => (
     <ReadLibraryExperience id={id} content={content} host={host} active={active} />
   ), [id]);
-  return <DocumentScreen route="library" entry={id} page={page} sharedShell wrap={wrap} />;
+  return <DocumentScreen route="library" entry={id} page={page} sharedShell wrap={wrap}
+    libraryOpeningFocus={readLibraryOpeningFocus(Platform.OS, Platform.isTV, params.view)} />;
 }
 
 function ReadLibraryExperience({ id, content, host, active }: { id: string; content: ReactNode; host: SkinHost; active: boolean }) {
