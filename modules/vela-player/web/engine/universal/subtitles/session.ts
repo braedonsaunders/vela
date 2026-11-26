@@ -292,6 +292,7 @@ export class SubtitleSession {
       top: '0',
     });
     let geometry = '';
+    let origin: { x: number; y: number } | undefined;
     let viewport: SubtitleViewport;
     const resize = () => {
       const v = this.viewport(),
@@ -317,13 +318,16 @@ export class SubtitleSession {
             height: v.height * scale,
             pictureHeight: v.pictureHeight * scale,
           };
+      if (ass && (origin?.x !== v.x || origin?.y !== v.y)) {
+        origin = { x: v.x, y: v.y };
+        canvas.style.left = `${v.x}px`;
+        canvas.style.top = `${v.y}px`;
+      }
       if (key !== geometry) {
         geometry = key;
         canvas.width = Math.max(1, Math.round(width * scale));
         canvas.height = Math.max(1, Math.round(height * scale));
         Object.assign(canvas.style, {
-          left: `${ass ? v.x : 0}px`,
-          top: `${ass ? v.y : 0}px`,
           width: `${width}px`,
           height: `${height}px`,
         });

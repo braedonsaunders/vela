@@ -120,7 +120,7 @@ export function createWindowsPlayerHost(node: HTMLElement, initial: VelaPlayerPr
     update(next) {
       const captionOnly = next.captionInsets !== props.captionInsets &&
         next.plan === props.plan && next.command === props.command &&
-        next.active === props.active && next.serverError === props.serverError;
+        next.active === props.active && next.serverError === props.serverError && next.metadata === props.metadata;
       props = next;
       if (browser) { browser.update(next); return; }
       if (captionOnly) { publishCaptionInsets(); return; }
