@@ -21,6 +21,11 @@ test('a 12 s network drop on a live channel recovers by itself', async ({ app, b
   try {
     await app.open('/vela/watch/channel-1?kind=channel');
     await waitForVideoPlayback(browser, screen);
+    // At the live edge, as the 0.2.74 walk was (WebKit can open the mock channel at the oldest point of its window).
+    const goLive = screen.getByTestId('player-go-live');
+    await expect.poll(async () => (await videoState(browser)).position > 1100 || await goLive.isVisible()).toBe(true);
+    if ((await videoState(browser)).position <= 1100) await goLive.tap();
+    await expect.poll(async () => (await videoState(browser)).position).toBeGreaterThan(1100);
     await expect.poll(() => playing.length).toBeGreaterThan(0);
 
     // The session's own media does not come back from the drop: its playlist refreshes keep answering but
