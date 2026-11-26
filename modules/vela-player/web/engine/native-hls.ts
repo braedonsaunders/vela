@@ -1,4 +1,5 @@
 import { cancelled } from './session';
+import { defaultHlsVariant } from './hls';
 import type { MediaFetch } from './media-auth';
 
 /** Resolve once; native ABR must not restart a serial server encoder per rung. */
@@ -19,9 +20,9 @@ export async function nativeMediaPlaylist(
   cancelled(signal);
   if (text.length > 1024 * 1024 || !text.trimStart().startsWith('#EXTM3U'))
     throw new Error('Invalid HLS manifest');
-  const lines = text.split(/\r?\n/).map((line) => line.trim());
-  const first = lines.findIndex((line) => line.startsWith('#EXT-X-STREAM-INF:'));
-  if (first < 0) {
+  const variant = defaultHlsVariant(text, response.url);
+  if (!variant) {
+    const lines = text.split(/\r?\n/).map((line) => line.trim());
     const durations = lines
       .filter((line) => line.startsWith('#EXTINF:'))
       .map((line) => Number(line.slice(8).split(',')[0]));
@@ -33,10 +34,5 @@ export async function nativeMediaPlaylist(
         : null;
     return { url: response.url, duration };
   }
-  const uri = lines.slice(first + 1).find((line) => line && !line.startsWith('#'));
-  if (!uri) throw new Error('HLS default variant is missing');
-  const variant = new URL(uri, response.url);
-  if (variant.origin !== new URL(response.url).origin || variant.username || variant.password)
-    throw new Error('HLS variant outside broker origin');
-  return nativeMediaPlaylist(variant.href, signal, depth + 1, fetcher);
+  return nativeMediaPlaylist(variant, signal, depth + 1, fetcher);
 }

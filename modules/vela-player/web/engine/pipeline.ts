@@ -3,7 +3,7 @@ import type { AudioRendition } from '../../../../packages/protocol/types';
 import { PlaybackFault, mutation, appendBuffer } from './buffer';
 export { PlaybackFault } from './buffer';
 import { AdaptiveBitrate, BandwidthEstimator } from './abr';
-import { parsePlaylist, playlistChanged, type Playlist } from './hls';
+import { defaultHlsVariant, parsePlaylist, playlistChanged, type Playlist } from './hls';
 import { cancelled, delay } from './session';
 import { codecKnown, type LiveSnapshot, type Rendition } from './model';
 import { livePlaylistReloadDelayMs } from './core/source/reload';
@@ -32,7 +32,7 @@ export class SegmentPipeline {
   readonly bandwidth = new BandwidthEstimator();
   readonly abr = new AdaptiveBitrate();
   private ladder: Rendition[] = [];
-  /** The source's own media playlist, played when the plan offers no ladder: codecs come from its init. */
+  /** The default stream when the plan offers no ladder. Its codecs come from its init. */
   private stream?: Rendition;
   private timescales = new Map<number, number>();
   updateRenditions(ladder: Rendition[]) {
@@ -261,7 +261,7 @@ export class SegmentPipeline {
     this.timescales = facts.timescales;
     return facts.mime;
   }
-  /** `streamUrl`: the source's media playlist, played as the only rendition when `ladder` is empty. */
+  /** `streamUrl`: the source manifest, played as the only rendition when `ladder` is empty. */
   async run(ladder: Rendition[], position: number, live: boolean, signal: AbortSignal, streamUrl?: string) {
     const MS = mediaSourceClass();
     if (!MS) throw new PlaybackFault('MediaSource unavailable', 'source');
@@ -313,7 +313,22 @@ export class SegmentPipeline {
     let rendition = candidates.find((r) => r.id === this.initialRenditionId) ?? candidates[0];
     this.abr.expensive = this.expensiveSwitches;
     let startupBuffered = false;
-    let list = await this.playlist(rendition, signal);
+    let list: Playlist;
+    if (rendition === this.stream) {
+      const text = new TextDecoder().decode(await this.bytes(rendition.url, signal));
+      const base = new URL(rendition.url, document.baseURI).href;
+      const variant = defaultHlsVariant(text, base);
+      if (variant) {
+        // Stay on the default variant when the server owns quality selection.
+        rendition = this.stream = { ...rendition, url: variant };
+        this.ladder = [rendition];
+        list = await this.playlist(rendition, signal);
+      } else {
+        list = parsePlaylist(text, base);
+      }
+    } else {
+      list = await this.playlist(rendition, signal);
+    }
     if (!live && this.timelineOriginSeconds)
       list.segments.forEach((s) => {
         s.start += this.timelineOriginSeconds;

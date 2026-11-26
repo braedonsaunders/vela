@@ -29,6 +29,21 @@ export function playlistChanged(previous: Playlist, current: Playlist): boolean 
     );
   });
 }
+
+/** Pick a master's default variant without sending media requests outside its origin. */
+export function defaultHlsVariant(text: string, base: string): string | undefined {
+  if (!text.trimStart().startsWith('#EXTM3U')) throw new Error('Invalid HLS manifest');
+  const lines = text.split(/\r?\n/).map((line) => line.trim());
+  const first = lines.findIndex((line) => line.startsWith('#EXT-X-STREAM-INF:'));
+  if (first < 0) return;
+  const uri = lines.slice(first + 1).find((line) => line && (!line.startsWith('#') || line.startsWith('#EXT')));
+  if (!uri || uri.startsWith('#')) throw new Error('HLS default variant is missing');
+  const variant = new URL(uri, base);
+  if (variant.origin !== new URL(base).origin || variant.username || variant.password)
+    throw new Error('HLS variant outside broker origin');
+  return variant.href;
+}
+
 export function parsePlaylist(text: string, base: string): Playlist {
   if (!text.trimStart().startsWith('#EXTM3U')) throw new Error('Invalid HLS playlist');
   // EXT-X-DISCONTINUITY-SEQUENCE only numbers discontinuities; a METHOD=NONE key is clear media.
