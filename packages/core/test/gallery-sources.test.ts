@@ -78,8 +78,8 @@ test('the Gallery fixture pages the timeline and resolves album and person seque
     expect(list('timeline').items.slice(0, first.length)).toEqual(first);
     const dates = cards('timeline').map(photo => photo.airDate);
     expect(dates).toEqual([...dates].sort().reverse());
-    expect(cards('albums').map(album => album.name)).toEqual(['Along the coast', 'A year outdoors']);
-    expect(cards('people').map(person => person.name)).toEqual(['Elena Rivers', 'Sam Calder']);
+    expect(cards('albums').map(album => [album.name, album.itemCount])).toEqual([['Along the coast', 120], ['A year outdoors', 120]]);
+    expect(cards('people').map(person => [person.name, person.itemCount])).toEqual([['Elena Rivers', 120], ['Sam Calder', 120]]);
     const subject = list('subject').items;
     expect(subject).toHaveLength(50);
     await more('subject');

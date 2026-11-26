@@ -11,8 +11,8 @@ import { MediaContentHeight, MediaFrameViewport } from './viewport';
 /** The page: its colour wash from the cover, a blurred cover behind the hero, the back control.
  * Framed, the document's title frame is the page: the wash and the content scroll in its region
  * and the frame's own close control closes it. */
-export function MediaFrame({ framed, accent, backdrop, wideArt, backdropComponents, children }: {
-  framed: boolean; accent: string; backdrop: string; wideArt: boolean; backdropComponents?: [number, number]; children: ReactNode;
+export function MediaFrame({ framed, accent, backdrop, wideArt, backdropComponents, children, titleActions }: {
+  framed: boolean; accent: string; backdrop: string; wideArt: boolean; backdropComponents?: [number, number]; children: ReactNode; titleActions?: ReactNode;
 }) {
   const host = useHost();
   const m = useMediaLook();
@@ -51,8 +51,9 @@ export function MediaFrame({ framed, accent, backdrop, wideArt, backdropComponen
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop, paddingBottom: 140 }} onLayout={viewport?.onLayout} testID="media-scroll">
         <View style={{ paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{content}</View>
       </ScrollView>
-      <View style={{ position: 'absolute', top, left: m.gutter - 6 }}>
+      <View style={{ position: 'absolute', top, left: m.gutter - 6, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <RoundButton icon="back" label={msg('media.ui.back')} onPress={actions.back} nativeID="detail-close" testID="detail-close" size={42} />
+        {titleActions}
       </View>
     </View>
   );

@@ -3881,7 +3881,9 @@
             "photoViewer.eyebrow",
             "photoViewer.title",
             "photoViewer.date",
-            "photoViewer.facts"
+            "photoViewer.facts",
+            "photoViewer.transport",
+            "photoViewer.control"
           ],
           "props": {
             "item": {

@@ -10,8 +10,8 @@ import { CardContextMenu, type CardMenuAnchor, type CardMenuOpenMode } from './w
 import { visibleRowItems } from './row-visible';
 import { EpisodeNavigation, episodeNavigation } from './episode-navigation';
 import { inheritText as inheritFrom } from './text-inheritance';
-import { hasFlowHeader } from './resolve/inherit';
 import { MediaFrameViewport } from './blocks/media/viewport';
+import { hasFlowHeader } from './resolve/inherit';
 import { isHeroControl, isHeroSegment } from './hero-pager';
 import { holdHero } from './hero-hold';
 import { androidHeroAfterTurn, androidHeroKeyDirection, androidHeroPageDirection, heroButtonRank, heroFocusCarry, type AndroidHeroKey } from './hero-focus';
@@ -1134,7 +1134,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       } else trackScroll?.(e);
     } : trackScroll;
     if (rowScroll) content = <RowScroll.Provider value={rowScroll}>{content}</RowScroll.Provider>;
-    const mediaViewport = env.route === 'title' && a11y.nativeID === `title-scroll-${env.entry}` ? use(MediaFrameViewport) : undefined;
+    const mediaViewport = env.route === 'title' && fill(node.id, ctx, env) === `title-scroll-${env.entry}`
+      ? use(MediaFrameViewport) : undefined;
     element = (
       <AScroll ref={scrollRef as never} horizontal={horizontal} style={[route ? ROUTE_SCROLL : BOX_SCROLL, outerStyle as ViewStyle]}
         contentContainerStyle={contentStyle as ViewStyle} stickyHeaderIndices={sticky?.length ? sticky : undefined}
@@ -1903,6 +1904,7 @@ function Slot({ node, ctx }: { node: Extract<RNode, { kind: 'slot' }>; ctx: Ctx 
   const surfaceSlots = useContext(SurfaceSlots);
   // Apple TV searches on the system's search screen (the shell's Search opens it): no field here.
   if (fx.hidden || (node.slot === 'searchField' && SYSTEM_SEARCH)) return null;
+  if (node.slot === 'mediaTitleActions') return <>{host.mediaTitleActions}</>;
   if (node.slot !== 'children' && node.slot !== 'searchField') {
     // A plugin slot draws the surfaces filling it (the app's view), or nothing.
     const Surfaces = surfaceSlots?.slot;

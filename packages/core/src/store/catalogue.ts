@@ -691,7 +691,7 @@ function libraryModel(
     kind: library.kind,
     dateDisplay: library.dateDisplay ?? 'year',
     backdrop: image ? artworkURL(image, artWidth, Math.ceil(artWidth * 9 / 16), images) ?? '' : '',
-    sorts: library.browse.sorts.map(s => ({ id: s.id, label: msg(`library.sort.${s.id}`), directions: s.directions })),
+    sorts: library.browse.sorts.map(s => ({ id: s.id, label: msg(media === 'photo' && s.id === 'released' ? 'gallery.dateTaken' : `library.sort.${s.id}`), directions: s.directions })),
     sort: result.sort,
     direction: result.direction,
     kinds: (filters.kind ?? []).map(k => ({ id: k, label: msg(`library.kind.${k}`) })),

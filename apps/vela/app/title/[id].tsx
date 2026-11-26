@@ -13,7 +13,7 @@ import { GalleryTitleScreen } from '../../src/experiences/gallery-title';
 import { closeModal } from '../../src/modal-motion';
 
 export default function Title() {
-  const { id, library, media } = useLocalSearchParams<{ id: string; library?: string; media?: string }>();
+  const { id, library, media, galleryFrom } = useLocalSearchParams<{ id: string; library?: string; media?: string; galleryFrom?: string }>();
   // A music, book, audiobook, podcast or photo title draws its own page (docs/media-kinds.md):
   // known from the card that opened it, or from the title once read (its card kind: a podcast's
   // show is 'podcast', never video's 'show').
@@ -52,7 +52,7 @@ export default function Title() {
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('click', onClick); };
   }, [back]));
   if (role === 'book' || role === 'series') return <ReadTitleScreen page={role} id={id ?? ''} library={library} active={focused} back={back} />;
-  if (role === 'photo') return <GalleryTitleScreen id={id ?? ''} library={library} active={focused} back={back} />;
+  if (role === 'photo') return <GalleryTitleScreen id={id ?? ''} library={library} galleryFrom={galleryFrom} active={focused} back={back} />;
   if (mediaPage) return <MediaTitleScreen id={id ?? ''} library={library} active={focused} back={back} />;
   return <DocumentScreen route="title" entry={id ?? ''} library={library} />;
 }
