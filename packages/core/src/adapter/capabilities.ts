@@ -319,6 +319,8 @@ export interface ProactiveFallback {
 }
 
 export interface LiveTv {
+  /** Viewer-specific Live TV capabilities for a guide opened before bootstrap settles. */
+  viewerLiveFeatures?(): Promise<V.ServerCapabilities['features']>;
   channels(cursor?: string, limit?: number): Promise<V.Page<V.Channel>>;
   guide(query: V.GuideQuery): Promise<V.GuideResponse>;
   guideWindow?(query: V.GuideWindowRequest): Promise<V.GuideWindowResponse | null>;

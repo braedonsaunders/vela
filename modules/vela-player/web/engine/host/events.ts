@@ -1,3 +1,4 @@
+import { releaseSeekPicture } from './seek-picture';
 import { playbackMark } from '../timing';
 import type { EngineEvent } from '../model';
 import type { HostContext } from './state';
@@ -23,6 +24,7 @@ export function publishHostState(context: HostContext, force = false) {
     context.media.runtime.readout.presentedFrames > 0
   ) {
     context.watchdog.frameSeen = true;
+    releaseSeekPicture(context);
     playbackMark('first-frame', 'webgpu');
   }
   const now = performance.now();

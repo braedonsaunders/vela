@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRef, type ComponentRef, type ReactNode } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { delayLabel, msg, time } from '@vela/core';
+import { msg, time } from '@vela/core';
 import { easing } from '../../motion';
 import { ChromeButton } from './button';
 import { ChapterStrip } from './chapters';
@@ -224,7 +224,7 @@ function Timeline({ look, state, view, blocked, seek, onActive, visible, reveal,
 
 /**
  * A channel's rewind window (or Start over's programme so far) as the timeline: the start's clock
- * time on the left, the delay ("-12:30") or LIVE on the right, the live edge marked at the end.
+ * time on the left and the live edge clock on the right.
  * Positions are the window's own; the scrubber works in seconds from its start.
  */
 function LiveTimeline({ look, view, blocked, seek, onActive, visible, reveal, stepFrom, live }: BottomProps) {
@@ -242,14 +242,14 @@ function LiveTimeline({ look, view, blocked, seek, onActive, visible, reveal, st
         disabled={blocked}
         onSeek={seconds => seek(window.start + seconds)}
         onActive={onActive}
-        live={{ label: seconds => delayLabel(span - seconds) || msg('data.live'), color: look.live, atEdge: !window.delayed && !window.startOver }}
+        live={{ label: seconds => time(startsAt + seconds * 1000), color: look.live, atEdge: !window.delayed && !window.startOver }}
       />
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={[look.text(12, 400, look.inkSecondary), { fontVariant: ['tabular-nums'] }]}>
           {live.archive === 'startOver' ? msg('catchUp.startOver') + ' · ' + time(startsAt) : time(startsAt)}
         </Text>
-        <Text testID="player-live-delay" style={[look.text(12, live.delay ? 600 : 700, live.delay ? look.ink : look.live), { fontVariant: ['tabular-nums'] }]}>
-          {live.delay || msg('data.live')}
+        <Text testID="player-live-edge-time" style={[look.text(12, window.delayed ? 600 : 700, window.delayed ? look.ink : look.live), { fontVariant: ['tabular-nums'] }]}>
+          {time(live.windowEdgeAt)} · {msg('data.live')}
         </Text>
       </View>
     </View>
@@ -553,7 +553,7 @@ function PhoneActions({ look, state, view, blocked, live, overlay, seek, seekBy,
       {!timeline && !live.archive && live.startOver ? action('restart', msg('catchUp.startOver'), 'player-start-over', live.startOver, blocked) : null}
       {timeline && state.nextEpisode ? action('next', msg('player.nextEpisodeNamed', { name: state.nextEpisode.label }),
         'player-next-episode', state.nextEpisode.play) : null}
-      {(live.live || live.archive === 'catchUp') && (live.behind > 0 || live.window?.delayed || live.archive)
+      {!(live.window?.delayed && live.window.seekable) && (live.live || live.archive === 'catchUp') && (live.behind > 0 || live.archive || (live.paused && !!live.window?.seekable))
         ? action('live', msg('catchUp.backToLive'), 'player-go-live', live.backToLive) : null}
       {!timeline && !live.archive && multiview && live.channelId ? action('tiles', msg('multiview.add'), 'player-multiview',
         () => multiview.open(live.channelId, { replace: true })) : null}

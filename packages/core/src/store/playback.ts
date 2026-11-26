@@ -25,6 +25,7 @@ import { withPlaying } from './playing-release';
 import { serverEnd } from './server-end';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
 import { matchSeriesTracks } from '../series-tracks';
+import type { ArchiveRange } from '../live/timeshift';
 import type { SeriesTracks } from './series-tracks';
 import type { Session } from './session';
 import { message, type StateBox } from './state';
@@ -39,17 +40,8 @@ export type PlaybackTarget =
   | { kind: 'extra'; id: string }
   | { kind: 'channel'; id: string }
   /** A programme from the channel's archive (features.liveCatchUp): ended, or with `from: 'start'` on air from its start. */
-  | { kind: 'programme'; id: string; channelId: string; from?: 'start'; positionSeconds?: number }
+  | { kind: 'programme'; id: string; channelId: string; from?: 'start'; range?: ArchiveRange; positionSeconds?: number }
   | { kind: 'library-live'; id: string; libraryId: string; tab?: string };
-
-/** The window start a `timeshift_position_evicted` refusal names, or null for any other error. */
-function evictedWindowStart(error: unknown): number | null {
-  if (!(error instanceof VelaError) || error.detail.code !== 'timeshift_position_evicted') return null;
-  // The bounds ride in `details`, or beside the code on servers that flatten them.
-  const start = (error.detail.details as { windowStartSeconds?: unknown } | undefined)?.windowStartSeconds
-    ?? (error.detail as unknown as { windowStartSeconds?: unknown }).windowStartSeconds;
-  return typeof start === 'number' && Number.isFinite(start) ? start : null;
-}
 
 export type PlaybackPhase = 'idle' | 'starting' | 'preparing' | 'playing' | 'ended' | 'failed';
 export type OriginalLostResult = 'reopened' | 'version_unavailable' | 'gone' | 'superseded';
@@ -222,7 +214,8 @@ export class Playback {
           current.target.libraryId === target.libraryId &&
           current.target.tab === target.tab)) &&
         (target.kind !== 'programme' || (current.target.kind === 'programme' &&
-          current.target.channelId === target.channelId && current.target.from === target.from))) return;
+          current.target.channelId === target.channelId && current.target.from === target.from &&
+          current.target.range?.startAt === target.range?.startAt && current.target.range?.durationSeconds === target.range?.durationSeconds))) return;
     const stopping = this.stop();
     const run = {};
     this.run = run;
@@ -312,7 +305,7 @@ export class Playback {
         reply = await api.startLibraryLive(target.libraryId, { itemId: target.id, tab: target.tab, liveMode: 'adaptive', client: this.session.client, idempotencyKey: intent.key });
       } else reply = await api.startPlayback({
           ...(target.kind === 'extra' ? { extraId: target.id } : target.kind === 'channel' ? { channelId: target.id }
-            : target.kind === 'programme' ? { channelId: target.channelId, programmeId: target.id, ...(target.from ? { from: target.from } : {}) }
+            : target.kind === 'programme' ? { channelId: target.channelId, ...(target.range ?? { programmeId: target.id, ...(target.from ? { from: target.from } : {}) }) }
             : { titleId: target.id }),
           ...(position !== undefined ? { positionSeconds: position } : {}),
           ...(target.kind === 'title' && target.mediaSourceId ? { mediaSourceId: target.mediaSourceId } : {}),
@@ -770,6 +763,23 @@ export class Playback {
     return added ?? chosen;
   }
 
+  private pendingLiveTransport?: { sessionId: string; result: Promise<boolean> };
+
+  liveTransport(sessionId: string, command: { kind: 'pause' | 'resume' | 'goLive' } | { kind: 'seek'; positionSeconds: number }): Promise<boolean> {
+    const queue = this.pendingLiveTransport?.sessionId === sessionId ? this.pendingLiveTransport.result : Promise.resolve();
+    const result = queue.then(() => {
+      const plan = this.box.get().playback.plan;
+      if (!plan?.live || plan.sessionId !== sessionId) return false;
+      return this.command(sessionId, { ...command, sourceGeneration: plan.sourceGeneration,
+        seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() });
+    });
+    this.pendingLiveTransport = { sessionId, result };
+    void result.then(() => {
+      if (this.pendingLiveTransport?.result === result) this.pendingLiveTransport = undefined;
+    });
+    return result;
+  }
+
   /**
    * A player's session command (seek, pause, track change, path switch, fallback, stop). `origin`
    * says whether the viewer asked for it (a quality pick) or the engine sent it on its own (an
@@ -777,11 +787,11 @@ export class Playback {
    * command gets viewer copy, and one that lost to a newer generation, or that the engine sent
    * on its own, is dropped silently (the engine plans again from the newer plan).
    */
-  async command(sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<void> {
+  async command(sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer'): Promise<boolean> {
     const current = this.box.get().playback;
     if (sessionId.startsWith('local-')) {
       const plan = current.sessionId === sessionId ? current.plan : null;
-      if (!plan) return;
+      if (!plan) return false;
       if (command.kind === 'stop') await this.stop();
       if (command.kind === 'pause') await this.checkpointDownload()?.catch(() => {});
       if (command.kind === 'tracks') {
@@ -794,7 +804,7 @@ export class Playback {
         } });
       }
       // File seeks and pause/resume happen in the native player.
-      return;
+      return true;
     }
     if (current.sessionId === sessionId && current.error) this.patch({ error: '' });
     // The engine recovering on its own (a path switch, a fallback) is not progress (stall.ts).
@@ -817,18 +827,14 @@ export class Playback {
           nextPlan = this.withLocalTracks(nextPlan);
         }
         this.patch({ plan: nextPlan });
+        return true;
       }
+      return false;
     } catch (error) {
       answered(null);
       const words = commandFailure(command, error, origin);
       if (words && this.box.get().playback.sessionId === sessionId) this.patch({ error: words });
-      // A paused live position the rewind window left behind resumes at the window's start (spec B2).
-      const start = evictedWindowStart(error);
-      if (start !== null && (command.kind === 'resume' || command.kind === 'seek') && this.box.get().playback.sessionId === sessionId) {
-        const plan = this.box.get().playback.plan;
-        if (plan) await this.command(sessionId, { kind: 'seek', positionSeconds: start, sourceGeneration: plan.sourceGeneration,
-          seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() }, origin);
-      }
+      return false;
     }
   }
 
@@ -869,7 +875,7 @@ export class Playback {
       // still offers its path. A switch the engine sent on its own is tied to the source it was
       // planned against and is not: the engine plans again from the newer plan.
       const generations = staleGeneration(error) ? error.detail.currentGenerations : undefined;
-      const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks'].includes(command.kind);
+      const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks', 'goLive'].includes(command.kind);
       const wanted = command.kind === 'switch' && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
       if ((!absolute && !wanted) || !generations) throw error;
       if (canRetry && !(await canRetry())) throw error;
@@ -1425,7 +1431,7 @@ export class Playback {
 /** What a watch is of, whatever position or track a restart asks it again at. */
 function watchOf(target: PlaybackTarget): string {
   return JSON.stringify([target.kind, target.id,
-    target.kind === 'programme' ? [target.channelId, target.from ?? ''] : target.kind === 'library-live' ? [target.libraryId, target.tab ?? ''] : []]);
+    target.kind === 'programme' ? [target.channelId, target.from ?? '', target.range?.startAt, target.range?.durationSeconds] : target.kind === 'library-live' ? [target.libraryId, target.tab ?? ''] : []]);
 }
 
 function delay(ms: number, signal: AbortSignal): Promise<void> {

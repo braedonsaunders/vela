@@ -28,10 +28,15 @@ function heading(detail: DetailModel | undefined): string {
   return title.name;
 }
 
-function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?: string, channelId?: string, from?: string, showId?: string): PlaybackTarget {
+function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?: string, channelId?: string, from?: string, showId?: string, startAt?: string, durationSeconds?: string): PlaybackTarget {
   if (kind === 'channel') return { kind: 'channel', id };
   // A programme from the channel's archive: ended (catch-up), or on air from its start.
-  if (kind === 'programme' && channelId) return { kind: 'programme', id, channelId, ...(from === 'start' ? { from: 'start' as const } : {}) };
+  if (kind === 'programme' && channelId) {
+    const duration = Number(durationSeconds);
+    const range = startAt && Number.isFinite(Date.parse(startAt)) && Number.isFinite(duration) && duration > 0
+      ? { startAt, durationSeconds: duration } : undefined;
+    return { kind: 'programme', id, channelId, ...(range ? { range } : from === 'start' ? { from } : {}) };
+  }
   if (kind === 'extra') return { kind: 'extra', id };
   if (kind === 'library-live' && libraryId) return { kind: 'library-live', id, libraryId, tab };
   return { kind: 'title', id, ...(showId ? { showId } : {}) };
@@ -49,9 +54,9 @@ export default function Watch() {
 }
 
 function WatchPlayer() {
-  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string; showId?: string }>();
+  const { id = '', kind, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId, startAt, durationSeconds, playbackRequest } = useLocalSearchParams<{ id: string; kind?: string; libraryId?: string; tab?: string; mediaSourceId?: string; audioTrackId?: string; positionSeconds?: string; versionId?: string; channelId?: string; from?: string; showId?: string; startAt?: string; durationSeconds?: string; playbackRequest?: string }>();
   const { host, openTitle, store } = useVela();
-  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from, showId), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId]);
+  const target = useMemo(() => ({ ...targetOf(kind, id, libraryId, tab, channelId, from, showId, startAt, durationSeconds), ...(kind !== 'channel' && kind !== 'extra' && kind !== 'library-live' && startPosition(positionSeconds) !== undefined ? { positionSeconds: startPosition(positionSeconds) } : {}), ...(mediaSourceId ? { mediaSourceId } : {}), ...(audioTrackId ? { audioTrackId } : {}), ...(versionId ? { versionId } : {}) }), [kind, id, libraryId, tab, mediaSourceId, audioTrackId, positionSeconds, versionId, channelId, from, showId, startAt, durationSeconds]);
   const live = useLiveContext();
   const liveView = useLiveView();
   // A channel's session is the live controller's: its plan, its refusal (or a retry on the
@@ -68,7 +73,7 @@ function WatchPlayer() {
   // Android's picture-in-picture window keeps the watch on screen while the app is in the background.
   const { width, height } = useWindowDimensions();
   const webPicture = Platform.OS === 'web' && phoneControlLayout(width, height, playerUsesHandheldGeometry(), false).compact;
-  const session = usePlaybackSession(target, owned, pictureInPicture, webPicture);
+  const session = usePlaybackSession(target, owned, pictureInPicture, webPicture, playbackRequest);
   const skin = host('watch', id);
   const sessionId = session.view.plan?.sessionId ?? '';
   const channels = liveView.guide?.channels;
@@ -105,12 +110,13 @@ function WatchPlayer() {
     else router.replace(offline || local ? '/downloads' : '/');
   }, [stop, offline, local]);
 
-  const channel = target.kind === 'channel' ? channels?.find(c => c.id === id) : undefined;
+  const liveChannelId = session.view.plan?.channelId || (target.kind === 'channel' ? id : '');
+  const channel = liveChannelId ? channels?.find(c => c.id === liveChannelId) : undefined;
   const programmeChannel = target.kind === 'programme' ? channels?.find(c => c.id === target.channelId) : undefined;
   const title = channel
     ? `${channel.number} · ${channel.name}`
     : target.kind === 'programme'
-      ? [session.view.plan?.title, programmeChannel?.name].filter(Boolean).join(' · ') || msg('catchUp.fromArchive')
+      ? [session.view.plan?.title, !liveChannelId ? programmeChannel?.name : undefined].filter(Boolean).join(' · ') || msg('catchUp.fromArchive')
     : target.kind === 'library-live'
       ? session.view.plan?.title ?? 'Live'
       : heading(skin?.env.detail);

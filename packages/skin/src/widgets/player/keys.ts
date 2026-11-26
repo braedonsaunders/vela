@@ -48,7 +48,7 @@ export function useShortcuts(shortcuts: Shortcuts): void {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const onKey = (event: KeyboardEvent) => {
       const s = latest.current;
-      if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
+      if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
       if (event.key === 'Escape' && s.menuOpen) {
         event.preventDefault();
         event.stopImmediatePropagation();

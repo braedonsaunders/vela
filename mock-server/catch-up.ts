@@ -1,4 +1,4 @@
-// Live TV catch-up and timeshift (features.liveCatchUp, Ether v0.3.20 spec section C). Two of every
+// Live TV catch-up and timeshift (features.liveCatchUp, Ether v0.3.22 spec section C). Two of every
 // three channels keep a three-day provider archive (VELA_MOCK_ARCHIVE_DAYS); their past programmes
 // replay from it and the programme on air can start over. Every channel's live plan carries the
 // rewind window (live.ts). VELA_MOCK_CATCHUP=0 turns all of it off; VELA_MOCK_CATCHUP_UNAVAILABLE
@@ -47,7 +47,7 @@ export function archiveRange(request: ArchiveRequest, channel: V.Channel, find: 
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) fail('request', 'invalid_range', 'startAt and a positive durationSeconds are required');
   }
   const earliest = now - channel.archiveDays! * DAY;
-  if (start < earliest || start > now) fail('conflict', 'catchup_outside_archive', 'The range is outside the channel archive', { details: { archiveDays: channel.archiveDays, earliestAt: new Date(earliest).toISOString() } }, 409);
+  if (start < earliest || start > now) fail('conflict', 'catchup_outside_archive', 'The range is outside the channel archive', { archiveDays: channel.archiveDays, earliestAt: new Date(earliest).toISOString() }, 409);
   if (refusing.has(channel.id)) fail('source', 'catchup_unavailable', 'The provider had no archive for this range', { retry: { allowed: true, afterSeconds: 30 } }, 502);
   return { programme, start, end, airing: end > now };
 }
@@ -99,10 +99,10 @@ export function checkTimeshiftCommand(plan: V.PlaybackPlan, command: V.SessionCo
   if (!plan.live || (command.kind !== 'seek' && command.kind !== 'resume')) return;
   refreshLive(plan);
   const start = plan.live.windowStartSeconds ?? 0, edge = plan.live.liveEdgeSeconds ?? 0;
-  const bounds = { details: { windowStartSeconds: start, liveEdgeSeconds: edge } };
-  if (command.kind === 'resume' && plan.state === 'paused' && plan.positionSeconds < start)
+  const bounds = { windowStartSeconds: start, liveEdgeSeconds: edge };
+  if (plan.state === 'paused' && plan.positionSeconds < start)
     fail('conflict', 'timeshift_position_evicted', 'The paused position left the rewind window', bounds, 409);
-  if (command.kind === 'seek' && (command.positionSeconds < start || command.positionSeconds > edge))
+  if (command.kind === 'seek' && (!Number.isFinite(command.positionSeconds) || command.positionSeconds < start || command.positionSeconds > edge))
     fail('conflict', 'timeshift_outside_window', 'The position is outside the rewind window', bounds, 409);
 }
 

@@ -1,7 +1,7 @@
 import { expect, type Screen } from 'e2e';
 import type { Browser } from '@e2e-dev/web';
 
-function videoState(browser: Browser) {
+export function videoState(browser: Browser) {
   return browser.evaluate(() => {
     const stage = document.querySelector('[data-testid="watch-stage"]');
     for (const element of stage?.querySelectorAll('*') ?? []) {

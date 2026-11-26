@@ -18,3 +18,13 @@ test('Live TV channels are live and on-demand titles are not', () => {
   expect(sessionFromPlan({ ...base, channelId: 'ch-1' } as PlaybackPlan, 'https://server.test/').live).toBe(true);
   expect(sessionFromPlan({ ...base, titleId: 't-1' } as PlaybackPlan, 'https://server.test/').live).toBe(false);
 });
+
+test('catch-up is finite and Start over begins at its programme position', () => {
+  const archive = { ...base, catchUp: { channelId: 'ch-1', startAt: '2026-11-26T03:00:00Z' } };
+  expect(sessionFromPlan({ ...archive, durationSeconds: 1800 }, 'https://server.test/')).toMatchObject({
+    live: false, startOver: false, position: 0, duration: 1800,
+  });
+  const startOver = sessionFromPlan({ ...archive, live: { mode: 'startOver', liveEdgeSeconds: 420 } }, 'https://server.test/');
+  expect(startOver).toMatchObject({ live: true, startOver: true, position: 0, liveEdge: 420 });
+  expect(startOver.duration).toBeUndefined();
+});

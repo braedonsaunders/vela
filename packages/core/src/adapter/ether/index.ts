@@ -263,6 +263,12 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return answer;
   }
 
+  async viewerLiveFeatures(): Promise<V.ServerCapabilities['features']> {
+    const answer = await this.http.request<V.ServerCapabilities>('GET', '/capabilities', undefined, CACHED);
+    this.guideWindowLimits = answer.liveGuideWindow;
+    return answer.features;
+  }
+
   async declareClient(request: V.NegotiateRequest): Promise<void> {
     const answer = await this.http.request<V.NegotiateResponse>('POST', '/negotiate', request);
     if (answer.capabilities) this.guideWindowLimits = answer.capabilities.liveGuideWindow;
@@ -590,7 +596,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
   }
 
   startPlayback(request: V.PlaybackRequest) {
-    return this.http.request<V.PlaybackPlan | V.PlaybackPreparing>('POST', '/playback', request);
+    const archive = request.channelId && (request.programmeId !== undefined || request.startAt !== undefined);
+    return this.http.request<V.PlaybackPlan | V.PlaybackPreparing>('POST', '/playback',
+      archive ? { ...request, kind: 'channel' } : request);
   }
 
   reportObservation(sessionId: string, observation: V.PlayerObservation) {

@@ -1,4 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
+import { capabilitiesOf } from '../src/adapter/advertise';
+
 import { EtherAdapter } from '../src/adapter/ether';
 import type { GuideWindowRequest } from '../src/wire';
 import { FakeCredentials, restoreFetch, routeFetch, type Seen } from './helpers';
@@ -42,4 +44,11 @@ test('capability reads made together while a page loads share one request', asyn
   await Promise.all([adapter.describe(), adapter.describe()]);
   await adapter.describe();
   expect(seen).toHaveLength(1);
+});
+
+test('viewer capabilities retain timeshift when none of the visible channels has an archive', async () => {
+  const liveCatchUp = { available: false, maxDays: 0, timeshift: { available: true, maxMinutes: 60 } };
+  routeFetch({ 'GET /vela/v0/capabilities': { features: { liveCatchUp } } });
+  const adapter = new EtherAdapter('https://ether.example', new FakeCredentials(), 'web');
+  expect((await capabilitiesOf(adapter)).features.liveCatchUp).toEqual(liveCatchUp);
 });

@@ -31,6 +31,11 @@ export class SessionController {
     this.seek++;
     return this.token();
   }
+  /** A server-authorized seek using the same open playlist and producer. */
+  keepSourceAtSeek(seek: number) {
+    this.seek = seek;
+    return this.token();
+  }
   token(): Generation {
     return { sessionId: this.sessionId, source: this.source, seek: this.seek, signal: this.abort.signal };
   }

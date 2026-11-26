@@ -6,10 +6,10 @@
 import { FocusPressable as Pressable } from '../../focus';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View, Text } from 'react-native';
-import { clampSeek, LIVE_SLACK_SECONDS, msg } from '@vela/core';
+import { clampSeek, stepLandsLive, msg } from '@vela/core';
 import { useHost } from '../../host';
 import { BottomBar, TopBar, bottomFade, type Opened, type Reveal, type TickerToggle } from './bars';
-import { usePlayerChrome, type PlayerChromeState } from './context';
+import { usePlayerChrome, type CommandInput, type PlayerChromeState } from './context';
 import { holdsChrome } from './hold';
 import { useIdle } from './idle';
 import { useScreenAwake } from './wake-lock';
@@ -99,8 +99,28 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
 
   const failed = failureOf(state, view);
   const blocked = !state.plan || view.ended || !!failed;
-  const waiting = !failed && (!state.plan || view.waiting);
-  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, state.send);
+  const [liveSeek, setLiveSeek] = useState<{ sessionId: string; generation: number; seconds?: number } | null>(null);
+  const seeking = liveSeek != null && liveSeek.sessionId === state.plan?.sessionId && !failed;
+  useEffect(() => {
+    if (!liveSeek) return;
+    const snapshot = state.snapshot;
+    const settled = snapshot && snapshot.seekGeneration > liveSeek.generation && !snapshot.waiting
+      && (liveSeek.seconds === undefined ? snapshot.state === 'playing' : Math.abs(snapshot.position - liveSeek.seconds) < 3);
+    if (!seeking || settled || state.actionError) setLiveSeek(null);
+  }, [liveSeek, seeking, state.snapshot, state.actionError]);
+  useEffect(() => {
+    if (!liveSeek) return;
+    const timer = setTimeout(() => setLiveSeek(null), 12_000);
+    return () => clearTimeout(timer);
+  }, [liveSeek]);
+  const waiting = !failed && !seeking && (!state.plan || view.waiting);
+  const sendLive = (command: CommandInput) => {
+    const plan = state.plan;
+    if (command.type === 'catchUp' && (plan?.live?.timeshift || plan?.live?.mode === 'startOver'))
+      setLiveSeek({ sessionId: plan.sessionId, generation: plan.seekGeneration });
+    state.send(command);
+  };
+  const live = useLiveWatchChrome(state.plan, state.snapshot, state.target, sendLive, seeking ? liveSeek.seconds : undefined, seeking);
   // A channel back in the foreground goes to the live edge and plays (session.ts, returnedLive).
   const returnedLive = state.returnedLive ?? 0;
   useEffect(() => {
@@ -141,15 +161,16 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
 
   // A channel's rewind window bounds every seek; one that reaches the live edge goes back to live.
   const rewind = live.live && live.window?.seekable ? live.window : null;
-  const seek = (seconds: number) => {
+  const seek = (seconds: number, toLive = !!rewind && seconds >= rewind.edge - 0.5) => {
     if (rewind) {
-      if (!live.archive && seconds >= rewind.edge - LIVE_SLACK_SECONDS) {
+      if (!live.archive && toLive) {
         lastStep.current = null;
         live.backToLive();
         return;
       }
       seconds = clampSeek(rewind, seconds);
       live.leftLive();
+      if (state.plan) setLiveSeek({ sessionId: state.plan.sessionId, generation: state.plan.seekGeneration, seconds });
     }
     lastStep.current = { seconds, at: Date.now() };
     send({ type: 'seek', seconds });
@@ -160,7 +181,8 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
     if (blocked) return;
     const from = recentStep() ?? (rewind ? rewind.position : view.position);
     const limit = rewind ? rewind.edge : view.duration > 0 ? view.duration : Number.POSITIVE_INFINITY;
-    seek(Math.max(rewind ? rewind.start : 0, Math.min(limit, from + delta)));
+    const toLive = !!rewind && stepLandsLive({ edge: rewind.edge, position: from }, delta);
+    seek(Math.max(rewind ? rewind.start : 0, Math.min(limit, from + delta)), toLive);
   };
   const toggle = (menu: Exclude<Opened, null>) => {
     // One version read per opening of the quality menu, never a poll while it stands open.

@@ -1,5 +1,6 @@
 import { expect } from 'e2e';
 import { describe, test } from '@e2e-dev/web';
+import { waitForVideoReady } from './player-ready';
 
 describe('Sports deterministic release gate', { session: 'mock-sports' }, () => {
   test('Tonight opens a game and its stream starts only once', async ({ app, browser, screen }) => {
@@ -43,5 +44,64 @@ describe('Sports deterministic release gate', { session: 'mock-sports' }, () => 
     await screen.getByTestId('player-close').tap();
     await expect(screen.getByTestId('sports-game')).toBeVisible({ timeout: 30_000 });
     await browser.unroute(playback);
+  });
+});
+
+describe('Sports catch-up release gate', { session: 'mock-sports-catch-up' }, () => {
+  test('Watch from start shows only scores available at the picture time', async ({ app, browser, screen }) => {
+    await app.open('/vela/');
+    const setFixture = (enabled: boolean) => browser.evaluate(async catchUpFixture => {
+      const reply = await fetch('/__admin/faults', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ catchUpFixture }) });
+      return (await reply.json() as { catchUpFixture: boolean }).catchUpFixture;
+    }, enabled);
+    expect(await setFixture(true)).toBe(true);
+    const scoreBug = screen.getByTestId('player-score-bug');
+    const start = screen.getByTestId('sports-watch-from-start');
+    const stage = screen.getByTestId('player-stage-input');
+    const close = screen.getByTestId('player-close');
+    const toggle = screen.getByTestId('player-toggle');
+    const closeWatch = async () => {
+      if (!await stage.isVisible()) return;
+      if (await toggle.getAttribute('aria-label') === 'Pause') {
+        await stage.press('k');
+        await expect(toggle).toHaveAttribute('aria-label', 'Play');
+      }
+      await close.tap();
+      await expect(stage).toBeHidden();
+    };
+    try {
+      for (const [event, channel] of [['nfl-nyg-phi', 'channel-7'], ['nhl-tor-mtl', 'channel-29']] as const) {
+        await app.open('/vela/screen/sports/game?event=' + encodeURIComponent('event:sports:sports:' + event));
+        await expect(start).toBeVisible({ timeout: 30_000 });
+        await app.screenshot('sports-watch-from-start-' + event);
+        await start.tap();
+        await expect(screen.getByTestId('player-live-timeline')).toBeVisible({ timeout: 35_000 });
+        const request = await browser.evaluate(async () => (await fetch('/__e2e/last-playback')).json()) as {
+          kind: string; channelId: string; from: string; programmeId: string;
+        };
+        expect(request).toMatchObject({ kind: 'channel', channelId: channel, from: 'start' });
+        expect(request.programmeId).toMatch(/^catchup:/);
+        await expect(scoreBug).toBeVisible({ timeout: 25_000 });
+        if (event === 'nfl-nyg-phi') {
+          await expect(scoreBug.getByText(/^17$/)).toBeVisible();
+          await expect(scoreBug.getByText(/^24$/)).toBeVisible();
+          await expect(scoreBug.getByText(/^27$/)).toBeHidden();
+        } else {
+          await expect(screen.getByTestId('player-scores-hidden')).toHaveText('Scores hidden while behind live');
+          await expect(screen.getByTestId('score-bug-reveal')).toBeHidden();
+        }
+        await waitForVideoReady(browser, screen);
+        await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 30_000 });
+        await stage.press('k');
+        await expect(toggle).toHaveAttribute('aria-label', 'Play');
+        await app.screenshot('sports-score-' + event);
+        await closeWatch();
+        await expect(start).toBeVisible({ timeout: 30_000 });
+      }
+    } finally {
+      try { await closeWatch(); }
+      finally { expect(await setFixture(false)).toBe(false); }
+    }
   });
 });

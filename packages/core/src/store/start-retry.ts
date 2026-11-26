@@ -2,6 +2,7 @@
 // (retry.afterSeconds, Retry-After, retry.maxAttempts), within a bounded number of attempts and
 // never more than a minute away. Anything else is final: the viewer is told, not kept waiting.
 // Shared by core's playback slice and the live preview tile, which tunes channels itself.
+import { catchUpErrorMessage } from '../live/timeshift';
 import { VelaError } from '../adapter/errors';
 import { unreleasedMessage } from '../release-date';
 
@@ -22,7 +23,8 @@ export function startRetry(error: unknown, retries: number): number {
   if (retry?.allowed !== true) return 0;
   const header = Number(error.retryAfter ?? NaN);
   const hint = Number.isFinite(retry.afterSeconds) ? Math.max(0, retry.afterSeconds!) : 0;
-  const seconds = Math.ceil(Math.max(2 ** Math.min(retries, 5), hint, Number.isFinite(header) ? header : 0, 1));
+  const minimum = error.detail.code === 'catchup_unavailable' ? 30 : 1;
+  const seconds = Math.ceil(Math.max(2 ** Math.min(retries, 5), hint, Number.isFinite(header) ? header : 0, minimum));
   const attempts = Number.isFinite(retry.maxAttempts) ? Math.floor(retry.maxAttempts!) : DEFAULT_ATTEMPTS;
   const limit = Math.max(0, Math.min(MAX_ATTEMPTS, attempts) - 1);
   return seconds <= MAX_WAIT_SECONDS && retries < limit ? seconds : 0;
@@ -62,7 +64,7 @@ export interface StartRefusal {
 export function startRefusal(error: unknown, fallback = '', airDate?: string): StartRefusal {
   if (error instanceof VelaError) {
     const { code, class: errorClass } = error.detail;
-    const message = code === 'title_unreleased' ? unreleasedMessage(airDate) : error.message || fallback;
+    const message = code === 'title_unreleased' ? unreleasedMessage(airDate) : catchUpErrorMessage(code) || error.message || fallback;
     return { message, code, errorClass };
   }
   return { message: error instanceof Error && error.message ? error.message : fallback, code: '', errorClass: '' };

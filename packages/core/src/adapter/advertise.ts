@@ -48,6 +48,7 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       ...(hasUnifiedSearch(adapter) && description.features.unifiedSearch ? { unifiedSearch: description.features.unifiedSearch } : {}),
       proactiveFallback: operation('proactiveFallback', hasProactiveFallback(adapter)),
       liveTV: operation('liveTV', hasLiveTv(adapter)),
+      ...(hasLiveTv(adapter) && description.features.liveCatchUp ? { liveCatchUp: description.features.liveCatchUp } : {}),
       ...(description.features.livePreview ? { livePreview: description.features.livePreview } : {}),
       libraryLive: operation('libraryLive', hasLibraryLive(adapter)),
       trailerPreview: operation('trailerPreview', hasTrailerPreviews(adapter)),

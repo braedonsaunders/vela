@@ -435,6 +435,8 @@ export type SessionEvent = { cursor: Cursor; revision: number; sessionId: ID } &
 export interface ProtocolError { class: 'auth' | 'policy' | 'not-found' | 'source' | 'decoder' | 'playback' | 'capacity' | 'transient' | 'request' | 'conflict';
   code: string; message: string; retry: { allowed: boolean; afterSeconds?: number; maxAttempts?: number };
   requestId?: ID; currentGenerations?: Generations;
+  /** Archive and rewind bounds included with section C6 playback refusals. */
+  archiveDays?: number; earliestAt?: Timestamp; windowStartSeconds?: number; liveEdgeSeconds?: number;
   suggest?: { maxChannels: number; maxWindowMinutes: number };
   /** Attempted delivery labels (not path IDs) and human-readable diagnostics. */
   rejectedPaths?: { path: string; reasons: string[] }[];

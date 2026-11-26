@@ -71,7 +71,7 @@ export class Live {
     const connection = await this.session.ready();
     const adapter = connection.adapter;
     if (!hasLiveTv(adapter)) return null;
-    const features = this.session.features ?? (await adapter.describe()).features;
+    const features = this.session.features ?? (await adapter.viewerLiveFeatures?.()) ?? (await adapter.describe()).features;
     if (features.liveTV?.available === false) return null;
     const tokens = await this.session.tokens(connection);
     const server = this.playback.server;

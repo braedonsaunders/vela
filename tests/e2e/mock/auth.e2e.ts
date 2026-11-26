@@ -1,7 +1,7 @@
 import { expect } from 'e2e';
 import { test } from '@e2e-dev/web';
 
-for (const suite of ['film', 'music', 'quality-cap', 'see-all', 'sports']) {
+for (const suite of ['catch-up', 'film', 'music', 'quality-cap', 'see-all', 'sports', 'sports-catch-up']) {
   const name = `mock-${suite}`;
   test.setup(`Mock release gate: sign in for ${suite}`, { sessions: [name] }, async ({ app, screen, session }) => {
     await app.clearState();

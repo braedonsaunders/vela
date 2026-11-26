@@ -54,6 +54,13 @@ describe('player overlays', () => {
     expect(playerOverlays([scorebug, ticker, toast], { kind: 'title' }).shown).toEqual([]);
   });
 
+  test('delayed playback keeps the score bug and withholds the live ticker', () => {
+    const facts = { kind: 'channel' as const, eventFeed: 'sports', delayed: true };
+    const showTicker = { 'sports.ticker': true };
+    expect(playerOverlays([scorebug, ticker], facts, showTicker).shown).toEqual([scorebug]);
+    expect(playerOverlays([scorebug, ticker], { ...facts, delayed: false }, showTicker).shown).toEqual([scorebug, ticker]);
+  });
+
   test('a chrome overlay draws only while the chrome stands', () => {
     expect(overlayVisible({ visibility: 'chrome' }, false)).toBe(false);
     expect(overlayVisible({ visibility: 'chrome' }, true)).toBe(true);

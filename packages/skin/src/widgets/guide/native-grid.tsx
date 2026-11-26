@@ -33,6 +33,7 @@ export function NativeGuideGrid(props: GridProps & { Surface: ComponentType<Nati
   const now = useGuideMinute(model.nowMinute);
   const scale = minuteWidth(small, zoom), row = rowHeight(small, true), rail = railWidth(small, true);
   const [viewport, setViewport] = useState({ first: Math.max(0, rows.findIndex(c => c.id === props.landing.channelId) - 1), last: 12, from: Math.max(0, props.landing.minute - 60), to: props.landing.minute + 240 });
+  const reportedWindow = useRef<typeof viewport | null>(null);
   const [command, setCommand] = useState({ serial: 0, channel: props.landing.channelId || props.selected.channel, minute: props.landing.minute, focus: props.active });
   const latest = useRef(props); latest.current = props;
   const selectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -56,6 +57,18 @@ export function NativeGuideGrid(props: GridProps & { Surface: ComponentType<Nati
     return () => navigation?.register('guide-native-grid', null);
   }, [navigation]);
   useEffect(() => props.active ? startGuideFrames() : undefined, [props.active]);
+  const landing = props.landing;
+  useEffect(() => {
+    if (!props.active || !landing.explicit || !landing.channelId) return;
+    // The native view applies listing geometry asynchronously. Its first focus command can
+    // arrive before a prepended day expands the native timeline and be clamped to the old end.
+    const settle = setTimeout(() => {
+      const visible = reportedWindow.current;
+      if (!visible || landing.minute < visible.from || landing.minute >= visible.to)
+        enter(landing.channelId, landing.minute);
+    }, 750);
+    return () => clearTimeout(settle);
+  }, [props.active, landing.explicit, landing.channelId, landing.minute, model.startsAt]);
   const applyTime = () => {
     if (!waiting.current) return true;
     const target = resolveTimeTarget(waiting.current, model.dayStarts ?? {}, props.liveView().guide?.nowMinute ?? model.nowMinute, Math.max(30, viewport.to - viewport.from), model.minutes);
@@ -88,11 +101,15 @@ export function NativeGuideGrid(props: GridProps & { Surface: ComponentType<Nati
   const data = useMemo(() => {
     const range = rowWindow(viewport.first, rows.length, Math.max(1, viewport.last - viewport.first), 12);
     const window = { from: Math.max(0, viewport.from - 60), to: Math.min(model.minutes, viewport.to + 60) };
-    return { ticks: model.ticks, dayLabel: model.dayLabel, nowLabel: props.liveView().guide?.nowLabel ?? model.nowLabel, chrome: { background: look.page, surface: look.ui.raised, rail: look.rail, railOn: look.railOn, separator: look.hairline, logo: look.logoTile, ink: look.ink, secondary: look.inkQuiet, accent: look.accent, now: look.now }, emptyLabel: msg('live.noListings'), rows: nativeGuideChannels(rows.slice(range.start, range.end), window.from, window.to),
+    // The native viewport rounds out to half-hour slots. Its boundary labels can be
+    // partially outside the ruler, so render only ticks known to fit within that window.
+    const ticks = model.ticks.filter(tick => tick.minute > viewport.from && tick.minute < viewport.to - 30);
+    return { ticks, dayLabel: model.dayLabel, nowLabel: props.liveView().guide?.nowLabel ?? model.nowLabel, chrome: { background: look.page, surface: look.ui.raised, rail: look.rail, railOn: look.railOn, separator: look.hairline, logo: look.logoTile, ink: look.ink, secondary: look.inkQuiet, accent: look.accent, now: look.now }, emptyLabel: msg('live.noListings'), rows: nativeGuideChannels(rows.slice(range.start, range.end), window.from, window.to),
       drawings: rows.slice(range.start, range.end).map(c => rowDrawing(c, c.programmes.filter(p => p.at + p.span > window.from && p.at < window.to), scale, row, window, now, look, small)),
       minutes: model.minutes, scale, row, rail, now, startsAt: model.startsAt ?? Date.now() - model.nowMinute * 60000 };
   }, [rows, viewport, model.minutes, model.ticks, model.dayLabel, model.nowLabel, now, model.startsAt, scale, row, rail, look, small]);
   const onWindow = useCallback(({ nativeEvent: v }: Parameters<NativeGuideProps['onWindow']>[0]) => {
+    reportedWindow.current = v;
     setViewport(old => old.first === v.first && old.last === v.last && old.from === v.from && old.to === v.to ? old : v);
     const p = latest.current;
     const range = rowWindow(v.first, p.rows.length, v.last - v.first);

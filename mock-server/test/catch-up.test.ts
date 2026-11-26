@@ -1,4 +1,4 @@
-// Live TV catch-up and timeshift in the mock (Ether v0.3.20 spec section C): the capability, the
+// Live TV catch-up and timeshift in the mock (Ether v0.3.22 spec section C): the capability, the
 // channel archive and guide flags, archive plans, the C6 refusals and goLive.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
@@ -106,7 +106,7 @@ describe.skipIf(!mediaGenerated)('catch-up playback', () => {
     const old = await post('/playback', { channelId: 'channel-1', startAt: new Date(Date.now() - 5 * 86_400_000).toISOString(), durationSeconds: 1800, client, idempotencyKey: key() });
     const outside = await errorOf(old);
     expect(outside.code).toBe('catchup_outside_archive');
-    expect((outside.details as { archiveDays: number }).archiveDays).toBe(3);
+    expect(outside.archiveDays).toBe(3);
     const refused = await programmes('channel-5');
     const unavailable = await errorOf(await post('/playback', { channelId: 'channel-5', programmeId: refused.ended.id, client, idempotencyKey: key() }));
     expect(unavailable.code).toBe('catchup_unavailable');
@@ -121,7 +121,7 @@ describe.skipIf(!mediaGenerated)('catch-up playback', () => {
     const generations = { sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration };
     const outside = await errorOf(await post(`/sessions/${plan.sessionId}/commands`, { kind: 'seek', positionSeconds: plan.live!.liveEdgeSeconds! + 600, ...generations, idempotencyKey: key() }));
     expect(outside.code).toBe('timeshift_outside_window');
-    expect((outside.details as { liveEdgeSeconds: number }).liveEdgeSeconds).toBeGreaterThan(0);
+    expect(outside.liveEdgeSeconds).toBeGreaterThan(0);
     const back = await (await post(`/sessions/${plan.sessionId}/commands`, { kind: 'seek', positionSeconds: plan.live!.windowStartSeconds! + 60, ...generations, idempotencyKey: key() })).json() as V.PlaybackPlan;
     expect(back.live!.behindLiveSeconds).toBeGreaterThan(60);
     const live = await (await post(`/sessions/${plan.sessionId}/commands`, { kind: 'goLive', sourceGeneration: back.sourceGeneration, seekGeneration: back.seekGeneration, idempotencyKey: key() })).json() as V.PlaybackPlan;

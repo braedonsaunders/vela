@@ -39,6 +39,8 @@ export function bindMedia(context: HostContext, token: Generation) {
         context.surface.video.readyState >= 2
       )
         context.session.pendingSeek = undefined;
+      if (!context.playback.wantsPlay && video.readyState >= 2 && context.playback.status === 'buffering')
+        context.playback.status = 'paused';
     },
     timeupdate: () => {
       // WebKit can advance after a seek without dispatching another playing event.

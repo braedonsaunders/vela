@@ -46,10 +46,11 @@ export function usePlayerSurfaces(facts: PlayerFacts): PlayerSurfaces {
   const surfaces = useVelaState(state => state.home.value?.surfaces ?? NO_SURFACES);
   const settings = useVelaState(state => state.screens?.settings ?? NO_SETTINGS);
   const [band, setBandHeight] = useState(0);
-  const { shown, switchable } = useMemo(
-    () => playerOverlays(surfaces, { kind: facts.kind, eventFeed: facts.feed }, settings),
-    [surfaces, facts.kind, facts.feed, settings]);
   const context = overlayContext(facts);
+  const delayed = context.local.delayed;
+  const { shown, switchable } = useMemo(
+    () => playerOverlays(surfaces, { kind: facts.kind, eventFeed: facts.feed, delayed }, settings),
+    [surfaces, facts.kind, facts.feed, delayed, settings]);
   const switches = useMemo(() => switchable.map(surface => {
     const on = shown.includes(surface);
     return { id: surface.id, label: surface.setting?.label ?? surface.id, on, button: surface.visibility === 'toggle',

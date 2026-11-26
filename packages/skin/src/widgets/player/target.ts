@@ -19,7 +19,7 @@ export function liveWatchOf(plan: PlaybackPlan | null, target: ChromeTarget | un
  * growing) or a catch-up (one that has ended), and the channel Back to live returns to.
  */
 export function catchUpWatchOf(plan: PlaybackPlan | null, target: ChromeTarget | undefined): { kind: 'startOver' | 'catchUp'; channelId: string } | null {
-  const channelId = plan?.catchUp?.channelId || (target?.kind === 'programme' ? target.channelId ?? '' : '');
+  const channelId = plan?.catchUp?.channelId || (!plan && (target?.kind === 'programme' ? target.channelId ?? '' : ''));
   if (!channelId) return null;
   const startOver = plan ? plan.live?.mode === 'startOver' : target?.kind === 'programme' && target.from === 'start';
   return { kind: startOver ? 'startOver' : 'catchUp', channelId };
