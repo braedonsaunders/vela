@@ -3,7 +3,7 @@ import { deviceLanguages, iso6391, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguag
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { LibraryRecommendations, LiveTv, PathSwitching, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
+import type { DownloadResolution, DownloadSidecar, LibraryRecommendations, LiveTv, MediaDownloads, PathSwitching, ResolveDownloadOptions, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
 import { VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { seriesOrder } from '../series';
@@ -97,7 +97,7 @@ function plexPlayed(n: Node): boolean {
 }
 
 /** Plex Media Server. Sign-in is plex.tv PIN linking (`./link`), outside the per-server adapter. */
-export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, Versions, TrickplaySheets, UnloadStop {
+export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackChanges, TitleChildren, LibraryRecommendations, Versions, TrickplaySheets, UnloadStop, MediaDownloads {
   readonly origin: string;
   private sessions = new Map<string, PlexSession>();
   /** Sections by key, from the last section list: a music section named for audiobooks holds books. */
@@ -105,6 +105,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   private watchlistProbe?: Promise<boolean>;
   private liveConfig?: { dvr: string; grid: string; channels: string };
   private delegation?: Promise<string>;
+  /** Whether the signed-in account has sync/download permission on this server (`allowSync`). */
+  private allowSync?: boolean;
   /** The token the last authorised request carried, for a request that cannot wait for credentials (`unloadStop`). */
   private lastToken?: string;
   constructor(private config: PlexConfig) {
@@ -202,7 +204,13 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     // /identity carries no name (PMS and Ether alike): the server's name is its root container's.
     let name = '';
     if (await this.config.credentials.get()) {
-      try { name = (await this.request('/')).friendlyName || ''; } catch { /* the name the server was added under stands */ }
+      try {
+        const container = await this.request('/');
+        name = container.friendlyName || '';
+        if (container.allowSync !== undefined) {
+          this.allowSync = container.allowSync === true || container.allowSync === 1 || container.allowSync === '1';
+        }
+      } catch { /* the name the server was added under stands */ }
       try {
         const dvrs = await this.request('/livetv/dvrs');
         if (dvrs.Dvr?.length) {
@@ -290,9 +298,10 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       if (n[field] !== undefined) ratings.push({ source: n[image] || 'Plex', kind, value: Number(n[field]), scale: 10 });
     let themeMusic: V.ThemeMusic | undefined;
     if (n.theme) { try { themeMusic = { url: this.mediaURL(n.theme), expiresAt: '9999-12-31T23:59:59Z' }; } catch {} }
+    const lastViewedAt = Number(n.lastViewedAt) > 0 ? new Date(Number(n.lastViewedAt) * 1000).toISOString() : undefined;
     return { ...(projection?.media ? { media: projection.media } : {}), id: String(n.ratingKey), kind: projection?.kind ?? n.type, name: n.title || '', summary: n.summary || '', year: n.year, airDate: n.originallyAvailableAt,
       genres: (n.Genre || []).map((g: Node) => g.tag), durationSeconds: seconds(n.duration), rating: n.contentRating, ratings,
-      artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: plexPlayed(n), favorite: false, watchlisted: false },
+      artwork: this.artwork(n), watch: { positionSeconds: seconds(n.viewOffset), played: plexPlayed(n), favorite: false, watchlisted: false, ...(lastViewedAt ? { lastViewedAt } : {}) },
       ...(themeMusic ? { themeMusic } : {}), showId: n.grandparentRatingKey ? String(n.grandparentRatingKey) : n.type === 'season' && n.parentRatingKey != null ? String(n.parentRatingKey) : undefined,
       showName: n.type === 'episode' ? n.grandparentTitle : n.type === 'season' ? n.parentTitle : undefined,
       seasonId: n.type === 'episode' && n.parentRatingKey != null ? String(n.parentRatingKey) : undefined, seasonNumber: n.type === 'season' ? n.index : n.parentIndex, episodeNumber: n.type === 'episode' ? n.index : undefined };
@@ -597,6 +606,118 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
   }
   async clearVersionChoice(id: string, _request: V.ClearVersionChoiceRequest): Promise<V.ClearVersionChoiceResponse> {
     return { ...(await this.titleVersions(id)), cleared: false };
+  }
+  /** Whether the signed-in account may download original files from this Plex server (`allowSync`). */
+  async downloadsAvailable(): Promise<boolean> {
+    if (this.allowSync !== undefined) return this.allowSync;
+    try {
+      const root = await this.request('/');
+      if (root.allowSync !== undefined) {
+        this.allowSync = root.allowSync === true || root.allowSync === 1 || root.allowSync === '1';
+        return this.allowSync;
+      }
+    } catch {
+      // If the root container does not state allowSync, let the part request enforce server policy.
+    }
+    return true;
+  }
+  /**
+   * Resolve a movie or episode's original file for offline download: `GET {Part.key}?download=1`
+   * with `mediaHeaders()`, plus external text subtitle sidecars and poster artwork. Multi-part
+   * stacked items are refused because they play through the server's HLS stream.
+   */
+  async resolveDownload(titleId: string, options?: ResolveDownloadOptions): Promise<DownloadResolution> {
+    const n = await this.metadata(titleId);
+    if (!['movie', 'episode', 'clip'].includes(n.type)) {
+      fail('Only movies and episodes can be downloaded for offline playback');
+    }
+    if (n.allowSync === false || n.allowSync === 0 || n.allowSync === '0' || this.allowSync === false) {
+      throw new VelaError({ class: 'policy', code: 'download_not_allowed', message: 'Downloads are not allowed for this account on this Plex server', retry: { allowed: false } }, 403);
+    }
+    const mediaList: Node[] = n.Media ?? [];
+    const chosen = options?.versionId;
+    const media = chosen ? mediaList.find((m: Node, index: number) => mediaId(m, index) === chosen) : mediaList[0];
+    if (chosen && !media) fail('Unknown Plex version');
+    if (!media) fail('Plex title has no downloadable media', 'playback');
+    const parts: Node[] = media.Part ?? [];
+    if (!parts.length || !parts[0]?.key) fail('Plex title has no downloadable media', 'playback');
+    if (parts.length > 1) fail('This title is in several parts, which play through the server\'s stream', 'playback');
+    const part = parts[0]!;
+    const mediaIndex = Math.max(0, mediaList.indexOf(media));
+    const version = plexVersion(media, mediaIndex);
+    const subtitleFormats = options?.subtitleFormats ?? ['ass', 'ssa', 'webvtt', 'vtt', 'srt'];
+    const streams: Node[] = part.Stream ?? [];
+    const sidecars: DownloadSidecar[] = [];
+    const audioTracks: V.Track[] = streams.filter(s => Number(s.streamType) === 2).map(s => ({
+      id: String(s.id),
+      streamIndex: s.index,
+      kind: 'audio',
+      language: s.languageCode || 'und',
+      name: s.displayTitle || s.title || s.language || s.codec || '',
+      codec: s.codec || '',
+      channels: s.channels,
+      default: !!s.selected,
+      forced: !!s.forced,
+      hearingImpaired: !!s.hearingImpaired,
+    }));
+    const subtitleTracks: V.Track[] = [];
+    for (const s of streams.filter(st => Number(st.streamType) === 3)) {
+      const id = String(s.id);
+      const base: V.Track = {
+        id,
+        streamIndex: s.index,
+        kind: 'subtitle',
+        language: s.languageCode || 'und',
+        name: s.displayTitle || s.title || s.language || s.codec || '',
+        codec: s.codec || '',
+        default: !!s.selected,
+        forced: !!s.forced,
+        hearingImpaired: !!s.hearingImpaired,
+      };
+      if (s.key && isTextSidecar(s.codec)) {
+        const external = plexSidecar(new URL(this.mediaURL(s.key)), s.codec, subtitleFormats);
+        sidecars.push({ trackId: id, format: external.format, url: external.url });
+        subtitleTracks.push({
+          ...base,
+          ...(external.format === 'webvtt' ? { url: external.url } : {}),
+          delivery: { kind: 'external', format: external.format, url: external.url },
+        });
+      } else if (!s.key) {
+        // Embedded text and bitmap (PGS/VobSub) tracks inside the original file are rendered by libmpv offline.
+        subtitleTracks.push({ ...base, delivery: { kind: 'embedded' } });
+      }
+    }
+    const playing = playingAudio(streams, media.audioCodec);
+    const selectedAudioTrackId = audioTracks.find(t => t.default)?.id ?? playing.id ?? audioTracks[0]?.id;
+    const selectedSubtitleTrackId = subtitleTracks.find(t => t.default)?.id ?? null;
+    const downloadUrl = new URL(this.mediaURL(part.key));
+    downloadUrl.searchParams.set('download', '1');
+    const container = String(part.container || media.container || 'mkv').toLowerCase();
+    const mimeType = container === 'mp4' || container === 'm4v' ? 'video/mp4' : container === 'webm' ? 'video/webm' : 'video/x-matroska';
+    const title = this.title({ ...n, duration: media.duration ?? n.duration });
+    const posterUrl = title.artwork.find(a => a.kind === 'poster')?.sizes[0]?.url ?? title.artwork[0]?.sizes[0]?.url;
+    const markers = plexMarkers(n);
+    const byteLength = Number(part.size) > 0 ? Number(part.size) : undefined;
+    return {
+      title,
+      versionId: version.id,
+      versionLabel: version.label,
+      url: downloadUrl.href,
+      headers: await this.mediaHeaders(),
+      mimeType,
+      container,
+      ...(byteLength ? { byteLength } : {}),
+      ...(part.id != null ? { sourceId: String(part.id) } : {}),
+      ...(media.videoCodec ? { originalVideo: { codec: String(media.videoCodec), width: media.width, height: media.height } } : {}),
+      audioTracks,
+      subtitleTracks,
+      ...(selectedAudioTrackId ? { selectedAudioTrackId } : {}),
+      selectedSubtitleTrackId,
+      chapters: this.chapters(n),
+      ...(markers ? { markers } : {}),
+      sidecars,
+      ...(posterUrl ? { posterUrl } : {}),
+    };
   }
   async startPlayback(r: V.PlaybackRequest): Promise<V.PlaybackPlan> {
     for (const s of this.sessions.values()) if (s.mutations.has(r.idempotencyKey)) return s.mutations.get(r.idempotencyKey)!;

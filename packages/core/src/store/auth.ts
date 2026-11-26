@@ -13,6 +13,7 @@ import { EtherAdapter } from '../adapter/ether';
 import { refusesSession, serverWait } from '../adapter/ether/transport';
 import { ServerCredentials, type ServerKind } from '../session/servers';
 import { msg, time } from '../i18n';
+import type { Downloads } from './downloads';
 import type { VelaPlatform } from './platform';
 import type { Session } from './session';
 import { message, type StateBox } from './state';
@@ -124,11 +125,14 @@ export class Auth {
   private reconnect: { timer: ReturnType<typeof setTimeout>; attempt: number } | undefined;
   /** The wait the server asked for with its last restore failure (Retry-After), in milliseconds. */
   private serverWait = 0;
+  /** Viewer read from local stored credentials during the active restore attempt, so a timeout offline keeps viewer identity. */
+  private restoringViewer: { viewer: string; viewerId: string } | undefined;
 
   constructor(
     private readonly box: StateBox<VelaState>,
     private readonly session: Session,
     private readonly platform: VelaPlatform,
+    private readonly downloads?: Downloads,
   ) {
     session.onReset((kind, refused) => {
       if (kind === 'server') this.linkGeneration++;
@@ -185,6 +189,7 @@ export class Auth {
   // A late answer cannot repaint the offline state or a subsequent sign-in.
   private async restoreSession(): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    this.restoringViewer = undefined;
     if (this.box.get().auth.phase === 'offline') this.patch({ restoring: true, retryAt: 0 });
     const restoring = this.startSession();
     const generation = this.linkGeneration;
@@ -203,7 +208,8 @@ export class Auth {
         const connection = this.session.selected();
         server = { serverId: connection.record.id, serverKind: connection.record.kind,
           serverName: this.session.names.get(connection.record.id) ?? connection.record.name,
-          serverVersion: this.versions.get(connection.record.id) ?? '' };
+          serverVersion: this.versions.get(connection.record.id) ?? '',
+          ...(this.restoringViewer ?? {}) };
       } catch {
         // An unreadable stored registry must not break the recovery path too.
       }
@@ -227,11 +233,16 @@ export class Auth {
     }
     const connection = this.session.selected();
     const generation = this.linkGeneration;
+    let knownViewerId = '';
     try {
       if (this.session.demoSignIn(connection)) await this.session.ready();
       const stored = await this.session.tokens(connection);
       if (generation !== this.linkGeneration) return;
-      if (stored) await this.session.validate(connection, stored);
+      if (stored) {
+        knownViewerId = stored.viewer.id;
+        this.restoringViewer = { viewer: stored.viewer.name, viewerId: stored.viewer.id };
+        await this.session.validate(connection, stored);
+      }
       if (generation !== this.linkGeneration) return;
       await this.refresh();
     } catch (error) {
@@ -241,6 +252,9 @@ export class Auth {
       // A session the server no longer accepts was dropped: the viewer is asked to sign in again
       // rather than shown the server's own wording ("Refresh invalid").
       const rejected = !stillSignedIn && refusesSession(error);
+      if (rejected && knownViewerId) {
+        await this.downloads?.removeViewer(connection.record.id, knownViewerId);
+      }
       if (stillSignedIn) this.serverWait = serverWait(error);
       await this.refresh(rejected ? msg('server.sessionEnded') : restoreFailure(error), stillSignedIn ? 'offline' : undefined);
     }
@@ -682,6 +696,8 @@ export class Auth {
     this.cancelReconnect();
     const connection = this.session.selected();
     const epoch = this.session.epoch;
+    const stored = await this.session.tokens(connection);
+    const viewerId = stored?.viewer.id || this.box.get().auth.viewerId;
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       endSession(connection, this.session).catch(() => {}),
@@ -690,6 +706,7 @@ export class Auth {
     clearTimeout(timer);
     if (epoch !== this.session.epoch) return;
     await connection.credentials.set(null);
+    if (viewerId) await this.downloads?.removeViewer(connection.record.id, viewerId);
     this.cancelQuick();
     this.session.resetSession();
   }
@@ -701,7 +718,10 @@ export class Auth {
     const connection = this.session.selected();
     const epoch = this.session.epoch;
     try {
+      const stored = await this.session.tokens(connection);
+      const viewerId = stored?.viewer.id || this.box.get().auth.viewerId;
       await endSession(connection, this.session);
+      if (viewerId) await this.downloads?.removeViewer(connection.record.id, viewerId);
       if (epoch === this.session.epoch) {
         this.cancelQuick();
         this.session.resetSession();
