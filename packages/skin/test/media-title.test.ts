@@ -61,3 +61,15 @@ test('every built-in document opens media titles in its own title page, with its
     expect(find(media!, node => node.kind === 'widget' && node.widget === 'titleActions').length, name).toBe(0);
   }
 });
+
+test('the inline media slot preserves modal framing and close controls for the active skin', () => {
+  for (const [name, doc] of documents) for (const width of [390, 1440]) {
+    const { mediaTitle, mediaTitleSlot } = resolveDocument(doc, width);
+    expect(mediaTitleSlot, name).toBeDefined();
+    const slotCount = (tree: RNode) => find(tree, node => node.kind === 'slot' && node.slot === 'children').length;
+    expect(slotCount(mediaTitleSlot!), name).toBe(slotCount(mediaTitle!) + 1);
+    expect(find(mediaTitleSlot!, node => node.kind === 'widget' && node.widget === 'mediaPage')).toEqual([]);
+    expect(find(mediaTitleSlot!, node => ['detail-close', 'detail-back'].includes(testId(node))))
+      .toEqual(find(mediaTitle!, node => ['detail-close', 'detail-back'].includes(testId(node))));
+  }
+});

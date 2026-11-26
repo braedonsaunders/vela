@@ -1,0 +1,61 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "read",
+ "screen": "read",
+ "page": "book",
+ "version": "1",
+ "title": "{src.title.item.name}",
+ "presentation": "page",
+ "params": {
+  "id": {
+   "type": "string"
+  },
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {
+  "title": {
+   "from": "vela.title",
+   "id": "{param.id}"
+  },
+  "books": {
+   "from": "vela.children",
+   "id": "{src.title.seriesId}",
+   "limit": 1000
+  }
+ },
+ "tree": {
+  "type": "box",
+  "children": [
+   {
+    "type": "bookHero",
+    "props": {
+     "item": "{src.title.item}"
+    }
+   },
+   {
+    "type": "bookSummary",
+    "props": {
+     "item": "{src.title.item}"
+    }
+   },
+   {
+    "type": "bookFacts",
+    "props": {
+     "item": "{src.title.item}"
+    }
+   },
+   {
+    "type": "bookSeriesList",
+    "props": {
+     "item": "{src.title.item}",
+     "items": "{src.books.items}"
+    }
+   }
+  ]
+ }
+}

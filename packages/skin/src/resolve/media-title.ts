@@ -2,6 +2,7 @@
 // the same frame, scrim, opening motion and close control as a film, with the media page drawn in
 // the frame's scroll region in place of the film's sections. Each document keeps its look.
 import type { Node } from '../../../protocol/skin';
+import type { RNode } from '../resolve';
 
 /** The id every title page gives the region that scrolls inside its frame. */
 export const TITLE_SCROLL_ID = '{env.route}-scroll-{env.entry}';
@@ -30,4 +31,15 @@ export function mediaTitleTree(title: Node | undefined): Node | undefined {
   };
   const tree = walk(title);
   return found ? tree : undefined;
+}
+
+/** Reuse the resolved title frame and host a built-in page in its media slot. */
+export function inlineMediaTitleTree(node: RNode): RNode {
+  if (node.kind === 'widget' && node.widget === 'mediaPage') {
+    const { widget: _widget, params: _params, ...common } = node;
+    return { ...common, kind: 'slot', slot: 'children' };
+  }
+  if (node.kind !== 'box') return node;
+  const children = node.children.map(inlineMediaTitleTree);
+  return children.every((child, index) => child === node.children[index]) ? node : { ...node, children };
 }

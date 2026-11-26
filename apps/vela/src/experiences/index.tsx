@@ -8,11 +8,11 @@ import { useVelaState } from '@vela/core/react';
 import type { LibraryParams } from '../browse/library-query';
 import { ListenSection } from '../listen/section';
 import { WatchLibrary } from './watch';
+import { ReadLibrary } from './read';
+import { config } from '../data/config';
 
 export type LibrarySectionProps = { id: string; params: LibraryParams & { m?: string } };
 
-/** Books and comics: today the standard library, whose titles open the book pages and the reader. */
-function ReadLibrary(props: LibrarySectionProps) { return <WatchLibrary {...props} />; }
 /** Photos and home videos: today the standard library, whose photos open the photo viewer. */
 function GalleryLibrary(props: LibrarySectionProps) { return <WatchLibrary {...props} />; }
 /** Live TV: today the standard library's live tabs, whose channels open the guide and the player. */
@@ -23,7 +23,7 @@ function ListenLibrary({ id, params }: LibrarySectionProps) { return <ListenSect
 export const EXPERIENCE_SECTIONS: Record<VelaExperience, ComponentType<LibrarySectionProps>> = {
   watch: WatchLibrary,
   listen: ListenLibrary,
-  read: ReadLibrary,
+  read: config.readDocuments ? ReadLibrary : WatchLibrary,
   gallery: GalleryLibrary,
   live: LiveLibrary,
 };

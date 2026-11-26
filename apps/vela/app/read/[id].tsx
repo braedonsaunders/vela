@@ -1,17 +1,19 @@
 // Reading a book (docs/media-kinds.md): the reader full screen, its document asked of the server
 // when it opens, the viewer's place saved as they read and when they leave.
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVelaState } from '@vela/core/react';
 import { HostContext } from '@vela/skin/src/host';
-import { ReaderPage } from '@vela/skin/src/widgets/media/reader';
-import { takeReaderOrigin } from '@vela/skin/src/widgets/media/reader-origin';
-import { DEFAULT_READER_SETTINGS, type ReaderLocation, type ReaderSettings } from '@vela/skin/src/widgets/media/reader-engine';
+import { ReaderHostContext, ReaderPage } from '@vela/skin/src/blocks/read/reader';
+import { takeReaderOrigin } from '@vela/skin/src/blocks/read/reader-origin';
+import { DEFAULT_READER_SETTINGS, type ReaderLocation, type ReaderSettings } from '@vela/skin/src/blocks/read/reader-engine';
 import { preferences } from '../../src/data/preferences';
 import { createReaderEngine } from '../../src/media/reader-engine';
 import { useVela } from '../../src/vela';
+import { config } from '../../src/data/config';
+import { ReadDocument } from '../../src/experiences/read-document';
 
 const SETTINGS = 'reader-settings';
 const SAVE_AFTER_MS = 1500;
@@ -19,6 +21,7 @@ const SAVE_AFTER_MS = 1500;
 export default function Read() {
   const { id = '', library } = useLocalSearchParams<{ id: string; library?: string }>();
   const vela = useVela();
+  const active = useIsFocused();
   const store = vela.store;
   const detail = useVelaState(state => state.titles[id]);
   const card = detail?.value?.title[0];
@@ -66,10 +69,18 @@ export default function Read() {
     flush();
     if (router.canGoBack()) router.back(); else router.replace({ pathname: '/title/[id]', params: { id, library: library ?? '' } });
   }, [flush, id, library]);
+  const session = useMemo(() => ({
+    open, engine, settings, onSettings: changeSettings, onLocation, onClose: close, origin,
+  }), [open, engine, settings, changeSettings, onLocation, close, origin]);
+  if (host && config.readDocuments) return (
+    <ReaderHostContext.Provider value={session}>
+      <ReadDocument page="reader" id={id} library={library} host={host} active={active} back={close} />
+    </ReaderHostContext.Provider>
+  );
   if (!host || !card) return <View style={{ flex: 1, backgroundColor: '#fbf9f4' }} />;
   return (
     <HostContext.Provider value={host}>
-      <ReaderPage card={card} open={open} engine={engine} settings={settings} onSettings={changeSettings} onLocation={onLocation} onClose={close} origin={origin} />
+      <ReaderPage card={card} {...session} />
     </HostContext.Provider>
   );
 }

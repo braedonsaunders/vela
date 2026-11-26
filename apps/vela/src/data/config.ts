@@ -9,6 +9,7 @@ export const config = {
   password: process.env.EXPO_PUBLIC_VELA_PASSWORD ?? '',
   /** The mock server's demo sign-in (mock-server/). */
   mock: process.env.EXPO_PUBLIC_VELA_MOCK === '1',
+  readDocuments: process.env.EXPO_PUBLIC_VELA_READ === 'documents',
   /** The build Ether is told this client is (the lab admits builds it knows). */
   appVersion: process.env.EXPO_PUBLIC_VELA_APP_VERSION ?? '0.2.72',
   /** The skin document to start with, by id (`?skin=` on the web). */
