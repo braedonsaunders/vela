@@ -98,12 +98,15 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
     if (auth?.quick && step.page === 'signin' && target === auth.serverId) send({type: 'code'});
   }, [auth?.quick, step.page, target]);
   const offline = step.page === 'signin' && target === auth?.serverId && auth?.phase === 'offline';
-  const title = offline && auth.viewerId ? "You're offline" : step.page === 'choose' ? 'Choose a server' : step.page === 'add' ? 'Add a server' : step.page === 'plex' || step.page === 'server-plex' ? 'Sign in with Plex' : step.page === 'code' ? 'Use a code' : `Sign in to ${name}`;
+  const savedOffline = offline && !!auth.viewerId;
+  const title = savedOffline ? "You're offline" : step.page === 'choose' ? 'Choose a server' : step.page === 'add' ? 'Add a server' : step.page === 'plex' || step.page === 'server-plex' ? 'Sign in with Plex' : step.page === 'code' ? 'Use a code' : `Sign in to ${name}`;
+  // Fabric ignores the no-common-ligatures font variant. Non-joiners keep the ffl glyphs distinct.
+  const displayTitle = savedOffline ? title.replace('ffl', 'f\u200cf\u200cl') : title;
   const serverPlex = step.page === 'signin' && target === auth?.serverId && auth.plexAvailable ? <Pill primary label="Sign in with Plex" testID="server-plex" height={layout?.tight ? 44 : 52} disabled={busy} onPress={() => { send({type: 'server-plex'}); void run(() => authActions!.startPlex()); }}><PlexMark /></Pill> : null;
   return <View style={{ gap: layout?.gap ?? 20, minHeight: 0, flexShrink: 1 }}>
     <View style={{ gap: layout?.tight ? 4 : 12 }}>
       {flow.history.length || onClose ? <Pill label={flow.history.length ? 'Back' : 'Cancel'} height={44} align="flex-start" onPress={back} testID="auth-back" /> : null}
-      {!layout?.minimal ? <Heading title={title} /> : null}
+      {!layout?.minimal ? <Heading title={displayTitle} accessibilityLabel={savedOffline ? title : undefined} /> : null}
     </View>
     {step.page === 'choose' ? <>
       <Pill label="Add a server" height={44} onPress={() => send({type: 'add'})} testID="auth-add" />
