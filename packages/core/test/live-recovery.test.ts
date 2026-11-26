@@ -11,8 +11,22 @@ const live = { mode: 'adaptive', timeshift: { maxMinutes: 60 }, edgeAt: '2026-11
 test('archive recovery keeps the programme origin and seeks to the current position', () => {
   expect(liveRestart(programme, { catchUp: archive } as PlaybackPlan, 82, false)).toEqual({
     target: { kind: 'programme', id: 'programme', channelId: 'channel', range: { startAt: archive.startAt, durationSeconds: 3600 } },
-    resume: { kind: 'programme', seconds: 82 },
+    resume: { kind: 'programme', seconds: 82, startAt: archive.startAt },
   });
+});
+
+test('archive recovery maps the same broadcast instant when the returned range has a different start', () => {
+  const { resume } = liveRestart(programme, { catchUp: archive } as PlaybackPlan, 100, false)!;
+  if (resume?.kind !== 'programme') throw new Error('Expected an archive resume point');
+  const replacement = {
+    catchUp: { ...archive, startAt: '2026-11-26T12:00:20Z' },
+    durationSeconds: 300,
+  } as PlaybackPlan;
+  expect(liveRestartSeek(resume, replacement)).toBe(80);
+  expect(liveRestartSeek(resume, { ...replacement, catchUp: archive })).toBe(100);
+  expect(liveRestartSeek(resume, { ...replacement, catchUp: undefined })).toBe(100);
+  expect(liveRestartSeek({ ...resume, seconds: 10 }, replacement)).toBe(0);
+  expect(liveRestartSeek({ ...resume, seconds: 350 }, replacement)).toBe(300);
 });
 
 test('Start over seeks within the growing range and rejoins live after Go live', () => {

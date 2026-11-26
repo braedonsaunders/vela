@@ -91,14 +91,30 @@ describe('Live TV catch-up release gate', () => {
       });
       return (await response.json()).rewindSegments;
     }, rewindSegments);
-    const recoverWatch = async (seek: boolean, notice?: string) => {
+    const recoverWatch = async (seek: boolean, notice?: string, captureFrame = false) => {
       await expect.poll(() => observedSession).not.toBe('');
       const previous = observedSession;
       const startsBefore = recoveryStarts.length;
-      const expired = await browser.evaluate(async id => {
+      const expired = await browser.evaluate(async ({ id, captureFrame }) => {
+        if (captureFrame) {
+          const stage = document.querySelector<HTMLElement>('[data-testid="watch-stage"]')!;
+          const findVideo = () => Array.from(stage.querySelectorAll('*'))
+            .map(element => element.shadowRoot?.querySelector('video')).find(video => !!video);
+          const previousVideo = findVideo();
+          const observer = new MutationObserver(() => {
+            const video = findVideo();
+            if (!video || video === previousVideo) return;
+            observer.disconnect();
+            // currentTime can echo a requested seek before the decoder presents that position.
+            video.requestVideoFrameCallback((_now, frame) => {
+              stage.dataset.recoveredFrame = String(frame.mediaTime);
+            });
+          });
+          observer.observe(stage, { childList: true, subtree: true });
+        }
         const response = await fetch(`/__admin/sessions/${id}/expire`, { method: 'POST' });
         return (await response.json()).expired;
-      }, previous);
+      }, { id: previous, captureFrame });
       expect(expired).toBe(true);
       if (notice) await expect(screen.getByText(notice, { exact: true })).toBeVisible();
       try {
@@ -141,7 +157,13 @@ describe('Live TV catch-up release gate', () => {
       await pause();
       await screen.getByTestId('player-scrub').press('PageUp');
       await expect.poll(async () => (await videoState(browser)).position).toBeGreaterThan(55);
+      for (let step = 0; step < 3; step++) {
+        const before = (await videoState(browser)).position;
+        await stage.press('ArrowRight');
+        await expect.poll(async () => Math.abs((await videoState(browser)).position - before - 10)).toBeLessThan(1);
+      }
       const archivePosition = (await videoState(browser)).position;
+      expect(Math.abs(archivePosition - 90)).toBeLessThan(5);
       await expect.poll(() => Math.abs(observedPosition - archivePosition)).toBeLessThan(1);
       const archiveSession = observedSession;
       await expect.poll(() => follows.get(archiveSession) ?? 0).toBeGreaterThan(0);
@@ -161,8 +183,15 @@ describe('Live TV catch-up release gate', () => {
       expect(Math.abs(held.position - archivePosition)).toBeLessThan(1);
       expect(recoveryStarts).toHaveLength(archiveStarts);
 
-      const archiveSeek = await recoverWatch(true);
-      expect(Math.abs(archiveSeek.position! - archivePosition)).toBeLessThan(3);
+      await stage.press('k');
+      await waitForVideoPlayback(browser, screen);
+      await expect.poll(async () => (await videoState(browser)).position).toBeGreaterThanOrEqual(98);
+      const playingArchivePosition = (await videoState(browser)).position;
+      const archiveSeek = await recoverWatch(true, undefined, true);
+      const firstFrame = () => browser.evaluate(() => Number(document.querySelector<HTMLElement>('[data-testid="watch-stage"]')?.dataset.recoveredFrame));
+      await expect.poll(firstFrame).toBeGreaterThan(0);
+      expect(Math.abs(await firstFrame() - playingArchivePosition)).toBeLessThan(2);
+      expect(Math.abs(archiveSeek.position! - playingArchivePosition)).toBeLessThan(2);
       expect(archiveSeek.start.channelId).toBe('channel-1');
       expect(archiveSeek.start.startAt).toBe(guide.programmes[0]!.start);
       expect(archiveSeek.start.durationSeconds).toBe((Date.parse(guide.programmes[0]!.end) - Date.parse(guide.programmes[0]!.start)) / 1000);
@@ -201,6 +230,8 @@ describe('Live TV catch-up release gate', () => {
       await expect(toggle).toHaveAttribute('aria-label', 'Pause', { timeout: 35_000 });
       await expect(screen.getByTestId('player-live-mark')).toBeVisible();
       await waitForVideoPlayback(browser, screen);
+      // Wait for the live player report before expiring the observed session.
+      await expect.poll(() => observedPosition).toBeGreaterThan(1100);
       const recoveredLive = await recoverWatch(false);
       expect(recoveredLive.start.channelId).toBe('channel-1');
       expect(recoveredLive.start.programmeId).toBeUndefined();
