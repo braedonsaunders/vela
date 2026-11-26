@@ -32,8 +32,9 @@ const press = (key: string, label: string, window = 1200): Step => ({ key, label
 const repeat = (key: string, label: string, count: number, window = 1200): Step[] =>
   Array.from({ length: count }, (_, i) => press(key, `${label} ${i + 1}`, window));
 
-/** Home on launch: focus starts on the hero's Play. */
-const toMovies: Step[] = [press('DPAD_UP', 'hero → nav'), press('DPAD_RIGHT', 'nav → Movies'), press('DPAD_CENTER', 'open Movies', 6000)];
+/** From Home on launch (focus on the hero's Play, or on search when the account has no hero):
+ * up to the navigation bar, where further presses up do nothing, then Movies. */
+const toMovies: Step[] = [...repeat('DPAD_UP', 'up to nav', 3, 900), press('DPAD_RIGHT', 'nav → Movies'), press('DPAD_CENTER', 'open Movies', 6000)];
 
 /** A scenario: after launch and `settle` ms, `setup` presses (not measured) bring the app where
  * it starts, then `steps` run under the trace. */
