@@ -85,7 +85,8 @@ function GalleryLibraryExperience({ id, address, name, host, active }: {
     let frame = 0;
     let attempts = 0;
     const focus = () => {
-      if (focusElement(target, true)) restore.current = '';
+      const moved = focusElement(target, true);
+      if (moved && (Platform.OS !== 'web' || document.activeElement?.id === target)) restore.current = '';
       else if (++attempts < 60) frame = requestAnimationFrame(focus);
       else restore.current = '';
     };

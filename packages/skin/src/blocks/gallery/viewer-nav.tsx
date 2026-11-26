@@ -118,7 +118,8 @@ export function PhotoViewerNavigation({ navigation, card, children }: {
   useFocusedTVKeys(active, event => {
     if (event.eventKeyAction === 0) return;
     if (fullscreen) reveal();
-    if (event.eventType === 'left') move(-1);
+    if (event.eventType === 'up' && !fullscreen) focusElement(FULLSCREEN_ID);
+    else if (event.eventType === 'left') move(-1);
     else if (event.eventType === 'right') move(1);
     else if (event.eventType === 'select' && !navigation.focusedControl()) setInfo(!info);
   });
