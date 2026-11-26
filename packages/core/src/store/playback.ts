@@ -151,7 +151,13 @@ export class Playback {
   private cursorSeek = 0;
   /** Seeks sent and not yet answered, at the seek generation each was sent against: a published plan moves
    * the cursor only when it answers one of them, once. */
-  private seeking = new Set<{ sessionId: string; seconds: number; seekGeneration: number }>();
+  private seeking = new Set<WaitingSeek>();
+  /** Whether the cursor last moved for a seek (until a report moves it), and the waiting seek whose published
+   * plan moved it, still to be confirmed by its reply. */
+  private cursorFollowsSeek = false;
+  private provisional: WaitingSeek | undefined;
+  /** The source generation the cursor's seek state belongs to: a newer source ends it. */
+  private cursorSource = 0;
   private localTracks = false;
   private audio: string | undefined;
   private subtitle: string | null | undefined;
@@ -426,6 +432,9 @@ export class Playback {
     this.stall = stallWatch(Date.now(), this.watch.restarts);
     this.cursor = plan.positionSeconds ?? 0;
     this.cursorSeek = plan.seekGeneration;
+    this.cursorSource = plan.sourceGeneration;
+    this.cursorFollowsSeek = false;
+    this.provisional = undefined;
     this.patch({ phase: 'playing', plan, sessionId: plan.sessionId, error: '', errorCode: '', errorClass: '', retryAfterSeconds: 0, retryAttempt: 0, versions: null });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     this.followSession(run, connection, plan.sessionId);
@@ -519,7 +528,7 @@ export class Playback {
         this.giveUp(true);
         return;
       }
-      if (!this.recovering) this.followSeek(plan);
+      if (!this.recovering) this.followSeek(plan, false, this.followSource(plan));
       this.patch({ plan, phase: plan.state === 'ended' ? 'ended' : 'playing' });
       if (ended) this.afterWatching(plan, this.box.get().playback.target, plan.positionSeconds);
     };
@@ -820,29 +829,46 @@ export class Playback {
     const answered = (plan: V.PlaybackPlan | null) => {
       if (watch && this.stall && current.sessionId === sessionId && this.box.get().playback.sessionId === sessionId) this.stall = engineCommandAnswered(this.stall, plan);
     };
-    const seek = command.kind === 'seek' ? { sessionId, seconds: command.positionSeconds, seekGeneration: command.seekGeneration } : undefined;
+    const seek: WaitingSeek | undefined = command.kind === 'seek'
+      ? { sessionId, seconds: command.positionSeconds, sourceGeneration: command.sourceGeneration, seekGeneration: command.seekGeneration } : undefined;
     if (seek) this.seeking.add(seek);
     try {
       const connection = await this.session.ready();
       const plan = await this.send(connection.adapter, sessionId, command, origin);
       answered(plan);
+      if (seek && this.provisional === seek) this.provisional = undefined;
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
-        // An accepted seek is the viewer's place, even before the engine presents it.
-        if (command.kind === 'seek') this.followSeek(plan, true);
+        // A late reply behind the plan already shown on its generations (a newer seek's, a version switch's)
+        // is not published and moves nothing. One behind it only on revision is not published either, but
+        // what it confirms (its seek, its tracks) still counts.
+        const shown = this.box.get().playback.plan;
         let nextPlan = connection.plan(plan);
-        if (command.kind === 'tracks') {
+        // A track reply on the shown plan's source records its selection even when its seek generation is behind.
+        if (command.kind === 'tracks' && !(shown && plan.sourceGeneration < shown.sourceGeneration)) {
           if (command.audioTrackId !== undefined && nextPlan.selectedAudioTrackId) this.audio = nextPlan.selectedAudioTrackId;
           if (command.subtitleTrackId !== undefined) this.subtitle = nextPlan.selectedSubtitleTrackId;
-          nextPlan = this.withLocalTracks(nextPlan);
-        } else {
-          nextPlan = this.withLocalTracks(nextPlan);
         }
-        this.patch({ plan: nextPlan });
+        if (shown && olderPlan(plan, shown, false)) return true;
+        const newer = shown && olderPlan(plan, shown) ? shown : undefined;
+        this.followSource(plan);
+        // An accepted seek is the viewer's place, even before the engine presents it.
+        if (command.kind === 'seek') this.followSeek(plan, true);
+        nextPlan = this.withLocalTracks(nextPlan);
+        this.patch({ plan: newer ? this.withLocalTracks(newer) : nextPlan });
         return true;
       }
       return false;
     } catch (error) {
       answered(null);
+      // A plan published at the target of a seek the server refused did not answer it (a track change at that
+      // position): the cursor goes back unless something has moved it since. A lost reply (no answer from
+      // the server) says nothing against the plan, so the cursor stays at its target.
+      if (seek?.before && this.provisional === seek) {
+        if (serverRefused(error) && Math.abs(this.cursor - seek.seconds) < 0.001) {
+          ({ cursor: this.cursor, cursorSeek: this.cursorSeek, followsSeek: this.cursorFollowsSeek } = seek.before);
+        }
+        this.provisional = undefined;
+      }
       const words = commandFailure(command, error, origin);
       if (words && this.box.get().playback.sessionId === sessionId) this.patch({ error: words });
       return false;
@@ -870,6 +896,7 @@ export class Playback {
       this.localTracks = false;
       this.audio = next.selectedAudioTrackId;
       this.subtitle = next.selectedSubtitleTrackId;
+      this.followSource(next);
       this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
     }
     return next;
@@ -896,21 +923,48 @@ export class Playback {
     }
   }
 
+  /** A plan on a newer source generation than the cursor's ends the old source's seek state: its waiting
+   * seeks (except one this plan answers, at its target and past its seek generation) and a provisional match
+   * are dropped. The cursor starts from the new plan's position only when it was following a seek or a
+   * waiting seek was dropped; otherwise the player's last report stands. Returns the cursor from before. */
+  private followSource(plan: V.PlaybackPlan): WaitingSeek['before'] {
+    if (!(plan.sourceGeneration > this.cursorSource)) return undefined;
+    const before = { cursor: this.cursor, cursorSeek: this.cursorSeek, followsSeek: this.cursorFollowsSeek };
+    let dropped = false;
+    for (const seek of this.seeking) {
+      const answers = seek.sessionId === plan.sessionId && plan.seekGeneration > seek.seekGeneration && Math.abs(seek.seconds - plan.positionSeconds) < 0.001;
+      if (seek.sourceGeneration < plan.sourceGeneration && !answers) {
+        this.seeking.delete(seek);
+        dropped = true;
+      }
+    }
+    this.cursorSource = plan.sourceGeneration;
+    if (this.cursorFollowsSeek || dropped) this.cursor = plan.positionSeconds;
+    this.cursorFollowsSeek = false;
+    this.provisional = undefined;
+    return before;
+  }
+
   /** A plan at a newer seek generation than the cursor has followed moves the cursor to its target when it
    * is a seek's reply (`reply`) or, published before that reply, at the target of a seek still waiting for
    * one and past the seek generation that seek was sent against (each seek is answered once); an older one
    * does not move it back. The server also raises the seek generation without a seek (a track change, at its
-   * last observed position): such a plan leaves the cursor to the player's reports. */
-  private followSeek(plan: V.PlaybackPlan, reply = false): void {
+   * last observed position), also at a waiting seek's target: a published plan moves the cursor only until
+   * that seek's reply, which puts it back (`before`: from before this plan's `followSource`) when the seek is refused. */
+  private followSeek(plan: V.PlaybackPlan, reply = false, before?: WaitingSeek['before']): void {
     if (plan.seekGeneration <= this.cursorSeek) return;
+    let seek: WaitingSeek | undefined;
     if (!reply) {
-      const seek = [...this.seeking].find(seek => seek.sessionId === plan.sessionId && plan.seekGeneration > seek.seekGeneration &&
+      seek = [...this.seeking].find(seek => seek.sessionId === plan.sessionId && plan.seekGeneration > seek.seekGeneration &&
         Math.abs(seek.seconds - plan.positionSeconds) < 0.001);
       if (!seek) return;
       this.seeking.delete(seek);
+      seek.before = before ?? { cursor: this.cursor, cursorSeek: this.cursorSeek, followsSeek: this.cursorFollowsSeek };
     }
+    this.provisional = seek;
     this.cursorSeek = plan.seekGeneration;
     this.cursor = plan.positionSeconds;
+    this.cursorFollowsSeek = true;
   }
 
   private offersPath(sessionId: string, pathId: string): boolean {
@@ -937,7 +991,7 @@ export class Playback {
       }
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
         const plan = this.withLocalTracks(connection.plan(snapshot.plan));
-        this.followSeek(plan);
+        this.followSeek(plan, false, this.followSource(plan));
         this.patch({ plan });
       }
       return true;
@@ -981,6 +1035,7 @@ export class Playback {
         return 'version_unavailable';
       }
       if (plan.state === 'ended' || plan.sourceGeneration <= (failedSourceGeneration ?? before.sourceGeneration)) return 'gone';
+      this.followSource(plan);
       this.cursor = plan.positionSeconds;
       this.lastPosition = { sessionId, seconds: plan.positionSeconds, ended: false };
       this.patch({ plan, phase: 'playing', error: '', errorCode: '', errorClass: '' });
@@ -1060,9 +1115,15 @@ export class Playback {
     const stale = !!plan && ((snapshot.sourceGeneration !== undefined && snapshot.sourceGeneration < plan.sourceGeneration) ||
       (snapshot.seekGeneration !== undefined && snapshot.seekGeneration < Math.max(plan.seekGeneration, this.cursorSeek)));
     // An engine (re)loading a source reports a reset clock of zero before it presents: not the viewer's place.
-    if (snapshot.position !== undefined && !stale && (snapshot.position > 0 || presenting)) {
+    // Nor, after the cursor followed a seek, is a report at that seek generation before the engine presents
+    // it (an old clock while it loads, buffers or seeks).
+    const settling = this.cursorFollowsSeek && !presenting && snapshot.seekGeneration === this.cursorSeek &&
+      (snapshot.sourceGeneration === undefined || snapshot.sourceGeneration === this.cursorSource);
+    if (snapshot.position !== undefined && !stale && !settling && (snapshot.position > 0 || presenting)) {
       this.cursor = snapshot.position;
       if (snapshot.seekGeneration !== undefined) this.cursorSeek = Math.max(this.cursorSeek, snapshot.seekGeneration);
+      this.cursorFollowsSeek = false;
+      this.provisional = undefined;
     }
     if (!this.localTracks && presenting) {
       if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
@@ -1140,6 +1201,9 @@ export class Playback {
     this.watch = { target: watchOf(target), session: plan.sessionId, restarts: 0 };
     this.cursor = plan.positionSeconds ?? 0;
     this.cursorSeek = plan.seekGeneration;
+    this.cursorSource = plan.sourceGeneration;
+    this.cursorFollowsSeek = false;
+    this.provisional = undefined;
     this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     void this.session.ready().then(connection => { if (this.run === run) this.followSession(run, connection, plan.sessionId); }, () => undefined);
@@ -1299,6 +1363,9 @@ export class Playback {
     this.stall = undefined;
     this.cursor = 0;
     this.cursorSeek = 0;
+    this.cursorSource = 0;
+    this.cursorFollowsSeek = false;
+    this.provisional = undefined;
     this.localTracks = false;
     this.audio = undefined;
     this.subtitle = undefined;
@@ -1473,6 +1540,19 @@ export class Playback {
     }
     return sent;
   }
+}
+
+/** A seek sent and not yet answered, at the seek generation it was sent against; `before`: the cursor a
+ * published plan matching it moved, kept until its reply. */
+type WaitingSeek = { sessionId: string; seconds: number; sourceGeneration: number; seekGeneration: number;
+  before?: { cursor: number; cursorSeek: number; followsSeek: boolean } };
+
+/** A plan older than the one shown: behind on its source generation, then its seek generation, then (unless
+ * `revision` is false) its revision when both carry one. */
+function olderPlan(plan: V.PlaybackPlan, shown: V.PlaybackPlan, revision = true): boolean {
+  if (plan.sourceGeneration !== shown.sourceGeneration) return plan.sourceGeneration < shown.sourceGeneration;
+  if (plan.seekGeneration !== shown.seekGeneration) return plan.seekGeneration < shown.seekGeneration;
+  return revision && typeof plan.revision === 'number' && typeof shown.revision === 'number' && plan.revision < shown.revision;
 }
 
 /** What a watch is of, whatever position or track a restart asks it again at. */
