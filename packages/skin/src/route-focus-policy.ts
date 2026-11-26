@@ -8,11 +8,6 @@ export function readLibraryOpeningFocus(tv: boolean, view: string | undefined): 
   return !(tv && view === 'all-books');
 }
 
-/** The legacy Android TV series modal opens on its close button. */
-export function readTitleOpeningFocus(platform: string, tv: boolean, page: 'book' | 'series'): 'close' | undefined {
-  return tv && platform === 'android' && page === 'series' ? 'close' : undefined;
-}
-
 const CONTENT_ACTIONS = new Set(['select', 'playExtra', 'navigate', 'plugin', 'setParam', 'stop']);
 
 /** A primary title action can replace provisional focus while its details are arriving. */

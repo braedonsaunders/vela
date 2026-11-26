@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { openingFocusPriority, takesOpeningFocus, readLibraryOpeningFocus, readTitleOpeningFocus, restoreRouteFocus, returnFocusTarget } from '../src/route-focus-policy';
+import { openingFocusPriority, takesOpeningFocus, readLibraryOpeningFocus, restoreRouteFocus, returnFocusTarget } from '../src/route-focus-policy';
 
 test('native touch navigation does not restore TV focus over the keyboard', () => {
   expect(restoreRouteFocus('android', false)).toBe(false);
@@ -16,13 +16,6 @@ test('Read All books leaves opening focus with TV navigation', () => {
   expect(readLibraryOpeningFocus(true, 'all-books')).toBe(false);
   expect(readLibraryOpeningFocus(true, 'series')).toBe(true);
   expect(readLibraryOpeningFocus(false, 'all-books')).toBe(true);
-});
-
-test('Android TV Read starts the series modal on Close', () => {
-  expect(readTitleOpeningFocus('android', true, 'series')).toBe('close');
-  expect(readTitleOpeningFocus('android', true, 'book')).toBeUndefined();
-  expect(readTitleOpeningFocus('android', false, 'series')).toBeUndefined();
-  expect(readTitleOpeningFocus('ios', true, 'series')).toBeUndefined();
 });
 
 test('Back from playback prefers the pressed hero button even if another button plays the same title', () => {
