@@ -18,8 +18,8 @@ export async function selectPlexHomeProfile(origin: string, request: PlexHomeSig
 }
 
 /** Validate and resolve the common profile-selection response used by sign-in and switching. */
-export function plexHomeSelection(origin: string, value: PlexAccountSignIn): import('../../wire').PlexHomeSelection {
-  if (!validSelection(value)) throw new Error('Ether returned an invalid Plex Home profile selection.');
+export function plexHomeSelection(origin: string, value: PlexAccountSignIn, minProfiles = 2): import('../../wire').PlexHomeSelection {
+  if (!validSelection(value, minProfiles)) throw new Error('Ether returned an invalid Plex Home profile selection.');
   return { ...value, profiles: value.profiles.map(profile => {
     const { avatarUrl, ...rest } = profile;
     const avatar = profileAvatar(origin, avatarUrl);
@@ -61,11 +61,12 @@ async function plexRequest(origin: string, path: string, body: object, allowSele
   return plexTokens(value);
 }
 
-function validSelection(value: PlexAccountSignIn): value is import('../../wire').PlexHomeSelection {
+/** A sign-in challenge needs a real choice (two or more profiles); a switch may list only the viewer's own. */
+function validSelection(value: PlexAccountSignIn, minProfiles = 2): value is import('../../wire').PlexHomeSelection {
   const candidate = value as { selectionToken?: unknown; expiresAt?: unknown; profiles?: unknown };
   if (typeof candidate.selectionToken !== 'string' || !candidate.selectionToken || candidate.selectionToken.length > 512
     || typeof candidate.expiresAt !== 'string' || !Number.isFinite(Date.parse(candidate.expiresAt)) || !Array.isArray(candidate.profiles)
-    || candidate.profiles.length < 2 || candidate.profiles.length > 32) return false;
+    || candidate.profiles.length < minProfiles || candidate.profiles.length > 32) return false;
   return candidate.profiles.every((profile: PlexHomeProfile) => profile && typeof profile.id === 'string' && !!profile.id
     && typeof profile.name === 'string' && !!profile.name.trim() && profile.name.length <= 80 && typeof profile.protected === 'boolean'
     && (profile.restricted === undefined || typeof profile.restricted === 'boolean'));

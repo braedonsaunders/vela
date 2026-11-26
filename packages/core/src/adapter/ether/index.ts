@@ -232,7 +232,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   async startPlexProfileSwitch(request: V.PlexHomeChallengeRequest): Promise<V.PlexHomeSelection> {
     const answer = await this.http.request<V.PlexAccountSignIn>('POST', '/auth/plex/profiles/challenge', request, { retryAuth: false });
-    return plexHomeSelection(this.origin, answer);
+    return plexHomeSelection(this.origin, answer, 1);
   }
 
   /** Completion revokes the bearer used to create the challenge; save its replacement atomically. */
