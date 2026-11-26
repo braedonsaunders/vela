@@ -26,11 +26,16 @@ const PACKAGE = 'app.ether.vela';
  * press is measured for (the next press waits that long); `burst` sends several keys back to back. */
 export type Step =
   | { key: string; label?: string; window?: number; burst?: number }
-  | { wait: number };
+  | { wait: number }
+  /** Opens a deep link (an unmeasured jump to where the presses start) and waits `wait` ms. */
+  | { link: string; wait: number };
 
 const press = (key: string, label: string, window = 1200): Step => ({ key, label, window });
 const repeat = (key: string, label: string, count: number, window = 1200): Step[] =>
   Array.from({ length: count }, (_, i) => press(key, `${label} ${i + 1}`, window));
+
+/** The lab's Movies library, in its grid view. */
+const MOVIES_GRID = 'vela://library/1?view=library';
 
 /** From Home on launch (focus on the hero's Play, or on search when the account has no hero):
  * up to the navigation bar, where further presses up do nothing, then Movies. */
@@ -60,18 +65,22 @@ export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: 
       ...repeat('DPAD_UP', 'rows ↑', 3),
     ],
   },
+  /** Movies' Library grid (24,000 titles on the lab), opened by its deep link with focus on the first card. */
   library: {
     settle: 15000,
+    setup: [{ link: MOVIES_GRID, wait: 7000 }],
     steps: [
-      ...toMovies,
-      ...repeat('DPAD_UP', 'up to the chips', 3),
-      press('DPAD_RIGHT', 'chip → Library'),
-      press('DPAD_CENTER', 'open Library grid', 6000),
       ...repeat('DPAD_DOWN', 'grid ↓', 8),
       ...repeat('DPAD_RIGHT', 'grid →', 4),
       ...repeat('DPAD_DOWN', 'grid deep ↓', 6),
       ...repeat('DPAD_UP', 'grid ↑', 3),
     ],
+  },
+  /** Vertical moves over grid rows already drawn, deep in a long library (setup draws them). */
+  griddeep: {
+    settle: 15000,
+    setup: [{ link: MOVIES_GRID, wait: 7000 }, ...repeat('DPAD_DOWN', 'grid ↓', 16, 900), { wait: 12000 }],
+    steps: [...repeat('DPAD_UP', 'drawn ↑', 6), ...repeat('DPAD_DOWN', 'drawn ↓', 6), ...repeat('DPAD_RIGHT', 'drawn →', 4)],
   },
   title: {
     settle: 15000,
@@ -150,7 +159,8 @@ duration_ms: ${Math.ceil(seconds * 1000)}
 export function deviceScript(steps: Step[]): string {
   const lines = ['#!/system/bin/sh'];
   for (const step of steps) {
-    if ('wait' in step) lines.push(`sleep ${step.wait / 1000}`);
+    if ('link' in step) lines.push(`am start -a android.intent.action.VIEW -d '${step.link}' ${PACKAGE} >/dev/null 2>&1`, `sleep ${step.wait / 1000}`);
+    else if ('wait' in step) lines.push(`sleep ${step.wait / 1000}`);
     else {
       const keys = Array.from({ length: step.burst ?? 1 }, () => `KEYCODE_${step.key}`).join(' ');
       lines.push(step.burst ? `input keyevent ${keys}` : `input keyevent --duration 80 ${keys}`);
@@ -226,7 +236,7 @@ async function measure(o: Options, name: string, label: string): Promise<RunRepo
   const work = mkdtempSync(join(tmpdir(), 'tv-nav-'));
   try {
     const presses = scenario.steps.filter((s): s is Extract<Step, { key: string }> => 'key' in s);
-    const seconds = scenario.steps.reduce((t, s) => t + ('wait' in s ? s.wait : (s.window ?? 1200) + 600 * (s.burst ?? 1)), 0) / 1000 + 8;
+    const seconds = scenario.steps.reduce((t, s) => t + ('key' in s ? (s.window ?? 1200) + 600 * (s.burst ?? 1) : s.wait), 0) / 1000 + 8;
     shell(o, `am force-stop ${PACKAGE}`);
     shell(o, `am start -n ${PACKAGE}/.MainActivity`);
     await Bun.sleep(scenario.settle);

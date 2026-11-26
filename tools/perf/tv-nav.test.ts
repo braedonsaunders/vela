@@ -77,8 +77,9 @@ describe('tv-nav probe and trace parsing', () => {
 
 describe('tv-nav scenarios', () => {
   test('presses are held for 80 ms and paced by the device; bursts go back to back', () => {
-    expect(deviceScript([{ key: 'DPAD_DOWN', window: 1500 }, { wait: 2000 }, { key: 'DPAD_RIGHT', burst: 3, window: 4000 }])).toBe([
+    expect(deviceScript([{ link: 'vela://library/1', wait: 500 }, { key: 'DPAD_DOWN', window: 1500 }, { wait: 2000 }, { key: 'DPAD_RIGHT', burst: 3, window: 4000 }])).toBe([
       '#!/system/bin/sh',
+      "am start -a android.intent.action.VIEW -d 'vela://library/1' app.ether.vela >/dev/null 2>&1", 'sleep 0.5',
       'input keyevent --duration 80 KEYCODE_DPAD_DOWN', 'sleep 1.5',
       'sleep 2',
       'input keyevent KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT', 'sleep 4',

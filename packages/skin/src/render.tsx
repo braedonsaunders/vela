@@ -743,9 +743,12 @@ const NativeStickyHeader = forwardRef<{ setNextHeaderY(y: number): void }, Stick
     });
   }, [layout, nextY, scrollAnimatedValue]);
   // Fabric's hit testing needs the settled transform in its shadow tree too. Drawing stays
-  // native-driven during the gesture; only publish the explicit value once scrolling pauses.
+  // native-driven during the gesture; only publish the explicit value once scrolling pauses. A TV
+  // has no touch to hit-test (its focus moves by native view positions, which the native-driven
+  // transform already moves), and each publish was a React commit after every D-pad scroll that
+  // relaid out the page: in a long library it doubled the JS work of a press up or down (#60).
   useEffect(() => {
-    if (!layout) return;
+    if (!layout || Platform.isTV) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const listener = scrollAnimatedValue.addListener(({ value }) => {
       clearTimeout(timer);
