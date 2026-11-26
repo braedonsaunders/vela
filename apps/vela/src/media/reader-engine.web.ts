@@ -40,6 +40,7 @@ interface FoliateView extends HTMLElement {
 
 const SERIF = '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif';
 const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const FIXED_PAGE_TOUCH_ACTION = 'pan-y pinch-zoom';
 
 function text(value: unknown): string {
   if (!value) return '';
@@ -292,7 +293,10 @@ export function createReaderEngine(): ReaderEngine | null {
       target.replaceChildren(opened);
       opened.addEventListener('load', event => {
         const { doc } = (event as CustomEvent<{ doc: Document }>).detail;
-        if (!opened.isFixedLayout) {
+        if (opened.isFixedLayout) {
+          // The renderer's touch policy doesn't cross the iframe boundary.
+          doc.documentElement.style.touchAction = FIXED_PAGE_TOUCH_ACTION;
+        } else {
           fitPictures(doc);
           chapter = doc;
           scheduleHeadings();
@@ -327,6 +331,8 @@ export function createReaderEngine(): ReaderEngine | null {
       // PDFs open through a Metro-safe loader (pdf-book.web.ts); everything else foliate detects itself.
       await opened.open(source.format === 'pdf' ? await (await import('./pdf-book.web')).makePdfBook(file) as never : file);
       if (view !== opened) throw new Error('The reader closed while the book opened');
+      // Keep horizontal drags on the margins in the pointer event stream as well.
+      if (opened.isFixedLayout) opened.renderer.style.touchAction = FIXED_PAGE_TOUCH_ACTION;
       sections = Math.max(1, opened.book.sections.length);
       rtl = opened.book.dir === 'rtl';
       apply(settings ?? initial);
