@@ -1666,3 +1666,386 @@ test('a delayed refresh does not let a republished track change match a repeated
     restore();
   }, 1800);
 });
+
+// The server answers each switch to version B, C, … with that version at the given plan fields, refuses it, or loses its reply.
+function holdSwitches(adapter: object, plan: () => PlaybackPlan | null) {
+  const versions = adapter as Record<string, unknown>;
+  const waiting: Record<string, { accept: (fields: Partial<PlaybackPlan>) => void; refuse: () => void; lose: () => void }> = {};
+  const refusal = new VelaError({ class: 'conflict', code: 'version_refused', message: 'refused', retry: { allowed: false } }, 409);
+  versions.titleVersions = async () => ({ versions: [] });
+  versions.clearVersionChoice = async () => {};
+  versions.switchVersion = (id: string, c: { versionId: string }) => new Promise((resolve, reject) => {
+    waiting[c.versionId] = {
+      accept: fields => resolve({ ...plan()!, sessionId: id, selectedVersionId: c.versionId, ...fields }),
+      refuse: () => reject(refusal),
+      lose: () => reject(new TypeError('Network request failed')),
+    };
+  });
+  return waiting;
+}
+
+test('taking a version after both restarts are spent gives a fresh restart budget, also when its switch reply comes behind a newer plan', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    expect(await restart()).toBe(1815);
+    expect(await restart()).toBe(1815);
+    // Both restarts are spent. Version B is published, then a newer plan for B, then B's older switch reply arrives.
+    const { accept } = holdSwitch(adapter, plan);
+    const switched = playback.switchVersion(sessionId(), 'b', 1815);
+    await flush();
+    await publish(2, 1810, { sourceGeneration: 2, selectedVersionId: 'b' });
+    await publish(3, 1810, { sourceGeneration: 2, selectedVersionId: 'b' });
+    accept({ positionSeconds: 1810, sourceGeneration: 2, seekGeneration: 2 }); await switched;
+    // The session fails: a replacement starts on B.
+    expect(await restart()).toBe(1810);
+    expect(requests.at(-1).versionId).toBe('b');
+    // The fresh budget is spent like any other: one more restart, then the viewer is told.
+    expect(await restart()).toBe(1810);
+    playback.recover(sessionId());
+    expect(sessionId()).toBe('');
+  }, 1800);
+});
+
+test('a recovery\'s own replacement on the version taken does not give a fresh restart budget', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+    const server = adapter as unknown as { startPlayback: (r: any) => Promise<PlaybackPlan> };
+    const start = server.startPlayback;
+    server.startPlayback = async r => ({ ...(await start(r)), selectedVersionId: r.versionId });
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    const { accept } = holdSwitch(adapter, plan);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    const switched = playback.switchVersion(sessionId(), 'b', 1815);
+    await flush();
+    accept({ positionSeconds: 1815, sourceGeneration: 2, seekGeneration: 2 }); await switched;
+    expect(await restart()).toBe(1815);
+    expect(await restart()).toBe(1815);
+    expect(requests.at(-1).versionId).toBe('b');
+    // The replacement names B, and a newer plan for B is published on it: both restarts stay spent.
+    await publish(2, 1815, { sourceGeneration: 2, selectedVersionId: 'b' });
+    playback.recover(sessionId());
+    expect(sessionId()).toBe('');
+  }, 1800);
+});
+
+test('an original reopened after both restarts are spent does not give a fresh restart budget', async () => {
+  await watch(async ({ playback, sessionId, restart, plan, adapter }) => {
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    expect(await restart()).toBe(1815);
+    expect(await restart()).toBe(1815);
+    const server = adapter as unknown as { sessionSnapshot: (id: string) => Promise<{ plan: PlaybackPlan }> };
+    server.sessionSnapshot = async () => ({ plan: { ...plan()!, positionSeconds: 1810, sourceGeneration: 3, seekGeneration: 3 } });
+    expect(await playback.originalLost(sessionId(), 1810)).toBe('reopened');
+    playback.recover(sessionId());
+    expect(sessionId()).toBe('');
+  }, 1800);
+});
+
+test('a buffering report at the old position under an accepted seek\'s new generations does not outrank its reply', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter }) => {
+    const { waiting, restore } = answerSeeks(adapter);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    // At 1815 s, a seek to 90; the server's adjusted plan is published at 91.
+    const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+    await flush();
+    await publish(2, 91);
+    const reply = { ...plan()! };
+    // Buffering at 1815 s under the new generations, then the accepted 91 s reply.
+    playback.snapshot({ ...at(sessionId(), 'buffering', 1815), sourceGeneration: reply.sourceGeneration, seekGeneration: reply.seekGeneration });
+    waiting[0]!.accept(reply); await seek;
+    restore();
+    expect(await restart()).toBe(91);
+  }, 1800);
+});
+
+for (const [answer, expected] of [['refused', 300], ['accepted', 91]] as const) {
+  test(`a buffering report under a seek's new generations before its reply restarts at ${expected} once the seek is ${answer}`, async () => {
+    await watch(async ({ playback, sessionId, restart, publish, plan, adapter }) => {
+      const { waiting, restore } = answerSeeks(adapter);
+      const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+      playback.snapshot(at(sessionId(), 'playing', 1815));
+      const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+      await flush();
+      await publish(2, 91);
+      const reply = { ...plan()! };
+      playback.snapshot({ ...at(sessionId(), 'buffering', 300), sourceGeneration: reply.sourceGeneration, seekGeneration: reply.seekGeneration });
+      if (answer === 'accepted') waiting[0]!.accept(reply); else waiting[0]!.refuse();
+      await seek;
+      restore();
+      expect(await restart()).toBe(expected);
+    }, 1800);
+  });
+}
+
+test('a buffering report at the old position under an adjusted seek\'s new generations stands once that seek is refused', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter }) => {
+    const { waiting, restore } = answerSeeks(adapter);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+    await flush();
+    await publish(2, 91);
+    const shown = plan()!;
+    playback.snapshot({ ...at(sessionId(), 'buffering', 1815), sourceGeneration: shown.sourceGeneration, seekGeneration: shown.seekGeneration });
+    waiting[0]!.refuse(); await seek;
+    restore();
+    expect(await restart()).toBe(1815);
+  }, 1800);
+});
+
+test('a buffering report under new generations no seek asked for moves the restart position', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan }) => {
+    await publish(2, 91);
+    const shown = plan()!;
+    playback.snapshot({ ...at(sessionId(), 'buffering', 1815), sourceGeneration: shown.sourceGeneration, seekGeneration: shown.seekGeneration });
+    expect(await restart()).toBe(1815);
+  }, 1800);
+});
+
+test('a playing report under an adjusted seek\'s new generations while the seek waits is newer than its reply', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter }) => {
+    const { waiting, restore } = answerSeeks(adapter);
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'seek-90' });
+    await flush();
+    await publish(2, 91);
+    const reply = { ...plan()! };
+    // The viewer scrubs locally to 95 s; the player plays there under the new generations.
+    playback.snapshot({ ...at(sessionId(), 'playing', 95), sourceGeneration: reply.sourceGeneration, seekGeneration: reply.seekGeneration });
+    expect(await restart(async () => { waiting[0]!.accept(reply); await seek; })).toBe(95);
+    restore();
+  }, 1800);
+});
+
+test('a refused version switch does not erase an earlier switch whose reply was lost', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'a', positionSeconds: 1800 });
+    await flush();
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    // On A at 1815 s: the server accepts B at 1810 s and the reply is lost; C is refused; then B is published.
+    const switches = holdSwitches(adapter, plan);
+    const toB = playback.switchVersion(sessionId(), 'b', 1810).catch(() => undefined);
+    await flush();
+    switches.b!.lose(); await toB;
+    const toC = playback.switchVersion(sessionId(), 'c', 1815).catch(() => undefined);
+    await flush();
+    switches.c!.refuse(); await toC;
+    await publish(2, 1810, { sourceGeneration: 2, selectedVersionId: 'b' });
+    expect(await restart()).toBe(1810);
+    expect(requests.at(-1).versionId).toBe('b');
+  }, 1800);
+});
+
+for (const [case_, expected] of [['C accepted', 'c'], ['B and C both refused', 'a'], ['B published before C is refused', 'b']] as const) {
+  test(`after a switch to B and one to C, ${case_}: recovery asks for ${expected.toUpperCase()}`, async () => {
+    await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+      const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+      await playback.start({ kind: 'title', id: 'movie', versionId: 'a', positionSeconds: 1800 });
+      await flush();
+      playback.snapshot(at(sessionId(), 'playing', 1815));
+      const switches = holdSwitches(adapter, plan);
+      const toB = playback.switchVersion(sessionId(), 'b', 1810).catch(() => undefined);
+      await flush();
+      if (case_ === 'B and C both refused') switches.b!.refuse(); else switches.b!.lose();
+      await toB;
+      const toC = playback.switchVersion(sessionId(), 'c', 1820).catch(() => undefined);
+      await flush();
+      if (case_ === 'C accepted') switches.c!.accept({ positionSeconds: 1820, sourceGeneration: 2, seekGeneration: 2 });
+      else {
+        if (case_ === 'B published before C is refused') await publish(2, 1810, { sourceGeneration: 2, selectedVersionId: 'b' });
+        switches.c!.refuse();
+      }
+      await toC;
+      expect(await restart()).toBe({ a: 1815, b: 1810, c: 1820 }[expected]);
+      expect(requests.at(-1).versionId).toBe(expected);
+    }, 1800);
+  });
+}
+
+test('a version asked for twice in a row is taken once: a later plan for it is not taken again', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    const switches = holdSwitches(adapter, plan);
+    const first = playback.switchVersion(sessionId(), 'b', 1810).catch(() => undefined);
+    await flush();
+    const toFirst = switches.b!;
+    const second = playback.switchVersion(sessionId(), 'b', 1810).catch(() => undefined);
+    await flush();
+    // B is published and plays on to 1830 s; then a newer plan for B (another source of it) is published at 1700 s.
+    await publish(2, 1810, { sourceGeneration: 2, selectedVersionId: 'b' });
+    playback.snapshot({ ...at(sessionId(), 'playing', 1830), sourceGeneration: 2, seekGeneration: 2 });
+    await publish(3, 1700, { sourceGeneration: 3, selectedVersionId: 'b' });
+    // The first request's reply is lost; the second one's is accepted at 1810 s, behind the plan shown.
+    toFirst.lose(); await first;
+    switches.b!.accept({ positionSeconds: 1810, sourceGeneration: 2, seekGeneration: 2 }); await second;
+    expect(plan()?.sourceGeneration).toBe(3);
+    expect(await restart()).toBe(1830);
+    expect(requests.at(-1).versionId).toBe('b');
+  }, 1800);
+});
+
+const twoAudioTracks = [{ id: '1' }, { id: '2' }] as unknown as PlaybackPlan['audioTracks'];
+
+test('a retried switch\'s reply behind a track change on its version does not take its tracks back', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    // The server takes track changes; a replacement offers both audio tracks and opens on track 1.
+    const server = adapter as unknown as { changeTracks: (id: string, c: any) => Promise<PlaybackPlan>; startPlayback: (r: any) => Promise<PlaybackPlan> };
+    const sent: any[] = [];
+    server.changeTracks = async (id, c) => { sent.push(c); return { ...plan()!, sessionId: id, selectedAudioTrackId: c.audioTrackId, sourceGeneration: 3, seekGeneration: 3 }; };
+    const start = server.startPlayback;
+    server.startPlayback = async r => ({ ...(await start(r)), audioTracks: twoAudioTracks, selectedAudioTrackId: '1' } as unknown as PlaybackPlan);
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    // The first request for B is lost; B is asked for again and published at generation 2 on audio track 1.
+    const switches = holdSwitches(adapter, plan);
+    const first = playback.switchVersion(sessionId(), 'b', 1815).catch(() => undefined);
+    await flush();
+    switches.b!.lose(); await first;
+    const second = playback.switchVersion(sessionId(), 'b', 1815);
+    await flush();
+    await publish(2, 1815, { sourceGeneration: 2, selectedVersionId: 'b', audioTracks: twoAudioTracks, selectedAudioTrackId: '1' });
+    // Audio track 2 is accepted at generation 3; then the retry's generation-2 reply, selecting track 1, arrives.
+    await playback.command(sessionId(), { kind: 'tracks', audioTrackId: '2', sourceGeneration: 2, seekGeneration: 2, idempotencyKey: 'tracks-2' });
+    switches.b!.accept({ positionSeconds: 1815, sourceGeneration: 2, seekGeneration: 2, audioTracks: twoAudioTracks, selectedAudioTrackId: '1' }); await second;
+    expect(plan()?.selectedAudioTrackId).toBe('2');
+    sent.length = 0;
+    expect(await restart()).toBe(1815);
+    expect(requests.at(-1).versionId).toBe('b');
+    // Recovery asks the replacement for track 2.
+    expect(sent.map(c => c.audioTrackId)).toEqual(['2']);
+  }, 1800);
+});
+
+test('a retried switch\'s reply behind a seek on its version does not put the older plan back', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    // The first request for B is lost before the server takes it; the retry is published at 1810 s.
+    const switches = holdSwitches(adapter, plan);
+    const first = playback.switchVersion(sessionId(), 'b', 1810).catch(() => undefined);
+    await flush();
+    switches.b!.lose(); await first;
+    const second = playback.switchVersion(sessionId(), 'b', 1810);
+    await flush();
+    await publish(2, 1810, { sourceGeneration: 2, selectedVersionId: 'b' });
+    // A seek on B to 90 s is accepted; then the retry's older reply arrives.
+    const { waiting, restore } = answerSeeks(adapter);
+    const seek = playback.command(sessionId(), { kind: 'seek', positionSeconds: 90, sourceGeneration: 2, seekGeneration: 2, idempotencyKey: 'seek-90' });
+    await flush();
+    waiting[0]!.accept({ ...plan()!, positionSeconds: 90, sourceGeneration: 2, seekGeneration: 3 }); await seek;
+    restore();
+    switches.b!.accept({ positionSeconds: 1810, sourceGeneration: 2, seekGeneration: 2 }); await second;
+    expect(plan()?.positionSeconds).toBe(90);
+    expect(plan()?.seekGeneration).toBe(3);
+    expect(await restart()).toBe(90);
+    expect(requests.at(-1).versionId).toBe('b');
+  }, 1800);
+});
+
+for (const way of ['published', 'read by a refresh', 'reopened by the original-lost read'] as const) {
+  test(`a version taken from a plan ${way} keeps its own tracks over a local choice made on the previous version`, async () => {
+    await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+      const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+      // Every replacement offers both audio tracks and opens on track 1; the server leaves track selection to the engine.
+      const server = adapter as unknown as { changeTracks: (id: string, c: any) => Promise<PlaybackPlan>; startPlayback: (r: any) => Promise<PlaybackPlan>; sessionSnapshot: (id: string) => Promise<{ plan: PlaybackPlan }> };
+      server.changeTracks = async () => { throw new TypeError('Track changes are unavailable'); };
+      const start = server.startPlayback;
+      server.startPlayback = async r => ({ ...(await start(r)), audioTracks: twoAudioTracks, selectedAudioTrackId: '1' } as unknown as PlaybackPlan);
+      // Audio track 2 plays on version A, and a replacement keeps it locally.
+      playback.snapshot({ ...at(sessionId(), 'playing', 1815), audioTrackId: '2' });
+      expect(await restart()).toBe(1815);
+      const sent: any[] = [];
+      server.changeTracks = async (id, c) => { sent.push(c); return { ...plan()!, sessionId: id, selectedAudioTrackId: c.audioTrackId }; };
+      // B negotiates track 1 and reuses id 2 for another language; it comes in, then its matching reply arrives.
+      const { accept } = holdSwitch(adapter, plan);
+      const switched = playback.switchVersion(sessionId(), 'b', 1815);
+      await flush();
+      const onB = { sourceGeneration: 2, seekGeneration: 2, selectedVersionId: 'b', audioTracks: twoAudioTracks, selectedAudioTrackId: '1' };
+      if (way === 'published') await publish(2, 1810, onB);
+      else {
+        server.sessionSnapshot = async id => ({ plan: { ...plan()!, sessionId: id, positionSeconds: 1810, ...onB } });
+        if (way === 'read by a refresh') expect(await playback.refresh(sessionId())).toBe(true);
+        else expect(await playback.originalLost(sessionId(), 1815)).toBe('reopened');
+      }
+      accept({ positionSeconds: 1810, ...onB }); await switched;
+      // The session fails before B reports its tracks.
+      expect(await restart()).toBe(1810);
+      expect(requests.at(-1).versionId).toBe('b');
+      // The replacement opens on B's track 1 and is not asked for track 2.
+      expect(sent.map(c => c.audioTrackId)).toEqual([]);
+    }, 1800);
+  });
+}
+
+test('a pending switch is taken by the first usable plan of its version after the original-lost read showed it unavailable', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'a', positionSeconds: 1800 });
+    await flush();
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    // On A, pinned, at 1815 s: the server accepts B at 1810 s and the reply is lost.
+    const switches = holdSwitches(adapter, plan);
+    const toB = playback.switchVersion(sessionId(), 'b', 1810).catch(() => undefined);
+    await flush();
+    switches.b!.lose(); await toB;
+    // The original-lost read first shows B as unavailable; then a newer plan for B is published at 1810 s.
+    const server = adapter as unknown as { sessionSnapshot: (id: string) => Promise<{ plan: PlaybackPlan }> };
+    server.sessionSnapshot = async () => ({ plan: { ...plan()!, positionSeconds: 1810, selectedVersionId: 'b', sourceFailure: 'version_unavailable', sourceGeneration: 2, seekGeneration: 2 } as PlaybackPlan });
+    expect(await playback.originalLost(sessionId(), 1815)).toBe('version_unavailable');
+    await publish(3, 1810, { sourceGeneration: 3, selectedVersionId: 'b' });
+    expect(await restart()).toBe(1810);
+    expect(requests.at(-1).versionId).toBe('b');
+  }, 1800);
+});
+
+test('a queued report from the previous source does not choose the tracks of the version taken', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    const server = adapter as unknown as { changeTracks: (id: string, c: any) => Promise<PlaybackPlan>; startPlayback: (r: any) => Promise<PlaybackPlan> };
+    const start = server.startPlayback;
+    server.startPlayback = async r => ({ ...(await start(r)), audioTracks: twoAudioTracks, selectedAudioTrackId: '1' } as unknown as PlaybackPlan);
+    const sent: any[] = [];
+    server.changeTracks = async (id, c) => { sent.push(c); return { ...plan()!, sessionId: id, selectedAudioTrackId: c.audioTrackId }; };
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    // B is published on audio 1 at generation 2; A's queued generation-1 report naming audio 2 arrives, then B's reply.
+    const { accept } = holdSwitch(adapter, plan);
+    const switched = playback.switchVersion(sessionId(), 'b', 1815);
+    await flush();
+    const onB = { sourceGeneration: 2, seekGeneration: 2, selectedVersionId: 'b', audioTracks: twoAudioTracks, selectedAudioTrackId: '1' };
+    await publish(2, 1810, onB);
+    playback.snapshot({ ...at(sessionId(), 'playing', 1815), audioTrackId: '2' });
+    accept({ positionSeconds: 1810, ...onB }); await switched;
+    // B fails before it presents: the replacement opens on B's audio 1 and is not asked for audio 2.
+    expect(await restart()).toBe(1810);
+    expect(requests.at(-1).versionId).toBe('b');
+    expect(sent.map(c => c.audioTrackId)).toEqual([]);
+  }, 1800);
+});
+
+test('a version still waiting for its lost switch reply is taken from a subtitle download\'s reply that shows it', async () => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter, requests }) => {
+    const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'a', positionSeconds: 1800 });
+    await flush();
+    playback.snapshot(at(sessionId(), 'playing', 1815));
+    // On A, pinned, at 1815 s: the server accepts B at 1810 s and the reply is lost.
+    const switches = holdSwitches(adapter, plan);
+    const toB = playback.switchVersion(sessionId(), 'b', 1810).catch(() => undefined);
+    await flush();
+    switches.b!.lose(); await toB;
+    // A subtitle download's reply first shows B; then the poll publishes B, and the session fails before B presents.
+    const onB = { positionSeconds: 1810, selectedVersionId: 'b', sourceGeneration: 2, seekGeneration: 2 };
+    const subtitles = adapter as unknown as Record<string, unknown>;
+    subtitles.subtitleLanguages = async () => null;
+    subtitles.searchSubtitles = async () => ({ results: [] });
+    subtitles.downloadSubtitle = async (id: string) => ({ ...plan()!, sessionId: id, ...onB, subtitleTracks: [{ id: 'found' }] });
+    expect(await playback.downloadSubtitle('found')).toBe('found');
+    await publish(2, 1810, { ...onB, subtitleTracks: [{ id: 'found' }] } as Partial<PlaybackPlan>);
+    expect(await restart()).toBe(1810);
+    expect(requests.at(-1).versionId).toBe('b');
+  }, 1800);
+});
