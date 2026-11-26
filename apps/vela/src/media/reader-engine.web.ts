@@ -106,16 +106,16 @@ function keepHeadingWithText(doc: Document): boolean {
   const origin = (vertical ? bounds.top : bounds.left) + leading;
   const place = (rect: DOMRect) => vertical ? rect.top + rect.height / 2 : rect.left + rect.width / 2;
   const drawn = (rect: DOMRect) => rect.width > 0 && rect.height > 0;
-  const old = new Set(doc.querySelectorAll(`[${READER_COLUMN_START}]`));
+  const old = new Set(Array.from(doc.querySelectorAll(`[${READER_COLUMN_START}]`)));
   for (const element of old) element.removeAttribute(READER_COLUMN_START);
   let changed = false;
   const range = doc.createRange();
-  for (const heading of doc.querySelectorAll(READER_HEADINGS)) {
+  for (const heading of Array.from(doc.querySelectorAll(READER_HEADINGS))) {
     const next = heading.nextElementSibling;
-    const head = [...heading.getClientRects()].find(drawn);
+    const head = Array.from(heading.getClientRects()).find(drawn);
     if (!next || !head) continue;
     range.selectNodeContents(next);
-    const line = [...range.getClientRects()].find(drawn) ?? [...next.getClientRects()].find(drawn);
+    const line = Array.from(range.getClientRects()).find(drawn) ?? Array.from(next.getClientRects()).find(drawn);
     if (!line || !headingOrphaned(place(head), place(line), origin, stride)) continue;
     heading.setAttribute(READER_COLUMN_START, '');
     if (!old.delete(heading)) changed = true;
