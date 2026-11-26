@@ -1,6 +1,6 @@
-// The reader grows out of the book's cover and shrinks back into it (widgets/media/reader-origin.ts).
+// The reader grows out of the book's cover and shrinks back into it (blocks/read/reader-origin.ts).
 import { expect, test } from 'bun:test';
-import { bookFrom, bookRect, COVER_ASPECT, noteReaderOrigin, pageFill, takeReaderOrigin } from '../src/widgets/media/reader-origin';
+import { bookFrom, bookRect, COVER_ASPECT, noteReaderOrigin, pageFill, takeReaderOrigin } from '../src/blocks/read/reader-origin';
 
 test('the opening book stands centred in the cover\'s shape, large on a desktop and within a phone\'s width', () => {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 1024, height: 1366 }, { width: 2560, height: 1080 }]) {

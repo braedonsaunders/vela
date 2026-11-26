@@ -1,4 +1,4 @@
-// The Listen rich blocks as document nodes (docs/experiences.md: Blocks; the registry is
+// The rich blocks as document nodes (docs/experiences.md: Blocks; the registry is
 // packages/protocol/rich-blocks.ts). The resolver hands a block its props (holes compiled as
 // arguments), its parts (document, node and skin styles already merged) and its part templates;
 // this file reads them in the block's context, publishes the parts and templates to the engine
@@ -7,34 +7,34 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Platform, View } from 'react-native';
 import { currentInQueue, msg, withBand, type HistoryRecapPeriod } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
-import { useHost, type ScreenPress } from '../../host';
-import { fill, type RNode } from '../../resolve';
-import type { Arg } from '../../screen/holes';
-import { bind } from '../../screen/items';
-import { useScopedReads } from '../../screen/scoped-reads';
-import type { Ctx, Env } from '../../vocabulary';
-import { useMediaLook } from '../../widgets/media/parts';
-import { useScreenBlockRuntime } from '../types';
-import { isRichBlock, type RichBlockName } from '../../../../protocol/rich-blocks';
-import { deref } from '../../screen/scope';
-import { DuplicatesBlock } from '../duplicates';
-import { PlaylistImportBlock } from '../import';
-import { RecapBlock } from '../recap';
-import { EqBlock, SoundBlock } from '../sound';
-import { placeOf, useMusic } from './app';
-import { LyricsPanel } from './lyrics';
-import { QueuePanel } from './queue';
-import { RailChips, RailFirstFocus, RailIcons, Sidebar } from './rail';
-import { openNowPlaying } from './hub';
-import { useListenDock } from './dock';
-import { isPageBlock, PageBlock } from './page-blocks';
-import { useVisualizerHost, VisualizerBlock, type VisualizerSwitch } from './visualizer';
-import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '../../widgets/media/player';
-import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './bar';
-import { ListenLookProvider, usePart, type ListenLook } from './look';
-import { fillParts } from './part-style';
-import { asCard, barPresses, parseBool, parseEnum, parseNumber, propDefault, tableTracks } from './props';
-import { TrackList, type TrackListOptions } from './track-table';
+import { useHost, type ScreenPress } from '../host';
+import { fill, type RNode } from '../resolve';
+import type { Arg } from '../screen/holes';
+import { bind } from '../screen/items';
+import { useScopedReads } from '../screen/scoped-reads';
+import type { Ctx, Env } from '../vocabulary';
+import { useMediaLook } from './media/parts';
+import { useScreenBlockRuntime } from './types';
+import { isRichBlock, type RichBlockName } from '../../../protocol/rich-blocks';
+import { deref } from '../screen/scope';
+import { DuplicatesBlock } from './duplicates';
+import { PlaylistImportBlock } from './import';
+import { RecapBlock } from './recap';
+import { EqBlock, SoundBlock } from './sound';
+import { placeOf, useMusic } from './listen/app';
+import { LyricsPanel } from './listen/lyrics';
+import { QueuePanel } from './listen/queue';
+import { RailChips, RailFirstFocus, RailIcons, Sidebar } from './listen/rail';
+import { openNowPlaying } from './listen/hub';
+import { useListenDock } from './listen/dock';
+import { isPageBlock, PageBlock } from './listen/page-blocks';
+import { useVisualizerHost, VisualizerBlock, type VisualizerSwitch } from './listen/visualizer';
+import { MINI_PLAYER_HEIGHT, MiniPlayer, NowPlaying } from '../widgets/media/player';
+import { BarPanelView, NowPlayingBar, NOW_PLAYING_BAR_HEIGHT, type BarPanel } from './listen/bar';
+import { ListenLookProvider, usePart, type ListenLook } from './listen/look';
+import { fillParts } from './listen/part-style';
+import { asCard, barPresses, parseBool, parseEnum, parseNumber, propDefault, tableTracks } from './listen/props';
+import { TrackList, type TrackListOptions } from './listen/track-table';
 
 /** A rich block node as resolved (resolve.ts). */
 export type RichNode = Extract<RNode, { kind: 'rich' }>;

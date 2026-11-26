@@ -2,9 +2,9 @@
 // EPUB in paginated or scrolled columns and CBZ/PDF as fixed pages. Settings become the book's
 // injected styles and the page geometry (reader-layout.ts); taps and keys inside the book's frames
 // come back as page turns and the controls' toggle.
-import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings, TocItem } from '@vela/skin/src/widgets/media/reader-engine';
-import { READER_THEMES } from '@vela/skin/src/widgets/media/reader-engine';
-import { isTap, readerLayout, safeFraction, startTarget, swipeTurn, tapZone, type Landmark, type SectionInfo } from '@vela/skin/src/widgets/media/reader-layout';
+import type { ReaderBook, ReaderEngine, ReaderLocation, ReaderSettings, TocItem } from '@vela/skin/src/blocks/read/reader-engine';
+import { READER_THEMES } from '@vela/skin/src/blocks/read/reader-engine';
+import { isTap, readerLayout, safeFraction, startTarget, swipeTurn, tapZone, type Landmark, type SectionInfo } from '@vela/skin/src/blocks/read/reader-layout';
 
 type Input = 'next' | 'previous' | 'toggle-chrome' | 'show-chrome' | 'escape';
 interface FoliateTocItem { label?: string; href?: string; subitems?: FoliateTocItem[] }

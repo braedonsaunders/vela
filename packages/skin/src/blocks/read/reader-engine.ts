@@ -1,0 +1,69 @@
+// The reader's engine boundary (docs/media-kinds.md): what the reader page asks of whatever
+// renders the book (foliate-js on the web; the same engine in a DOM component on phones and tablets).
+import type { ComponentType } from 'react';
+
+export type ReaderTheme = 'light' | 'sepia' | 'dark';
+export type ReaderFont = 'serif' | 'sans' | 'publisher';
+export type ReaderFlow = 'paginated' | 'scrolled';
+
+export interface ReaderSettings {
+  theme: ReaderTheme;
+  font: ReaderFont;
+  /** Text size, percent of the book's own (100 = as published). */
+  fontSize: number;
+  lineHeight: number;
+  flow: ReaderFlow;
+}
+
+export const DEFAULT_READER_SETTINGS: ReaderSettings = { theme: 'light', font: 'serif', fontSize: 100, lineHeight: 1.5, flow: 'paginated' };
+
+export const READER_THEMES: Record<ReaderTheme, { page: string; ink: string; quiet: string; rule: string; link: string }> = {
+  light: { page: '#fbf9f4', ink: '#1f1d1a', quiet: '#7a756c', rule: '#e6e0d4', link: '#7a4b1f' },
+  sepia: { page: '#f3ead8', ink: '#4b3a2a', quiet: '#8a7660', rule: '#e0d3b8', link: '#8a4b16' },
+  dark: { page: '#141416', ink: '#d9d4ca', quiet: '#8b8780', rule: '#2a2a2e', link: '#e0b88a' },
+};
+
+export interface TocItem { label: string; href: string; depth: number }
+
+export interface ReaderLocation {
+  /** Opaque to the server: the engine's locator (an EPUB CFI, a page). */
+  locator: string;
+  /** 0..1 through the whole book. */
+  fraction: number;
+  /** The chapter the page is in. */
+  chapter: string;
+  /** Page within the book (1-based) and the total, for fixed-layout books (comics, PDFs) whose pages are real. */
+  page?: number;
+  pages?: number;
+  /** Pages left in the chapter, for paginated reflowable books, when known. */
+  pagesLeft?: number;
+  /** The current TOC entry's href, to mark it in the contents. */
+  tocHref?: string;
+}
+
+export interface ReaderBook {
+  title: string;
+  author: string;
+  toc: TocItem[];
+  rtl: boolean;
+  /** The book's own cover image (an object URL owned by the engine), often sharper than the server's. */
+  cover?: string;
+}
+
+export interface ReaderEngine {
+  /** What draws the pages where the page cannot hand the engine an element (phones and tablets: a
+   * web view), rendered in the reader's page area. The web engine draws into `host` instead. */
+  Surface?: ComponentType<{ page: string }>;
+  /** Open the document into `host` (a DOM element on the web; unused with a Surface) at a saved locator. */
+  open(source: { url: string; format: 'epub' | 'pdf' | 'cbz'; mimeType: string; /** The saved share of the book, when the locator cannot be resolved. */ fraction?: number }, host: unknown, settings: ReaderSettings, locator?: string): Promise<ReaderBook>;
+  next(): void;
+  previous(): void;
+  goTo(href: string): void;
+  goToFraction(fraction: number): void;
+  apply(settings: ReaderSettings): void;
+  onLocation(listener: (location: ReaderLocation) => void): () => void;
+  /** Taps, clicks and keys inside the book's frame, which the page cannot see itself. Taps are
+   * already sorted by where they land: the outer quarters turn the page, the middle toggles the controls. */
+  onInput(listener: (input: 'next' | 'previous' | 'toggle-chrome' | 'show-chrome' | 'escape') => void): () => void;
+  destroy(): void;
+}

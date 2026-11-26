@@ -1,7 +1,7 @@
-// The reader's page decisions (widgets/media/reader-layout.ts): where a book opens, its layout at a
+// The reader's page decisions (blocks/read/reader-layout.ts): where a book opens, its layout at a
 // window size, tap zones and the position line.
 import { expect, test } from 'bun:test';
-import { coverSection, isTap, readerLayout, readerPosition, safeFraction, startTarget, swipeTurn, tapZone } from '../src/widgets/media/reader-layout';
+import { coverSection, isTap, readerLayout, readerPosition, safeFraction, startTarget, swipeTurn, tapZone } from '../src/blocks/read/reader-layout';
 
 // The Way of Kings as calibre packs it: the cover page first, named only by the EPUB 2 guide.
 const calibre = [{ id: 'titlepage.xhtml' }, { id: 'The_Way_of_Kings_split_000.html' }, { id: 'The_Way_of_Kings_split_001.html' }];

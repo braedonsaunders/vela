@@ -21,7 +21,7 @@ import {
 } from './pages';
 import { Byline, Heart, IconButton, LikedCover, MusicTile, PlayFab, ReleaseStatus, Shelf, Wash } from './parts';
 import { cardOf, cardsOf, dedupeAlbums, shelfSubtitle } from './props';
-import type { Props } from './rich';
+import type { Props } from '../rich';
 import { ListeningSearch, RecentSearches, SearchField, SearchResults } from './search';
 import { ContinueListening, Credits, ListeningHome, ListeningTitle, SpokenAbout, SpokenCollectionShelf, SpokenFacts, SpokenItems, SpokenPlay, SpokenProgress } from './spoken';
 import { PageEnd } from './paging';

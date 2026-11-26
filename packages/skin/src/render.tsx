@@ -58,7 +58,7 @@ import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocab
 import { itemKey, items } from './screen/items';
 import { deref as derefValue, screenImageSrc } from './screen/scope';
 import { BlockView } from './screen/block-view';
-import { RichBlock } from './blocks/listen/rich';
+import { RichBlock } from './blocks/rich';
 import { useScopedReads } from './screen/scoped-reads';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
