@@ -233,13 +233,16 @@ function FullscreenPhoto({ card, ratio, navigation, reveal, hide }: {
   const lastTouch = useRef(0);
   const toggle = navigation.chrome ? hide : reveal;
   const uri = photoImage(card);
-  const top = host.viewport.insets.top + (m.tv ? 24 : 16);
+  const insets = host.viewport.windowInsets ?? host.viewport.insets;
+  const top = insets.top + (m.tv ? 24 : 16);
   const right = (host.viewport.sides?.right ?? 0) + (m.tv ? 28 : 16);
   const left = host.viewport.sides?.left ?? 0;
   const back = () => navigation.setFullscreen(false);
 
   return (
     <Modal visible animationType="none" presentationStyle="fullScreen" onRequestClose={back}
+      statusBarTranslucent={Platform.OS === 'android' && !Platform.isTV}
+      navigationBarTranslucent={Platform.OS === 'android' && !Platform.isTV}
       onShow={() => { focusElement(SURFACE_ID); }}>
       <View style={{ flex: 1, backgroundColor: m.ui.page }} testID="gallery-photo-fullscreen-stage">
         <FocusPressable ref={focusTarget(SURFACE_ID)} nativeID={SURFACE_ID} testID={SURFACE_ID} accessibilityRole="button"
@@ -264,7 +267,7 @@ function FullscreenPhoto({ card, ratio, navigation, reveal, hide }: {
         {navigation.info ? (
           <PhotoInfo card={card} style={{
             top: top + (m.tv ? 62 : 56), right,
-            width: Math.min(360, m.width - 32), maxHeight: m.height - top - 96 - host.viewport.insets.bottom,
+            width: Math.min(360, m.width - 32), maxHeight: m.height + (host.viewport.windowInsets ? insets.top + insets.bottom : 0) - top - 96 - insets.bottom,
           }} />
         ) : null}
       </View>

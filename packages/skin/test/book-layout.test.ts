@@ -16,5 +16,8 @@ test('TV and iOS book pages use only low-frequency cover colors as their backdro
   expect(readBackdropComponents('book', 'ios', false)).toEqual([3, 4]);
   expect(readBackdropComponents('book', 'web', false)).toBeUndefined();
   expect(readBackdropComponents('book', 'android', false)).toBeUndefined();
-  expect(readBackdropComponents('series', 'ios', true)).toBeUndefined();
+  expect(readBackdropComponents('series', 'ios', true)).toEqual([3, 4]);
+  expect(readBackdropComponents('series', 'android', true)).toEqual([3, 4]);
+  expect(readBackdropComponents('series', 'ios', false)).toBeUndefined();
+  expect(readBackdropComponents('series', 'web', false)).toBeUndefined();
 });

@@ -6,8 +6,7 @@ import { HostContext, useHost } from '@vela/skin/src/host';
 import { MediaActionsContext } from '@vela/skin/src/blocks/media/context';
 import { MediaFrame } from '@vela/skin/src/blocks/media/title';
 import { readBackdropComponents } from '@vela/skin/src/blocks/read/book-layout';
-import { inlineMediaTitleCloseTargets } from '@vela/skin/src/resolve/media-title';
-import { readTitleOpeningFocus } from '@vela/skin/src/route-focus-policy';
+import { READ_SERIES_PRIMARY } from '@vela/skin/src/blocks/read/series';
 import { FocusBoundary } from '../focus-boundary';
 import { DocumentScreen } from '../screen';
 import { useVela } from '../vela';
@@ -15,6 +14,8 @@ import { useMediaPageActions } from '../media/actions';
 import { useMediaPlayerActions } from '../media/player-actions';
 import { useReaderActions } from '../media/reader-actions';
 import { ReadDocument } from './read-document';
+
+const SERIES_FOCUS = [READ_SERIES_PRIMARY];
 
 interface Props {
   id: string;
@@ -29,8 +30,7 @@ export function ReadTitleScreen(props: Props) {
   const vela = useVela();
   const host = vela.host('title', id, library);
   const framed = vela.doc?.mediaTitleSlot;
-  const openingFocus = readTitleOpeningFocus(Platform.OS, Platform.isTV, props.page);
-  const initialTVFocus = useMemo(() => framed && openingFocus === 'close' ? inlineMediaTitleCloseTargets(framed) : undefined, [framed, openingFocus]);
+  const initialTVFocus = props.page === 'series' ? SERIES_FOCUS : undefined;
   const actions = useMediaPageActions(library, back, useMediaPlayerActions(), useReaderActions(library));
   const page = useCallback((current: SkinHost): SkinHost => ({
     ...current,

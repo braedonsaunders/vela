@@ -15,6 +15,8 @@ export interface Viewport {
    * lays out between them and its env(safe-area-inset-left/right) is zero). A layer drawn over
    * the whole window, such as a modal, pads by them itself. */
   sides?: { left: number; right: number };
+  /** Vertical insets of the outer window when navigation has already consumed them. */
+  windowInsets?: { top: number; bottom: number };
   /** Points per CSS px here, when a host draws at its own scale (a plugin overlay over the TV player
    * draws in the player look's 1.4); else the platform's (PX, or Android TV's pixel scale). */
   pxScale?: number;

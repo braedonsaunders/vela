@@ -5,5 +5,5 @@ export function readingChapterLabel(label: string): string {
 
 /** The enlarged native cover needs just its broad color shapes behind the hero. */
 export function readBackdropComponents(page: 'book' | 'series', platform: string, tv: boolean): [number, number] | undefined {
-  return page === 'book' && (tv || platform === 'ios') ? [3, 4] : undefined;
+  return tv || (page === 'book' && platform === 'ios') ? [3, 4] : undefined;
 }
