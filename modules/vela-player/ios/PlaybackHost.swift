@@ -1,7 +1,7 @@
 import Foundation
 
 /// What the owner is asked to do.
-enum SystemMediaCommand {
+enum SystemMediaCommand: Equatable {
     case play
     case pause
     case toggle
@@ -9,6 +9,9 @@ enum SystemMediaCommand {
     case seek(to: Double)
     case next
     case previous
+    case enableAudio(trackId: String)
+    case enableSubtitle(trackId: String)
+    case disableSubtitle
 }
 
 /// Which remote commands an owner takes: a video's 10-second skips, music's next and previous, or spoken
@@ -17,6 +20,27 @@ enum SystemMediaStyle: Equatable {
     case video
     case music
     case spoken
+}
+
+/// One audio or subtitle track published through Now Playing.
+struct NowPlayingTrack: Equatable {
+    let id: String
+    let name: String
+    let language: String?
+    let codec: String?
+    let channels: Int?
+    let forced: Bool
+    let hearingImpaired: Bool
+}
+
+/// The video track choices currently available and selected, scoped to one session and source generation.
+struct NowPlayingLanguages: Equatable {
+    let sessionId: String
+    let sourceGeneration: Int
+    let audioTracks: [NowPlayingTrack]
+    let subtitleTracks: [NowPlayingTrack]
+    let selectedAudioTrackId: String?
+    let selectedSubtitleTrackId: String?
 }
 
 /// What the owner says about itself for Now Playing.
@@ -34,11 +58,23 @@ struct NowPlayingState: Equatable {
     /// The player's clock is moving. A queue player's next item stands still for a moment after it
     /// takes over; Now Playing must not extrapolate over that, or it stays ahead for the whole track.
     var clockRunning = true
+    /// Audio and subtitle choices for video playback; omitted when audio playback owns Now Playing.
+    var languages: NowPlayingLanguages? = nil
+
+    /// A change of title, rate, duration or language choices, or a jump the system's extrapolation would not reach.
+    static func differs(_ old: NowPlayingState, _ new: NowPlayingState, elapsed: TimeInterval) -> Bool {
+        let expected = old.position + (old.playing && old.clockRunning ? elapsed * old.rate : 0)
+        return old.title != new.title || old.subtitle != new.subtitle || old.album != new.album || old.artworkURL != new.artworkURL
+            || old.duration != new.duration || old.playing != new.playing || old.rate != new.rate || old.audio != new.audio
+            || old.clockRunning != new.clockRunning || old.languages != new.languages
+            || abs(new.position - expected) > (new.audio ? 2 : 5)
+    }
 }
 
 @MainActor
 protocol SystemMediaOwner: AnyObject {
-    func systemMediaCommand(_ command: SystemMediaCommand)
+    @discardableResult
+    func systemMediaCommand(_ command: SystemMediaCommand) -> Bool
     var systemMediaStyle: SystemMediaStyle { get }
 }
 

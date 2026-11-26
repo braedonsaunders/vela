@@ -18,6 +18,7 @@ export type LibraryParams = {
   played?: string;
   fav?: string;
   collectionId?: string;
+  start?: string;
 };
 
 type Sort = NonNullable<LibraryQuery['sort']>;
@@ -54,8 +55,45 @@ function played(text: string | undefined): boolean | undefined {
   return undefined;
 }
 
+function startOffset(text: string | undefined): number | undefined {
+  if (!text || !/^\d+$/.test(text)) return undefined;
+  const value = Number(text);
+  return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+function hasAnyFilter(query: Pick<LibraryQuery, 'query' | 'facets' | 'kind' | 'genre' | 'year' | 'played' | 'favorite' | 'collectionId' | 'tab'>): boolean {
+  return !!(
+    query.query
+    || query.kind
+    || query.genre
+    || query.year !== undefined
+    || query.played !== undefined
+    || query.favorite
+    || query.collectionId
+    || query.tab
+    || (query.facets && Object.keys(query.facets).length > 0)
+  );
+}
+
+/** Whether a library view is eligible for first-character letter jumping: an unfiltered
+ * title-ascending grid of a video movie or show section. */
+export function jumpIndexEligible(
+  model: Pick<LibraryModel, 'kind' | 'media' | 'sort' | 'direction'> | undefined,
+  query: LibraryQuery,
+  options: { view: string; layout: string; facetTitle?: string },
+): boolean {
+  if (!model) return false;
+  if (options.view !== 'library' || options.layout !== 'grid' || options.facetTitle) return false;
+  if ((model.media ?? 'video') !== 'video') return false;
+  if (model.kind !== 'movies' && model.kind !== 'shows') return false;
+  const sort = query.sort ?? model.sort;
+  const direction = query.direction ?? model.direction;
+  if (sort !== 'title' || direction !== 'asc') return false;
+  return !hasAnyFilter(query);
+}
+
 export function queryOf(params: LibraryParams): LibraryQuery {
-  return {
+  const query: LibraryQuery = {
     query: params.query || undefined,
     facets: parseFacets(params.facets),
     sort: isSort(params.sort) ? params.sort : undefined,
@@ -67,6 +105,9 @@ export function queryOf(params: LibraryParams): LibraryQuery {
     favorite: params.fav === 'true' ? true : undefined,
     collectionId: params.collectionId || undefined,
   };
+  const start = startOffset(params.start);
+  const titleAsc = (!query.sort || query.sort === 'title') && (!query.direction || query.direction === 'asc');
+  return start !== undefined && titleAsc && !hasAnyFilter(query) ? { ...query, start } : query;
 }
 
 /** Every parameter, an absent part as undefined so setting them clears it from the URL. */
@@ -82,6 +123,7 @@ export function paramsOf(query: LibraryQuery): Record<Exclude<keyof LibraryParam
     played: query.played === undefined ? undefined : String(query.played),
     fav: query.favorite ? 'true' : undefined,
     collectionId: query.collectionId,
+    start: query.start !== undefined && Number.isSafeInteger(query.start) && query.start > 0 ? String(query.start) : undefined,
   };
 }
 
@@ -123,36 +165,38 @@ export function sortedBy(query: LibraryQuery, model: LibraryModel | undefined, i
   if (!isSort(id)) return query;
   const option = model?.sorts.find(o => o.id === id);
   const kept = option && model && option.directions.includes(model.direction) ? model.direction : undefined;
-  return { ...query, sort: id, direction: kept ?? option?.directions[0] };
+  return { ...query, sort: id, direction: kept ?? option?.directions[0], start: undefined };
 }
 
 /** `librarySortFlip`: the sort in force, the other way round. */
 export function flipped(query: LibraryQuery, model: LibraryModel | undefined): LibraryQuery {
   if (!model) return query;
-  return { ...query, sort: model.sort, direction: model.direction === 'asc' ? 'desc' : 'asc' };
+  return { ...query, sort: model.sort, direction: model.direction === 'asc' ? 'desc' : 'asc', start: undefined };
 }
 
-/** `libraryFilter name|value`: kind, genre, year, played or favorite; an empty value clears it; `clear|facets` clears them all. */
+/** `libraryFilter name|value`: kind, genre, year, played, favorite or start; an empty value clears it; `clear|facets` clears them all. */
 export function filteredBy(query: LibraryQuery, arg: string): LibraryQuery {
   const [name = '', ...rest] = arg.split('|');
   const value = rest.join('|');
   switch (name) {
-    case 'query': return { ...query, query: value || undefined };
-    case 'facets': return { ...query, facets: parseFacets(value) };
+    case 'start':
+      return { ...query, start: startOffset(value) };
+    case 'query': return { ...query, query: value || undefined, start: undefined };
+    case 'facets': return { ...query, facets: parseFacets(value), start: undefined };
     case 'kind':
-      return { ...query, kind: isKind(value) ? value : undefined };
+      return { ...query, kind: isKind(value) ? value : undefined, start: undefined };
     case 'genre':
-      return { ...query, genre: value || undefined };
+      return { ...query, genre: value || undefined, start: undefined };
     case 'year':
-      return { ...query, year: year(value) };
+      return { ...query, year: year(value), start: undefined };
     case 'played':
-      return { ...query, played: played(value) };
+      return { ...query, played: played(value), start: undefined };
     case 'favorite':
-      return { ...query, favorite: value === 'true' ? true : undefined };
+      return { ...query, favorite: value === 'true' ? true : undefined, start: undefined };
     // Every filter at once (the Filters panel's Clear all); the facets given are kept (an opened
     // facet collection's own). Search and sort stay.
     case 'clear':
-      return { ...query, facets: parseFacets(value), kind: undefined, genre: undefined, year: undefined, played: undefined, favorite: undefined };
+      return { ...query, facets: parseFacets(value), kind: undefined, genre: undefined, year: undefined, played: undefined, favorite: undefined, start: undefined };
     default:
       return query;
   }
