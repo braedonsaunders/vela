@@ -153,3 +153,19 @@ test('proxy keeps the media playlist target duration for the live latency', asyn
     expect(proxy.targetDuration()).toBe(6);
   } finally { proxy.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });
+
+test('timeshift startup maps the requested broadcast position to a media segment and an mpv-local seek', () => {
+  const { timeshiftLanding, demuxerOptions } = require('../logic');
+  const playlist = '#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:90\n#EXTINF:3.5,\na\n#EXTINF:4.75,\nb\n#EXTINF:5,\nc\n#EXTINF:2,\nd\n';
+  const live = { mode: 'adaptive', timeshift: { maxMinutes: 60 }, anchor: { mediaSequence: 92, windowStartSeconds: 908.25 } };
+  const headers = new Headers({ 'X-Ether-Live-Media-Sequence': '90', 'X-Ether-Live-Window-Start': '1000' });
+  expect(timeshiftLanding(playlist, headers, live, 1004.5)).toEqual({ offset: 3.5, segmentStart: 1003.5, position: 1004.5 });
+  expect(timeshiftLanding(playlist, headers, live, 1000)).toEqual({ offset: 0, segmentStart: 1000, position: 1000 });
+  expect(timeshiftLanding(playlist, new Headers(), live, 909)).toEqual({ offset: 8.25, segmentStart: 908.25, position: 909 });
+  expect(timeshiftLanding(playlist, new Headers(), {}, 909)).toBeNull();
+  expect(timeshiftLanding(playlist + "#EXT-X-ENDLIST\n", headers, live, 1004.5)).toBeNull();
+  for (const target of [null, 999, 1015.25]) {
+    expect(timeshiftLanding(playlist, headers, live, target)).toEqual({ offset: 3.5, segmentStart: 1003.5, position: 1003.5 });
+  }
+  expect(Object.fromEntries(demuxerOptions({ live }, true))['demuxer-lavf-o']).toBe('prefer_x_start=1');
+});
