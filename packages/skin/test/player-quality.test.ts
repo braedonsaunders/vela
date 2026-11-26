@@ -208,3 +208,18 @@ test('subtitle labels translate languages and source formats and merge matching 
     { id: 'german', name: 'German', detail: '' },
   ]);
 });
+
+test('a Plex subtitle titled with its language code and format is named by its language', () => {
+  const source = plan();
+  source.subtitleTracks = [
+    { id: 'en-pgs', kind: 'subtitle', language: 'en', name: 'en PGS', codec: 'pgs' },
+    { id: 'fr-pgs', kind: 'subtitle', language: 'fr', name: 'fr PGS', codec: 'pgs' },
+    { id: 'en-sdh', kind: 'subtitle', language: 'en', name: 'English SDH SRT', codec: 'srt' },
+  ] as never;
+  const snapshot = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, subtitleTracks: [], throughputHistory: [], capabilities: {} } as unknown as Snapshot;
+  expect(present(source, snapshot).subtitles).toEqual([
+    { id: 'en-pgs', name: 'English', detail: 'PGS' },
+    { id: 'fr-pgs', name: 'French', detail: 'PGS' },
+    { id: 'en-sdh', name: 'English SDH SRT', detail: '' },
+  ]);
+});

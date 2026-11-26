@@ -81,8 +81,31 @@ function proxy(request: http.IncomingMessage, response: http.ServerResponse, tar
   });
 }
 
+/**
+ * A network outage between the browser and the server (`POST /__e2e/outage?seconds=12`): every open
+ * connection is cut (event streams and media reads included) and, until it ends, every new one is
+ * reset before it is answered, as a dropped Wi-Fi link or a restarting proxy does. Only `/__e2e/` answers.
+ */
+let outageUntil = 0;
+const sockets = new Set<import('node:net').Socket>();
+
 const server = http.createServer((request, response) => {
   const requested = new URL(request.url ?? '/', 'http://localhost');
+  if (requested.pathname === '/__e2e/outage' && request.method === 'POST') {
+    const seconds = Number(requested.searchParams.get('seconds'));
+    if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 120) {
+      response.writeHead(400).end();
+      return;
+    }
+    outageUntil = Date.now() + seconds * 1000;
+    response.writeHead(204, { Connection: 'close', 'Cache-Control': 'no-store' }).end();
+    for (const socket of sockets) if (socket !== request.socket) socket.destroy();
+    return;
+  }
+  if (Date.now() < outageUntil && !requested.pathname.startsWith('/__e2e/')) {
+    request.socket.destroy();
+    return;
+  }
   if (requested.pathname === '/__e2e/last-playback') {
     if (request.method === 'DELETE') {
       lastPlaybackBody = '';
@@ -163,6 +186,10 @@ async function localStatic(pathname: string, method: string, response: http.Serv
   else createReadStream(file).pipe(response);
 }
 
+server.on('connection', socket => {
+  sockets.add(socket);
+  socket.once('close', () => sockets.delete(socket));
+});
 server.listen(port, '127.0.0.1');
 
 let closing = false;

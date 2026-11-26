@@ -210,9 +210,13 @@ function trackOption(track: AnyTrack, subtitle: boolean): TrackOption {
   const language = track.language && track.language !== 'und' ? track.language : '';
   const title = track.name ?? track.label ?? '';
   const format = subtitleFormat(track.delivery?.kind === 'external' ? track.delivery.format : track.codec);
+  // A server title that only restates the language and format ("en PGS", "English · SRT") is not a
+  // name: the language and format are shown on their own.
+  const restated = new Set([language, language && languageLabel(language)].filter(Boolean).map(word => word.toLowerCase()));
+  const onlyRestates = (part: string) => part.split(/\s+/).every(word =>
+    !word || restated.has(word.toLowerCase()) || !!subtitleFormat(word) || /^(application|audio|text|video)\//i.test(word));
   const name = subtitle
-    ? title.split(/\s*·\s*/).filter(part => part.toLowerCase() !== language.toLowerCase() &&
-      !subtitleFormat(part) && !/^(application|audio|text|video)\//i.test(part)).join(' · ')
+    ? title.split(/\s*·\s*/).filter(part => !onlyRestates(part)).join(' · ')
     : title;
   const parts = [
     name,

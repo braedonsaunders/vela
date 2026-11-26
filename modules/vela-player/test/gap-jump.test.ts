@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { gapJump, liveSeekLanding, TINY_GAP_SECONDS } from '../web/engine/gap-jump';
+import { gapJump, liveSeekLanding, playableBufferAhead, TINY_GAP_SECONDS } from '../web/engine/gap-jump';
 
 test('a live start jumps the hole in front of its first media, however wide', () => {
   // The lab, November 2026: the playlist put the first segment at 0 s; its media began at 5 s.
@@ -42,4 +42,12 @@ test('a rewind waits for the next fragment when the desired time is in a gap at 
   expect(liveSeekLanding(1143.985, [first, { start: 1144, end: 1148 }, live]))
     .toEqual({ position: 1144.01, bufferedEnd: 1148 });
   expect(liveSeekLanding(1142, [first, live])).toEqual({ position: 1142, bufferedEnd: 1143.96 });
+});
+
+test('the buffer budget counts media beyond rounding gaps and stops at real holes', () => {
+  const ranges = [{ start: 88, end: 119.95 }, { start: 120, end: 148 }, { start: 160, end: 200 }];
+  expect(playableBufferAhead(100, ranges)).toBe(48);
+  expect(playableBufferAhead(119.98, ranges)).toBeCloseTo(28.02);
+  expect(playableBufferAhead(151, ranges)).toBe(0);
+  expect(playableBufferAhead(100, [])).toBe(0);
 });
