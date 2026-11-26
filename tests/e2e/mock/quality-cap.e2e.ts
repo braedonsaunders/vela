@@ -1,17 +1,17 @@
 import { expect } from 'e2e';
 import { describe, test } from '@e2e-dev/web';
+import { waitForVideoPlayback } from './player-ready';
 
 describe('Quality-cap deterministic release gate', { session: 'mock-quality-cap' }, () => {
   test('a widescreen 720p film starts within the Wi-Fi cap', async ({ app, browser, screen }) => {
     await app.open('/vela/watch/title-1-1');
     await expect(screen.getByTestId('player-close')).toBeVisible({ timeout: 30_000 });
-    await expect(screen.getByRole('button', 'Pause')).toBeVisible({ timeout: 30_000 });
+    await waitForVideoPlayback(browser, screen);
     await screen.getByTestId('player-quality-button').tap();
     const wifi = screen.getByRole('radiogroup', 'On Wi-Fi');
     await expect(wifi).toBeVisible();
     await wifi.getByRole('radio', '720p').press('Enter');
-    await browser.evaluate(() => new Promise<null>(resolve => setTimeout(() => resolve(null), 100)));
-    expect(JSON.parse(await browser.evaluate(() => localStorage.getItem('vela.pref.player-settings') ?? '{}')))
+    await expect.poll(() => browser.evaluate(() => JSON.parse(localStorage.getItem('vela.pref.player-settings') ?? '{}')))
       .toMatchObject({ streaming: { wifi: '720p' } });
     await screen.getByTestId('player-quality-button').tap();
     await screen.getByTestId('player-close').tap();
@@ -30,11 +30,11 @@ describe('Quality-cap deterministic release gate', { session: 'mock-quality-cap'
     });
     expect(body.client).toMatchObject({ maxWidth: 1280, maxHeight: 720, maxBitrate: 4_000_000 });
 
+    await waitForVideoPlayback(browser, screen);
+    await expect(screen.getByTestId('player-quality')).toHaveText(/^720p(?:$| ·)/);
     await screen.getByTestId('player-quality-button').tap();
-    await expect(screen.getByText(/^720p/).first()).toBeVisible();
     await wifi.getByRole('radio', 'Original').press('Enter');
-    await browser.evaluate(() => new Promise<null>(resolve => setTimeout(() => resolve(null), 100)));
-    expect(JSON.parse(await browser.evaluate(() => localStorage.getItem('vela.pref.player-settings') ?? '{}')))
+    await expect.poll(() => browser.evaluate(() => JSON.parse(localStorage.getItem('vela.pref.player-settings') ?? '{}')))
       .toMatchObject({ streaming: { wifi: 'original' } });
     await screen.getByTestId('player-close').tap();
   });

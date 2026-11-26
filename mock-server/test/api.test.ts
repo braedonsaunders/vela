@@ -413,7 +413,11 @@ describe('mock server: catalogue and live', () => {
       const pinned = await start();
       const pinnedPath = pinned.paths.find(path => path.id === pinned.selectedPathId)!;
       await arm({ originalLost409: 1, originalLostVersionUnavailable: true });
-      expect((await fetch(new URL(pinnedPath.url!, mock.url), { headers: { Range: 'bytes=0-31' } })).status).toBe(409);
+      const pinnedUrl = new URL(pinnedPath.url!, mock.url);
+      expect((await fetch(pinnedUrl)).status).toBe(409);
+      const probe = await fetch(pinnedUrl, { headers: { Range: 'bytes=0-31' } });
+      expect(probe.status).toBe(409);
+      expect(probe.headers.get('X-Ether-Playback-Error')).toBe('original_lost');
       expect((await get<V.SessionSnapshot>(`/sessions/${pinned.sessionId}`)).plan).toMatchObject({
         sourceGeneration: pinned.sourceGeneration, sourceFailure: 'version_unavailable', positionSeconds: pinned.positionSeconds,
       });

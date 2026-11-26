@@ -1244,13 +1244,17 @@ async function dispatch(req: Request): Promise<Response> {
       return vtt ? new Response(vtt, { headers: { 'Content-Type': 'text/vtt; charset=utf-8', 'Cache-Control': 'private, no-store' } }) : new Response('Not found', { status: 404 });
     }
     const selected = s.plan.paths.find(path => path.id === s.plan.selectedPathId);
-    const originalRange = req.method === 'GET' && req.headers.has('range') && selected?.original === true && selected.url?.endsWith(`/${media[3]}`);
-    if (originalRange && faults.originalLost409 > 0) {
-      faults.originalLost409--;
-      originalLost(s, faults.originalLostVersionUnavailable);
+    const originalRead = req.method === 'GET' && selected?.original === true && selected.url?.endsWith(`/${media[3]}`);
+    if (originalRead && (s.plan.sourceFailure === 'version_unavailable' || faults.originalLost409 > 0)) {
+      // Some native browser media loaders reopen an original with a full GET.
+      // A follow-up range probe must still see the pinned original as unavailable.
+      if (s.plan.sourceFailure !== 'version_unavailable') {
+        faults.originalLost409--;
+        originalLost(s, faults.originalLostVersionUnavailable);
+      }
       return new Response('Original file is gone', { status: 409, headers: { 'X-Ether-Playback-Error': 'original_lost', 'Cache-Control': 'no-store' } });
     }
-    const truncateOriginal = originalRange && faults.originalLostTruncate > 0;
+    const truncateOriginal = originalRead && req.headers.has('range') && faults.originalLostTruncate > 0;
     if (truncateOriginal) {
       faults.originalLostTruncate--;
       originalLost(s, faults.originalLostVersionUnavailable);

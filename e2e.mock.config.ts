@@ -18,35 +18,40 @@ if (server) {
   }
 }
 
-const appUrl = 'http://127.0.0.1:43253/vela/';
-const app = {
-  url: appUrl,
-  readyUrl: appUrl,
-  environment: 'staging' as const,
-  identity: 'vela-mock',
-  command: {
-    executable: process.execPath,
-    args: ['tests/e2e/mock-proxy.ts', '{port}'],
-    env: {
-      VELA_E2E_SERVER: server ?? '',
-      VELA_E2E_STATIC_ROOT: staticRoot ?? '',
-      VELA_E2E_BUN: process.env.VELA_E2E_BUN ?? 'bun',
-      VELA_MOCK_MEDIA_ROOT: process.env.VELA_MOCK_MEDIA_ROOT ?? join(homedir(), '.scratch/tmp/vela/media'),
-      VELA_MOCK_MUSIC_ROOT: process.env.VELA_MOCK_MUSIC_ROOT ?? join(homedir(), '.scratch/tmp/vela/media-music'),
-      VELA_MOCK_FORMATS_ROOT: process.env.VELA_MOCK_FORMATS_ROOT ?? join(homedir(), '.scratch/tmp/vela/formats'),
+function mockTarget(browser: 'chromium' | 'webkit', port: number) {
+  const name = `mock-${browser}`;
+  const url = `http://127.0.0.1:${port}/vela/`;
+  return {
+    name,
+    engine: mutedBrowser(browser, { allowSoftwareVisualizer: true }),
+    app: {
+      url,
+      readyUrl: url,
+      environment: 'staging' as const,
+      identity: `vela-${name}`,
+      command: {
+        executable: process.execPath,
+        args: ['tests/e2e/mock-proxy.ts', '{port}'],
+        env: {
+          VELA_E2E_SERVER: server ?? '',
+          VELA_E2E_STATIC_ROOT: staticRoot ?? '',
+          VELA_E2E_BUN: process.env.VELA_E2E_BUN ?? 'bun',
+          VELA_MOCK_MEDIA_ROOT: process.env.VELA_MOCK_MEDIA_ROOT ?? join(homedir(), '.scratch/tmp/vela/media'),
+          VELA_MOCK_MUSIC_ROOT: process.env.VELA_MOCK_MUSIC_ROOT ?? join(homedir(), '.scratch/tmp/vela/media-music'),
+          VELA_MOCK_FORMATS_ROOT: process.env.VELA_MOCK_FORMATS_ROOT ?? join(homedir(), '.scratch/tmp/vela/formats'),
+        },
+        log: `.e2e/logs/${name}.log`,
+        shutdownTimeout: 8_000,
+      },
     },
-    log: '.e2e/logs/mock-proxy.log',
-    shutdownTimeout: 8_000,
-  },
-};
+  };
+}
 
 export default {
   projectId: 'vela-release-gates-mock',
   tests: 'tests/e2e/mock/**/*.e2e.ts',
-  targets: [
-    { name: 'mock-chromium', engine: mutedBrowser('chromium', { allowSoftwareVisualizer: true }), app },
-    { name: 'mock-webkit', engine: mutedBrowser('webkit', { allowSoftwareVisualizer: true }), app },
-  ],
+  // Each browser starts with the same watch state and fault counters.
+  targets: [mockTarget('chromium', 43253), mockTarget('webkit', 43255)],
   agents: {
     default: {
       executor: codex({

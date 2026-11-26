@@ -5,15 +5,13 @@ describe('Sports deterministic release gate', { session: 'mock-sports' }, () => 
   test('Tonight opens a game and its stream starts only once', async ({ app, browser, screen }) => {
     await app.open('/vela/');
     const tonight = screen.getByTestId('sports-tonight');
-    for (let page = 0; page < 6 && !await tonight.isVisible(); page++) {
-      await browser.evaluate(() => {
-        for (const element of [document.scrollingElement, ...document.querySelectorAll<HTMLElement>('*')]) {
-          if (element && element.scrollHeight > element.clientHeight) element.scrollTop = element.scrollHeight;
-        }
-        return null;
-      });
-      await browser.evaluate(() => new Promise<null>(resolve => setTimeout(() => resolve(null), 500)));
-    }
+    await expect(screen.getByRole('link', 'Home')).toBeVisible({ timeout: 30_000 });
+    await browser.mouse.move(720, 700);
+    await expect.poll(async () => {
+      if (await tonight.isVisible()) return true;
+      await browser.mouse.wheel(0, 1_600);
+      return false;
+    }, { timeout: 30_000 }).toBe(true);
     await expect(tonight).toBeVisible({ timeout: 30_000 });
     await expect(screen.getByRole('heading', 'Tonight')).toBeVisible();
 
@@ -37,11 +35,12 @@ describe('Sports deterministic release gate', { session: 'mock-sports' }, () => 
       return route.continue();
     });
     await screen.getByTestId('sports-watch-0').tap();
-    await expect(screen.getByRole('button', 'Close player')).toBeVisible({ timeout: 30_000 });
+    await expect(screen.getByTestId('player-toggle')).toHaveAttribute('aria-label', 'Pause', { timeout: 30_000 });
     await browser.evaluate(() => new Promise<null>(resolve => setTimeout(() => resolve(null), 10_000)));
     expect(starts).toBe(1);
     await screen.getByTestId('watch-stage').tap();
-    await screen.getByRole('button', 'Close player').tap();
+    await expect(screen.getByTestId('player-failure-close')).toBeHidden();
+    await screen.getByTestId('player-close').tap();
     await expect(screen.getByTestId('sports-game')).toBeVisible({ timeout: 30_000 });
     await browser.unroute(playback);
   });
