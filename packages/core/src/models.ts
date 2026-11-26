@@ -225,6 +225,15 @@ export interface SortChoice extends Choice {
   directions: V.SortDirection[];
 }
 
+/** One entry in a library's jump index (A–Z, `#`, …), in the server's title-sort order. */
+export interface LibraryJumpBucket {
+  key: string;
+  label: string;
+  count: number;
+  /** Zero-based item offset where this bucket starts in ascending title sort. */
+  startOffset: number;
+}
+
 /** One library, browsed with a sort and filters. */
 export interface LibraryModel {
   canSearch?: boolean;
@@ -259,6 +268,8 @@ export interface LibraryModel {
   more: boolean;
   /** Titles matching the whole view when the server counts them. */
   total?: number;
+  /** Zero-based item offset this window began at (absent or 0 from the start of the library). */
+  startOffset?: number;
   /** How many pages the items fill (the next read asks for one more). */
   pages: number;
 }

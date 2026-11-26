@@ -1,7 +1,7 @@
 // Signing in to the selected server: its sign-in options, password and Quick Connect sign-in,
 // the web's sign-in link (a one-time code redeemed at start), the hand-off to the server's
 // secure origin, and sign-out. Quick Connect polling runs here, at the server's interval.
-import { createPlexPin, plexAuthUrl, pollPlexPin, PlexAccountRefused } from '../adapter/plex/auth';
+import { createPlexPin, plexAuthUrl, pollPlexPin, plexHomeUsers, PlexAccountRefused } from '../adapter/plex/auth';
 import { plexServerProfiles, switchPlexServerProfile } from '../adapter/plex/home';
 import { beginPlexHomeSignIn, exchangePlexAccount, selectPlexHomeProfile } from '../adapter/ether/plex';
 import type * as V from '../wire';
@@ -53,6 +53,7 @@ export interface AuthState {
   serverVersion: string;
   viewer: string;
   viewerId: string;
+  crossServerSearch?: boolean;
   passwordAvailable: boolean;
   plexAvailable: boolean;
   plexHomeAvailable: boolean;
@@ -111,9 +112,10 @@ export class Auth {
    * account that lists and switches its Home and the server's machine identifier. */
   private plexSelection?: { token: string; expiresAt: string; serverId: string; switching: boolean; direct?: { accountToken: string; machine: string } };
   /** Whether each directly linked Plex server's account is in a Plex Home, by server and account. */
-  private readonly plexHomes = new Map<string, boolean | Promise<boolean>>();
+  private readonly plexHomes = new Map<string, { offered: boolean; viewerId?: string } | Promise<void>>();
   private starting: Promise<void> | undefined;
   private retrying: Promise<void> | undefined;
+  private resetRefresh: Promise<void> | undefined;
   private linkError = '';
   /** Each server's version as it last stated it, by server id. */
   private readonly versions = new Map<string, string>();
@@ -135,7 +137,11 @@ export class Auth {
       this.cancelReconnect();
       this.cancelPlex();
       // A session the server refused ends here, whichever read found it: the viewer is told why.
-      if (this.box.get().auth.phase !== 'redeeming') void this.refresh(refused ? msg('server.sessionEnded') : '').catch(() => {});
+      if (this.box.get().auth.phase !== 'redeeming') {
+        const pending = this.refresh(refused ? msg('server.sessionEnded') : '').catch(() => {});
+        this.resetRefresh = pending;
+        void pending.finally(() => { if (this.resetRefresh === pending) this.resetRefresh = undefined; });
+      }
     });
   }
 
@@ -185,14 +191,19 @@ export class Auth {
   // A late answer cannot repaint the offline state or a subsequent sign-in.
   private async restoreSession(): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
     if (this.box.get().auth.phase === 'offline') this.patch({ restoring: true, retryAt: 0 });
-    const restoring = this.startSession();
+    const restoring = this.startSession(controller.signal);
     const generation = this.linkGeneration;
     try {
       await Promise.race([
         restoring,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(msg('server.unreachable'))), SESSION_RESTORE_TIMEOUT_MS);
+          timer = setTimeout(() => {
+            const timeout = new Error(msg('server.unreachable'));
+            controller.abort(timeout);
+            reject(timeout);
+          }, SESSION_RESTORE_TIMEOUT_MS);
         }),
       ]);
     } catch (error) {
@@ -216,7 +227,7 @@ export class Auth {
     }
   }
 
-  private async startSession(): Promise<void> {
+  private async startSession(signal?: AbortSignal): Promise<void> {
     if (this.box.get().auth.phase !== 'offline') this.patch({ phase: 'starting', error: '' });
     if (!this.session.hasServer()) return this.noServer();
     const code = !this.session.servers.standalone ? this.platform.page?.webCode : undefined;
@@ -227,16 +238,23 @@ export class Auth {
     }
     const connection = this.session.selected();
     const generation = this.linkGeneration;
+    const epoch = this.session.epoch;
     try {
       if (this.session.demoSignIn(connection)) await this.session.ready();
       const stored = await this.session.tokens(connection);
-      if (generation !== this.linkGeneration) return;
+      if (generation !== this.linkGeneration || epoch !== this.session.epoch) return;
       if (stored) await this.session.validate(connection, stored);
-      if (generation !== this.linkGeneration) return;
-      await this.refresh();
+      if (generation !== this.linkGeneration || epoch !== this.session.epoch) return;
+      await this.refresh('', undefined, signal);
     } catch (error) {
-      if (generation !== this.linkGeneration) return;
+      if (generation !== this.linkGeneration || epoch !== this.session.epoch || signal?.aborted) return;
       const stillSignedIn = !!(await this.session.tokens(connection));
+      if (generation !== this.linkGeneration || epoch !== this.session.epoch || signal?.aborted) return;
+      if (stillSignedIn && await this.session.relocatePlex?.(connection, epoch, error, signal)) {
+        if (this.resetRefresh) await this.resetRefresh;
+        return;
+      }
+      if (generation !== this.linkGeneration || epoch !== this.session.epoch || signal?.aborted) return;
       // A transient failure is not sign-out: the stored session stays and the app says it is offline.
       // A session the server no longer accepts was dropped: the viewer is asked to sign in again
       // rather than shown the server's own wording ("Refresh invalid").
@@ -304,21 +322,28 @@ export class Auth {
   }
 
   /** Re-read the selected server's sign-in options and session into state. */
-  async refresh(error = '', phase?: AuthPhase): Promise<void> {
+  async refresh(error = '', phase?: AuthPhase, signal?: AbortSignal): Promise<void> {
     error ||= this.linkError;
     if (!this.session.hasServer()) return this.noServer();
     const connection = this.session.selected();
     const epoch = this.session.epoch;
     const generation = this.linkGeneration;
     const tokens = await this.session.tokens(connection);
-    let options = { passwordAvailable: false, quickAvailable: false, plexAvailable: false, plexHomeAvailable: false, secureOrigin: '' };
+    let options = { passwordAvailable: false, quickAvailable: false, plexAvailable: false, plexHomeAvailable: false, crossServerSearch: false, secureOrigin: '' };
     let reachable = true;
+    let optionsError: unknown;
     try {
       options = await this.options(connection);
-    } catch {
+    } catch (cause) {
       reachable = false;
+      optionsError = cause;
     }
     // An older option/session read must never repaint a viewer after a new handoff.
+    if (epoch !== this.session.epoch || generation !== this.linkGeneration) return;
+    if (!reachable && tokens && !phase && await this.session.relocatePlex?.(connection, epoch, optionsError, signal)) {
+      if (this.resetRefresh) await this.resetRefresh;
+      return;
+    }
     if (epoch !== this.session.epoch || generation !== this.linkGeneration) return;
     let settled: AuthPhase = tokens ? 'signed-in' : 'signed-out';
     if (phase) settled = phase;
@@ -339,6 +364,7 @@ export class Auth {
       viewer: tokens?.viewer.name ?? '',
       viewerId: tokens?.viewer.id ?? '',
       ...options,
+      crossServerSearch: settled === 'signed-in' && options.crossServerSearch,
       error,
       retryAt: 0,
       failures: settled === 'offline' ? this.box.get().auth.failures + 1 : 0,
@@ -356,9 +382,12 @@ export class Auth {
     // A standalone app has no page to move, so it is never offered (its server record keeps its address).
     const secure = hasWebCodeSignIn(connection.adapter) && !this.session.servers.standalone
       ? secureOriginFor(this.platform, capabilities.secureOrigins) : '';
+    const home = connection.record.kind === 'plex' ? await this.plexHomePolicy(connection) : undefined;
     return {
+      crossServerSearch: connection.record.kind === 'ether' ? !capabilities.plexHomeProfiles
+        : !!home?.viewerId,
       plexAvailable: connection.record.kind === 'ether' && capabilities.plexAccountSignIn === true,
-      plexHomeAvailable: connection.record.kind === 'ether' ? capabilities.plexHomeProfiles === true : await this.directPlexHome(connection),
+      plexHomeAvailable: connection.record.kind === 'ether' ? capabilities.plexHomeProfiles === true : home?.offered ?? false,
       passwordAvailable: capabilities.features.passwordSignIn.available,
       quickAvailable: capabilities.features.quickConnect.available,
       secureOrigin: secure,
@@ -390,30 +419,36 @@ export class Auth {
    * someone else to switch to. plex.tv is asked once per account, off the refresh's path; the answer
    * is shown when it comes. A kept account plex.tv refuses still offers it, to explain and relink.
    */
-  private async directPlexHome(connection: Connection): Promise<boolean> {
+  private async plexHomePolicy(connection: Connection): Promise<{ offered: boolean; viewerId?: string } | undefined> {
     const token = await this.plexAccountToken(connection);
-    if (!token) return false;
+    if (!token) return undefined;
     const key = `${connection.record.id}\n${token}`;
     const known = this.plexHomes.get(key);
-    if (typeof known === 'boolean') return known;
+    const viewer = (await connection.credentials.get())?.viewer;
+    if (known && !(known instanceof Promise)) return {
+      offered: known.offered, viewerId: known.viewerId === viewer?.id ? known.viewerId : undefined,
+    };
     if (!known) {
+      const epoch = this.session.epoch;
       const kept = connection.credentials instanceof ServerCredentials && await connection.credentials.plexAccount() === token;
-      const asking = plexServerProfiles(this.session.device, token).then(profiles => profiles.length > 0, error => {
-        if (error instanceof PlexAccountRefused) return kept;
-        // plex.tv did not answer: ask again with the next refresh.
+      const asking = plexHomeUsers(this.session.device, token).then(users => {
+        const me = viewer && users.find(user => user.uuid === viewer.id || String(user.id) === viewer.id);
+        return { offered: users.length > 1, viewerId: me && !me.restricted && (me.admin || me.restricted === false) ? viewer?.id : undefined };
+      }, error => {
+        if (error instanceof PlexAccountRefused) return { offered: kept, viewerId: undefined };
         this.plexHomes.delete(key);
-        return false;
+        return { offered: false, viewerId: undefined };
+      }).then(home => {
+        if (this.plexHomes.get(key) === asking) this.plexHomes.set(key, home);
+        const auth = this.box.get().auth;
+        if (epoch === this.session.epoch && auth.serverId === connection.record.id && this.session.selected() === connection) {
+          this.patch({ plexHomeAvailable: home.offered, crossServerSearch: !!home.viewerId && home.viewerId === auth.viewerId });
+        }
       });
       this.plexHomes.set(key, asking);
-      void asking.then(offered => {
-        if (this.plexHomes.get(key) === asking) this.plexHomes.set(key, offered);
-        const auth = this.box.get().auth;
-        if (auth.serverId === connection.record.id && auth.plexHomeAvailable !== offered && this.session.selected() === connection) {
-          this.patch({ plexHomeAvailable: offered });
-        }
-      }).catch(() => {});
+      void asking.catch(() => {});
     }
-    return false;
+    return undefined;
   }
 
   /** Open a fresh profile challenge for the currently signed-in Plex account. */

@@ -8,7 +8,7 @@ import type { Generations, PlaybackPlan } from '../src/wire';
 import type { UnloadRequest } from '../src/adapter/capabilities';
 import { EtherAdapter } from '../src/adapter/ether';
 import { PlexAdapter } from '../src/adapter/plex';
-import { FakeCredentials, restoreFetch, routeFetch } from './helpers';
+import { FakeCredentials, restoreFetch, routeFetch, type Seen } from './helpers';
 
 afterEach(restoreFetch);
 
@@ -22,7 +22,7 @@ function store(adapter: Record<string, unknown>) {
     asked.push([id, at]);
     return [{ url: `https://server.example/stop/${id}`, method: 'POST' as const }];
   }, ...adapter };
-  const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter: full, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, client: {}, audioClient: {} };
+  const session = { epoch: 0, onReset() {}, ready: async () => ({ adapter: full, plan: (p: PlaybackPlan) => p }), negotiate: async () => {}, key: () => 'retry', client: {}, audioClient: {} };
   const box = new StateBox({ playback: initialPlayback } as VelaState);
   const playback = new Playback(box, session as unknown as Session, () => {}, () => {});
   return { playback, asked, box };
@@ -154,4 +154,92 @@ test('Plex stops on unload with the timeline stopped and the transcode stop, its
   expect(await plex.reportObservation(video.sessionId, { sequence: 1, positionSeconds: 13, state: 'playing', sourceGeneration: 0, seekGeneration: 0 } as never)).toMatchObject({ accepted: true });
   const audio = await plex.startPlayback({ titleId: '9', client, idempotencyKey: 'a' } as never) as PlaybackPlan;
   expect(plex.unloadStop(audio.sessionId, audio).map(r => new URL(r.url).pathname)).toEqual(['/:/timeline', '/music/:/transcode/universal/stop']);
+});
+
+test('Plex pagehide ends the session while a timeline update is in flight and another is queued', async () => {
+  const plex = new PlexAdapter({ origin: 'https://plex.example', credentials: new FakeCredentials(), clientIdentifier: 'client-1' });
+  const track = { ratingKey: '9', type: 'track', title: 'Opening', duration: 60000, Media: [{ id: 5, container: 'mp3', audioCodec: 'mp3',
+    Part: [{ id: 6, key: '/library/parts/6/1/file.mp3' }] }] };
+  const playingSent = Promise.withResolvers<void>();
+  const playingResponse = Promise.withResolvers<Response>();
+  const seen = routeFetch({
+    'GET /library/metadata/9': { MediaContainer: { Metadata: [track] } },
+    'POST /:/timeline': ({ url }: Seen) => {
+      if (url.searchParams.get('state') === 'playing' && url.searchParams.get('time') === '17000') {
+        playingSent.resolve();
+        return playingResponse.promise;
+      }
+      return new Response(null, { status: 204 });
+    },
+    'GET /music/:/transcode/universal/stop': new Response(null, { status: 204 }),
+  });
+  const started = await plex.startPlayback({ titleId: '9', idempotencyKey: 'start' } as never) as PlaybackPlan;
+  const { sessionId, sourceGeneration, seekGeneration } = started;
+  const at = { sourceGeneration, seekGeneration };
+  const observe = (sequence: number) => plex.reportObservation(sessionId, {
+    ...at, sequence, state: 'playing', positionSeconds: sequence, observedAt: '2026-01-01T00:00:00Z',
+    idempotencyKey: `observation-${sequence}`, playableRanges: [], selectedPathId: started.selectedPathId,
+  });
+  const first = observe(17);
+  await playingSent.promise;
+  const queued = observe(18);
+  const command = plex.command(sessionId, { ...at, kind: 'resume', idempotencyKey: 'resume' }).catch(error => error);
+
+  const page = new EventTarget();
+  stopSessionsOnPageHide(page, {
+    stopOnUnload(send) {
+      const requests = plex.unloadStop(sessionId, at);
+      requests.forEach(send);
+      return requests.length;
+    },
+  });
+  const requests = () => seen.slice(1).map(({ method, url }) => [method, url.pathname, url.searchParams.get('state'), url.searchParams.get('time')]);
+  const expected = [
+    ['POST', '/:/timeline', 'playing', '17000'],
+    ['POST', '/:/timeline', 'stopped', '17000'],
+    ['GET', '/music/:/transcode/universal/stop', null, null],
+  ];
+  page.dispatchEvent(new Event('pagehide'));
+  expect(requests()).toEqual(expected);
+  playingResponse.resolve(new Response(null, { status: 204 }));
+  await Promise.all([first, queued]);
+  expect(requests()).toEqual(expected);
+  expect(await command).toMatchObject({ message: 'Plex playback session ended' });
+  expect((await plex.sessionSnapshot(sessionId)).plan).toMatchObject({ state: 'ended', positionSeconds: 17 });
+});
+
+test.each([204, 500])('Plex close retries at the generation of a held seek (cleanup HTTP %i)', async status => {
+  const plex = new PlexAdapter({ origin: 'https://plex.example', credentials: new FakeCredentials(), clientIdentifier: 'client-1' });
+  const seekSent = Promise.withResolvers<void>();
+  const seekResponse = Promise.withResolvers<Response>();
+  const track = { ratingKey: '9', type: 'track', title: 'Opening', duration: 60000, Media: [{ id: 5, container: 'mp3', audioCodec: 'mp3',
+    Part: [{ id: 6, key: '/library/parts/6/1/file.mp3' }] }] };
+  const seen = routeFetch({
+    'GET /library/metadata/9': { MediaContainer: { Metadata: [track] } },
+    'POST /:/timeline': ({ url }: Seen) => {
+      if (url.searchParams.get('state') === 'playing') {
+        seekSent.resolve();
+        return seekResponse.promise;
+      }
+      return new Response(null, { status: 204 });
+    },
+    'GET /music/:/transcode/universal/stop': new Response(null, { status }),
+  });
+  const { playback, box } = store({
+    startPlayback: plex.startPlayback.bind(plex), command: plex.command.bind(plex),
+    detail: plex.detail.bind(plex), unloadStop: plex.unloadStop.bind(plex),
+  });
+  await playback.start({ kind: 'title', id: '9' });
+  const { sessionId, sourceGeneration, seekGeneration } = box.get().playback.plan!;
+  const seek = playback.command(sessionId, { kind: 'seek', sourceGeneration, seekGeneration, positionSeconds: 19, idempotencyKey: 'seek' });
+  await seekSent.promise;
+  const close = playback.stop();
+  seekResponse.resolve(new Response(null, { status: 204 }));
+  await Promise.all([seek, close]);
+
+  expect(seen.filter(({ url }) => url.pathname === '/:/timeline').map(({ url }) =>
+    [url.searchParams.get('state'), url.searchParams.get('time')])).toEqual([['playing', '19000'], ['stopped', '19000']]);
+  const unload: string[] = [];
+  playback.stopOnUnload(({ url }) => unload.push(new URL(url).pathname));
+  expect(unload).toEqual(status === 500 ? ['/music/:/transcode/universal/stop'] : []);
 });

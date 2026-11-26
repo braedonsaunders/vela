@@ -1,0 +1,230 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "playlist",
+ "version": "1",
+ "title": "{src.playlist.playlist.name}",
+ "presentation": "section",
+ "params": {
+  "id": {
+   "type": "string"
+  },
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {
+  "playlist": {
+   "from": "vela.playlist",
+   "id": "{param.id}",
+   "audio": "true"
+  },
+  "me": {
+   "from": "vela.viewer"
+  },
+  "queue": {
+   "from": "vela.queue"
+  }
+ },
+ "tree": {
+  "type": "sections",
+  "style": {
+   "padding-bottom": "32px"
+  },
+  "children": [
+   {
+    "type": "box",
+    "children": [
+     {
+      "type": "wash",
+      "props": {
+       "accent": "{src.playlist.items.0.accent}",
+       "image": "{src.playlist.items.0.poster}"
+      }
+     },
+     {
+      "type": "box",
+      "style": {
+       "padding-left": "28px",
+       "padding-right": "28px"
+      },
+      "small": {
+       "padding-left": "16px",
+       "padding-right": "16px"
+      },
+      "children": [
+       {
+        "type": "collectionHeader",
+        "props": {
+         "eyebrow": "{s:music.playlist}",
+         "title": "{src.playlist.playlist.name}"
+        },
+        "partTemplates": {
+         "collectionHeader.cover": {
+          "type": "cover",
+          "props": {
+           "kind": "mosaic",
+           "tracks": "{src.playlist.items}",
+           "item": "{src.playlist.playlist}"
+          }
+         },
+         "collectionHeader.byline": {
+          "type": "box",
+          "style": {
+           "gap": "10px"
+          },
+          "children": [
+           {
+            "type": "text",
+            "when": [
+             {
+              "test": "src.playlist.summary"
+             }
+            ],
+            "text": "{src.playlist.summary}",
+            "style": {
+             "font-size": "15px",
+             "color": "$ui.inkSecondary",
+             "line-clamp": "2"
+            }
+           },
+           {
+            "type": "box",
+            "style": {
+             "flex-direction": "row",
+             "align-items": "center",
+             "gap": "8px"
+            },
+            "children": [
+             {
+              "type": "box",
+              "style": {
+               "width": "24px",
+               "height": "24px",
+               "border-radius": "12px",
+               "background-color": "$ui.accent",
+               "align-items": "center",
+               "justify-content": "center"
+              },
+              "children": [
+               {
+                "type": "text",
+                "text": "{src.me.name|initial}",
+                "style": {
+                 "font-size": "12px",
+                 "font-weight": "800",
+                 "color": "$ui.onAccent"
+                }
+               }
+              ],
+              "tv": {
+               "width": "24pt",
+               "height": "24pt",
+               "border-radius": "12pt"
+              }
+             },
+             {
+              "type": "text",
+              "text": "{src.me.name}",
+              "style": {
+               "font-size": "15px",
+               "font-weight": "700",
+               "color": "$ui.ink"
+              }
+             },
+             {
+              "type": "text",
+              "text": "· {src.playlist.items|totalLabel}",
+              "style": {
+               "font-size": "15px",
+               "color": "$ui.inkSecondary"
+              }
+             }
+            ],
+            "tv": {
+             "gap": "8pt"
+            }
+           }
+          ],
+          "small": {
+           "gap": "8px"
+          },
+          "tv": {
+           "gap": "10pt"
+          }
+         }
+        }
+       },
+       {
+        "type": "actionBar",
+        "props": {
+         "item": "{src.playlist.playlist}",
+         "tracks": "{src.playlist.items}",
+         "sourceId": "{param.id}",
+         "sourceName": "{src.playlist.playlist.name}",
+         "sourceKind": "playlist",
+         "buttons": "play,shuffle,edit",
+         "playlist": "{param.id}",
+         "summary": "{src.playlist.summary}"
+        }
+       },
+       {
+        "type": "trackTable",
+        "props": {
+         "tracks": "{src.playlist.items}",
+         "covers": "true",
+         "album": "true",
+         "position": "true",
+         "sourceId": "{param.id}",
+         "sourceName": "{src.playlist.playlist.name}",
+         "sourceKind": "playlist",
+         "playlist": "{param.id}",
+         "entryIds": "{src.playlist.entryIds}"
+        }
+       },
+       {
+        "type": "box",
+        "style": {
+         "height": "40px"
+        },
+        "tv": {
+         "height": "40pt"
+        }
+       }
+      ],
+      "tv": {
+       "padding-left": "28pt",
+       "padding-right": "28pt"
+      }
+     }
+    ]
+   }
+  ],
+  "testId": "music-main",
+  "tv": {
+   "padding-bottom": "48pt",
+   "padding-right": "32pt"
+  },
+  "states": [
+   {
+    "when": [
+     {
+      "test": "env.form",
+      "is": "eq",
+      "value": "small"
+     },
+     {
+      "test": "src.queue.current"
+     }
+    ],
+    "style": {
+     "padding-bottom": "110px"
+    }
+   }
+  ]
+ }
+}

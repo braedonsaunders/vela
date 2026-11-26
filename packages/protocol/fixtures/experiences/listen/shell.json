@@ -1,0 +1,314 @@
+{
+ "schema": 1,
+ "kind": "screen",
+ "renderer": 20,
+ "owner": "vela",
+ "experience": "listen",
+ "screen": "listen",
+ "page": "shell",
+ "version": "1",
+ "title": "{s:music.yourLibrary}",
+ "presentation": "section",
+ "params": {
+  "library": {
+   "type": "string"
+  }
+ },
+ "sources": {
+  "queue": {
+   "from": "vela.queue"
+  }
+ },
+ "focus": {
+  "initial": "music-nav-home"
+ },
+ "tokens": {
+  "hairline": "$ui.glassEdge"
+ },
+ "templates": {
+  "side": {
+   "type": "box",
+   "style": {
+    "flex-direction": "row",
+    "background-color": "$ui.raised",
+    "width": "{arg.width}"
+   },
+   "children": [
+    {
+     "type": "box",
+     "when": [
+      {
+       "test": "arg.edge",
+       "is": "eq",
+       "value": "left"
+      }
+     ],
+     "style": {
+      "width": "1px",
+      "background-color": "$hairline"
+     }
+    },
+    {
+     "type": "box",
+     "style": {
+      "flex": "1",
+      "min-width": "0px"
+     },
+     "children": [
+      {
+       "type": "slot",
+       "slot": "children"
+      }
+     ]
+    },
+    {
+     "type": "box",
+     "when": [
+      {
+       "test": "arg.edge",
+       "is": "eq",
+       "value": "right"
+      }
+     ],
+     "style": {
+      "width": "1px",
+      "background-color": "$hairline"
+     }
+    }
+   ]
+  }
+ },
+ "forms": {
+  "wide": {
+   "type": "box",
+   "testId": "music-shell",
+   "style": {
+    "flex": "1",
+    "padding-top": "6px"
+   },
+   "children": [
+    {
+     "type": "box",
+     "style": {
+      "height": "1px",
+      "background-color": "$hairline"
+     }
+    },
+    {
+     "type": "box",
+     "style": {
+      "flex": "1",
+      "flex-direction": "row",
+      "min-height": "0px"
+     },
+     "children": [
+      {
+       "type": "use",
+       "template": "side",
+       "with": {
+        "width": "316px",
+        "edge": "right"
+       },
+       "states": [
+        {
+         "when": [
+          {
+           "test": "state.railCollapsed"
+          }
+         ],
+         "style": {
+          "width": "84px"
+         }
+        }
+       ],
+       "below": {
+        "1180": {
+         "width": "84px"
+        }
+       },
+       "children": [
+        {
+         "type": "rail",
+         "props": {
+          "mode": "auto",
+          "collapseFlag": "railCollapsed"
+         }
+        }
+       ]
+      },
+      {
+       "type": "box",
+       "style": {
+        "flex": "1",
+        "min-width": "0px",
+        "overflow": "hidden"
+       },
+       "children": [
+        {
+         "type": "slot",
+         "slot": "children",
+         "style": {
+          "flex": "1",
+          "min-height": "0px"
+         },
+         "inner": {
+          "flex": "1"
+         }
+        }
+       ]
+      },
+      {
+       "type": "use",
+       "template": "side",
+       "when": [
+        {
+         "test": "state.sound"
+        }
+       ],
+       "with": {
+        "width": "360px",
+        "edge": "left"
+       },
+       "children": [
+        {
+         "type": "eq",
+         "props": {
+          "closeFlag": "sound"
+         }
+        }
+       ]
+      },
+      {
+       "type": "use",
+       "template": "side",
+       "when": [
+        {
+         "test": "state.queue"
+        },
+        {
+         "test": "state.sound",
+         "not": true
+        }
+       ],
+       "with": {
+        "width": "340px",
+        "edge": "left"
+       },
+       "children": [
+        {
+         "type": "queue",
+         "props": {
+          "closeFlag": "queue"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "type": "box",
+     "style": {
+      "height": "1px",
+      "background-color": "$hairline"
+     }
+    },
+    {
+     "type": "box",
+     "style": {
+      "height": "84px",
+      "background-color": "$ui.raised"
+     },
+     "children": [
+      {
+       "type": "bar",
+       "props": {
+        "queueFlag": "queue",
+        "soundFlag": "sound"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "small": {
+   "type": "box",
+   "testId": "music-shell",
+   "style": {
+    "flex": "1",
+    "padding-top": "6px"
+   },
+   "children": [
+    {
+     "type": "rail",
+     "props": {
+      "mode": "chips"
+     }
+    },
+    {
+     "type": "slot",
+     "slot": "children",
+     "style": {
+      "flex": "1",
+      "min-height": "0px"
+     },
+     "inner": {
+      "flex": "1"
+     }
+    }
+   ]
+  },
+  "tv": {
+   "type": "box",
+   "testId": "music-shell",
+   "style": {
+    "flex": "1",
+    "flex-direction": "row",
+    "padding-top": "6px"
+   },
+   "children": [
+    {
+     "type": "rail",
+     "props": {
+      "mode": "icons"
+     }
+    },
+    {
+     "type": "slot",
+     "slot": "children",
+     "style": {
+      "flex": "1",
+      "min-height": "0px"
+     },
+     "inner": {
+      "flex": "1"
+     },
+     "states": [
+      {
+       "when": [
+        {
+         "test": "src.queue.current"
+        }
+       ],
+       "style": {
+        "flex": "1",
+        "min-height": "0px",
+        "margin-bottom": "90pt"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "tree": {
+  "type": "slot",
+  "slot": "children",
+  "style": {
+   "flex": "1",
+   "min-height": "0px"
+  },
+  "inner": {
+   "flex": "1"
+  }
+ }
+}

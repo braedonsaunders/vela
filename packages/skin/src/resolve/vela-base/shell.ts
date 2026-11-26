@@ -444,6 +444,8 @@ export const shell: Node = {
       style: {
         position: 'absolute',
         top: 'calc(56px + env(safe-area-inset-top))',
+        'max-height': 'calc(100vh - 68px - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
+        'overflow-y': 'auto',
         right: 'max(28px, 4vw)',
         'z-index': '30',
         width: '260px',

@@ -5,9 +5,7 @@
 import { createContext } from 'react';
 import { Platform } from 'react-native';
 import type { Focusable } from './escape';
-
-/** Space kept between the bar and a focused control. */
-const MARGIN = 16;
+import { revealOffset } from './tv-reveal-policy';
 
 /** The height of the bar floating over the top of routes (the shell's navigation box). */
 let topBar = 0;
@@ -20,11 +18,11 @@ export function noteTopBar(height: number, pinned: boolean): void {
 }
 
 /** Brings a focused control of the route below the bar; null off Android TV. */
-export type Reveal = (target: Focusable) => void;
+export type Reveal = (target: Focusable, full?: boolean) => void;
 export const RevealContext = createContext<Reveal | null>(null);
 
 interface MeasurableView {
-  measureLayout?(relativeTo: unknown, onSuccess: (x: number, y: number) => void, onFail?: () => void): void;
+  measureLayout?(relativeTo: unknown, onSuccess: (x: number, y: number, width: number, height: number) => void, onFail?: () => void): void;
 }
 
 interface RouteScroll {
@@ -33,16 +31,16 @@ interface RouteScroll {
 }
 
 /** The route scroll's reveal: `scroll` is the route's scroll view, `offset` its vertical offset. */
-export function revealer(scroll: { current: unknown }, offset: { current: number }): Reveal {
-  return target => {
+export function revealer(scroll: { current: unknown }, offset: { current: number }, height: number): Reveal {
+  return (target, full) => {
     const view = scroll.current as RouteScroll | null;
     const content = view?.getInnerViewRef?.();
     const measurable = target as MeasurableView;
     if (!topBar || !view || !content || !measurable.measureLayout) return;
-    measurable.measureLayout(content, (_x, y) => {
-      const clear = topBar + MARGIN;
-      if (y - offset.current >= clear) return;
-      view.scrollTo({ y: Math.max(0, y - clear), animated: true });
+    measurable.measureLayout(content, (_x, y, _width, targetHeight) => {
+      // A programmatically restored result can already be focused without being scrolled into view.
+      const next = revealOffset(y, targetHeight, offset.current, height, topBar, !!full);
+      if (next !== undefined) view.scrollTo({ y: next, animated: !full });
     });
   };
 }

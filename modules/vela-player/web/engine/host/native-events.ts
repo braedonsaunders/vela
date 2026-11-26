@@ -4,7 +4,9 @@ import type { HostContext } from './state';
 import { saveVolume } from './platform';
 import { endPlayback } from './session';
 import { recoverPlayback } from './recovery';
-import { publishHostState } from './events';
+import { emitHostEvent, publishHostState } from './events';
+import { readPosition } from './position';
+import { originalEndedEarly, originalLostResponse } from '../original-lost';
 export function detachMedia(context: HostContext) {
   for (const remove of context.lifecycle.listeners) remove();
   context.lifecycle.listeners = [];
@@ -12,28 +14,39 @@ export function detachMedia(context: HostContext) {
 export function bindMedia(context: HostContext, token: Generation) {
   const { video } = context.surface;
   detachMedia(context);
+  let waitingPosition: number | undefined;
+  const playing = () => {
+    waitingPosition = undefined;
+    context.playback.status = 'playing';
+    context.playback.failure = null;
+    if (context.session.pendingSeek?.authorized) context.session.pendingSeek = undefined;
+  };
   for (const [name, handler] of Object.entries({
     volumechange: () => {
       saveVolume(context);
     },
     playing: () => {
-      if (
-        !context.surface.video.paused &&
-        !context.surface.video.error &&
-        context.surface.video.readyState >= 3
-      ) {
-        context.playback.status = 'playing';
-        context.playback.failure = null;
-        if (context.session.pendingSeek?.authorized) context.session.pendingSeek = undefined;
-      }
+      if (!video.paused && !video.error && video.readyState >= 3) playing();
+    },
+    seeking: () => {
+      waitingPosition = undefined;
     },
     seeked: () => {
+      if (context.playback.status === 'buffering') waitingPosition = video.currentTime;
       if (
         context.session.pendingSeek?.authorized &&
         !context.playback.wantsPlay &&
         context.surface.video.readyState >= 2
       )
         context.session.pendingSeek = undefined;
+    },
+    timeupdate: () => {
+      // WebKit can advance after a seek without dispatching another playing event.
+      if (
+        context.playback.status === 'buffering' && context.playback.wantsPlay &&
+        !video.paused && !video.seeking && !video.error &&
+        waitingPosition !== undefined && video.currentTime > waitingPosition
+      ) playing();
     },
     pause: () => {
       if (
@@ -46,10 +59,19 @@ export function bindMedia(context: HostContext, token: Generation) {
       context.watchdog.loadEvents++;
     },
     waiting: () => {
-      if (!['recovering', 'ended', 'failed'].includes(context.playback.status))
+      if (!['recovering', 'ended', 'failed'].includes(context.playback.status)) {
         context.playback.status = 'buffering';
+        waitingPosition = video.seeking ? undefined : video.currentTime;
+      }
     },
     ended: () => {
+      const session = context.session.current;
+      if (context.media.source?.original && session && originalEndedEarly(readPosition(context), session.duration)) {
+        context.playback.status = 'loading';
+        emitHostEvent(context, { type: 'session-refresh', sessionId: session.id,
+          reason: 'original_lost', positionSeconds: readPosition(context), sourceGeneration: token.source });
+        return;
+      }
       endPlayback(context);
     },
     error: () => {
@@ -74,6 +96,13 @@ export function bindMedia(context: HostContext, token: Generation) {
               headers: { Range: 'bytes=0-0' }, signal: AbortSignal.any([generation.signal, AbortSignal.timeout(5000)]),
             });
             void response.body?.cancel();
+            if (originalLostResponse(response) && context.session.current) {
+              context.playback.status = 'loading';
+              emitHostEvent(context, { type: 'session-refresh', sessionId: context.session.current.id,
+                reason: 'original_lost', positionSeconds: readPosition(context), sourceGeneration: generation.source });
+              publishHostState(context, true);
+              return;
+            }
             if (!response.ok) { message = `HTTP ${response.status}: ${message}`; failureKind = 'network'; }
           } catch (error) {
             if (generation.signal.aborted) return;
@@ -94,6 +123,7 @@ export function bindMedia(context: HostContext, token: Generation) {
       const previous = context.playback.status;
       const failure = context.playback.failure;
       handler();
+      if (name === 'timeupdate' && previous === context.playback.status) return;
       if (previous !== context.playback.status || failure !== context.playback.failure)
         context.telemetry.lastObservation = -Infinity;
       publishHostState(context);

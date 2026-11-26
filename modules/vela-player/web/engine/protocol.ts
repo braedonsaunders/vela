@@ -14,6 +14,7 @@ export function sessionFromPlan(plan: PlaybackPlan, mediaBase: string = location
     serverState: plan.state,
     serverControlled: true,
     selectedSourceId: plan.selectedPathId,
+    selectedVersionId: plan.selectedVersionId ?? undefined,
     mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? plan.liveItemId ?? '',
     edition,
     position: plan.positionSeconds,
@@ -138,7 +139,8 @@ export function observation(snapshot: Snapshot, sequence: number): PlayerObserva
     ...(snapshot.audioTrackId === null || snapshot.audioClientOnly
       ? {}
       : { audioTrackId: snapshot.audioTrackId }),
-    ...(snapshot.subtitleClientOnly
+    // A sidecar still opening must not report Off and clear the server selection.
+    ...(snapshot.subtitleClientOnly || (snapshot.subtitleTrackId === null && snapshot.pendingSubtitleTrackId)
       ? {}
       : { subtitleTrackId: snapshot.subtitleReportingId ?? snapshot.subtitleTrackId }),
     ...(snapshot.failure

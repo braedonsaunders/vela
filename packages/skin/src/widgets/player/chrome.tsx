@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View, Text } from 'react-native';
 import { clampSeek, LIVE_SLACK_SECONDS, msg } from '@vela/core';
 import { useHost } from '../../host';
-import { BottomBar, TopBar, type Opened, type Reveal, type TickerToggle } from './bars';
+import { BottomBar, TopBar, bottomFade, type Opened, type Reveal, type TickerToggle } from './bars';
 import { usePlayerChrome, type PlayerChromeState } from './context';
 import { holdsChrome } from './hold';
 import { useIdle } from './idle';
@@ -17,7 +17,7 @@ import { InfoCard } from './info-card';
 import { LiveDial, LiveNotice, useLiveWatchChrome } from './live';
 import { useShortcuts } from './keys';
 import { usePlayerLook } from './look';
-import { present, type PlayerView } from './present';
+import { belongs, present, type PlayerView } from './present';
 import { NO_CLICK, pictureClick, UNDO_AFTER_MS, type ClickMemory, type PlayCommand } from './picture-click';
 import { PICTURE_TEST_ID } from './remote-actions';
 import { watchFrames } from './fold-layout';
@@ -110,6 +110,12 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     state: view.state, started: !!sessionId && playedSession.current === sessionId,
     menuOpen: opened !== null, active, failed: !!failed,
   }));
+  useEffect(() => {
+    if (!state.offerVersions) return;
+    state.refreshVersions?.();
+    setOpened('quality');
+    idle.wake();
+  }, [state.offerVersions]);
   const chromeUp = idle.visible || !!failed;
   const surfaces = usePlayerSurfaces({
     channelId: live.live ? live.channelId : '', eventId: live.live ? liveEvent?.id ?? '' : '', feed: live.live ? liveEvent?.feed : undefined,
@@ -203,7 +209,7 @@ function Chrome({ state }: { state: PlayerChromeState }) {
   const tv = look.tv && Platform.isTV;
   // Skip intro, Skip credits or Next episode, while the position is inside a range the plan names.
   const skip = failed || live.live || live.archive ? null : skipHere(state.plan?.markers, view.position, view.ended, state.nextEpisode);
-  const fade = look.small ? 80 : look.size(150);
+  const fade = bottomFade(look);
   const skipBottom = surfaces.lift + (chromeUp && barHeight > fade ? barHeight - fade + look.size(look.small ? 8 : 12) : look.size(look.small ? 20 : 44));
 
   // Touch: a tap on the picture shows a hidden chrome, or hides a standing one (closing a menu first).
@@ -236,10 +242,12 @@ function Chrome({ state }: { state: PlayerChromeState }) {
     else if (idle.visible && view.playing) idle.hide();
     else idle.wake();
   };
-  const top = look.small ? 76 : look.size(108);
+  const top = look.small ? (look.short ? 54 : 76) : look.size(108);
   // The chrome spans the stage, so a tap anywhere on the picture wakes it; its controls keep to
   // the safe area (and to a tabletop's lower half: fold-layout.ts).
   const frame = watchFrames(viewport).chrome;
+  // Fade across the whole picture, including the area under side insets or a book's other pane.
+  const bleed = look.small ? { left: -frame.left, right: -frame.right } : undefined;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="player-chrome">
       {/* On TV remove the picture's focus destination on reveal, rather than leaving a
@@ -255,16 +263,17 @@ function Chrome({ state }: { state: PlayerChromeState }) {
         // A skip button over the hidden chrome takes focus instead, so select skips.
         hasTVPreferredFocus={Platform.isTV && !skip}
       />}
+      <PlayerOverlays look={look} surfaces={surfaces} chrome={chromeUp} top={top}
+        video={belongs(state.snapshot, state.plan) ? state.snapshot.video : null} fill={state.picture?.fill ?? false} />
       <View style={[StyleSheet.absoluteFill, frame]} pointerEvents="box-none">
       {/* Each bar holds its own edge: on a short screen they overlap at the middle rather than
           push the controls off the bottom. On TV, moving focus along a bar keeps the chrome up:
           the focus engine takes those presses, so they never reach the remote's event stream,
           but a control's focus bubbles to its bar (and counts only while the chrome stands). */}
       <View style={styles.top} pointerEvents="box-none" onFocus={tv ? idle.stir : undefined}>
-        <TopBar look={look} title={state.title} visible={idle.visible || !!failed} onClose={state.close} />
+        <TopBar look={look} title={state.title} visible={idle.visible || !!failed} onClose={state.close} bleed={bleed} />
       </View>
-      {/* Plugin overlays (the score bug, the ticker) and alert toasts, under the bars so a menu always covers them. */}
-      <PlayerOverlays look={look} surfaces={surfaces} chrome={chromeUp} top={top} />
+      {/* Alert toasts stay under the bars so a menu always covers them. */}
       <PlayerToasts look={look} top={chromeUp ? top : look.small ? 18 : look.size(30)} playingChannelId={live.live ? live.channelId : ''}
         right={info && !failed && !look.small ? look.gutter + look.size(300) + look.size(14) : undefined} />
       <View style={[styles.bottom, { bottom: surfaces.lift }, opened === 'quality' && !!state.plan?.versions?.length && !failed && styles.menuAboveStatus]}
@@ -279,7 +288,8 @@ function Chrome({ state }: { state: PlayerChromeState }) {
           blocked={blocked}
           opened={opened}
           info={info}
-          menuHeight={Math.round(viewport.height * 0.55)}
+          menuHeight={Math.round((look.small ? viewport.height - frame.top - frame.bottom : viewport.height) * 0.55)}
+          bleed={bleed}
           send={send}
           seek={seek}
           seekBy={seekBy}

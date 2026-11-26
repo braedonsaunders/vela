@@ -1,7 +1,7 @@
 // What a library page and a collection page show (routes.library, routes.collection): the model
 // on show and whether a read is under way. The app builds these from core's store; documents
 // read them through the library vocabulary.
-import type { Choice, CollectionModel, LibraryExtras, LibraryModel } from '@vela/core';
+import type { Choice, CollectionModel, LibraryExtras, LibraryJumpBucket, LibraryModel } from '@vela/core';
 import type { LibraryLiveFilter } from '../../../../protocol/types';
 
 export type LibraryView = 'recommended' | 'library' | 'collections' | 'people' | 'genres' | 'live' | 'view';
@@ -23,6 +23,10 @@ export interface LibraryPage {
   viewLoad?: import('@vela/core').Load;
   extrasLoading?: boolean;
   extrasFailed?: boolean;
+  /** Non-empty first-character jump buckets when the view and server support jumping. */
+  jumpBuckets?: LibraryJumpBucket[];
+  /** Requested zero-based starting offset for a letter-jumped window (absent when at the top). */
+  jumpStart?: number;
   /** The view on show: the current sort and filters' answer, or while it is read, the last one. */
   model?: LibraryModel;
   /** The first page of the current sort and filters is being read. */

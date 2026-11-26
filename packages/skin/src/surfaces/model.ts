@@ -2,6 +2,7 @@
 // what the host is showing (`when`, evaluated here so an inapplicable surface costs no request),
 // which player overlays stand and where (anchors, boxes, the chrome's bars), the context a surface
 // reads, and the toast stack (which alerts stand, for how long). Nothing here draws.
+import { slotSpec, surfaceSlot } from '../../../protocol/experiences';
 import { SPOILER_DELAY_SECONDS } from '@vela/core';
 import type { AlertFrame, SurfaceContext, SurfaceContribution } from '../../../protocol/screen';
 
@@ -53,7 +54,7 @@ export const OVERLAYS_PER_ANCHOR = 2;
  * every applicable one (the player menu offers a switch for each, on or off). */
 export function playerOverlays(surfaces: readonly SurfaceContribution[], facts: SurfaceFacts, local: Record<string, boolean> = {}):
   { shown: SurfaceContribution[]; switchable: SurfaceContribution[] } {
-  const switchable = surfaces.filter(s => s.presentation === 'playerOverlay' && surfaceApplies(s, facts));
+  const switchable = surfaces.filter(s => surfaceSlot(s)?.startsWith('player.overlay.') && surfaceApplies(s, facts));
   const counts = new Map<Anchor, number>();
   const shown: SurfaceContribution[] = [];
   for (const surface of switchable) {
@@ -83,25 +84,28 @@ export interface OverlayBox {
 
 export interface OverlayFrame {
   width: number; height: number;
-  /** A phone (under 640 px): tighter edges, and corners may take more of the narrow width. */
+  /** A phone has tighter insets and lets a lone corner use the available width. */
   small: boolean;
   /** The player's design size: (px) => points (look.size). */
   size(px: number): number;
   /** The chrome stands, and where its top bar ends. */
   chrome: boolean;
   top: number;
+  /** Both corners are occupied and must leave room for each other. */
+  opposingCorners?: boolean;
 }
 
-/** Corners take at most 34% x 22% of the picture (on a phone, where 34% is too narrow to read a
- * score, 80% of its width), the band 100% x 12%. */
+/** Give corner documents room for a compact row or a wrapped layout on short screens. */
 export function overlayBox(anchor: Anchor, frame: OverlayFrame): OverlayBox {
-  const edge = frame.small ? 18 : frame.size(30);
-  const gutter = frame.small ? 16 : frame.size(40);
+  const edge = frame.small ? 12 : frame.size(30);
+  const gutter = frame.small ? 12 : frame.size(40);
   if (anchor === 'bottom') return { left: 0, right: 0, bottom: 0, maxWidth: frame.width, maxHeight: Math.round(frame.height * 0.12), shift: 0 };
-  const maxWidth = Math.round(frame.width * (frame.small ? 0.8 : 0.34));
-  const maxHeight = Math.round(frame.height * 0.22);
   // Under the chrome's top bar while it stands, back to the edge as it hides (as the score bug moved).
   const shift = frame.chrome ? Math.max(0, frame.top - edge) : 0;
+  const available = Math.max(0, frame.width - gutter * 2);
+  const preferred = frame.small ? available : Math.max(frame.size(440), Math.round(frame.width * 0.34));
+  const maxWidth = Math.floor(Math.min(preferred, frame.opposingCorners ? Math.max(0, (available - gutter) / 2) : available));
+  const maxHeight = Math.max(0, Math.min(frame.height - edge - shift, Math.max(frame.size(120), Math.round(frame.height * 0.22))));
   return anchor === 'topLeft' ? { left: gutter, top: edge, maxWidth, maxHeight, shift } : { right: gutter, top: edge, maxWidth, maxHeight, shift };
 }
 
@@ -171,7 +175,7 @@ export function toastBox(size: (px: number) => number, small: boolean, width: nu
 
 /** The toast surface an alert draws with: the one it names, else the toast its plugin contributes. */
 export function toastSurface(alert: AlertFrame, surfaces: readonly SurfaceContribution[]): SurfaceContribution | undefined {
-  const toasts = surfaces.filter(s => s.presentation === 'toast');
+  const toasts = surfaces.filter(s => surfaceSlot(s) === 'toast');
   if (alert.surface) {
     const named = toasts.find(s => s.id === alert.surface);
     if (named) return named;
@@ -197,4 +201,29 @@ export function toastStack(alerts: readonly AlertFrame[], max = MAX_TOASTS): { s
 /** A toast's time left after it ran `ranMs` unheld: it resumes where it stopped, with at least a beat left. */
 export function toastRemaining(totalMs: number, ranMs: number): number {
   return Math.max(1200, totalMs - Math.max(0, ranMs));
+}
+
+/** The context keys a slot surface's data read carries to Ether (the rest stay on the client, but for
+ * `titleKind`, which only picks surfaces). */
+const SERVER_CONTEXT = new Set(['channel', 'event', 'title', 'kind']);
+
+/** The surfaces filling a published slot (renderer 20, `{type: "slot", slot: "plugin:<id>"}` in a built-in
+ * page): slot surfaces with that slot id, and the Sports-era presentations standing for it
+ * (experiences.ts surfaceSlot), in Ether's order, at most the slot's cap. A `titleKind` context
+ * picks by `when.titleKind`. */
+export function slotSurfaces(surfaces: readonly SurfaceContribution[], slot: string, context: Record<string, string>, limit?: number): SurfaceContribution[] {
+  const cap = Math.min(limit ?? Infinity, slotSpec(slot)?.cap.perSlot ?? Infinity);
+  return surfaces.filter(s => surfaceSlot(s) === slot && surfaceApplies(s, { titleKind: context.titleKind })).slice(0, Number.isFinite(cap) ? cap : undefined);
+}
+
+/** A slot's context as a surface reads it: server keys (a title as its `item:` key) and the rest local. */
+export function slotContext(context: Record<string, string>): { server: SurfaceContext; local: SurfaceContext } {
+  const server: Record<string, string> = {};
+  const local: Record<string, string> = {};
+  for (const [name, value] of Object.entries(context)) {
+    if (!value || name === 'titleKind') continue;
+    if (SERVER_CONTEXT.has(name)) server[name] = name === 'title' ? (value.startsWith('item:') ? value : `item:${value}`) : value;
+    else local[name] = value;
+  }
+  return { server: server as SurfaceContext, local: local as SurfaceContext };
 }

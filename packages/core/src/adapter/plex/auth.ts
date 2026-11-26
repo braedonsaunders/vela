@@ -3,6 +3,7 @@ export interface PlexPin { id: number; code: string; expiresAt: string; authToke
 export interface PlexResource { name: string; clientIdentifier: string; accessToken: string; owned: boolean;
   connections: { uri: string; local: boolean; relay: boolean; protocol: string }[] }
 import type { Device } from '../../wire';
+import { fetchBounded, readJsonBody } from '../../protocol/timeout';
 
 /** This device as Plex names it: the client identifier, the name shown in Plex's devices and
  * dashboard, and the platform and device Plex picks a client profile (and so transcodes) from. */
@@ -42,15 +43,22 @@ export function plexMediaHeaders(device: PlexDevice): Record<string, string> {
 export class PlexAccountRefused extends Error {
   constructor() { super('Plex no longer accepts this sign-in. Link Plex again.'); this.name = 'PlexAccountRefused'; }
 }
-async function cloud<T>(path: string, device: PlexDevice, method = 'GET', accountToken?: string, refused?: string): Promise<T> {
+interface CloudOptions { timeoutMs?: number; signal?: AbortSignal }
+async function cloud<T>(path: string, device: PlexDevice, method = 'GET', accountToken?: string, refused?: string, options?: CloudOptions): Promise<T> {
   const url = new URL(path, 'https://plex.tv');
   if (url.origin !== 'https://plex.tv' || !url.pathname.startsWith('/api/v2/')) throw new Error('Invalid Plex account endpoint');
-  const response = await fetch(url.href, { method, cache: 'no-store', redirect: 'error', credentials: 'omit',
-    headers: { ...plexHeaders(device), ...(accountToken ? { 'X-Plex-Token': accountToken } : {}) } });
-  if (!response.ok && response.status === 401 && accountToken && !refused) throw new PlexAccountRefused();
-  if (!response.ok) throw new Error(response.status === 429 ? 'Too many Plex sign-in attempts. Wait before trying again.'
-    : refused && [401, 403, 422].includes(response.status) ? refused : 'Plex is temporarily unavailable. Wait before trying again.');
-  return response.json() as Promise<T>;
+  const init: RequestInit = { method, cache: 'no-store', redirect: 'error', credentials: 'omit',
+    headers: { ...plexHeaders(device), ...(accountToken ? { 'X-Plex-Token': accountToken } : {}) } };
+  const handle = async (response: Response, onCancel?: (cancel: () => void) => void): Promise<T> => {
+    if (!response.ok && response.status === 401 && accountToken && !refused) throw new PlexAccountRefused();
+    if (!response.ok) throw new Error(response.status === 429 ? 'Too many Plex sign-in attempts. Wait before trying again.'
+      : refused && [401, 403, 422].includes(response.status) ? refused : 'Plex is temporarily unavailable. Wait before trying again.');
+    return (await readJsonBody(response, onCancel)) as T;
+  };
+  if (options?.timeoutMs !== undefined || options?.signal !== undefined) {
+    return fetchBounded(url.href, init, handle, options.timeoutMs, options.signal);
+  }
+  return handle(await fetch(url.href, init));
 }
 export function createPlexPin(device: PlexDevice, strong = false): Promise<PlexPin> {
   // Short PINs can be entered on plex.tv/link on another device; browser authorization uses a
@@ -64,9 +72,10 @@ export function plexAuthUrl(clientIdentifier: string, code: string): string {
 export function pollPlexPin(device: PlexDevice, pin: Pick<PlexPin, 'id' | 'code'>): Promise<PlexPin> {
   return cloud(`/api/v2/pins/${encodeURIComponent(pin.id)}?code=${encodeURIComponent(pin.code)}`, device);
 }
-export async function discoverPlexServers(device: PlexDevice, accountToken: string): Promise<PlexResource[]> {
-  const resources = await cloud<(PlexResource & { provides: string })[]>('/api/v2/resources?includeHttps=1&includeRelay=1', device, 'GET', accountToken);
-  return resources.filter(r => r.provides.split(',').includes('server')).map(r => ({ ...r, connections: r.connections.filter(c => {
+export async function discoverPlexServers(device: PlexDevice, accountToken: string, options?: CloudOptions): Promise<PlexResource[]> {
+  const resources = await cloud<(PlexResource & { provides: string })[]>('/api/v2/resources?includeHttps=1&includeRelay=1', device, 'GET', accountToken, undefined, options);
+  if (!Array.isArray(resources)) return [];
+  return resources.filter(r => r && typeof r.provides === 'string' && r.provides.split(',').includes('server') && Array.isArray(r.connections)).map(r => ({ ...r, connections: r.connections.filter(c => {
     try { const u = new URL(c.uri); return ['https:', 'http:'].includes(u.protocol) && !u.username && !u.password && u.pathname === '/' && !u.search && !u.hash; } catch { return false; }
   }).sort((a, b) => Number(b.protocol === 'https') - Number(a.protocol === 'https') || Number(a.relay) - Number(b.relay)) }));
 }

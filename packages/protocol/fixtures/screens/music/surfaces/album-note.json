@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "kind": "screen",
+  "renderer": 20,
+  "screen": "music.albumNote",
+  "page": "main",
+  "version": "1.0.0",
+  "title": "{s:title}",
+  "presentation": "slot",
+  "slot": "listen.album.panel",
+  "sources": {
+    "album": { "from": "vela.title", "id": "{context.title}" },
+    "note": { "from": "plugin", "route": "albumNote", "args": { "title": "{context.title}" } }
+  },
+  "strings": { "title": "Liner notes", "released": "Released {arg.year}" },
+  "tree": {
+    "type": "box",
+    "testId": "music-album-note",
+    "when": [{ "test": "src.note.note.text" }],
+    "style": { "font-family": "$ui.font", "gap": "6px", "padding": "16px", "border-radius": "$ui.radiusCard", "background-color": "$ui.raised" },
+    "children": [
+      { "type": "text", "text": "{s:title}", "style": { "font-size": "13px", "font-weight": "700", "color": "$ui.inkQuiet", "text-transform": "uppercase", "letter-spacing": "0.06em" } },
+      { "type": "text", "when": [{ "test": "src.album.item.yearLabel" }], "text": "{s:released|with:year=src.album.item.yearLabel}", "style": { "font-size": "14px", "color": "$ui.inkSecondary" } },
+      { "type": "text", "text": "{src.note.note.text}", "style": { "font-size": "15px", "color": "$ui.ink", "line-clamp": "4" } }
+    ]
+  }
+}

@@ -236,6 +236,7 @@ final class PlaybackSession {
                 seekConfirmed(next.positionSeconds)
             }
             applyTracks()
+            updateNowPlaying()
             return
         }
         guard path.readiness == "ready", let text = path.url, let url = resolve(text) else {
@@ -306,7 +307,8 @@ final class PlaybackSession {
             position: pendingSeek ?? state.position,
             playing: state.phase == .playing,
             // Now Playing extrapolates the position at the video's speed (live always plays at 1).
-            rate: plan?.isLive == true ? 1 : report.speed
+            rate: plan?.isLive == true ? 1 : report.speed,
+            languages: plan.map { NowPlayingLanguageOptions.languages(for: $0, state: state, report: report) }
         )
         host.updateNowPlaying(now, owner: self)
     }
@@ -499,13 +501,21 @@ final class PlaybackSession {
             state.loaded = true
             applyTracks()
             resumeAfterDisplaySwitch()
+            updateNowPlaying()
         case .endFile(let reason, _):
+            if reason == 0, playsOriginal, let duration = plan?.durationSeconds,
+               duration > 2, state.position < duration - 2 {
+                askForFreshPlan("original ended before its planned duration", originalLost: true, position: state.position)
+                break
+            }
             if reason == 4, !recoverPath() {
                 state.failure = "AetherEngine could not play any server path"
                 state.failureKind = "decoder"
             }
         case .refused(let status):
             askForFreshPlan("media request refused (\(status))")
+        case .originalLost(let position):
+            askForFreshPlan("original lost", originalLost: true, position: position)
         case .seekDone:
             pendingSeek = nil
             if !loggedOutput {
@@ -538,13 +548,19 @@ final class PlaybackSession {
     }
 
     /// Asks once per source for a fresh plan: the grant behind the media URL has expired or was revoked.
-    private func askForFreshPlan(_ reason: String) {
+    private func askForFreshPlan(_ reason: String, originalLost: Bool = false, position: Double? = nil) {
         guard let plan, refreshAsked != activeSource else {
             return
         }
         refreshAsked = activeSource
         print("[vela-player] session refresh: \(reason)")
-        onSessionRefresh(["sessionId": plan.sessionId])
+        var event: [String: Any] = ["sessionId": plan.sessionId]
+        if originalLost {
+            event["reason"] = "original_lost"
+            event["positionSeconds"] = position ?? state.position
+            event["sourceGeneration"] = plan.sourceGeneration
+        }
+        onSessionRefresh(event)
     }
 
     private func logOutput() {
@@ -892,23 +908,35 @@ final class PlaybackSession {
 
 extension PlaybackSession: SystemMediaOwner {
     /// The Siri Remote's or Control Center's command, through the same paths as the `command` prop.
-    func systemMediaCommand(_ command: SystemMediaCommand) {
+    @discardableResult
+    func systemMediaCommand(_ command: SystemMediaCommand) -> Bool {
+        let failure: String?
         switch command {
         case .play:
-            _ = perform(["type": "play"])
+            failure = perform(["type": "play"])
         case .pause:
-            _ = perform(["type": "pause"])
+            failure = perform(["type": "pause"])
         case .toggle:
-            _ = perform(["type": state.phase == .playing ? "pause" : "play"])
+            failure = perform(["type": state.phase == .playing ? "pause" : "play"])
         case .skip(let seconds):
-            _ = perform(["type": "seekBy", "seconds": seconds])
+            failure = perform(["type": "seekBy", "seconds": seconds])
         case .seek(let position):
-            _ = perform(["type": "seek", "seconds": position])
+            failure = perform(["type": "seek", "seconds": position])
+        case .enableAudio(let trackId):
+            failure = perform(["type": "audio", "trackId": trackId])
+        case .enableSubtitle(let trackId):
+            failure = perform(["type": "subtitle", "trackId": trackId])
+        case .disableSubtitle:
+            failure = perform(["type": "subtitle", "trackId": NSNull()])
         case .next, .previous:
             // A video takes no next or previous; its style never registers them.
-            break
+            return false
+        }
+        guard failure == nil else {
+            return false
         }
         report.publish(state, seekTarget: pendingSeek, force: true)
         updateNowPlaying()
+        return true
     }
 }

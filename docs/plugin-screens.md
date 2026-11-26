@@ -270,7 +270,7 @@ does not need to hand-roll controls. Each one reads `with` arguments:
 
 | Block | Purpose | Key fields | TV focus |
 | --- | --- | --- | --- |
-| `sections` | The page's vertical list. Each child is drawn inside its own error boundary (one that cannot draw is logged and left out). The first three children draw with the first frame and the rest follow one per frame. The page title is given as a hidden level-1 heading. | `children`, `gap` | Vertical; focus memory per child |
+| `sections` | The page's vertical list. Each child is drawn inside its own error boundary (one that cannot draw is logged and left out). The first three children draw with the first frame and the rest follow one per frame. Standalone pages expose their title as a visually hidden level-1 heading on the web. Pages in an experience shell use their own headings. | `children`, `gap` | Vertical; focus memory per child |
 | `shelf` | A horizontal, virtualised list of an item template | `over`, `as`, `key`, `item`, `itemWidth` (per class; `fit a..b` sizes an item to its content within bounds), `gap`, `stableOrder` (keep the first-seen order while mounted), `empty` | One focus row; remembers its position |
 | `grid` | A wrapping grid of an item template, virtualised by row | `over`, `as`, `item`, `columns` (per class), `gap` | Grid movement |
 | `tabs` | A chip row bound to a parameter or a state flag, with an optional "all" option | `over`, `as`, `value`, `label`, `count`, `bind: { param \| state, clear? }`, `default`, `all`, `chip` (the kit template to draw each option with; `vela:tab` by default) | One row; a tablist on the web |

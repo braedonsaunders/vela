@@ -13,6 +13,9 @@ import { useVela } from '../../../src/vela';
 import { closeModal } from '../../../src/modal-motion';
 import { PageFrame } from '../../../src/page-frame';
 import { useAppScreenActions } from '../../../src/screen-actions';
+import { previewDocUrl, previewToken } from '../../../src/screen-preview';
+
+const PREVIEW_QUERY_KEYS = new Set(['screenPreview', 'previewDoc', 'previewFrame', 'tv']);
 
 export default function ScreenPage() {
   const { id = '', page = '', ...rest } = useLocalSearchParams<{ id: string; page: string } & Record<string, string>>();
@@ -20,9 +23,14 @@ export default function ScreenPage() {
   const host = vela.host('screen', id);
   const focused = useIsFocused();
   const entry = useVelaState(state => state.home.value?.screens.find(screen => screen.id === id));
-  const href = entry ? screenDocumentHref(entry.document.href, page) : '';
-  // A Studio preview's token is the address's, not the page's.
-  const params = useMemo(() => Object.fromEntries(Object.entries(rest).filter(([name, v]) => typeof v === 'string' && name !== 'screenPreview')) as Record<string, string>,
+  const previewing = Boolean(previewToken() || previewDocUrl());
+  const href = entry
+    ? screenDocumentHref(entry.document.href, page)
+    : previewing && id && page
+      ? `/vela/v0/screens/${encodeURIComponent(id)}/pages/${encodeURIComponent(page)}/document`
+      : '';
+  // A Studio or `skin.ts serve` preview's query parameters belong to the preview address, not the page's.
+  const params = useMemo(() => Object.fromEntries(Object.entries(rest).filter(([name, v]) => typeof v === 'string' && !PREVIEW_QUERY_KEYS.has(name))) as Record<string, string>,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(rest)]);
   const back = useCallback(() => closeModal(() => {

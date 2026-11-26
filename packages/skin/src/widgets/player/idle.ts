@@ -8,6 +8,7 @@ import { fromViewer, pressed, useRemote } from './remote';
 
 /** A television is watched from across the room and worked with a remote: it waits longer. */
 const IDLE_MS = Platform.isTV ? 6000 : 3500;
+export const PLAYER_CHROME_TRANSITION_MS = 420;
 
 export interface Idle {
   visible: boolean;

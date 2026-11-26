@@ -2,7 +2,7 @@
 // not fold) the picture fills the stage and the controls keep to the safe area. A foldable stood
 // partly open on a table (tabletop) puts the picture in the upper half, clear of the status bar,
 // and the controls in the lower half, so neither sits in the fold. Held like a book, the picture
-// spans both halves as it does fully open; the bottom bar's controls already keep to each side.
+// spans both halves as it does fully open; the controls stay on the wider safe pane.
 import type { Viewport } from '../../css';
 
 export interface Edges { top: number; right: number; bottom: number; left: number }
@@ -17,6 +17,13 @@ export interface WatchFrames {
 /** The least either half of a tabletop needs to be worth splitting (else the picture fills). */
 export const TABLETOP_MIN_HALF = 180;
 
+export function watchWidth(viewport: Viewport): number {
+  const { left, right } = viewport.sides ?? viewport.insets;
+  return viewport.width + left + right;
+}
+
+const BOOK_MIN_PANE = 240;
+
 export function watchFrames(viewport: Viewport): WatchFrames {
   const { insets, sides, fold, height } = viewport;
   const left = sides?.left ?? insets.left, right = sides?.right ?? insets.right;
@@ -24,8 +31,20 @@ export function watchFrames(viewport: Viewport): WatchFrames {
     picture: { top: 0, right: 0, bottom: 0, left: 0 },
     chrome: { top: insets.top, right, bottom: insets.bottom, left },
   };
-  const d = fold?.posture === 'tabletop' ? fold.division : undefined;
-  if (!d) return flat;
+  const d = fold?.division;
+  if (!d || fold.posture === 'flat') return flat;
+  if (fold.posture === 'book') {
+    const width = watchWidth(viewport);
+    const leading = d.x - left;
+    const trailing = width - right - d.x - d.width;
+    if (Math.max(leading, trailing) < BOOK_MIN_PANE) return flat;
+    return {
+      ...flat,
+      chrome: leading >= trailing
+        ? { ...flat.chrome, right: width - d.x }
+        : { ...flat.chrome, left: d.x + d.width },
+    };
+  }
   const upper = d.y - insets.top;
   const lowerTop = d.y + d.height;
   const lower = height - insets.bottom - lowerTop;
@@ -33,5 +52,24 @@ export function watchFrames(viewport: Viewport): WatchFrames {
   return {
     picture: { top: insets.top, right: 0, bottom: height - d.y, left: 0 },
     chrome: { top: lowerTop, right, bottom: insets.bottom, left },
+  };
+}
+
+/** The visible video, intersected with the safe area and the active pane on a book fold. */
+export function watchPictureBounds(
+  viewport: Viewport, frames: WatchFrames, video: { width: number; height: number } | null | undefined, fill: boolean,
+): Edges {
+  const { picture, chrome } = frames;
+  const width = watchWidth(viewport) - picture.left - picture.right;
+  const height = viewport.height - picture.top - picture.bottom;
+  const aspect = video ? video.width / video.height : 0;
+  const fit = !fill && aspect > 0 && Number.isFinite(aspect) && width > 0 && height > 0;
+  const x = fit ? (width - Math.min(width, height * aspect)) / 2 : 0;
+  const y = fit ? (height - Math.min(height, width / aspect)) / 2 : 0;
+  return {
+    left: Math.max(picture.left + x, chrome.left),
+    right: Math.max(picture.right + x, chrome.right),
+    top: Math.max(picture.top + y, viewport.insets.top),
+    bottom: Math.max(picture.bottom + y, viewport.insets.bottom),
   };
 }

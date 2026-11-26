@@ -4,7 +4,7 @@ import { importFileModeLabel, importFileTextLabel, importFormatName, importRefus
 // Exposes the URL/file import form, reading/matching progress bar, matched tracks with plain match
 // badges ("Exact match" / "Matched by title & artist") and include/exclude toggles, unmatched tracks
 // with inline release picker for ambiguous songs, and playlist save action over `@vela/core`'s
-// `store.music` playlist import engine, independent of `widgets/music` page code.
+// `store.music` playlist import engine, independent of page code.
 import { useEffect, useState } from 'react';
 import { Platform, Text, TextInput, View, type ViewStyle } from 'react-native';
 import {

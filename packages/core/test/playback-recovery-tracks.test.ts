@@ -452,11 +452,10 @@ test('a subtitle in one script is not carried to the other script of its languag
   });
 });
 
-test('a recovery after one that kept the tracks locally shows the server\'s later selection', async () => {
-  // On B the server takes neither track command; on C it takes Off on its own, then selects subtitle 8.
+test('a recovery after one that kept the tracks locally keeps them locally', async () => {
+  // On B the server takes neither track command; tracks chosen locally stay local, also on C.
   const a = { source: 'a', audioTracks: [audio('4', 'fra')], subtitleTracks: [subtitle('2', 'eng')], selectedAudioTrackId: '4', selectedSubtitleTrackId: '2' };
   const b = { source: 'b', audioTracks: [audio('1', 'eng'), audio('9', 'fra')], subtitleTracks: [subtitle('2', 'eng'), subtitle('8', 'eng')], selectedAudioTrackId: '1', selectedSubtitleTrackId: '2' };
-  let refuseOff = true;
   await lab([a, b, b], async ({ playback, box, commands, files, run }) => {
     await playback.start({ kind: 'title', id: 'movie' });
     playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', audioTrackId: '4', subtitleTrackId: null });
@@ -464,16 +463,16 @@ test('a recovery after one that kept the tracks locally shows the server\'s late
     await run();
     expect(box.get().playback.sessionId).toBe('s2');
     expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
-    refuseOff = false;
     playback.recover('s2');
     await run();
     expect(box.get().playback.sessionId).toBe('s3');
-    expect(commands.filter(c => c.kind === 'tracks').map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([['9', null], [undefined, null], ['9', null], [undefined, null]]);
-    expect(files.get('s3')!.selectedSubtitleTrackId).toBeNull();
+    expect(commands.filter(c => c.kind === 'tracks').map(c => [c.audioTrackId, c.subtitleTrackId])).toEqual([['9', null], [undefined, null]]);
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('9');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
     files.set('s3', { ...files.get('s3')!, selectedSubtitleTrackId: '8' });
     await run(5000);
-    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('8');
-  }, c => c.audioTrackId !== undefined || refuseOff);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+  }, () => true);
 });
 
 test('a subtitle the server refuses on a new file is kept locally by its id there, not the old one', async () => {

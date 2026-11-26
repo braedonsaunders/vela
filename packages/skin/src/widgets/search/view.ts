@@ -16,7 +16,7 @@ function discovery(lane: SearchState['ai']): DiscoveryLane {
 }
 
 /** The view for the open query; none while no query is open. */
-export function searchView(state: SearchState): SearchView | undefined {
+export function searchView(state: SearchState, canSearchAll = false): SearchView | undefined {
   if (state.query.trim() === '') return undefined;
   const list = searchList(state);
   const live = list.state === 'ready' && state.fast.status === 'ready';
@@ -30,6 +30,8 @@ export function searchView(state: SearchState): SearchView | undefined {
   const descriptive: DescriptiveLane = { state: list.description, items: [], canRetry: list.canRetry };
   return {
     query: state.query,
+    canSearchAll,
+    sections: state.sections,
     controls: state,
     more: { fast: !!list.more, descriptive: false },
     titles,

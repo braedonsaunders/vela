@@ -93,8 +93,10 @@ export interface VelaPlayerProps {
   /** The engine needs the server to apply a session command (a seek, track change, path switch or
    * fallback it initiated): the controller sends it with the adapter and answers with a new plan. */
   onSessionCommand?: (event: { sessionId: string; command: SessionCommand }) => void;
-  /** The engine needs a fresh authoritative plan (a stale generation or an expired grant). */
-  onSessionRefresh?: (event: { sessionId: string }) => void;
+  /** The engine needs a fresh authoritative plan (a stale generation, an expired grant, or a
+   * confirmed/truncated original). Original loss carries the last trustworthy title position so
+   * the host can read the plan before treating the media as ended or starting a new session. */
+  onSessionRefresh?: (event: { sessionId: string; reason?: 'original_lost'; positionSeconds?: number; sourceGeneration?: number }) => void;
   /** The activity's picture-in-picture window (Android phones and tablets) opened or closed; `closed` when the
    * viewer dismissed it, which pauses playback as leaving the app does. */
   onPictureInPicture?: (event: { active: boolean; closed: boolean }) => void;

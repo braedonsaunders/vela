@@ -6,14 +6,15 @@
 // captured, the moving mask is what moved between each set's two frames (union of both), and the
 // diff is taken outside it. Writes report.md (the results table), results.json and diffs/*.png.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { decodePng, encodePng } from './png';
 import { diffImages, movingMask, RULE, verdict, type Rect } from './diff';
-import { CAPTURE_SCALE, DEVICE_MASKS, reviewed } from './views';
+import { CAPTURE_SCALE, DEVICE_MASKS, reviewed as sportsReviewed } from './views';
+import { listenReviewed } from './listen-views';
 
 interface Capture { viewport: string; view: string; file: string; frame: string; description: string; review?: string; ok: boolean; error?: string; reviewedRegions?: (Rect & { note: string })[] }
-interface Manifest { variant: string; platform: string; now: string; captures: Capture[] }
+interface Manifest { variant: string; experience?: string; platform: string; now: string; captures: Capture[] }
 
 const { values } = parseArgs({ options: { legacy: { type: 'string' }, document: { type: 'string' }, out: { type: 'string' }, threshold: { type: 'string' } } });
 if (!values.legacy || !values.document || !values.out) throw new Error('--legacy, --document and --out are required');
@@ -23,6 +24,9 @@ const read = (dir: string) => JSON.parse(readFileSync(join(dir, 'manifest.json')
 const legacy = read(legacyDir), document = read(documentDir);
 if (legacy.now !== document.now) console.warn(`warning: the sets were captured at different frozen instants (${legacy.now} vs ${document.now})`);
 const threshold = Number(values.threshold ?? 10);
+// The experience the sets capture (Sports when the manifest does not say) picks its reviewed list.
+const listen = legacy.experience === 'listen';
+const reviewed = listen ? listenReviewed : sportsReviewed;
 const png = (dir: string, file: string) => decodePng(new Uint8Array(readFileSync(join(dir, file))));
 
 interface Row { viewport: string; view: string; description: string; status: 'pass' | 'fail' | 'review' | 'missing'; percent?: number; maxDisplacement?: number; changed?: number; masked?: number; reasons: string[]; reviewedNotes?: string[]; moved?: { x: number; y: number; width: number; height: number; shift: { dx: number; dy: number } | null }[]; legacy?: string; document?: string; diff?: string; review?: string }
@@ -39,7 +43,7 @@ for (const before of legacy.captures) {
     if (existsSync(join(dir, capture.frame))) mask.push(...movingMask(image, png(dir, capture.frame)));
   }
   const result = diffImages(a, b, { mask, threshold });
-  const diffFile = join('diffs', before.file);
+  const diffFile = join('diffs', basename(before.file));
   writeFileSync(join(out, diffFile), encodePng(result.image));
   // Moves are judged in points: a 2x screenshot's 2 px is 1 point.
   const scale = CAPTURE_SCALE[before.viewport] ?? 1;
@@ -60,7 +64,7 @@ for (const before of legacy.captures) {
 writeFileSync(join(out, 'results.json'), JSON.stringify({ legacy: legacyDir, document: documentDir, rule: RULE, threshold, rows }, null, 2));
 const count = (status: Row['status']) => rows.filter(r => r.status === status).length;
 const lines = [
-  `# Sports parity: ${legacy.platform}`, '',
+  `# ${listen ? 'Listen' : 'Sports'} parity: ${legacy.platform}`, '',
   `Rule: at most ${RULE.maxPercent}% of pixels differ outside the moving regions, nothing moves more than ${RULE.maxDisplacement} px. Channel threshold ${threshold}/255. Frozen at ${legacy.now}.`, '',
   `Pass ${count('pass')} · fail ${count('fail')} · review ${count('review')} · missing ${count('missing')}`, '',
   '| Viewport | View | Result | % differing | Max move (px) | Content changes | Masked regions | Notes | Images |',

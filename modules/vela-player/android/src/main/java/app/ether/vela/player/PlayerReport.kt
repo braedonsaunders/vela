@@ -67,9 +67,11 @@ internal class PlayerReport(
   }
 
   /** Asks for a fresh plan: the grant behind the media URL has expired or was revoked. */
-  fun sessionRefresh() {
+  fun sessionRefresh(originalLost: Boolean = false, positionSeconds: Double? = null) {
     val plan = plan ?: return
-    emitSessionRefresh(mapOf("sessionId" to plan.sessionId))
+    emitSessionRefresh(mapOf("sessionId" to plan.sessionId) +
+      if (originalLost) mapOf("reason" to "original_lost", "positionSeconds" to (positionSeconds ?: plan.positionSeconds),
+        "sourceGeneration" to plan.sourceGeneration) else emptyMap())
   }
 
   /** A preview plays: snapshots and errors without a session, and no observations. */
@@ -84,11 +86,14 @@ internal class PlayerReport(
 
   /** A newer plan: the server's track choices, unless the viewer made their own on the device. */
   fun adopt(plan: PlaybackPlan, newSession: Boolean) {
+    val versionChanged = this.plan?.selectedVersionId != plan.selectedVersionId
     this.plan = plan
     previewing = false
-    if (newSession) {
+    if (newSession || versionChanged) {
       audioClientOnly = false
       subtitleClientOnly = false
+    }
+    if (newSession) {
       sequence = 0
       liveBehind = false
     }
