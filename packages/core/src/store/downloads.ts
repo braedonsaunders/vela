@@ -189,6 +189,12 @@ export const initialDownloads: DownloadsState = {
   error: '',
 };
 
+/** Whole percent for a transfer whose total size is known. */
+export function downloadPercent(item: Pick<DownloadRecord, 'byteLength' | 'bytesWritten'> | undefined): number | undefined {
+  if (!item?.byteLength || !Number.isFinite(item.byteLength) || item.byteLength < 0) return undefined;
+  return Number.isFinite(item.bytesWritten) ? Math.max(0, Math.min(100, Math.floor(100 * item.bytesWritten / item.byteLength))) : undefined;
+}
+
 /** Human-readable byte count for space deficit messages and storage summaries. */
 export function formatDownloadBytes(bytes: number): string {
   const positive = Math.max(0, bytes);
@@ -623,6 +629,16 @@ export class Downloads {
     const current = this.item(titleId);
     if (!isPlayableDownload(current) || record.serverId !== current.serverId || record.viewerId !== current.viewerId) return null;
     return localPlaybackPlan(current, base, options);
+  }
+
+  async posterFor(titleId: string): Promise<string | undefined> {
+    const item = this.item(titleId);
+    const path = item?.status === 'completed' ? item.posterPath : item?.previousCompleted?.posterPath;
+    if (!this.port || !path || !item) return undefined;
+    const base = await this.port.baseDirectoryUrl();
+    const current = this.item(titleId);
+    if (current?.serverId !== item.serverId || current.viewerId !== item.viewerId) return undefined;
+    return resolveDownloadFileUrl(base, path);
   }
 
   /** Build a `DetailModel` for `titleId` from the local index, seeding `state.titles[titleId]` when offline. */

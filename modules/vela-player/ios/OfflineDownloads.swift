@@ -557,7 +557,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
             return nil
         }
         let mime = response?.mimeType?.lowercased() ?? ""
-        let ext = mime.contains("png") ? "png" : mime.contains("webp") ? "webp" : "jpg"
+        let ext = mime.contains("svg") ? "svg" : mime.contains("png") ? "png" : mime.contains("webp") ? "webp" : "jpg"
         let target = titleDir.appendingPathComponent("poster.\(ext)")
         do {
             try data.write(to: target, options: .atomic)

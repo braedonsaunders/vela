@@ -6,6 +6,7 @@ import {
   Downloads,
   downloadedDetailModel,
   downloadNeedsReplacement,
+  downloadPercent,
   FREE_SPACE_RESERVE_BYTES,
   initialDownloads,
   localPlaybackPlan,
@@ -477,4 +478,11 @@ describe('Downloads slice isolation, lifecycle & replacement', () => {
     expect(h.port.removedServers).toEqual(['srv-plex']);
     expect(h.box.get().downloads.allItems.map(i => `${i.serverId}:${i.viewerId}`)).toEqual(['srv-other:viewer-9']);
   });
+});
+
+test('download progress stays within the file size and distinguishes an unknown total', () => {
+  expect(downloadPercent({ bytesWritten: 9, byteLength: 10 })).toBe(90);
+  expect(downloadPercent({ bytesWritten: 100, byteLength: 10 })).toBe(100);
+  expect(downloadPercent({ bytesWritten: -1, byteLength: 10 })).toBe(0);
+  expect(downloadPercent({ bytesWritten: 10 })).toBeUndefined();
 });

@@ -9,6 +9,7 @@ import { Stage } from './stage';
 export interface SessionAuth {
   phase: 'starting' | 'redeeming' | 'signed-out' | 'signed-in' | 'offline';
   serverId: string;
+  viewerId?: string;
   serverKind: string;
   passwordAvailable: boolean;
   plexAvailable?: boolean;
