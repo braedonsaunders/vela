@@ -584,13 +584,28 @@ export class Catalogue {
     background = false,
     signal?: AbortSignal,
   ): Promise<void> {
+    if (signal?.aborted) return;
     const epoch = this.session.epoch;
     const set = (value: Loadable<SliceValue<K>>) => {
       this.box.update(slice, map => ({ ...map, [key]: value }) as VelaState[K]);
     };
     const previous = this.box.get()[slice][key] as Loadable<SliceValue<K>> | undefined;
     const quiet = background && !!previous?.value;
-    if (!quiet) set(loading(previous));
+    const pending = quiet ? undefined : loading(previous);
+    if (pending) set(pending);
+    // A replacement view can mount immediately after aborting this one. Clear only the loading
+    // state this request owns so the new view can start its read instead of finding a stuck load.
+    const cancel = () => {
+      if (!pending || epoch !== this.session.epoch) return;
+      this.box.update(slice, map => {
+        if (map[key] !== pending) return map;
+        if (previous && previous.load !== 'loading') return { ...map, [key]: previous } as VelaState[K];
+        const next = { ...map };
+        delete next[key];
+        return next as VelaState[K];
+      });
+    };
+    signal?.addEventListener('abort', cancel, { once: true });
     let connection: Connection | undefined;
     try {
       connection = await this.session.ready();
@@ -601,6 +616,8 @@ export class Catalogue {
       if (signal?.aborted || epoch !== this.session.epoch) return;
       if (connection && await this.session.relocatePlex?.(connection, epoch, error, signal)) return;
       if (!signal?.aborted && epoch === this.session.epoch && !quiet) set(failed(error, previous));
+    } finally {
+      signal?.removeEventListener('abort', cancel);
     }
   }
 }
