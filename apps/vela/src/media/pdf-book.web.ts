@@ -3,6 +3,8 @@
 // (vendored by foliate-js, Apache-2.0) loads only when a PDF opens, runs its worker on the main
 // thread, and each page is drawn to a canvas at the reader's zoom.
 
+import { installPdfBuiltins } from './pdf-builtins';
+
 interface PdfPage { getViewport(options: { scale: number }): { width: number; height: number }; render(options: { canvasContext: CanvasRenderingContext2D; viewport: unknown }): { promise: Promise<void> } }
 interface PdfOutline { title: string; dest: unknown; items: PdfOutline[] }
 interface PdfDocument {
@@ -20,6 +22,7 @@ interface PdfJs {
 }
 
 async function pdfjs(): Promise<PdfJs> {
+  installPdfBuiltins();
   // The worker module registers itself as globalThis.pdfjsWorker, which PDF.js then runs in-page.
   await import('foliate-js/vendor/pdfjs/pdf.worker.mjs');
   await import('foliate-js/vendor/pdfjs/pdf.mjs');
