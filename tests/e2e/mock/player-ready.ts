@@ -21,6 +21,12 @@ export async function waitForVideoReady(browser: Browser, screen: Screen) {
 export async function waitForVideoPlayback(browser: Browser, screen: Screen) {
   await waitForVideoReady(browser, screen);
   // WebKit can leave a loaded video paused when playback starts after navigation.
-  if ((await videoState(browser)).paused) await screen.getByRole('button', 'Play').press('Enter');
-  await expect(screen.getByTestId('player-toggle')).toHaveAttribute('aria-label', 'Pause', { timeout: 30_000 });
+  const before = await videoState(browser);
+  try {
+    if (before.paused) await screen.getByRole('button', 'Play').press('Enter');
+    await expect(screen.getByTestId('player-toggle')).toHaveAttribute('aria-label', 'Pause', { timeout: 30_000 });
+  } finally {
+    console.log('QUALITY VIDEO DIAGNOSTICS', JSON.stringify({ before, after: await videoState(browser),
+      events: await browser.evaluate(() => (window as unknown as { velaMediaDiagnostics: unknown }).velaMediaDiagnostics) }));
+  }
 }
