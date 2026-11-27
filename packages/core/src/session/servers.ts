@@ -3,7 +3,7 @@ import { randomId } from '../protocol/id';
 
 export type ServerKind = 'ether' | 'jellyfin' | 'emby' | 'plex';
 export interface ServerRecord { id: string; name: string; kind: ServerKind; origin: string; basePath: string; machineIdentifier?: string }
-interface Registry { selectedId: string; servers: ServerRecord[]; hiddenEtherOrigin?: string }
+interface Registry { selectedId: string; servers: ServerRecord[]; hiddenEtherOrigin?: string; etherIds?: Record<string, string> }
 const registryKey = 'vela.servers';
 
 function validMachineIdentifier(value: unknown, kind: ServerKind): string | undefined {
@@ -68,7 +68,10 @@ export class ServerRegistry {
       servers.push(...implicit);
       hiddenEtherOrigin = undefined;
     }
-    return { selectedId: servers.some(s => s.id === parsed.selectedId) ? parsed.selectedId : servers[0]?.id ?? '', servers, hiddenEtherOrigin };
+    const etherIds = parsed.etherIds && Object.fromEntries([...servers, ...this.dormantEther]
+      .filter(record => record.kind === 'ether' && typeof parsed.etherIds?.[record.id] === 'string')
+      .map(record => [record.id, parsed.etherIds![record.id]]));
+    return { ...(etherIds && Object.keys(etherIds).length ? { etherIds } : {}), selectedId: servers.some(s => s.id === parsed.selectedId) ? parsed.selectedId : servers[0]?.id ?? '', servers, hiddenEtherOrigin };
   }
   private write(value: Registry): void {
     this.store.set(registryKey, JSON.stringify({ ...value, servers: [...value.servers, ...this.dormantEther] }));
@@ -108,12 +111,40 @@ export class ServerRegistry {
     this.write({ ...current, servers: current.servers.map(s => s.id === id ? record : s) });
     return record;
   }
+  rememberEtherIdentity(record: ServerRecord, identity: string): void {
+    const current = this.read();
+    if (current.etherIds?.[record.id] === identity || !current.servers.some(saved =>
+      saved.kind === 'ether' && saved.id === record.id && saved.origin === record.origin)) return;
+    this.write({ ...current, etherIds: { ...current.etherIds, [record.id]: identity } });
+  }
+
+  /** Replace aliases proven by Ether capabilities in one registry write. */
+  mergeEther(keep: ServerRecord, address: ServerRecord, aliases: readonly ServerRecord[]): boolean {
+    const current = this.read();
+    const identity = current.etherIds?.[address.id];
+    if (!this.standalone || !identity || ![keep, ...aliases].every(record => record.kind === 'ether'
+      && current.etherIds?.[record.id] === identity
+      && current.servers.some(saved => JSON.stringify(saved) === JSON.stringify(record)))) return false;
+    const removed = new Set(aliases.map(record => record.id));
+    const etherIds = { ...current.etherIds };
+    etherIds[keep.id] = identity;
+    for (const id of removed) delete etherIds[id];
+    const record = { ...keep, origin: address.origin, basePath: address.basePath, name: address.name };
+    this.write({ ...current, etherIds,
+      selectedId: removed.has(current.selectedId) ? keep.id : current.selectedId,
+      servers: current.servers.filter(saved => !removed.has(saved.id)).map(saved => saved.id === keep.id ? record : saved),
+    });
+    return true;
+  }
+
   remove(id: string): void {
     const current = this.read();
     if (id === 'ether' && current.selectedId === id) throw new Error('Cannot remove the selected host server');
     if (!current.servers.some(s => s.id === id)) throw new Error('Server not found');
     const servers = current.servers.filter(s => s.id !== id);
-    this.write({ selectedId: current.selectedId === id ? servers[0]?.id ?? '' : current.selectedId, servers,
+    const etherIds = { ...current.etherIds };
+    delete etherIds[id];
+    this.write({ etherIds, selectedId: current.selectedId === id ? servers[0]?.id ?? '' : current.selectedId, servers,
       hiddenEtherOrigin: id === 'ether' ? this.etherOrigin : current.hiddenEtherOrigin });
   }
 }

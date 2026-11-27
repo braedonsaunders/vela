@@ -5,13 +5,9 @@ import { useVela as useSession, useVelaState } from '@vela/core/react';
 import { Connect, Stage } from '@vela/skin/src/widgets/auth';
 import { HostContext } from '@vela/skin/src/host';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useRef } from 'react';
 import { View } from 'react-native';
 import { useVela } from '../../src/vela';
-
-function leave() {
-  if (router.canGoBack()) router.back();
-  else router.replace('/');
-}
 
 export default function ConnectServer() {
   const session = useSession();
@@ -19,6 +15,13 @@ export default function ConnectServer() {
   const { plex } = useLocalSearchParams<{ plex?: string }>();
   const servers = useVelaState(s => s.servers);
   const auth = useVelaState(s => s.auth);
+  const openedOn = useRef(auth.serverId);
+  const leave = useCallback(() => {
+    const current = session.getState().auth.serverId;
+    if (openedOn.current && current && openedOn.current !== current) router.dismissTo('/');
+    else if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }, [session]);
   const app = useVela();
   const host = app.host('auth', 'connect');
   if (!host) return <View style={{ flex: 1 }} />;

@@ -45,8 +45,8 @@ test('the shared phone shell provides a discoverable destination menu', async ()
   expect(JSON.stringify(resolveDocument(velaBase, 390).shell)).not.toContain('"widget":"libraryTabs"');
 });
 
-test('the phone navigation names Live TV once, whether or not the server lists it as a library', async () => {
-  const { resolveDocument, holds, fill } = await import('../src/resolve');
+test('the phone navigation keeps a section label even when the library fails to load', async () => {
+  const { resolveDocument, fill } = await import('../src/resolve');
   const { velaBase } = await import('../src/resolve/base');
   type RNode = import('../src/resolve').RNode;
   const find = (node: RNode, id: string): RNode | undefined => {
@@ -57,20 +57,23 @@ test('the phone navigation names Live TV once, whether or not the server lists i
   };
   const trigger = find(resolveDocument(velaBase, 390, 'en').shell!, 'mobile-navigation-trigger');
   if (trigger?.kind !== 'box') throw new Error('no phone navigation trigger');
-  const shown = (libraries: { id: string; kind: string; name: string }[]) => {
-    const env = { section: 'live', libraries, flags: [] } as unknown as import('../src/vocabulary').Env;
-    const names: string[] = [];
-    // The labels sit in the 36pt pill drawn inside the trigger's 44pt target.
-    const pill = trigger.children.find(child => child.kind === 'box');
-    if (pill?.kind !== 'box') throw new Error('no phone navigation pill');
-    for (const child of pill.children) {
-      if (child.kind === 'text' && holds(child.when, { index: 0 }, env)) names.push(fill(child.text, { index: 0 }, env));
-      if (child.kind === 'repeat' && child.item.kind === 'text') {
-        for (const dest of libraries) if (holds(child.item.when, { index: 0, dest } as never, env)) names.push(fill(child.item.text, { index: 0, dest } as never, env));
-      }
-    }
-    return names;
-  };
-  expect(shown([{ id: 'movies', kind: 'movies', name: 'Movies' }, { id: 'live', kind: 'live', name: 'Live TV' }])).toEqual(['Live TV']);
-  expect(shown([{ id: 'movies', kind: 'movies', name: 'Movies' }])).toEqual(['Live TV']);
+  // The label sits in the 36pt pill drawn inside the trigger's 44pt target.
+  const pill = trigger.children.find(child => child.kind === 'box');
+  if (pill?.kind !== 'box') throw new Error('no phone navigation pill');
+  const label = pill.children.find(node => node.kind === 'text');
+  if (label?.kind !== 'text') throw new Error('no phone navigation label');
+  const libraries = [
+    { id: 'movies', kind: 'movies', name: 'Movies' },
+    { id: 'broadcast', kind: 'live', name: 'Broadcast' },
+  ];
+  const shown = (section: string, destinations = libraries) => fill(label.text, { index: 0 }, {
+    section, libraries: destinations, load: 'failed',
+  } as unknown as import('../src/vocabulary').Env);
+
+  expect(shown('home')).toBe('Home');
+  expect(shown('live')).toBe('Live TV');
+  expect(shown('live', [])).toBe('Live TV');
+  expect(shown('movies')).toBe('Movies');
+  expect(shown('missing-library')).toBe('Library');
+  expect(shown('movies', [{ id: 'movies', kind: 'movies', name: ' ' }])).toBe('Library');
 });
