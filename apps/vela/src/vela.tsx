@@ -120,7 +120,7 @@ export function useSideInsets(): { paddingLeft: number; paddingRight: number; ba
 const ABOUT_APP = aboutApp();
 
 /** Routes a signed-out viewer may stay on. */
-const SIGNED_OUT_ROUTES = ['/sign-in', '/connect'];
+const SIGNED_OUT_ROUTES = ['/sign-in', '/connect', '/sign-in-preview'];
 
 /**
  * The core store belongs to the JavaScript runtime, not to a mount of the app's tree. On Android,
