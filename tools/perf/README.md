@@ -196,8 +196,10 @@ presses, which should land on the first card again), a Down held for 5 s (`gridh
 (`homefocus`). `input keyevent` cannot do either on Android 10 (it takes about a second to send each press
 and cannot hold a key), so the presses are the device's own remote input device's events (`sendevent` on the
 node `dumpsys input` names with a D-pad key layout, scan codes from that layout), held keys auto-repeat as a
-remote's do, and the device script keeps the timeline against `/proc/uptime`. Each checkpoint reports the
-focused view of a uiautomator dump, or that nothing had focus. No trace is taken, so it runs on tx1-box.
+remote's do, and the device script keeps the timeline against `/proc/uptime`. Where the shell cannot write
+the input device (an emulator's SELinux), presses fall back to `input keyevent --duration` (Android 12+). Each checkpoint reports the
+focused view of a uiautomator dump, or that nothing had focus; `--keep <dir>` also keeps each checkpoint's
+screen there. No trace is taken, so it runs on tx1-box.
 
 ```bash
 bun tools/perf/tv-nav.ts --lab tx1-box --owner "$OWNER" --focus --scenario grid05,grid10,grid16,gridhold --label after --out focus.json

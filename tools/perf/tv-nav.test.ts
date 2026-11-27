@@ -192,11 +192,12 @@ describe('tv-nav focus mode', () => {
       { path: '/dev/input/event2', scan: { DPAD_DOWN: 20 } });
     expect(script).toContain('E=/dev/input/event2');
     // On a timeline in centiseconds: down at 0, up 80 ms later, the held press from 500 ms to 5.5 s.
-    expect(script).toContain('at 0\ndown 20\nat 8\nup 20\nat 50\ndown 20\nat 550\nup 20\nat 1050\nuiautomator');
-    expect(script).toContain('> /data/local/tmp/tv-nav-focus-0.txt');
+    expect(script).toContain('at 0\ndown 20\nat 8\nup 20\nat 50\ndown 20\nat 550\nup 20\nat 1050\ndump /data/local/tmp/tv-nav-focus-0.txt');
     // A checkpoint restarts the timeline: the wait after it ends 2 s after the dump.
     expect(script.trimEnd().endsWith('B=$(now)\nat 200')).toBe(true);
     expect(() => focusScript([{ key: 'DPAD_LEFT' }], { path: '/dev/input/event2', scan: {} })).toThrow();
+    // No writable remote: input keyevent, held for the press's hold.
+    expect(focusScript([{ key: 'DPAD_DOWN', hold: 5000, window: 10000 }], undefined)).toContain('at 0\ninput keyevent --duration 5000 KEYCODE_DPAD_DOWN\nat 1000');
   });
 
   test('a checkpoint names the focused view, or nothing when focus was lost', () => {

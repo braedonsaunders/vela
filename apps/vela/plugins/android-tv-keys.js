@@ -49,6 +49,36 @@ module.exports = function withAndroidTVKeys(config) {
     })
   }
 
+  // The grid card focus was last on, until focus moves to a control outside grids. A press that finds
+  // the scroll around that card holding focus (Android's scroll takes focus when a press scrolls the
+  // focused card away) puts it back on the card. Focus on nothing is left alone: the player wants that.
+  private var velaLastGridCard: java.lang.ref.WeakReference<android.view.View>? = null
+
+  private fun velaNoControl(view: android.view.View?): Boolean =
+    view == null || view is android.widget.ScrollView || view is com.facebook.react.ReactRootView
+
+  private fun velaContains(ancestor: android.view.View, view: android.view.View): Boolean {
+    var parent = view.parent
+    while (parent is android.view.View) {
+      if (parent === ancestor) return true
+      parent = parent.parent
+    }
+    return false
+  }
+
+  private fun velaNoteFocus(view: android.view.View?) {
+    if (view != null && velaGrid(view, false) != null) velaLastGridCard = java.lang.ref.WeakReference(view)
+    else if (!velaNoControl(view)) velaLastGridCard = null
+  }
+
+  private fun velaRestoreGridFocus(focused: android.view.View?): Boolean {
+    if (focused !is android.widget.ScrollView) return false
+    val card = velaLastGridCard?.get() ?: return false
+    if (!velaContains(focused, card)) return false
+    if (!card.isAttachedToWindow || !card.isShown || !card.isFocusable) return false
+    return card.requestFocus()
+  }
+
   // Down from a card of such a grid whose next card down is not drawn yet: Android would take focus out
   // of the grid (to what lies past it, or to the scroll itself), so the press stays on the card and the
   // grid moves focus once the row is drawn.
@@ -85,6 +115,7 @@ module.exports = function withAndroidTVKeys(config) {
       }
       if (type != null) {
         val focused = currentFocus
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && velaRestoreGridFocus(focused)) return true
         val heroDirection = when (type) {
           "left" -> android.view.View.FOCUS_LEFT
           "right" -> android.view.View.FOCUS_RIGHT
@@ -126,7 +157,10 @@ module.exports = function withAndroidTVKeys(config) {
     const superCreate = /^(\s*)super\.onCreate\([^)]*\)\s*$/m;
     if (!superCreate.test(mod.modResults.contents)) throw new Error('MainActivity.onCreate has no super.onCreate call');
     const openingFocus = `    if (isVelaTelevision()) {
-      window.decorView.viewTreeObserver.addOnGlobalFocusChangeListener { _, focused -> velaRevealGridCard(focused) }
+      window.decorView.viewTreeObserver.addOnGlobalFocusChangeListener { _, focused ->
+        velaNoteFocus(focused)
+        velaRevealGridCard(focused)
+      }
     }
     // A physical keyboard can make Android focus the first button as the tree mounts.
     if (!isVelaTelevision()) {

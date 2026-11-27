@@ -423,12 +423,14 @@ export function findRemote(dumpsys: string, layout: (file: string) => string): R
 /** The focus-mode device script: presses as the remote's key events (`hold` ms down, else 80 ms) on a
  * timeline kept against /proc/uptime (a slow box spends a tenth of a second starting each sendevent),
  * and at each checkpoint the focused node of a uiautomator dump, to /data/local/tmp/tv-nav-focus-<n>.txt. */
-export function focusScript(steps: Step[], remote: Remote): string {
-  const lines = ['#!/system/bin/sh', `E=${remote.path}`,
+export function focusScript(steps: Step[], remote: Remote | undefined, shots = false): string {
+  const lines = ['#!/system/bin/sh', `E=${remote?.path ?? ''}`,
     // Centiseconds of uptime: small enough for a 32-bit shell's arithmetic.
     'now() { read u _ < /proc/uptime; echo ${u%.*}${u#*.}; }',
     'at() { while [ $(now) -lt $(( B + $1 )) ]; do sleep 0.02; done; }',
     'down() { sendevent $E 1 $1 1; sendevent $E 0 0 0; }',
+    // A busy app can keep uiautomator from finding the UI idle: one more try, else the failure is the record.
+    `dump() { for i in 1 2; do o=$(uiautomator dump /data/local/tmp/tv-nav-ui.xml 2>&1); case "$o" in *dumped*) grep -o '<node [^>]*focused="true"[^>]*>' /data/local/tmp/tv-nav-ui.xml > $1; return;; esac; sleep 1; done; echo "dump failed: $o" > $1; }`,
     'up() { sendevent $E 1 $1 0; sendevent $E 0 0 0; }',
     'B=$(now)'];
   const cs = (ms: number) => Math.round(ms / 10);
@@ -437,7 +439,7 @@ export function focusScript(steps: Step[], remote: Remote): string {
   for (const step of steps) {
     if ('focus' in step) {
       const file = `/data/local/tmp/tv-nav-focus-${check++}.txt`;
-      lines.push(`at ${cs(t)}`, `uiautomator dump /data/local/tmp/tv-nav-ui.xml >/dev/null 2>&1; grep -o '<node [^>]*focused="true"[^>]*>' /data/local/tmp/tv-nav-ui.xml > ${file}; true`, 'B=$(now)');
+      lines.push(`at ${cs(t)}`, ...(shots ? [`screencap -p ${file.replace(/\.txt$/, '.png')}`] : []), `dump ${file}`, 'B=$(now)');
       t = 0;
     } else if ('link' in step) {
       lines.push(`at ${cs(t)}`, `am start -a android.intent.action.VIEW -d '${step.link}' ${PACKAGE} >/dev/null 2>&1`);
@@ -447,12 +449,18 @@ export function focusScript(steps: Step[], remote: Remote): string {
       lines.push(`at ${cs(t)}`, `am start -n ${PACKAGE}/.MainActivity >/dev/null 2>&1`);
       t += step.window;
     } else {
-      const scan = remote.scan[step.key];
-      if (scan === undefined) throw new Error(`the remote sends no ${step.key}`);
+      const scan = remote?.scan[step.key];
+      if (remote && scan === undefined) throw new Error(`the remote sends no ${step.key}`);
       const hold = step.hold ?? 80;
       const window = step.window ?? 1200;
       const gap = window / (step.burst ?? 1);
-      for (let i = 0; i < (step.burst ?? 1); i++) lines.push(`at ${cs(t + i * gap)}`, `down ${scan}`, `at ${cs(t + i * gap + Math.min(hold, gap))}`, `up ${scan}`);
+      for (let i = 0; i < (step.burst ?? 1); i++) {
+        lines.push(`at ${cs(t + i * gap)}`);
+        // Without a writable remote (an emulator's SELinux keeps the shell off /dev/input): input
+        // keyevent, held with --duration (Android 12+); a slow box cannot keep the pace this way.
+        if (!remote) lines.push(`input keyevent --duration ${Math.min(hold, gap)} KEYCODE_${step.key}`);
+        else lines.push(`down ${scan}`, `at ${cs(t + i * gap + Math.min(hold, gap))}`, `up ${scan}`);
+      }
       t += window;
     }
   }
@@ -460,7 +468,7 @@ export function focusScript(steps: Step[], remote: Remote): string {
   return lines.join('\n') + '\n';
 }
 
-export interface FocusCheck { label: string; focused: { cls: string; desc: string; bounds: [number, number, number, number] }[] }
+export interface FocusCheck { label: string; focused: { cls: string; desc: string; bounds: [number, number, number, number] }[]; error?: string }
 
 /** The focused nodes of a checkpoint's grep of a uiautomator dump: none when focus was lost. */
 export function parseFocused(text: string): FocusCheck['focused'] {
@@ -472,28 +480,36 @@ export function parseFocused(text: string): FocusCheck['focused'] {
 }
 
 export function formatFocus(name: string, label: string, serial: string, checks: FocusCheck[]): string {
-  const rows = checks.map(check => `| ${check.label} | ${check.focused.length ? check.focused.map(f => `${f.cls} "${f.desc}" [${f.bounds.join(',')}]`).join('; ') : '**nothing focused**'} |`);
+  const rows = checks.map(check => `| ${check.label} | ${check.error ? `(${check.error})` : check.focused.length ? check.focused.map(f => `${f.cls} "${f.desc}" [${f.bounds.join(',')}]`).join('; ') : '**nothing focused**'} |`);
   return [`### ${name} focus (${label}, ${serial}, ${new Date().toISOString()})`, '', '| checkpoint | focused |', '| --- | --- |', ...rows].join('\n');
 }
 
-async function measureFocus(o: Options, name: string): Promise<FocusCheck[]> {
+async function measureFocus(o: Options, name: string, label: string): Promise<FocusCheck[]> {
   const scenario = SCENARIOS[name];
   if (!scenario) throw new Error(`unknown scenario ${name}; have ${Object.keys(SCENARIOS).join(', ')}`);
   const d = o.device;
-  const remote = findRemote(d.shell('dumpsys input'), file => d.shell(`cat ${file}`));
-  if (!remote) throw new Error('no remote input device with a D-pad layout');
+  const found = findRemote(d.shell('dumpsys input'), file => d.shell(`cat ${file}`));
+  const remote = found && d.shell(`sendevent ${found.path} 0 0 0 2>/dev/null && echo ok; true`).trim() === 'ok' ? found : undefined;
+  if (!remote && Number(d.shell('getprop ro.build.version.sdk').trim()) < 31) throw new Error('no writable remote input device, and input keyevent cannot hold keys before Android 12');
+  if (!remote) console.error('no writable remote input device: presses go through input keyevent');
   const work = mkdtempSync(join(tmpdir(), 'tv-nav-'));
   try {
     d.shell(`am force-stop ${PACKAGE}`);
     d.shell(`am start -n ${PACKAGE}/.MainActivity`);
     await Bun.sleep(o.settle ?? scenario.settle);
-    d.shell('rm -f /data/local/tmp/tv-nav-focus-*.txt /data/local/tmp/tv-nav-focus.sh.done');
-    writeFileSync(join(work, 'focus.sh'), focusScript([...(scenario.setup ?? []), ...scenario.steps], remote));
+    d.shell('rm -f /data/local/tmp/tv-nav-focus-*.txt /data/local/tmp/tv-nav-focus-*.png /data/local/tmp/tv-nav-focus.sh.done');
+    writeFileSync(join(work, 'focus.sh'), focusScript([...(scenario.setup ?? []), ...scenario.steps], remote, !!o.keep));
     d.push(join(work, 'focus.sh'), '/data/local/tmp/tv-nav-focus.sh');
     d.shell(`(nohup sh -c 'sh /data/local/tmp/tv-nav-focus.sh; echo ok > /data/local/tmp/tv-nav-focus.sh.done' > /dev/null 2>&1 &)`);
     while (d.shell('cat /data/local/tmp/tv-nav-focus.sh.done 2>/dev/null; true').trim() !== 'ok') await Bun.sleep(1500);
     const labels = scenario.steps.flatMap(s => ('focus' in s ? [s.focus] : []));
-    return labels.map((check, i) => ({ label: check, focused: parseFocused(d.shell(`cat /data/local/tmp/tv-nav-focus-${i}.txt 2>/dev/null; true`)) }));
+    // --keep: each checkpoint's screen beside the report, <scenario>-<label>-<n>.png.
+    if (o.keep) for (let i = 0; i < labels.length; i++) await d.pull(`/data/local/tmp/tv-nav-focus-${i}.png`, join(o.keep, `${name}-${label}-${i}.png`));
+    return labels.map((check, i) => {
+      const text = d.shell(`cat /data/local/tmp/tv-nav-focus-${i}.txt 2>/dev/null; true`);
+      const error = /^dump failed: (.*)/.exec(text.trim())?.[1];
+      return { label: check, focused: parseFocused(text), ...(error !== undefined ? { error: `uiautomator: ${error.trim() || 'no output'}` } : {}) };
+    });
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
@@ -786,7 +802,7 @@ if (import.meta.main) {
     if (values.focus) {
       const all: Record<string, FocusCheck[]> = {};
       for (const name of values.scenario!.split(',')) {
-        all[name] = await measureFocus(options, name);
+        all[name] = await measureFocus(options, name, values.label!);
         console.log(formatFocus(name, values.label!, device.serial, all[name]!) + '\n');
       }
       if (values.out) writeFileSync(values.out, JSON.stringify(all, null, 2));
