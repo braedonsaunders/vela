@@ -267,6 +267,18 @@ describe('interrupted transfers resume with fresh credentials', () => {
     expect(port.resumed.map(request => request.titleId)).toEqual(['101']);
   });
 
+  test('an engine that resumes by itself clears the reason it had stopped', async () => {
+    const port = new Port();
+    port.snapshot.items = [record({ status: 'downloading', bytesWritten: 1 * GB })];
+    const h = harness(port, 'offline');
+    await h.downloads.hydrate();
+    const base = { serverId: 'srv', viewerId: 'viewer-1', titleId: '101' };
+    await h.downloads.applyTransferEvent({ ...base, status: 'paused', bytesWritten: 2 * GB, errorCode: 'interrupted', error: 'Waiting for Wi-Fi' });
+    expect(h.downloads.item('101')).toMatchObject({ status: 'paused', error: 'Waiting for Wi-Fi' });
+    await h.downloads.applyTransferEvent({ ...base, status: 'downloading', bytesWritten: 2.1 * GB });
+    expect(h.downloads.item('101')).toMatchObject({ status: 'downloading', error: undefined, errorCode: undefined, neededBytes: undefined });
+  });
+
   test('a transfer the server now refuses stays put rather than retrying forever', async () => {
     const port = new Port();
     port.snapshot.items = [record({ status: 'paused', errorCode: 'interrupted', bytesWritten: 1 * GB })];

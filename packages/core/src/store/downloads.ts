@@ -1293,7 +1293,10 @@ export class Downloads {
       ...(completed ? { completedAt: new Date().toISOString(), previousCompleted: undefined, error: undefined, errorCode: undefined, neededBytes: undefined } : {}),
       ...(event.status === 'failed' || event.status === 'paused'
         ? { error: event.error, errorCode: event.errorCode, neededBytes: event.neededBytes }
-        : {}),
+        // Moving again (an engine that resumed by itself) clears the reason it had stopped.
+        : event.status === 'downloading' || event.status === 'queued'
+          ? { error: undefined, errorCode: undefined, neededBytes: undefined }
+          : {}),
     };
     const allItems = [...this.state.allItems];
     allItems[index] = next;
