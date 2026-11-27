@@ -21,6 +21,13 @@ export function takesOpeningFocus(priority: number, current: number, viewerMoved
   return !viewerMoved && priority > current;
 }
 
+/** Whether a route may still place its first focus. Its window is time-boxed so late content never pulls
+ * focus from where the route already put it; while it has placed none (`current` 0), a late arrival can only
+ * help. A slow TV box drew Home's hero long after the window: its Home opened with nothing focused. */
+export function openingWindowOpen(now: number, deadline: number, current: number): boolean {
+  return now < deadline || current === 0;
+}
+
 /** The pressed button if it is still drawn, else a drawn button that does the same. */
 export function returnFocusTarget<T>(pressed: { target: T; does: string }, mounted: ReadonlyMap<T, string>): T | undefined {
   if (mounted.has(pressed.target)) return pressed.target;

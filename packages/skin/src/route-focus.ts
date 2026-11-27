@@ -10,7 +10,7 @@
 import { createContext, useContext, useMemo } from 'react';
 import { Dimensions, Platform, TVEventHandler } from 'react-native';
 import type { Focusable } from './escape';
-import { openingFocusPriority, takesOpeningFocus } from './route-focus-policy';
+import { openingFocusPriority, openingWindowOpen, takesOpeningFocus } from './route-focus-policy';
 import { viewerScrolledSince } from './opening-scroll';
 
 export interface RouteFocus {
@@ -113,7 +113,7 @@ function firstFocus(): RouteFocus {
   let priority = 0;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let fallback: ReturnType<typeof setTimeout> | undefined;
-  const open = () => !settled && Date.now() < deadline;
+  const open = () => !settled && openingWindowOpen(Date.now(), deadline, priority);
   const settle = () => {
     settled = true;
     clearTimeout(fallback);
