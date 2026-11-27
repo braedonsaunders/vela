@@ -18,6 +18,7 @@ export interface EnvInput {
   entry: string;
   library?: string;
   width: number;
+  height?: number;
   skinCount: number;
   skinName: string;
   /** This build and where it runs (aboutApp); the server's facts come from the state. */
@@ -32,7 +33,7 @@ function load(value: { load: string; value?: unknown } | undefined): Env['load']
   return 'loading';
 }
 
-export function environment({ state, view, live, route, entry, library, width, skinCount, skinName, app, canVisualize }: EnvInput): Env {
+export function environment({ state, view, live, route, entry, library, width, height, skinCount, skinName, app, canVisualize }: EnvInput): Env {
   const home = state.home;
   const title = route === 'title' || route === 'watch' ? state.titles[entry] : undefined;
   const source = title?.value;
@@ -48,6 +49,7 @@ export function environment({ state, view, live, route, entry, library, width, s
     section: route === 'library' ? entry : route === 'live' ? 'live' : route === 'screen' ? screenDestinationId(entry) : 'home',
     query: state.search.query,
     small: width < 640,
+    shortLandscape: !Platform.isTV && width < 1600 && height !== undefined && width > height && height < 500,
     tv: width >= 1600 || Platform.isTV,
     still: view.still,
     canLive: home.value?.liveAvailable ?? false,
@@ -96,7 +98,7 @@ export function createEnvironmentReader() {
       state.auth.crossServerSearch, state.auth.phase, state.servers,
       route === 'home' || route === 'search' ? state.search : undefined, title, state.titles[season],
       view.season, view.flags, view.heroIndex, view.still,
-      input.live, input.width, input.skinCount, input.skinName, input.app, state.auth.serverName, state.auth.serverVersion, state.servers.list.find(item => item.selected)?.kindLabel, library, state.previews.cardId, route === 'home' ? state.previews.heroId : '', input.canVisualize];
+      input.live, input.width, input.height, input.skinCount, input.skinName, input.app, state.auth.serverName, state.auth.serverVersion, state.servers.list.find(item => item.selected)?.kindLabel, library, state.previews.cardId, route === 'home' ? state.previews.heroId : '', input.canVisualize];
     const key = `${route}:${entry}:${library ?? ''}`, previous = routes.get(key);
     if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.env;
     const env = environment({ ...input, view: { ...view, season: selection || season } });

@@ -14,6 +14,7 @@ import {
   pillSmall,
   ready,
   rowSkeleton,
+  shortLandscape,
   small,
   veil,
 } from './look';
@@ -255,6 +256,7 @@ export const heroCopy: Node = {
     type: 'box',
     style: { display: 'flex', 'flex-direction': 'column', ...gutter, gap: '16px', 'max-width': '46rem' },
     small: { ...gutterSmall, gap: '10px', 'max-width': 'none' },
+    states: [{ when: [shortLandscape], style: { gap: '8px' } }],
     children: [
       { type: 'widget', widget: 'observe', params: { receipt: '{hero.receipt}' } },
       {
@@ -319,6 +321,7 @@ export const heroCopy: Node = {
           'align-self': 'flex-start',
         },
         small: { height: '80px', 'max-width': '72%' },
+        states: [{ when: [shortLandscape], style: { height: '64px' } }],
       },
       {
         type: 'text',
@@ -337,6 +340,7 @@ export const heroCopy: Node = {
           'text-shadow': '0px 4px 40px $ui.shadow',
         },
         small: { 'font-size': '40px' },
+        states: [{ when: [shortLandscape], style: { 'font-size': '40px' } }],
       },
       {
         type: 'text',
@@ -365,7 +369,11 @@ export const heroCopy: Node = {
         },
         small: { 'font-size': '14px', 'line-clamp': '2' },
         // Over a playing trailer the summary takes the full ink, as compiled Cinematic's did.
-        states: [{ when: [{ test: 'hero.previewing' }], style: { color: '$ui.ink' } }],
+        states: [
+          { when: [shortLandscape, { test: 'hero.previewing' }], style: { color: '$ui.ink', 'line-clamp': '2' } },
+          { when: [shortLandscape], style: { 'line-clamp': '2' } },
+          { when: [{ test: 'hero.previewing' }], style: { color: '$ui.ink' } },
+        ],
       },
       {
         type: 'box',
@@ -616,6 +624,11 @@ export const copyColumn: Node = {
     { when: [{ test: 'env.searching' }], style: folded('82px') },
     { when: [noHero, small], style: folded('72px') },
     { when: [noHero], style: folded('82px') },
+    {
+      when: [shortLandscape],
+      style: { ...copyBase, 'min-height': '0px', 'justify-content': 'flex-start',
+        'padding-top': 'calc(68px + env(safe-area-inset-top))' },
+    },
     {
       when: [small],
       style: {
