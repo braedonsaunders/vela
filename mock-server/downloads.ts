@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { DownloadGrant, DownloadRequest, OfflineWatchRequest, TitleDetail, WatchState } from '../packages/protocol/types';
-import { formatsRoot, mediaRoot, originalFixture, serveMedia } from './media';
+import { faults, formatsRoot, mediaRoot, originalFixture, serveMedia } from './media';
 
 const enabled = process.env.VELA_MOCK_DOWNLOADS === '1';
 const maxPerDay = 3;
@@ -72,7 +72,9 @@ export async function serveDownload(req: Request, ticket: string, active: (owner
     ? join(formatsRoot, grant.resource.slice(9))
     : join(mediaRoot, grant.resource);
   if (await fileIdentity(path).catch(() => undefined) !== grant.etag) return new Response(null, { status: 409 });
-  return serveMedia(req, grant.resource, false, grant.etag);
+  const truncate = req.method === 'GET' && faults.downloadTruncate > 0;
+  if (truncate) faults.downloadTruncate--;
+  return serveMedia(req, grant.resource, truncate, grant.etag);
 }
 
 export function applyOfflineWatch(watch: WatchState, body: OfflineWatchRequest): boolean {

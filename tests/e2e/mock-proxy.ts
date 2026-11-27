@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { createReadStream, existsSync } from 'node:fs';
+import { readdir, stat } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { extname, resolve, sep } from 'node:path';
@@ -8,6 +8,7 @@ import { extname, resolve, sep } from 'node:path';
 const port = Number(process.argv[2]);
 const configured = process.env.VELA_E2E_SERVER;
 const staticRoot = process.env.VELA_E2E_STATIC_ROOT ? resolve(process.env.VELA_E2E_STATIC_ROOT) : '';
+const releaseShell = !!staticRoot && existsSync(resolve(staticRoot, 'sw.js'));
 const bun = process.env.VELA_E2E_BUN ?? 'bun';
 
 if (!Number.isInteger(port) || port < 1 || port > 65_534 || (!configured && !staticRoot)) {
@@ -31,6 +32,7 @@ const mock = spawn(bun, ['run', 'mock-server/main.ts'], {
     PORT: String(mockPort),
     DEV_ORIGIN: `http://127.0.0.1:${port}`,
     VELA_MOCK_SILENT_MEDIA: '1',
+    VELA_MOCK_DOWNLOADS: '1',
     // Keep the stock catalogue's photo dates stable in both browser runs.
     VELA_MOCK_NOW: '2026-11-26T15:00:00.000Z',
     VELA_MOCK_SPORTS_FREEZE: '1',
@@ -51,7 +53,7 @@ mock.once('exit', code => {
 });
 
 function proxy(request: http.IncomingMessage, response: http.ServerResponse, target: URL, captureBody?: (body: string) => void) {
-  const headers = { ...request.headers, host: target.host };
+  const headers: http.IncomingHttpHeaders = { ...request.headers, host: target.host };
   delete headers.connection;
   delete headers['proxy-connection'];
 
@@ -61,6 +63,7 @@ function proxy(request: http.IncomingMessage, response: http.ServerResponse, tar
     delete responseHeaders.connection;
     delete responseHeaders['transfer-encoding'];
     response.writeHead(incoming.statusCode ?? 502, responseHeaders);
+    incoming.once('aborted', () => response.destroy());
     incoming.pipe(response);
   });
   forwarded.on('error', () => {
@@ -125,13 +128,19 @@ const server = http.createServer((request, response) => {
     || requested.pathname.startsWith('/sessions/media/')
     || requested.pathname.startsWith('/reading/media/');
   if (useMock) {
+    request.headers['x-vela-language'] = 'en';
+    request.headers['x-vela-screen-renderer'] = '19';
     const capturePlayback = request.method === 'POST' && requested.pathname === '/vela/v0/playback'
       ? (body: string) => { lastPlaybackBody = body; }
       : undefined;
     proxy(request, response, new URL(`${requested.pathname}${requested.search}`, `http://127.0.0.1:${mockPort}`), capturePlayback);
     return;
   }
-  if (!lab && requested.pathname === '/vela/pwa.js') {
+  if (staticRoot && requested.pathname === '/vela/__e2e/offline-shell.js') {
+    void mockOfflineShell(response);
+    return;
+  }
+  if (!lab && !releaseShell && requested.pathname === '/vela/pwa.js') {
     response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
     response.end('export {};\n');
     return;
@@ -141,7 +150,7 @@ const server = http.createServer((request, response) => {
     response.end(JSON.stringify({ schemaVersion: 1, embeddedSubtitleFormats: [] }));
     return;
   }
-  if (lab && (requested.pathname.startsWith('/vela/player/') || requested.pathname === '/vela/pwa.js')) {
+  if (lab && !releaseShell && (requested.pathname.startsWith('/vela/player/') || requested.pathname === '/vela/pwa.js')) {
     proxy(request, response, new URL(`${requested.pathname}${requested.search}`, lab.origin));
     return;
   }
@@ -163,6 +172,41 @@ const contentTypes: Record<string, string> = {
   '.woff': 'font/woff', '.woff2': 'font/woff2',
 };
 
+// Expo's plain CI export has no release service worker. Stage only static
+// resources in this fixture: API, artwork and media still go through the network.
+async function mockOfflineShell(response: http.ServerResponse) {
+  try {
+    const roots = ['_expo/static', 'assets'].map(path => resolve(staticRoot, path)).filter(existsSync);
+    const files = (await Promise.all(roots.map(path => readdir(path, { recursive: true, withFileTypes: true })))).flat();
+    const urls = files.filter(file => file.isFile()).map(file =>
+      '/vela/' + resolve(file.parentPath, file.name).slice(staticRoot.length + 1)
+        .split(sep).join('/'));
+    const assets = ['/vela/index.html', ...urls];
+    // Playwright blocks service workers' own network in an offline context,
+    // so these resources must be in CacheStorage before the offline transition.
+    response.writeHead(200, {
+      'Content-Type': 'text/javascript; charset=utf-8', 'Service-Worker-Allowed': '/vela/',
+      'Cache-Control': 'no-store',
+    }).end(`
+      const assets = ${JSON.stringify(assets)};
+      const cache = caches.open('mock-downloads-shell');
+      self.addEventListener('install', event => event.waitUntil(cache.then(value => value.addAll(assets)).then(() => self.skipWaiting())));
+      self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+      self.addEventListener('fetch', event => {
+        const { pathname, origin } = new URL(event.request.url);
+        if (event.request.method !== 'GET' || origin !== self.location.origin) return;
+        const shell = event.request.mode === 'navigate' && /^\\/vela\\/(?:downloads|watch\\/[^/]+)$/.test(pathname);
+        if (shell || pathname.startsWith('/vela/_expo/static/') || pathname.startsWith('/vela/assets/')) {
+          event.respondWith(cache.then(value => value.match(shell ? '/vela/index.html' : event.request))
+            .then(cached => cached || fetch(event.request)));
+        }
+      });
+    `);
+  } catch {
+    response.writeHead(500).end();
+  }
+}
+
 async function localStatic(pathname: string, method: string, response: http.ServerResponse) {
   const relative = decodeURIComponent(pathname).replace(/^\/vela\/?/, '').replace(/^\/+/, '');
   let file = resolve(staticRoot, relative || 'index.html');
@@ -181,6 +225,7 @@ async function localStatic(pathname: string, method: string, response: http.Serv
     'Content-Type': contentTypes[extname(file)] ?? 'application/octet-stream',
     'Content-Length': fallback.size,
     'Cache-Control': 'no-store',
+    ...(pathname === '/vela/sw.js' ? { 'Service-Worker-Allowed': '/vela' } : {}),
   });
   if (method === 'HEAD') response.end();
   else createReadStream(file).pipe(response);
