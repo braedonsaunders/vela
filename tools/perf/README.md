@@ -193,13 +193,15 @@ bun tools/perf/tv-nav.ts --lab tx1-box --owner "$OWNER" --light --scenario cold,
 `--focus` asks where focus ends up rather than what a press costs, with presses at a viewer's pace: Down
 presses 0.5, 1 and 1.6 s apart (`grid05`, `grid10`, `grid16`, each walked back up with as many slow Up
 presses, which should land on the first card again), a Down held for 5 s (`gridhold`) and Home's rows
-(`homefocus`). `input keyevent` cannot do either on Android 10 (it takes about a second to send each press
+(`homefocus`), and a held and quick Right along a Home row whose cards are drawn as they come within reach
+(`homerow`). `input keyevent` cannot do either on Android 10 (it takes about a second to send each press
 and cannot hold a key), so the presses are the device's own remote input device's events (`sendevent` on the
 node `dumpsys input` names with a D-pad key layout, scan codes from that layout), held keys auto-repeat as a
 remote's do, and the device script keeps the timeline against `/proc/uptime`. Where the shell cannot write
 the input device (an emulator's SELinux), presses fall back to `input keyevent --duration` (Android 12+). Each checkpoint reports the
-focused view of a uiautomator dump, or that nothing had focus; `--keep <dir>` also keeps each checkpoint's
-screen there. No trace is taken, so it runs on tx1-box.
+focused view of a uiautomator dump; when the accessibility tree has no focused node (tx1-box's can miss a
+focus that just moved) it reports the app's view Android has focused, from `dumpsys activity top`, or that
+nothing had focus. `--keep <dir>` also keeps each checkpoint's screen there. No trace is taken, so it runs on tx1-box.
 
 ```bash
 bun tools/perf/tv-nav.ts --lab tx1-box --owner "$OWNER" --focus --scenario grid05,grid10,grid16,gridhold --label after --out focus.json

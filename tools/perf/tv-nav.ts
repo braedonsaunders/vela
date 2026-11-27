@@ -10,7 +10,7 @@
 //     through the claimed device's `lab shell`; --settle <ms> and --buffer-mb for slow, small devices)
 //   --light: for a kernel without tracing (tx1-box): frames from framestats, CPU from schedstat (no focus
 //     or mount times); see lightScript and analyzeLightPress
-//   --focus: where focus is, not what it costs (scenarios grid05, grid10, grid16, gridhold, homefocus): presses at a remote's pace
+//   --focus: where focus is, not what it costs (scenarios grid05, grid10, grid16, gridhold, homefocus, homerow): presses at a remote's pace
 //     and held keys, through the device's own remote input device, and the focused view at checkpoints
 //
 // Scenarios start the app afresh (force-stop, launch, wait), so runs are comparable; the build decides
@@ -142,6 +142,17 @@ export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: 
       ...quick('DPAD_DOWN', '↓ 0.5 s', 10, 500), { wait: 8000 }, { focus: 'after 10 ↓ 0.5 s apart' },
       { key: 'DPAD_DOWN', label: 'held ↓ 4 s', hold: 4000, window: 10000 }, { focus: 'after ↓ held 4 s' },
       ...quick('DPAD_UP', '↑', 2, 2500), { focus: 'after 2 slow ↑' },
+    ],
+  },
+  /** --focus: along one of Home's rows, whose cards are drawn as they come within reach: a held Right,
+   * then quick presses; focus stays on the row's cards. */
+  homerow: {
+    settle: 20000,
+    steps: [
+      ...quick('DPAD_DOWN', '↓ to a row', 4, 2500), { focus: 'on the fourth row' },
+      { key: 'DPAD_RIGHT', label: 'held → 4 s', hold: 4000, window: 10000 }, { focus: 'after → held 4 s' },
+      ...quick('DPAD_RIGHT', '→ 0.5 s', 10, 500), { wait: 8000 }, { focus: 'after 10 → 0.5 s apart' },
+      ...quick('DPAD_LEFT', '←', 2, 2500), { focus: 'after 2 slow ←' },
     ],
   },
   title: {
@@ -430,7 +441,10 @@ export function focusScript(steps: Step[], remote: Remote | undefined, shots = f
     'at() { while [ $(now) -lt $(( B + $1 )) ]; do sleep 0.02; done; }',
     'down() { sendevent $E 1 $1 1; sendevent $E 0 0 0; }',
     // A busy app can keep uiautomator from finding the UI idle: one more try, else the failure is the record.
-    `dump() { for i in 1 2; do o=$(uiautomator dump /data/local/tmp/tv-nav-ui.xml 2>&1); case "$o" in *dumped*) grep -o '<node [^>]*focused="true"[^>]*>' /data/local/tmp/tv-nav-ui.xml > $1; return;; esac; sleep 1; done; echo "dump failed: $o" > $1; }`,
+    // No focused node: what Android itself has focused. A slow box's accessibility tree can miss a focus
+    // just moved (tx1-box, a card focused as its row was drawn): the app's view with the focused flag.
+    `dump() { for i in 1 2; do o=$(uiautomator dump /data/local/tmp/tv-nav-ui.xml 2>&1); case "$o" in *dumped*) grep -o '<node [^>]*focused="true"[^>]*>' /data/local/tmp/tv-nav-ui.xml > $1; ` +
+      `[ -s $1 ] || { dumpsys window | grep -m1 mCurrentFocus; dumpsys activity top | awk '/ACTIVITY /{on = index($0, "${PACKAGE}/") > 0} on' | grep -m3 -E ' [.R]F[.S]'; } > \${1%.txt}.native 2>/dev/null; return;; esac; sleep 1; done; echo "dump failed: $o" > $1; }`,
     'up() { sendevent $E 1 $1 0; sendevent $E 0 0 0; }',
     'B=$(now)'];
   const cs = (ms: number) => Math.round(ms / 10);
@@ -468,7 +482,7 @@ export function focusScript(steps: Step[], remote: Remote | undefined, shots = f
   return lines.join('\n') + '\n';
 }
 
-export interface FocusCheck { label: string; focused: { cls: string; desc: string; bounds: [number, number, number, number] }[]; error?: string }
+export interface FocusCheck { label: string; focused: { cls: string; desc: string; bounds: [number, number, number, number] }[]; error?: string; native?: string }
 
 /** The focused nodes of a checkpoint's grep of a uiautomator dump: none when focus was lost. */
 export function parseFocused(text: string): FocusCheck['focused'] {
@@ -480,7 +494,7 @@ export function parseFocused(text: string): FocusCheck['focused'] {
 }
 
 export function formatFocus(name: string, label: string, serial: string, checks: FocusCheck[]): string {
-  const rows = checks.map(check => `| ${check.label} | ${check.error ? `(${check.error})` : check.focused.length ? check.focused.map(f => `${f.cls} "${f.desc}" [${f.bounds.join(',')}]`).join('; ') : '**nothing focused**'} |`);
+  const rows = checks.map(check => `| ${check.label} | ${check.error ? `(${check.error})` : check.focused.length ? check.focused.map(f => `${f.cls} "${f.desc}" [${f.bounds.join(',')}]`).join('; ') : check.native ? `no focused node in the accessibility tree; Android has focus on ${check.native}` : '**nothing focused**'} |`);
   return [`### ${name} focus (${label}, ${serial}, ${new Date().toISOString()})`, '', '| checkpoint | focused |', '| --- | --- |', ...rows].join('\n');
 }
 
@@ -497,7 +511,7 @@ async function measureFocus(o: Options, name: string, label: string): Promise<Fo
     d.shell(`am force-stop ${PACKAGE}`);
     d.shell(`am start -n ${PACKAGE}/.MainActivity`);
     await Bun.sleep(o.settle ?? scenario.settle);
-    d.shell('rm -f /data/local/tmp/tv-nav-focus-*.txt /data/local/tmp/tv-nav-focus-*.png /data/local/tmp/tv-nav-focus.sh.done');
+    d.shell('rm -f /data/local/tmp/tv-nav-focus-*.txt /data/local/tmp/tv-nav-focus-*.native /data/local/tmp/tv-nav-focus-*.png /data/local/tmp/tv-nav-focus.sh.done');
     writeFileSync(join(work, 'focus.sh'), focusScript([...(scenario.setup ?? []), ...scenario.steps], remote, !!o.keep));
     d.push(join(work, 'focus.sh'), '/data/local/tmp/tv-nav-focus.sh');
     d.shell(`(nohup sh -c 'sh /data/local/tmp/tv-nav-focus.sh; echo ok > /data/local/tmp/tv-nav-focus.sh.done' > /dev/null 2>&1 &)`);
@@ -508,7 +522,8 @@ async function measureFocus(o: Options, name: string, label: string): Promise<Fo
     return labels.map((check, i) => {
       const text = d.shell(`cat /data/local/tmp/tv-nav-focus-${i}.txt 2>/dev/null; true`);
       const error = /^dump failed: (.*)/.exec(text.trim())?.[1];
-      return { label: check, focused: parseFocused(text), ...(error !== undefined ? { error: `uiautomator: ${error.trim() || 'no output'}` } : {}) };
+      const native = d.shell(`cat /data/local/tmp/tv-nav-focus-${i}.native 2>/dev/null; true`).replace(/\s+/g, ' ').trim();
+      return { label: check, focused: parseFocused(text), ...(error !== undefined ? { error: `uiautomator: ${error.trim() || 'no output'}` } : {}), ...(native ? { native } : {}) };
     });
   } finally {
     rmSync(work, { recursive: true, force: true });
