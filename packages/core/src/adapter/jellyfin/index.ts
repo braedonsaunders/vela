@@ -14,7 +14,8 @@ const offerOf = ({ sourceId: _source, ...offer }: V.TrickplayMetadata & { source
 const seconds = (ticks?: number) => ticks === undefined ? undefined : ticks / 10000000;
 const ticks = (value: number) => Math.round(value * 10000000);
 const isTextSubtitle = (s: Stream) => s.IsTextSubtitleStream || ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'mov_text'].includes(s.Codec?.toLowerCase() ?? '');
-const videoMime = (container?: string) => container === 'mp4' || container === 'm4v' ? 'video/mp4' : container === 'webm' ? 'video/webm' : 'video/x-matroska';
+const videoMime = (container?: string) => container === 'mp4' || container === 'm4v' ? 'video/mp4' : container === 'webm' ? 'video/webm'
+    : container === 'ts' || container === 'mpegts' || container === 'm2ts' ? 'video/mp2t' : 'video/x-matroska';
 const e = encodeURIComponent;
 const offered: V.Feature = { available: true };
 const fields = 'Overview,Genres,MediaSources,Chapters,People,PrimaryImageAspectRatio,UserData,Path,ChildCount,DateCreated,ParentId,ProductionYear,PremiereDate';

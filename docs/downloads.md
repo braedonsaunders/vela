@@ -279,14 +279,12 @@ Ether's Jellyfin- and Emby-compatible APIs (`/jellyfin`, `/emby`) with the lab v
 | Request without credentials | 401 |
 
 - **File length.** The resolution takes it from a HEAD of the download. The Jellyfin-compatible
-  `MediaSource.Size` there is an estimate, and every engine checks the finished file against
+  `MediaSource.Size` was an estimate before Ether 0.3.25 (now omitted when unknown), and every engine checks the finished file against
   this length.
 - **Progress replay.** It writes user data (`POST /UserItems/{id}/UserData`, or the per-user route
-  on Emby). Where a server lacks that write, Vela falls back to a `Sessions/Playing/Stopped`
-  report plus `PlayedItems`.
-  - On the lab's Jellyfin API, the fallback replay landed and was restored.
-  - Emby's position fallback isn't stored by the lab yet. Ether is adding the user-data write
-    (W497).
+  on Emby). On the lab (Ether 0.3.25-lab.4) the replayed position landed and was restored on both
+  APIs. Where a server lacks that write, Vela falls back to a `Sessions/Playing/Stopped` report
+  plus `PlayedItems`.
 - **Not yet tested:** real Jellyfin and Emby servers.
 
 Every platform asks the same adapter, so permissions are identical everywhere.
