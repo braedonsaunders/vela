@@ -15,6 +15,7 @@ import type { Session } from './session';
 import { endSession, signInFailure, type QuickCode } from './auth';
 import { message, type StateBox } from './state';
 import type { VelaState } from './index';
+import { etherAliasMerges } from './ether-aliases';
 
 export interface ServerOption {
   id: string;
@@ -163,6 +164,49 @@ export class Servers {
     }
   }
 
+  private etherMerge: Promise<void> = Promise.resolve();
+
+  private reconcileEther(preferredId?: string): Promise<void> {
+    const work = this.etherMerge.then(async () => {
+      const registry = this.session.servers;
+      if (!registry.standalone) return;
+      const snapshot = registry.read();
+      const records = snapshot.servers.filter(record => record.kind === 'ether' && record.basePath === '/');
+      if (!records.length || (records.length === 1 && !preferredId && snapshot.etherIds?.[records[0]!.id])) return;
+      const entries = await Promise.all(records.map(async record => {
+        const capabilities = await probeEther(record.origin);
+        const current = registry.read();
+        if (!current.servers.some(saved => saved.id === record.id && saved.origin === record.origin)) {
+          return { record, serverId: '', signedIn: false, working: false };
+        }
+        const knownId = current.etherIds?.[record.id];
+        const signedIn = !!await this.session.tokens(this.session.connection(record.id));
+        // A signed-in address now answering for a different server cannot identify that session.
+        if (capabilities && knownId && knownId !== capabilities.id && signedIn) {
+          return { record, serverId: '', signedIn, working: false };
+        }
+        if (capabilities) registry.rememberEtherIdentity(record, capabilities.id);
+        return { record, serverId: capabilities?.id ?? knownId ?? '', signedIn, working: !!capabilities };
+      }));
+      const selectedId = registry.read().selectedId;
+      for (const merge of etherAliasMerges(entries, selectedId, preferredId)) {
+        const ids = new Set(registry.read().servers.map(record => record.id));
+        if (merge.aliases.some(record => !ids.has(record.id))) continue;
+        const aliases = merge.aliases.map(record => this.session.connection(record.id));
+        if (!registry.mergeEther(merge.keep, merge.address, merge.aliases)) continue;
+        if (selectedId === merge.keep.id && merge.keep.origin !== merge.address.origin) this.session.resetSelectedServer();
+        else this.session.selected();
+        // The surviving credentials may share the same server session. Only clear local aliases.
+        for (const alias of aliases) {
+          this.session.forget(alias.record.id);
+          await alias.credentials.set(null);
+        }
+      }
+    });
+    this.etherMerge = work.catch(() => {});
+    return work;
+  }
+
   /** Re-read every server's status. Other servers' sessions are checked with a bounded wait. */
   async refresh(): Promise<void> {
     const run = ++this.refreshRun;
@@ -170,6 +214,8 @@ export class Servers {
       this.patch({ list: [], selectedId: '' });
       return;
     }
+    await this.reconcileEther();
+    if (run !== this.refreshRun) return;
     const selected = this.session.selected();
     const registry = this.session.servers.read();
     this.patch({ selectedId: registry.selectedId });
@@ -267,8 +313,11 @@ export class Servers {
         ? registry.read().servers.find(record => record.machineIdentifier === machineIdentifier)
         : undefined;
       const record = known ?? registry.add(kind, name.trim() || kindLabel(kind), url, machineIdentifier);
+      if (ether) await this.reconcileEther(record.id);
+      const saved = ether ? registry.read().servers.find(candidate => candidate.kind === 'ether'
+        && candidate.origin === record.origin && candidate.basePath === record.basePath) : record;
       await this.refresh();
-      return { id: record.id, error: '' };
+      return { id: saved?.id ?? record.id, error: '' };
     } catch (error) {
       return { id: '', error: message(error, 'Server could not be added') };
     }
