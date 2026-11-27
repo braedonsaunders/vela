@@ -77,13 +77,14 @@ export function GalleryTitleScreen({ id: initialId, library, galleryFrom, active
 
 function GalleryTitlePage({ framed, id, library, active, back }: Props & { framed: boolean }) {
   const host = useHost();
+  const portrait = host.env.small && !host.env.tv && host.viewport.height > host.viewport.width;
   const pageHost = useMemo(() => host.children === undefined ? host : { ...host, children: undefined }, [host]);
   const detail = useVelaState(state => state.titles[id]);
   const card = detail?.value?.title[0];
   const params = useMemo(() => ({ id, library: library ?? '' }), [id, library]);
   const actions = useAppScreenActions({ host: pageHost, back, setParams });
   return (
-    <MediaFrame framed={framed} titleActions={!framed ? <PhotoViewerTopBar /> : undefined} accent={card?.accent ?? ''} backdrop={card?.poster ?? ''} wideArt={false}>
+    <MediaFrame framed={framed} titleActions={!framed ? <PhotoViewerTopBar /> : undefined} accent={card?.accent ?? ''} backdrop={portrait ? '' : card?.poster ?? ''} wideArt={false}>
       {card
         ? <ScreenView target={target} href={href} params={params} host={pageHost} active={active} actions={actions} route={false} />
         : <MediaTitlePending load={detail ?? { load: 'loading', error: '' }} id={id} />}
