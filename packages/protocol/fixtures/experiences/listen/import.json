@@ -204,23 +204,6 @@
   "tv": {
    "padding-bottom": "48pt",
    "padding-right": "32pt"
-  },
-  "states": [
-   {
-    "when": [
-     {
-      "test": "env.form",
-      "is": "eq",
-      "value": "small"
-     },
-     {
-      "test": "src.queue.current"
-     }
-    ],
-    "style": {
-     "padding-bottom": "110px"
-    }
-   }
-  ]
+  }
  }
 }

@@ -3,6 +3,7 @@ import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ScrollView, Text, View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
 import { msg, type Card } from '@vela/core';
 import { useHost } from '../../host';
+import { MiniPlayerInset } from '../../widgets/media/mini-player-inset';
 import { saturateBlurhash } from './blurhash-color';
 import { useMediaActions, type MediaActions } from './context';
 import { alpha, RoundButton, useMediaLook, type MediaLook } from './parts';
@@ -21,6 +22,7 @@ export function MediaFrame({ framed, accent, backdrop, wideArt, backdropComponen
   const top = m.tv ? 32 : Math.max(16, host.viewport.insets.top + 12);
   const paddingTop = framed ? (m.small && !m.tv ? host.viewport.insets.top + 56 + 72 : 72) : top + 56;
   const viewport = useContext(MediaFrameViewport);
+  const paddingBottom = 24 + useContext(MiniPlayerInset);
   const contentHeight = viewport?.height === undefined ? undefined : Math.max(0, viewport.height - paddingTop);
   const content = viewport ? <MediaContentHeight.Provider value={contentHeight}>{children}</MediaContentHeight.Provider> : children;
   const backdropSource = useMemo(() => backdrop ? host.image(backdrop) : undefined, [backdrop, host.image]);
@@ -42,13 +44,13 @@ export function MediaFrame({ framed, accent, backdrop, wideArt, backdropComponen
     // A phone's frame is full-bleed under the shell's bar, its close control at the region's top.
     <View testID="media-page" style={{ position: 'relative' }}>
       {wash}
-      <View testID="media-scroll" style={{ paddingTop, paddingBottom: 24, paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{content}</View>
+      <View testID="media-scroll" style={{ paddingTop, paddingBottom, paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{content}</View>
     </View>
   );
   return (
     <View style={{ flex: 1, backgroundColor: m.ui.page }} testID="media-page">
       {wash}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop, paddingBottom: 140 }} onLayout={viewport?.onLayout} testID="media-scroll">
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop, paddingBottom }} onLayout={viewport?.onLayout} testID="media-scroll">
         <View style={{ paddingHorizontal: m.gutter, maxWidth: 1360, width: '100%', alignSelf: 'center' } as ViewStyle}>{content}</View>
       </ScrollView>
       <View style={{ position: 'absolute', top, left: m.gutter - 6, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
