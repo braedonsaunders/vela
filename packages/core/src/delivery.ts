@@ -181,10 +181,11 @@ export function stepDown(watch: DeliveryWatch, plan: PlaybackPlan | null, now: n
 }
 
 /**
- * Whether the plan's playlist adapts on its own (Ether 0.3.25 multi-variant HLS, behind `features.adaptiveHLS` and a
- * plan flag): then the player picks its rung and Vela does not step down. Ether names the plan's flag when that
- * work lands; until then no plan is adaptive.
+ * Whether the plan's playlist adapts on its own: its playing HLS path is a multi-variant master (Ether 0.3.25
+ * `adaptive`, offered to a client declaring features.adaptiveHLS). Then the player picks its rung and Vela does
+ * not step down.
  */
-export function playerAdapts(_plan: PlaybackPlan | null): boolean {
-  return false;
+export function playerAdapts(plan: PlaybackPlan | null): boolean {
+  const path = plan?.paths.find(candidate => candidate.id === plan.selectedPathId);
+  return path?.transport === 'hls' && path.adaptive === true;
 }

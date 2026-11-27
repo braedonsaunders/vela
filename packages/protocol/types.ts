@@ -32,6 +32,9 @@ export interface ClientCapabilities {
   device: Device; protocolVersions: number[]; containers: string[]; videoCodecs: string[];
   audioCodecs: string[]; subtitleFormats: string[]; /** Native HLS acceptance, independent of MSE. */ hls: boolean; mse: boolean;
   maxWidth?: number; maxHeight?: number; maxBitrate?: number;
+  /** What the player does beyond playing a path: `adaptiveHLS`, it adapts across a multi-variant HLS master itself
+   * (sent only to a server that offers features.adaptiveHLS). */
+  features?: { adaptiveHLS?: boolean };
   /** Ranges the device shows as such: 'hdr10', 'hdr10+', 'hlg', 'dv'. */
   hdr?: string[];
   /** Dolby Vision profiles shown as Dolby Vision, natively or after the client's own conversion ('5', '7',
@@ -70,6 +73,9 @@ export interface ServerCapabilities {
     /** One ranked search list (`mode: 'auto'`): titles first, description matches as the server's fallback. */
     unifiedSearch?: Feature; proactiveFallback: Feature; liveTV: Feature; livePreview?: LivePreviewFeature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
     playlists?: Feature & { maxEntries: number };
+    /** A client that sets ClientCapabilities.features.adaptiveHLS gets a multi-variant master (the remux as the top
+     * rung when it can, transcode rungs started on demand) on an HLS path marked `adaptive` (Ether 0.3.25). */
+    adaptiveHLS?: Feature;
     /** GET /favorites/titles?role=: a viewer's likes of one role (Liked Songs, saved albums, followed artists). */
     favoritesList?: Feature;
     /** GET /titles/:id/lyrics for playable titles whose source has lyrics. */
@@ -338,6 +344,9 @@ export interface SwitchBoundary { atSeconds: number; independent: boolean; timel
   compatibility: 'same-source' | 'verified-timeline'; audioTrackIds: ID[]; subtitleTrackIds: ID[] }
 export interface OriginalVideo { isInterlaced?: boolean; fieldOrder?: 'progressive' | 'tt' | 'bb' | 'tb' | 'bt'; rotation?: number; codec?: string; width?: number; height?: number; bitDepth?: number; profile?: string; level?: number; frameRate?: number; colorPrimaries?: string; colorTransfer?: string; colorSpace?: string; colorRange?: string; dvProfile?: number; dvLevel?: number; dvBlSignalCompatibilityId?: number; rpuPresent?: boolean; elPresent?: boolean; blPresent?: boolean }
 export interface PlaybackPathBase { originalVideo?: OriginalVideo; original?: boolean; range?: boolean; byteLength?: number; id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
+  /** An HLS master of several variants the player adapts across itself (features.adaptiveHLS): no initial rendition is
+   * pinned and no switch is sent for bandwidth; explicit quality choices still switch paths. */
+  adaptive?: boolean;
   mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
   timelineOriginSeconds?: number; initialRenditionId?: ID; audioRenditions?: AudioRendition[];
   /** Output target metadata; readiness remains independent. */

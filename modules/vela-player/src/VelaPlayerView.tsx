@@ -125,7 +125,9 @@ const planIdentity = (plan: PlaybackPlan) => `${plan.sessionId}:${plan.sourceGen
 export const VelaPlayer: VelaPlayerModule = {
   // The native side probes the device (hardware decoders) rather than declaring a fixed list; the
   // audio player's own files (music and audiobooks) are added for direct play.
-  capabilities: async () => withAudioPlayback(nativeModule.capabilities(), Platform.OS),
+  // Media3 and AVPlayer adapt across a multi-variant HLS master themselves (ClientCapabilities.features.adaptiveHLS;
+  // core sends it only to a server that offers it).
+  capabilities: async () => ({ ...withAudioPlayback(nativeModule.capabilities(), Platform.OS), features: { adaptiveHLS: true } }),
   audioCapabilities: async () => nativeAudioCapabilities(nativeModule.capabilities(), Platform.OS),
   setMediaAccess(access: MediaAccess | null) {
     const generation = ++accessGeneration;

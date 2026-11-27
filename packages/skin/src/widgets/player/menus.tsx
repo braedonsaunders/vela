@@ -266,6 +266,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
   ];
   const source = convertedFrom(groups.versions, selectedVersionId, view.playingLabel);
   const elsewhere = playingElsewhere(groups.versions, view.playingVersionId, view.playingLabel);
+  const autoReason = selectedVersionId && selectedVersionId === groups.versions[0]?.id ? plan?.autoSelectionReason?.message?.trim() ?? '' : '';
   const convertedTitle = source ? msg('player.quality.convertedFrom', { version: source }) : msg('player.quality.convertedFromCurrent');
   const hasConversions = view.qualityAuto || converted.length > 0 || !!serverStream;
   const showQuality = hasVersions && (hasConversions || originals.length > 0);
@@ -280,6 +281,8 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
           onChoose={() => { if (version.id !== selectedVersionId) switchVersion(version.id); }} />;
       })}
       {elsewhere ? <MenuHeading look={look} text={elsewhere} /> : null}
+      {/* Why Auto picked what plays (Ether 0.3.25: a recent connection estimate, the source's delivery, a resume). */}
+      {autoReason ? <MenuHeading look={look} text={autoReason} /> : null}
       {versionMessage ? <MenuHeading look={look} text={versionMessage} /> : null}
     </MenuSection> : null,
     showQuality ? <MenuRule key="quality-divider" look={look} /> : null,

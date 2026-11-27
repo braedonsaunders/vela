@@ -108,7 +108,7 @@ export class Session {
   /** What this client declares it can play; unavailable until the player has said. */
   get client(): V.ClientCapabilities {
     if (!this.clientValue) throw new Error('Media capabilities are unavailable');
-    return cappedClient(this.clientValue, this.streamingCap);
+    return cappedClient(serverFeatures(this.clientValue, this.features), this.streamingCap);
   }
 
   /** What an audio session declares (music, audiobooks, podcasts): what the app's audio engine plays,
@@ -393,4 +393,13 @@ function validOrigin(candidate: string): string {
   const bare = !parsed.username && !parsed.password && parsed.pathname === '/' && !parsed.search && !parsed.hash;
   if (!['http:', 'https:'].includes(parsed.protocol) || !bare) throw new Error('Invalid server origin');
   return parsed.origin;
+}
+
+/** A player's features as far as the server offers them: an adaptive-HLS declaration goes only to a server with
+ * features.adaptiveHLS, so an older one never sees a field it does not know. */
+export function serverFeatures(client: V.ClientCapabilities, features: Partial<V.ServerCapabilities['features']> | undefined): V.ClientCapabilities {
+  if (!client.features) return client;
+  const { features: declared, ...rest } = client;
+  const adaptiveHLS = declared.adaptiveHLS && features?.adaptiveHLS?.available === true;
+  return adaptiveHLS ? { ...rest, features: { adaptiveHLS: true } } : rest;
 }

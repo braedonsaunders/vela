@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { deliveryEvidence, deliveryWatch, heardDelivery, measuredThroughput, pathRate, stepDown, type DeliverySample, type DeliveryWatch } from '../src/delivery';
+import { deliveryEvidence, deliveryWatch, heardDelivery, measuredThroughput, pathRate, playerAdapts, stepDown, type DeliverySample, type DeliveryWatch } from '../src/delivery';
 import type { PlaybackPath, PlaybackPlan } from '../src/wire';
 
 const transcode = (id: string, average: number, peak = average * 1.2): PlaybackPath => ({
@@ -109,4 +109,12 @@ test('the server is told the active download rate: bytes while loading over the 
   // Only the last 20 s.
   const old = feed(deliveryWatch(), 0, 30, () => 'playing', 12_000_000);
   expect(measuredThroughput(old, 80_000)).toBeNull();
+});
+
+test('a plan whose playing HLS path is an adaptive master is the player\'s to step down', () => {
+  const adaptive = plan({ paths: [{ ...plan().paths[0]!, adaptive: true }, ...plan().paths.slice(1)] });
+  expect(playerAdapts(adaptive)).toBe(true);
+  expect(playerAdapts(plan())).toBe(false);
+  expect(playerAdapts(plan({ selectedPathId: 'quality-1080p8000k' }))).toBe(false);
+  expect(playerAdapts(null)).toBe(false);
 });
