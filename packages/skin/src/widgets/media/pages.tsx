@@ -68,7 +68,7 @@ function AlbumPage({ card, detail: _detail }: { card: Card; detail: DetailModel 
   const total = tracks.reduce((sum, track) => sum + track.durationSeconds, 0);
   const artist = card.media?.parents.find(parent => parent.role === 'artist');
   const source = { id: card.id, name: card.name };
-  const play = (index: number, shuffle = false) => actions.play({ items: playable(tracks), index, shuffle, source });
+  const play = (index: number, shuffle = false, picked = false) => actions.play({ items: playable(tracks), index, shuffle, source, picked });
   const count = tracks.length || card.media?.childCount || 0;
   return (
     <View>
@@ -96,7 +96,7 @@ function AlbumPage({ card, detail: _detail }: { card: Card; detail: DetailModel 
               subtitle={track.media?.byline && track.media.byline !== card.media?.byline ? track.media.byline : undefined}
               trailing={track.media?.clockLabel || (track.durationSeconds ? clock(track.durationSeconds) : '')}
               current={actions.nowPlaying?.id === track.id} playing={actions.nowPlaying?.playing}
-              onPress={() => play(playable(tracks).findIndex(t => t.id === track.id))} testID={`media-track-${track.id}`} />
+              onPress={() => play(playable(tracks).findIndex(t => t.id === track.id), false, true)} testID={`media-track-${track.id}`} />
           </View>
         ))}
       </View>
@@ -206,7 +206,7 @@ function ArtistPage({ card }: { card: Card }) {
             {top.map((track, i) => (
               <ListRow key={track.id} number={number(i + 1)} title={track.name} subtitle={track.media?.parent?.name}
                 trailing={track.media?.clockLabel} current={actions.nowPlaying?.id === track.id} playing={actions.nowPlaying?.playing}
-                onPress={() => actions.play({ items: playable(songs), index: playable(songs).findIndex(t => t.id === track.id), source: { id: newest!.id, name: newest!.name } })}
+                onPress={() => actions.play({ items: playable(songs), index: playable(songs).findIndex(t => t.id === track.id), source: { id: newest!.id, name: newest!.name }, picked: true })}
                 testID={`media-track-${track.id}`} />
             ))}
           </View>
@@ -329,7 +329,7 @@ function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
           <SectionHeading title={msg('media.ui.parts')} />
           {parts.map((part, i) => <ListRow key={part.id} number={number(part.media?.index || i + 1)} title={part.name} trailing={part.durationSeconds ? durationLabel(part.durationSeconds) : ''}
             current={actions.nowPlaying?.id === part.id} playing={actions.nowPlaying?.playing} dim={part.played}
-            onPress={() => actions.play({ items: parts, index: i, source })} testID={`media-part-${part.id}`} />)}
+            onPress={() => actions.play({ items: parts, index: i, source, picked: true })} testID={`media-part-${part.id}`} />)}
         </View>
       ) : chapters.length ? (
         <View style={{ marginBottom: 40 }}>

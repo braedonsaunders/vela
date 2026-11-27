@@ -269,7 +269,7 @@ function RecapRichBlock({ props, ctx, press }: { props: Props; ctx: Ctx; press?(
         if (periodState) press?.({ action: 'open', arg: `${periodState}=${next}`, args: {}, control: 'recap-period' });
       }}
       onSelectCard={card => app.go(placeOf(card))}
-      onPlayCards={(cards, index) => app.play(cards, index, { id: 'rewind', name: msg('music.rewind.title') })} />
+      onPlayCards={(cards, index, picked) => app.play(cards, index, { id: 'rewind', name: msg('music.rewind.title') }, false, undefined, picked)} />
   );
 }
 

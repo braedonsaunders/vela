@@ -333,3 +333,67 @@ test('a refusal other than no copy fails the item where it is', async () => {
   expect(h.starts).toEqual(['t1']);
   expect(h.box.get().audio).toMatchObject({ phase: 'failed', reason: 'Your profile isn’t allowed to play this.' });
 });
+
+// Passing over follows what the viewer asked for: Play, Shuffle and a queue moving on pass over a
+// track the server has no copy of; a track the viewer picked is never swapped for another.
+
+test('a track the viewer picks on its own, which the server lacks, says why and stays put', async () => {
+  const h = harness({ answer: missing('t1') });
+  h.audio.play({ items: [track('t1')], index: 0, picked: true });
+  await settle();
+  expect(h.starts).toEqual(['t1']);
+  expect(h.box.get().audio).toMatchObject({ phase: 'failed', reason: 'Your server doesn’t have a copy of this yet.' });
+  expect(h.box.get().audio.queue?.items[h.box.get().audio.queue!.order[h.box.get().audio.queue!.at]!]?.id).toBe('t1');
+});
+
+test('a track picked inside an album list, which the server lacks, says why and stays put: nothing after it plays instead', async () => {
+  const h = harness({ answer: missing('t2') });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3')], index: 1, picked: true });
+  await settle();
+  expect(h.starts).toEqual(['t2']);
+  expect(h.loads).toEqual([]);
+  expect(h.box.get().audio).toMatchObject({ phase: 'failed', reason: 'Your server doesn’t have a copy of this yet.' });
+  expect(h.box.get().audio.queue?.at).toBe(1);
+});
+
+test('the tracks after a picked one are passed over as the queue moves on', async () => {
+  const h = harness({ answer: missing('t3') });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3'), track('t4')], index: 1, picked: true });
+  await settle();
+  expect(h.box.get().audio.phase).toBe('playing');
+  h.end();
+  await settle();
+  expect(h.starts).toEqual(['t2', 't3', 't4']);
+  expect(h.loads).toEqual(['/media/s1', '/media/s3']);
+  expect(h.box.get().audio).toMatchObject({ phase: 'playing', reason: '' });
+});
+
+test('shuffle passes over a missing track even when it starts from a picked one', async () => {
+  const h = harness({ answer: (n: number) => n === 1 ? notAvailable() : undefined });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3')], index: 0, shuffle: true, picked: true });
+  await settle();
+  expect(h.starts).toHaveLength(2);
+  expect(h.box.get().audio.phase).toBe('playing');
+});
+
+test('a track picked from the queue, which the server lacks, says why and stays put', async () => {
+  const h = harness({ answer: missing('t3') });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3'), track('t4')], index: 0 });
+  await settle();
+  h.audio.jump(2);
+  await settle();
+  expect(h.starts).toEqual(['t1', 't3']);
+  expect(h.box.get().audio).toMatchObject({ phase: 'failed', reason: 'Your server doesn’t have a copy of this yet.' });
+  expect(h.box.get().audio.queue?.at).toBe(2);
+});
+
+test('Next onto a track the server lacks moves on to the one after', async () => {
+  const h = harness({ answer: missing('t2') });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3')], index: 0 });
+  await settle();
+  h.audio.next();
+  await settle();
+  expect(h.starts).toEqual(['t1', 't2', 't3']);
+  expect(h.box.get().audio.phase).toBe('playing');
+  expect(h.box.get().audio.queue?.at).toBe(2);
+});
