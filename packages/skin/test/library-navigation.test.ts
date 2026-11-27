@@ -60,7 +60,10 @@ test('the phone navigation names Live TV once, whether or not the server lists i
   const shown = (libraries: { id: string; kind: string; name: string }[]) => {
     const env = { section: 'live', libraries, flags: [] } as unknown as import('../src/vocabulary').Env;
     const names: string[] = [];
-    for (const child of trigger.children) {
+    // The labels sit in the 36pt pill drawn inside the trigger's 44pt target.
+    const pill = trigger.children.find(child => child.kind === 'box');
+    if (pill?.kind !== 'box') throw new Error('no phone navigation pill');
+    for (const child of pill.children) {
       if (child.kind === 'text' && holds(child.when, { index: 0 }, env)) names.push(fill(child.text, { index: 0 }, env));
       if (child.kind === 'repeat' && child.item.kind === 'text') {
         for (const dest of libraries) if (holds(child.item.when, { index: 0, dest } as never, env)) names.push(fill(child.item.text, { index: 0, dest } as never, env));
