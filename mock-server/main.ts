@@ -375,6 +375,14 @@ const squareCollections: V.Row = {
     };
   }),
 };
+function watchlistRows(): V.Row[] {
+  const items = allTitles.filter(title => title.watch?.watchlisted)
+    .sort((a, b) => (watchlistedAt.get(b.id) ?? 0) - (watchlistedAt.get(a.id) ?? 0))
+    .map(title => ({ id: title.id, kind: 'title' as const, title, receiptToken: '' }));
+  return items.length ? [{ id: 'watchlist', name: 'Watchlist', purpose: 'watchlist', items, receiptToken: '', continuation: 'exhausted' }] : [];
+}
+const watchlistedAt = new Map<string, number>();
+let watchlistOrder = 0;
 function homeScope(g: Grant) { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows, mediaHomeRows(g), squareCollections]))}`; }
 function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
   const source = row.purpose === 'continue' ? { ...row, items: row.items.filter(item => item.kind !== 'title' || !removedContinue.has(item.title.id)) } : row;
@@ -416,7 +424,7 @@ const labHomeRows: V.Row[] = [
 /** Home's page in order: progress rows, media rows, the catalogue's rows, and a plugin's surface
  * row where the page places it (after Top 10), as Ether lists them. */
 function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = [], snapshot = rowSnapshot): V.Page<V.Row | V.SurfaceRow> {
-  const ordered: (V.Row | V.SurfaceRow)[] = [...progressRows(), ...mediaHomeRows(g), ...rows, squareCollections];
+  const ordered: (V.Row | V.SurfaceRow)[] = [...watchlistRows(), ...progressRows(), ...mediaHomeRows(g), ...rows, squareCollections];
   const top = ordered.findIndex(row => row.id === 'row-top10');
   ordered.splice(top + 1, 0, ...surfaces);
   const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}:${surfaces.map(row => row.id).join(',')}`, labPreset ? 5 : 2);
@@ -954,7 +962,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
   if (method === 'GET' && rowMatch) {
-    const r = mintedRow(decodeURIComponent(rowMatch[1]!), [...progressRows(), ...rows, squareCollections, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])]);
+    const r = mintedRow(decodeURIComponent(rowMatch[1]!), [...watchlistRows(), ...progressRows(), ...rows, squareCollections, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])]);
     return cached(req, minted(homeRow(g, r, url)), `${g.id}:${rowSnapshot}`);
   }
   const versionsMatch = /^\/titles\/([^/]+)\/versions(?:\/(choice))?$/.exec(path);
@@ -1071,7 +1079,9 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       }
       for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key];
       if (body.continueWatching === false) removedContinue.add(t.id);
-      if (typeof body.played === 'boolean' || body.continueWatching === false) feedChanged();
+      if (body.watchlisted === true) watchlistedAt.set(t.id, ++watchlistOrder);
+      if (body.watchlisted === false) watchlistedAt.delete(t.id);
+      if (typeof body.played === 'boolean' || typeof body.watchlisted === 'boolean' || body.continueWatching === false) feedChanged();
       viewer.policyRevision = `mock-${++viewerRevision}`;
       return json({ accepted: true });
     }
@@ -1354,6 +1364,12 @@ async function dispatch(req: Request): Promise<Response> {
       }
     }
     if (req.method === 'GET' && url.pathname === '/__admin/catch-up-fixture') return json(archiveFixture);
+    if (req.method === 'POST' && url.pathname === '/__admin/remint-home') {
+      const { bootstrapStaleReads } = await req.json();
+      if (bootstrapStaleReads === 1) faults.bootstrapStaleReads = 1;
+      feedChanged();
+      return json({ accepted: true });
+    }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; if ('refreshAbandonMs' in data) { abandonedRefreshKeys.clear(); refreshAbandonArmed = faults.refreshAbandonMs > 0; } return json(faults); }
     if (req.method === 'POST' && url.pathname === '/__admin/sports') return json(sportsAdmin(await req.json()));

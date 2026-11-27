@@ -44,3 +44,56 @@ export function revealer(scroll: { current: unknown }, offset: { current: number
     });
   };
 }
+
+interface HomeCardAnchor {
+  row: string;
+  card: string;
+  target: Focusable;
+  top?: number;
+}
+
+export interface HomeFocus {
+  focus(row: string, card: string, target: Focusable): void;
+  restore(rows: readonly { key: string; cards: readonly string[] }[]): () => void;
+}
+
+let focusedHomeCard: HomeCardAnchor | undefined;
+
+/** A different control taking focus supersedes the Home card, including controls in the shell. */
+export function leaveHomeCard(): void {
+  focusedHomeCard = undefined;
+}
+
+/** Preserve the focused card's viewport position when Home inserts or moves shelves above it. */
+export function homeFocus(scroll: { current: unknown }, offset: { current: number }): HomeFocus {
+  let anchor: HomeCardAnchor | undefined;
+  function measure(target: Focusable, read: (y: number) => void) {
+    const inner = (scroll.current as RouteScroll | null)?.getInnerViewRef?.();
+    if (inner) (target as MeasurableView).measureLayout?.(inner, (_x, y) => read(y));
+  }
+  return {
+    focus(row, card, target) {
+      const next = { row, card, target } as HomeCardAnchor;
+      anchor = focusedHomeCard = next;
+      measure(target, y => { next.top = y; });
+    },
+    restore(rows) {
+      const current = anchor;
+      if (!current || focusedHomeCard !== current || !rows.some(row => row.key === current.row && row.cards.includes(current.card))) return () => {};
+      let active = true;
+      let focusFrame = 0;
+      const frame = requestAnimationFrame(() => measure(current.target, y => {
+        if (!active || focusedHomeCard !== current) return;
+        const top = current.top;
+        current.top = y;
+        if (top === undefined || Math.abs(top - y) < 1) return;
+        const next = Math.max(0, offset.current + y - top);
+        (scroll.current as RouteScroll | null)?.scrollTo({ y: next, animated: false });
+        focusFrame = requestAnimationFrame(() => {
+          if (focusedHomeCard === current) current.target.requestTVFocus?.();
+        });
+      }));
+      return () => { active = false; cancelAnimationFrame(frame); if (focusFrame) cancelAnimationFrame(focusFrame); };
+    },
+  };
+}

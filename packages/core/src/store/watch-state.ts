@@ -34,7 +34,7 @@ export function changeCardWatch(card: Card, id: string, change: Change): Card {
 const cards = (values: Card[], id: string, change: Change) => values.map(card => changeCardWatch(card, id, change));
 /** A row after one viewer mutation: a progress row drops a title marked played or removed. */
 export const watchRow = (value: Row, id: string, change: Change): Row => row(value, id, change);
-const row = (value: Row, id: string, change: Change): Row => ({
+const row = (value: Row, id: string, change: Change): Row => !value.items.some(card => card.id === id) ? value : ({
   ...value,
   items: (value.purpose === 'continue' && change.played === true)
     || (value.purpose === 'continue' && change.continueWatching === false)
