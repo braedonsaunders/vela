@@ -73,6 +73,7 @@ export function Previews({ store, state, onHome, heroIndex, still, searchFocused
     };
   }, [intent, heroVisible, heroEnded, cardId, url]);
 
-  if (!source) return <>{children}</>;
+  // The lite tier offers no previews: card widgets then report no intents at all.
+  if (!source || appRenderTier() === 'lite') return <>{children}</>;
   return <PreviewProvider value={source}>{children}</PreviewProvider>;
 }

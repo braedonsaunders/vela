@@ -30,14 +30,19 @@ export const LAZY_STILL_MS = 200;
  * scrolls only what the scroll is about to reach is drawn, and once it is still the page draws
  * further ahead, a little at a time, for the next scroll to find. A TV draws only what it reaches:
  * its section switches would wait on the extra rows. */
-export function lazyReach(axis: 'x' | 'y', moving: boolean, tv: boolean): number {
+export function lazyReach(axis: 'x' | 'y', moving: boolean, tv: boolean, lite = false): number {
+  // The lite tier (device-tier.ts) draws little past the edge: a card costs it a hundred milliseconds or
+  // more of JavaScript, and cards drawn ahead hold the presses made meanwhile.
+  if (lite) return axis === 'y' ? 0.5 : 0.25;
   if (tv || moving) return 1;
   return axis === 'y' ? 2 : 1.5;
 }
 
 /** Items added at once: while still, one at a time for the page's rows (each is a row of cards)
  * and half a batch for a row's cards, so a touch arriving meanwhile waits on little. */
-export function lazyBatch(axis: 'x' | 'y', batch: number, moving: boolean): number {
+export function lazyBatch(axis: 'x' | 'y', batch: number, moving: boolean, lite = false): number {
+  // The lite tier draws one row, or a third of a row's batch, at a time: a press waits on one small piece.
+  if (lite) return axis === 'y' ? 1 : Math.max(1, Math.ceil(batch / 3));
   if (moving) return batch;
   return axis === 'y' ? 1 : Math.max(1, Math.ceil(batch / 2));
 }
