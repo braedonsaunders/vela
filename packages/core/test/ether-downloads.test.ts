@@ -65,6 +65,17 @@ test('Ether download refusals read as sentences, and an incomplete grant fails c
     routeFetch({ 'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] }, 'POST /vela/v0/titles/movie/download': answer });
     await expect(adapter().resolveDownload('movie')).rejects.toThrow(words);
   }
-  routeFetch({ 'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] }, 'POST /vela/v0/titles/movie/download': { ...grant, subtitleTracks: undefined } });
+  routeFetch({ 'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] }, 'POST /vela/v0/titles/movie/download': { ...grant, url: undefined } });
   await expect(adapter().resolveDownload('movie')).rejects.toThrow('incomplete grant');
+});
+
+test('a minimal Ether grant (no track lists or container) still resolves from its file name', async () => {
+  const { audioTracks: _a, subtitleTracks: _s, chapters: _c, container: _k, ...minimal } = grant;
+  routeFetch({
+    'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] },
+    'POST /vela/v0/titles/movie/download': { ...minimal, mimeType: 'video/mp4', filename: 'Andre and Wally B.MP4' },
+  });
+  const resolution = await adapter().resolveDownload('movie');
+  expect(resolution).toMatchObject({ container: 'mp4', audioTracks: [], subtitleTracks: [], chapters: [], sidecars: [] });
+  expect(resolution).not.toHaveProperty('filename');
 });
