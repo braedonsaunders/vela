@@ -943,7 +943,7 @@ export class Playback {
   }
 
   /** Adds a found subtitle to the running session; the new track's id, or null when the server
-   * added none (it is still indexing) or the session moved on meanwhile. */
+   * added none (it is still indexing), the session moved on meanwhile, or the plan shown does not list it. */
   async downloadSubtitle(id: string): Promise<string | null> {
     const connection = await this.session.ready();
     const api = connection.adapter;
@@ -951,13 +951,28 @@ export class Playback {
     const sessionId = this.box.get().playback.sessionId;
     const previous = this.box.get().playback.plan;
     const plan = connection.plan(await api.downloadSubtitle(sessionId, id, this.session.key()));
-    if (this.box.get().playback.sessionId !== sessionId) return null;
-    // A reply naming the version a switch still waits for brings it, as a command reply would.
-    if (this.tookVersion(plan)) this.taken(plan);
-    this.patch({ plan });
+    if (this.box.get().playback.sessionId !== sessionId || this.recovering) return null;
     // A new track, or (the same file chosen again) the one the server selected for it.
     const added = plan.subtitleTracks.find(t => !previous?.subtitleTracks.some(p => p.id === t.id))?.id;
     const chosen = plan.selectedSubtitleTrackId && plan.selectedSubtitleTrackId !== previous?.selectedSubtitleTrackId ? plan.selectedSubtitleTrackId : null;
+    // Like a command reply, a reply behind the newest plan heard is not shown. Its track is given only when the plan
+    // shown is of the same version and lists it, after one read of the session when it does not yet; another version
+    // (the previous one) may lack it.
+    const shown = this.newestShown();
+    if (olderThanShown(plan, shown)) {
+      const track = added ?? chosen;
+      const listed = () => {
+        const now = this.box.get().playback.plan;
+        return !this.recovering && now?.sessionId === sessionId && now.selectedVersionId === plan.selectedVersionId &&
+          now.subtitleTracks.some(t => t.id === track);
+      };
+      if (!track || shown?.selectedVersionId !== plan.selectedVersionId) return null;
+      return listed() || (await this.refresh(sessionId) && listed()) ? track : null;
+    }
+    // A reply naming the version a switch still waits for brings it, as a command reply would.
+    if (this.tookVersion(plan)) this.taken(plan);
+    this.expire(plan.sourceGeneration);
+    this.patch({ plan: this.withLocalTracks(plan) });
     return added ?? chosen;
   }
 
@@ -1090,15 +1105,19 @@ export class Playback {
       if (serverRefused(error)) this.dropSwitch(switching);
       throw error;
     }
-    // Neither a published plan nor a later switch has taken it yet: the reply does, also when its source is already shown.
-    const unseen = this.switches.includes(switching);
+    // Neither a published plan nor a later switch has taken it yet: the reply does, also when its source is already
+    // shown, but not from behind a plan showing this version unavailable: its first usable plan still takes it.
+    const newest = this.newestShown();
+    const unseen = this.switches.includes(switching) && !(olderThanShown(next, newest) &&
+      newest?.selectedVersionId === switching.versionId && newest.sourceFailure === 'version_unavailable');
     if (unseen) this.applySwitch(switching.number);
     const now = this.box.get().playback;
     // A restart (stall recovery) asks for the file now playing, not the one first asked for. Once a published plan
     // brought this version or a later switch was taken, a reply behind the plan shown (that later version's, a
-    // seek's on this one) changes nothing, nor does a reply arriving while recovering. Any reply behind the plan
-    // shown (a seek or track change on its version) neither replaces that plan nor takes its tracks.
-    const fresh = !now.plan || !olderPlan(next, now.plan, false);
+    // seek's on this one) changes nothing, nor does a reply arriving while recovering. Any reply behind the newest
+    // plan heard (a seek, track change or pause on its version, also one held back for moving only the clock)
+    // neither replaces the plan shown nor takes its tracks.
+    const fresh = !olderThanShown(next, newest);
     if (now.sessionId === sessionId && !this.recovering && (unseen || fresh)) {
       // The version is taken once, with a fresh restart budget: here, unless a published plan already brought it.
       if (unseen) {
@@ -1180,14 +1199,14 @@ export class Playback {
     this.expire(plan.sourceGeneration);
   }
 
-  /** A plan on the session that moves from the version shown to the version a switch still waits for, on a newer source
-   * than that switch was sent against, is that version (the oldest such switch): recovery asks for it and its tracks, as
-   * after the switch reply, with a fresh restart budget. */
+  /** A usable plan on the session that moves from the version shown to the version a switch still waits for, on a newer
+   * source than that switch was sent against, is that version (the oldest such switch): recovery asks for it and its
+   * tracks, as after the switch reply, with a fresh restart budget. */
   private tookVersion(plan: V.PlaybackPlan): boolean {
     // A version shown only as unavailable has not been brought yet: its first usable plan still is.
+    if (plan.sourceFailure === 'version_unavailable') return false;
     const shown = this.box.get().playback.plan;
-    if (plan.selectedVersionId === shown?.selectedVersionId &&
-      (shown?.sourceFailure !== 'version_unavailable' || plan.sourceFailure === 'version_unavailable')) return false;
+    if (plan.selectedVersionId === shown?.selectedVersionId && shown?.sourceFailure !== 'version_unavailable') return false;
     const switching = this.switches.find(other => other.sessionId === plan.sessionId && other.versionId === plan.selectedVersionId &&
       plan.sourceGeneration > other.sourceGeneration);
     if (!switching) return false;
@@ -1468,8 +1487,9 @@ export class Playback {
       this.liveCursor = { sessionId: plan.sessionId, sourceGeneration: plan.sourceGeneration,
         seekGeneration: plan.seekGeneration, seconds: snapshot.position };
     }
-    // A report from a source older than the one shown names that source's tracks.
-    const oldSource = snapshot.sourceGeneration !== undefined && !!plan && snapshot.sourceGeneration < plan.sourceGeneration;
+    // A report from a source older than the newest the session has shown or has evidence at names that source's
+    // tracks, also when an older plan is back on screen (a poll); one without a source generation is at the newest.
+    const oldSource = at.sourceGeneration < marks.sourceGeneration;
     if (!this.localTracks && presenting && !oldSource) {
       if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
       if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
