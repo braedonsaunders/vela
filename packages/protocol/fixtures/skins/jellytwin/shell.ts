@@ -332,7 +332,7 @@ export const dropdownLook: ProfileMenuLook = {
     section: sectionHeading('10px 16px 4px'),
     row: dropdownRow,
     // The server rows reach 10px past their column, so it is inset to the rows' text.
-    servers: { type: 'box', style: col({ padding: '0px 16px' }) },
+    servers: { type: 'box', style: col({ padding: '0px 16px', 'font-size': '15px' }) },
     about: { type: 'box', testId: '{entry.testId}', style: { padding: '8px 12px 6px', 'border-radius': '6px' }, children: [
       { type: 'text', text: '{entry.label}', style: { 'font-size': '12px', 'line-height': '16px', color: '$secondary' } }] },
   },
@@ -361,7 +361,7 @@ export const drawerLook: ProfileMenuLook = {
         { type: 'text', text: '{entry.label}', style: { 'font-size': '15px', 'line-clamp': '1' } },
       ],
     },
-    servers: { type: 'box', style: col({ padding: '0px 20px' }) },
+    servers: { type: 'box', style: col({ padding: '0px 20px', 'font-size': '15px' }) },
     about: { type: 'box', testId: '{entry.testId}', style: { padding: '14px 20px 20px' }, children: [
       { type: 'text', text: '{entry.label}', style: { 'font-size': '12px', 'line-height': '16px', color: '$secondary' } }] },
   },

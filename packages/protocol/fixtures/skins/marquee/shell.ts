@@ -402,7 +402,7 @@ export const accountMenuLook: ProfileMenuLook = {
       ],
     },
     // The server rows reach 10px past their column (the base's menu), so the column is inset to the rows' text.
-    servers: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', padding: '0px 16px' } },
+    servers: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', padding: '0px 16px', 'font-size': '14px' } },
     // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
     about: {
       type: 'box',
