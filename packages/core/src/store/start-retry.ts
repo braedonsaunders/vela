@@ -5,6 +5,7 @@
 import { catchUpErrorMessage } from '../live/timeshift';
 import { VelaError } from '../adapter/errors';
 import { unreleasedMessage } from '../release-date';
+import { msg } from '../i18n';
 
 /** Total attempts (the first included) when the server does not say. */
 const DEFAULT_ATTEMPTS = 3;
@@ -77,10 +78,42 @@ export interface StartRefusal {
   errorClass: string;
 }
 
+/**
+ * The viewer's words for a refusal whose code says more than the server's own message. Ether words
+ * many refusals as nothing but the code spelt out (`not_available` → "not available"), so those
+ * known codes get a sentence here; '' for any other code.
+ */
+export function refusalWords(code: string | undefined): string {
+  switch (code) {
+    // Ether: no copy of the title on the server, and none it could find (frontends/vela, ErrNotAvailable).
+    case 'not_available': return msg('playback.refused.notAvailable');
+    case 'not_playable': return msg('playback.refused.notPlayable');
+    case 'source_unavailable': return msg('playback.refused.sourceUnavailable');
+    case 'version_unavailable': return msg('playback.refused.versionUnavailable');
+    case 'forbidden': return msg('playback.refused.forbidden');
+    case 'playback_capacity': return msg('playback.refused.capacity');
+    default: return '';
+  }
+}
+
+/** A server message that is only its error code spelt out ("not available", "playback capacity"):
+ * a diagnostic, not words for the viewer. */
+export function codeOnlyMessage(message: string, code: string): boolean {
+  const spelt = (text: string) => text.trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+  return !spelt(message) || (!!code && spelt(message) === spelt(code));
+}
+
+/** Whether a refused start means this title has no copy to play on the server (it is not in the
+ * library, and nothing was found for it): another item of a queue may still play. */
+export function noCopy(code: string | undefined): boolean {
+  return code === 'not_available' || code === 'not_playable';
+}
+
 export function startRefusal(error: unknown, fallback = '', airDate?: string): StartRefusal {
   if (error instanceof VelaError) {
     const { code, class: errorClass } = error.detail;
-    const message = code === 'title_unreleased' ? unreleasedMessage(airDate) : catchUpErrorMessage(code) || error.message || fallback;
+    const own = codeOnlyMessage(error.message, code) ? '' : error.message;
+    const message = code === 'title_unreleased' ? unreleasedMessage(airDate) : catchUpErrorMessage(code) || refusalWords(code) || own || fallback;
     return { message, code, errorClass };
   }
   return { message: error instanceof Error && error.message ? error.message : fallback, code: '', errorClass: '' };

@@ -72,7 +72,7 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} style={[m.text({ 'font-size': '15px', 'font-weight': '650' }), titlePart]}>{item.name}</Text>
             <Text numberOfLines={1} style={[m.text({ 'font-size': '13px', color: '$ui.inkSecondary' }), bylinePart]}>
-              {preview !== null ? `${clock(preview)} / ${clock(audio.durationSeconds)}` : audio.phase === 'failed' ? (audio.unreleased ? audio.error : msg('media.player.failed')) : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
+              {preview !== null ? `${clock(preview)} / ${clock(audio.durationSeconds)}` : audio.phase === 'failed' ? (audio.unreleased ? audio.error : audio.reason || msg('media.player.failed')) : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
             </Text>
           </View>
         </Pressable>
@@ -367,7 +367,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
         </View>
       </View>
       <Scrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={s => store.audio.seek(s)} chapters={book ? audio.chapters : []} />
-      {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : audio.unreleased ? audio.error : msg('media.player.failed')}</Text></Arrive> : null}
+      {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : audio.unreleased ? audio.error : audio.reason || msg('media.player.failed')}</Text></Arrive> : null}
       <View style={{ zIndex: 3 }}>
         <Guide {...guided} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           {book
