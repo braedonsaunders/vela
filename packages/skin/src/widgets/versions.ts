@@ -13,8 +13,12 @@ function codec(value: string | undefined): string {
   return codecs[key] ?? value.toUpperCase();
 }
 
+// Sizes count in 1024³ bytes with one decimal, as the server's own version labels do ("1080p Remux ·
+// DD 5.1 · 7.3 GB"), so a version's chip never contradicts its title.
 function sizeChip(bytes: number | undefined): string {
-  return bytes && bytes > 0 ? `${(bytes / 1_000_000_000).toFixed(bytes >= 10_000_000_000 ? 0 : 1)} GB` : '';
+  if (!bytes || bytes <= 0) return '';
+  const gb = bytes / 1024 ** 3;
+  return `${gb.toFixed(gb >= 100 ? 0 : 1)} GB`;
 }
 
 export function versionChips(version: VersionItem): string[] {
