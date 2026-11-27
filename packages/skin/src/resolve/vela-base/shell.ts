@@ -116,7 +116,7 @@ const moreMenu: Node = {
     { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.more' }],
       item: moreDestination([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}', 'nav-more-{dest.id}') },
     { ...moreDestination([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}', 'nav-more-live'),
-      when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore' }] },
+      when: [{ test: 'nav.showLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore' }] },
   ],
 };
 
@@ -199,7 +199,7 @@ const compactMenu: Node = {
         compactDestination([is('env.section', 'home')], { action: 'home' }, '{t:ui.home}'),
         { type: 'repeat', over: 'nav.destinations', item: compactDestination([{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, '{dest.name}') },
         { ...compactDestination([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'),
-          when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }] },
+          when: [{ test: 'nav.showLive' }, { test: 'env.hasLiveLibrary', not: true }] },
       ] },
   ],
 };
@@ -346,7 +346,7 @@ export const shell: Node = {
                     },
                     {
                       ...navItem([is('env.section', 'live')], { action: 'live' }, '{t:ui.live}'),
-                      when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore', not: true }],
+                      when: [{ test: 'nav.showLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore', not: true }],
                     },
                     moreNavItem,
                   ],

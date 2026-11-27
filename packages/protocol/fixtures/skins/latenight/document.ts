@@ -6,7 +6,7 @@ import { episodePage } from '../../../episode-page';
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
 import type { Node, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.17';
+const id = 'latenight', version = '1.0.18';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -52,7 +52,7 @@ const channel = (num: string, name: string, on: Node['when'], press: { action: '
 
 // Live TV on the dial, when the server has it and no library already stands for it.
 const liveChannel: Node = { ...channel('04', '{s:liveTv}', [{ test: 'env.section', is: 'eq', value: 'live' }], { action: 'live' }, 'channel-live'),
-  when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }] };
+  when: [{ test: 'nav.showLive' }, { test: 'env.hasLiveLibrary', not: true }] };
 
 // More: the dial keeps the channels it has room for (the renderer measures them) and the rest wait
 // in a setup menu under this button, which is lit while the channel on show is one of them.
@@ -67,7 +67,7 @@ const moreChannels: Node = { type: 'box', when: [{ test: 'nav.more' }], style: {
       { type: 'text', text: '{s:moreTitle}', style: { ...osdText('18px', '$ink'), 'text-shadow': 'none', 'letter-spacing': '0.16em', opacity: '0.75', padding: '0px 10px 8px' } },
       { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.more' }], item: channel('1{index.label}', '{dest.name}', [{ test: 'dest.on' }], { action: 'library', arg: '{dest.id}' }, 'nav-more-{dest.id}', true) },
       { ...channel('04', '{s:liveTv}', [{ test: 'env.section', is: 'eq', value: 'live' }], { action: 'live' }, 'nav-more-live', true),
-        when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore' }] },
+        when: [{ test: 'nav.showLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore' }] },
     ] },
 ] };
 
@@ -116,7 +116,7 @@ const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer'
     ] },
   ] };
 
-const menuRow = (label: string, icon: string, press: { action: 'openPicker' | 'signOut' }, testId?: string): Node & { type: 'box' } => ({ type: 'box', press, label, testId,
+const menuRow = (label: string, icon: string, press: { action: 'openPicker' | 'manageLibraries' | 'signOut' }, testId?: string): Node & { type: 'box' } => ({ type: 'box', press, label, testId,
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '12px 12px', 'align-items': 'center', padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', color: '$ink', ...osdText('22px', '$ink'), 'text-shadow': 'none' },
   hover: { 'background-color': '$glass-hi' }, focus: { 'background-color': '$vcr-blue' }, children: [
     { type: 'icon', symbol: icon, style: { width: '16px', height: '16px', color: '$osd' } },
@@ -144,6 +144,7 @@ const menu: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:m
       ] },
       { type: 'icon', symbol: 'forward-chevron', style: { width: '12px', height: '12px' } },
     ] },
+    { ...menuRow('{s:manageLibraries}', 'library', { action: 'manageLibraries' }, 'manage-libraries'), when: [{ test: 'env.canManageLibraries' }] },
     { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
     { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
     menuRow('{s:signOut}', 'sign-out', { action: 'signOut' }),
@@ -491,7 +492,7 @@ const fadeStill = { keyframes: 'dissolve', duration: 200 };
 const osdIn = (delay: number) => ({ keyframes: 'dissolve', duration: 240, delay, easing: 'steps(3, jump-end)', fill: 'both' as const, still: fadeStill });
 
 export default {
-  schema: 1, renderer: 18, id, name: 'Late Night', version,
+  schema: 1, renderer: 21, id, name: 'Late Night', version,
   tagline: 'Your library on an old TV set: channel flips, tape labels and a glowing on-screen display.',
   preview: asset('preview.svg'), swatches: ['#07080b', '#f3eee0', '#7dffa1', '#e8452c', '#f4cf3a'],
   // Late Night's dark set, OSD green and the VCR's blue menus, for the routes it inherits (search, library, collection, sign-in).
@@ -523,7 +524,7 @@ export default {
   },
   strings: { en: {
     velaHome: 'Vela home', home: 'Home', search: 'Search', profile: 'Profile and appearance', menu: 'Profile menu', menuTitle: 'Setup menu', more: 'More', moreChannels: 'More channels', moreTitle: 'More channels',
-    appearance: 'Appearance', skinName: 'Late Night', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out',
+    appearance: 'Appearance', manageLibraries: 'Manage libraries', skinName: 'Late Night', install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out',
     moreInfo: 'Info', play: 'Play', featured: 'Featured titles', presets: 'Preset', watched: 'Watched', live: 'Live', liveTv: 'Live TV', tunedTo: 'Tuned channel',
     back: 'Back', opening: 'Searching', noSignal: 'No signal', failed: 'This title could not be opened. Try again in a moment.', seasons: 'Seasons', extras: 'Extras', cast: 'Cast', retry: 'Try again',
   } },

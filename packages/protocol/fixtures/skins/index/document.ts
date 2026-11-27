@@ -11,7 +11,7 @@ import { episodePage } from '../../../episode-page';
 import type { Condition, Node, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.14';
+const version = '1.0.15';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -41,7 +41,7 @@ const inkWash = {
 };
 
 // A plain text button as Exact draws one: unset, a block, 4 px of padding, centred text.
-const plain = (text: string, press: { action: 'home' | 'search' | 'live' | 'signOut' }, when: Condition[]): Node => ({
+const plain = (text: string, press: { action: 'home' | 'search' | 'live' | 'manageLibraries' | 'signOut' }, when: Condition[]): Node => ({
   type: 'box',
   press,
   label: text,
@@ -76,7 +76,7 @@ const nav: Node = {
     },
     plain('{s:home}', { action: 'home' }, [{ test: 'env.viewer' }]),
     plain('{s:search}', { action: 'search' }, [{ test: 'env.viewer' }]),
-    plain('{s:live}', { action: 'live' }, [{ test: 'env.canLive' }]),
+    plain('{s:live}', { action: 'live' }, [{ test: 'nav.showLive' }]),
     {
       type: 'box',
       press: { action: 'openPicker' },
@@ -95,6 +95,7 @@ const nav: Node = {
       ...inkWash,
       children: [{ type: 'text', text: '{s:choose}', style: { 'font-size': '13px' } }],
     },
+    { ...plain('{s:manageLibraries}', { action: 'manageLibraries' }, [{ test: 'env.canManageLibraries' }]), testId: 'manage-libraries' } as Node,
     { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
     { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
     // The reader: a small printed plate (their avatar where the server gives one, else their initial) and their name.
@@ -1254,7 +1255,7 @@ const title: Node = {
 
 export default {
   schema: 1,
-  renderer: 18,
+  renderer: 21,
   status: true,
   id,
   name: 'Index',
@@ -1333,6 +1334,7 @@ export default {
       search: 'Search',
       live: 'Live TV',
       choose: 'Change appearance',
+      manageLibraries: 'Manage libraries',
       install: 'Install Vela',
       update: 'Update ready, reload',
       signOut: 'Sign out',

@@ -20,6 +20,7 @@
         "librarySortFlip",
         "libraryView",
         "live",
+        "manageLibraries",
         "moreRow",
         "multiview",
         "navigate",
@@ -2974,7 +2975,7 @@
       "type": "object"
     },
     "Renderer": {
-      "const": 20,
+      "const": 21,
       "description": "The RENDERER_VERSION this schema describes."
     },
     "RepeatNode": {

@@ -51,6 +51,8 @@ export interface Env {
   canLive: boolean;
   canPlaylists: boolean;
   canSwitchProfile: boolean;
+  /** The profile menu offers Manage libraries (action manageLibraries): a viewer is signed in. */
+  canManageLibraries: boolean;
   width: number;
   /** Screen documents (env.canMultiview, env.canPlay): multiview is available here; playback is (default true). */
   canMultiview?: boolean;
@@ -67,6 +69,9 @@ export interface Env {
   home?: HomeModel;
   heroIndex: number;
   libraries: Destination[];
+  /** The destinations the shell's navigation lists (nav.destinations): the libraries in the
+   * viewer's order without the ones they hid, and the plugin screens. */
+  navigation: Destination[];
   skinCount: number;
   skinName: string;
   /** The About line's facts: this build, where it runs, the connected server (about.ts). */
@@ -375,6 +380,11 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.canLive': (_, e) => yes(e.canLive),
   'env.canPlaylists': (_, e) => yes(e.canPlaylists),
   'env.canSwitchProfile': (_, e) => yes(e.canSwitchProfile),
+  'env.canManageLibraries': (_, e) => yes(e.canManageLibraries),
+  /** Live TV in the navigation: the server has it, and the viewer has not hidden its Live TV library
+   * (env.navigation leaves hidden libraries out). env.canLive stays for content (a live home's monitor,
+   * in-page guide buttons). */
+  'nav.showLive': (_, e) => yes(e.canLive && (!(e.libraries ?? []).some(l => l.kind === 'live') || (e.navigation ?? []).some(l => l.kind === 'live'))),
   'env.heroCount': (_, e) => (e.home ? String(e.home.hero.length) : ''),
   'env.heroIndex': (_, e) => String(e.heroIndex),
   'env.rowCount': (_, e) => (e.home ? String(e.home.rows.length) : ''),
@@ -397,7 +407,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.serverVersion': (_, e) => e.about?.serverVersion ?? '',
   'env.aboutLine': (_, e) => aboutLine(e.about),
   'env.aboutLabel': (_, e) => aboutLabel(e.about),
-  'env.libraryCount': (_, e) => String(e.libraries.length),
+  'env.libraryCount': (_, e) => String(e.navigation.length),
   'env.homeMoreLoading': (_, e) => yes(e.homeLoading),
   'env.homeSlow': (_, e) => yes(e.homeSlow),
   'env.homeHasMore': (_, e) => (e.home ? yes(e.home.nextCursor !== '') : ''),
@@ -523,7 +533,7 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
       const hero = e.home?.hero[e.heroIndex];
       return hero ? [{ ...c, hero, heroAct: heroAct(hero.id), index: e.heroIndex }] : [];
     }
-    case 'nav.destinations': return at(e.libraries, dest => ({ dest }));
+    case 'nav.destinations': return at(e.navigation, dest => ({ dest }));
     case 'hero.genres': return at(c.hero?.genres ?? [], fact => ({ fact }));
     case 'detail.seasons': return at(d?.seasons ?? [], card => ({ card, seasonLabel: seasonDisplayName(card) }));
     case 'detail.episodes': return at(seasonEpisodes(d, e.season), card => ({ card }));

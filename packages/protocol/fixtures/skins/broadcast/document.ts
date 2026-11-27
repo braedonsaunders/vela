@@ -9,7 +9,7 @@ type Press = NonNullable<BoxNode['press']>;
 
 // Asset URLs carry the document's own version: a release rebases them to /vela/skins/<id>/<version>/,
 // and only that version's files are published and bundled.
-const id = 'broadcast', version = '1.0.7';
+const id = 'broadcast', version = '1.0.8';
 const ASSETS = `/vela/v0/appearance/skins/${id}/${version}`;
 const display = '"Barlow Condensed", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", sans-serif';
 const sans = 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif';
@@ -34,7 +34,7 @@ const tab = (label: string, press: Press, on: Node['when'], testId?: string): No
   ],
 });
 const homeTab = tab('{s:live}', { action: 'home' }, [{ test: 'env.section', is: 'eq', value: 'home' }]);
-const guideTab: Node = { ...tab('{s:guide}', { action: 'live' }, [{ test: 'env.section', is: 'eq', value: 'live' }]), when: [{ test: 'env.canLive' }] };
+const guideTab: Node = { ...tab('{s:guide}', { action: 'live' }, [{ test: 'env.section', is: 'eq', value: 'live' }]), when: [{ test: 'nav.showLive' }] };
 const destTab: Node = { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], item: tab('{dest.name}', { action: 'library', arg: '{dest.id}' }, [{ test: 'dest.on' }]) };
 
 // More: the bar keeps the sections it has room for (the renderer measures them) and the rest wait in a
@@ -109,6 +109,10 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
         ] },
         { type: 'icon', symbol: 'forward-chevron', style: { width: '12px', height: '12px', color: '$ink3' } },
       ]),
+      { ...menuItem({ action: 'manageLibraries' }, '{s:manageLibraries}', [
+        { type: 'icon', symbol: 'library', style: { width: '16px', height: '16px' } },
+        { type: 'text', text: '{s:manageLibraries}' },
+      ]), when: [{ test: 'env.canManageLibraries' }], testId: 'manage-libraries' } as Node,
       { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
       { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
       menuItem({ action: 'signOut' }, '{s:signOut}', [
@@ -400,7 +404,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 const broadcastDoc: SkinDocument = {
-  schema: 1, renderer: 18, id, name: 'Broadcast', version, tagline: 'Live TV first: on now, your channels and the guide, with films below.',
+  schema: 1, renderer: 21, id, name: 'Broadcast', version, tagline: 'Live TV first: on now, your channels and the guide, with films below.',
   preview: `${ASSETS}/preview.jpg`, swatches: ['#07090d', '#f2f4f7', '#ff3d2e', '#ffc23d', '#141b24'],
   live: { home: true },
   fonts: { display: { family: 'Barlow Condensed', files: [500, 600, 700].map(weight => ({ url: `${ASSETS}/barlow-condensed-${weight}.ttf`, weight, style: 'normal' as const })) } },
@@ -423,7 +427,7 @@ const broadcastDoc: SkinDocument = {
     signal: '#ff3d2e', cue: '#ffc23d',
   },
   strings: { en: {
-    velaHome: 'Vela home', live: 'Live', guide: 'Guide', more: 'More', moreSections: 'More sections', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', skinName: 'Broadcast',
+    velaHome: 'Vela home', live: 'Live', guide: 'Guide', more: 'More', moreSections: 'More sections', search: 'Search', profile: 'Profile and appearance', appearance: 'Appearance', manageLibraries: 'Manage libraries', skinName: 'Broadcast',
     install: 'Install Vela', update: 'Update ready, reload', signOut: 'Sign out', clockLabel: 'Time now, {env.clock}',
     onAir: 'On air', lineup: '{env.channelCount} channels', liveBug: 'Live', monitor: 'Now playing on {tile.channelName}', monitorControls: 'Monitor controls',
     tuneInTo: 'Tune in to {tile.channelName}', tuning: 'Tuning {tile.channelNumber}', noPicture: 'No picture on {tile.channelNumber}', noPictureHint: 'Pick another channel, or try again from the guide.',

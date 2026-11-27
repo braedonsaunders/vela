@@ -24,6 +24,11 @@ describe('document action links', () => {
     expect(actionHref({ route: 'title', entry: 'movie-1', library: 'films' }, 'person', 'Ada Lovelace'))
       .toBe('/person?title=movie-1&name=Ada+Lovelace&library=films');
   });
+
+  test('the profile menu screens have their own addresses', () => {
+    expect(actionHref({ route: 'home', entry: 'home' }, 'playlists', '')).toBe('/playlists');
+    expect(actionHref({ route: 'library', entry: 'films' }, 'manageLibraries', '')).toBe('/libraries');
+  });
 });
 
 test('collection links carry the same named view as their press action', () => {

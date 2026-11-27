@@ -28,11 +28,11 @@ const rise = (delay: number) => ({
 });
 
 // Asset URLs carry the document's own version: a release rebases them to /vela/skins/<id>/<version>/.
-const version = '1.0.20';
+const version = '1.0.21';
 
 const lounge: SkinDocument = {
   schema: 1,
-  renderer: 18,
+  renderer: 21,
   id: 'lounge',
   name: 'Lounge',
   version,
@@ -73,6 +73,7 @@ const lounge: SkinDocument = {
       profile: 'Profile and appearance',
       watchingAs: 'Watching on this screen',
       appearance: 'Appearance',
+      manageLibraries: 'Manage libraries',
       skinName: 'Lounge',
       install: 'Install Vela',
       update: 'Update ready, reload',

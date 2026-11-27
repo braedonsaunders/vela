@@ -26,6 +26,7 @@ import { Audio, initialAudio, type AudioState } from './audio';
 import { initialServers, Servers, type ServersState } from './servers';
 import { initialPlayerSettings, PlayerSettings, type PlayerSettingsState } from './player-settings';
 import { initialSeriesTracks, SeriesTracks, type SeriesTracksState } from './series-tracks';
+import { initialLibraryOrders, LibraryOrders, type LibraryOrdersState } from './library-orders';
 import { PlexRelocator } from './plex-relocate';
 import { Session } from './session';
 import { idle, StateBox, type Loadable } from './state';
@@ -64,6 +65,8 @@ export interface VelaState {
   playerSettings: PlayerSettingsState;
   /** Remembered per-series audio and subtitle choices on this device, keyed by (server, viewer, show). */
   seriesTracks: SeriesTracksState;
+  /** The viewer's order and hidden libraries for the navigation on this device, keyed by (server, viewer). */
+  libraryOrders: LibraryOrdersState;
   /** Offline original-file downloads and their progress outbox (iPhone and iPad). */
   downloads: DownloadsState;
 }
@@ -107,6 +110,7 @@ export interface Vela {
   audio: Audio;
   playerSettings: PlayerSettings;
   seriesTracks: SeriesTracks;
+  libraryOrders: LibraryOrders;
   downloads: Downloads;
 }
 
@@ -133,6 +137,7 @@ const initialState: VelaState = {
   previews: initialPreviews,
   playerSettings: initialPlayerSettings,
   seriesTracks: initialSeriesTracks,
+  libraryOrders: initialLibraryOrders,
   downloads: initialDownloads,
 };
 
@@ -216,6 +221,7 @@ export function createVela(options: VelaOptions): Vela {
     audio,
     playerSettings: new PlayerSettings(box, session),
     seriesTracks,
+    libraryOrders: new LibraryOrders(box, session),
     downloads,
   };
   // Vela's own pages read `vela.*` sources through these same stores and the active server.

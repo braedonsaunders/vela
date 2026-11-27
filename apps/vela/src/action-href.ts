@@ -20,6 +20,7 @@ export function actionHref(place: Place, action: Action, arg: string): string | 
     case 'live': return '/live';
     case 'library': return arg ? `/library/${encodeURIComponent(arg)}` : undefined;
     case 'playlists': return '/playlists';
+    case 'manageLibraries': return '/libraries';
     case 'person': return place.entry && arg
       ? path('/person', { title: place.entry, name: arg, library: place.library }) : undefined;
     case 'play': {

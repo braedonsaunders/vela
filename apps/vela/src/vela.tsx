@@ -51,6 +51,8 @@ import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents'
 import { preferences } from './data/preferences';
 import { usePlayerSettings } from './player-settings';
 import { useSeriesTracks } from './series-tracks';
+import { useLibraryOrders } from './library-orders';
+import { canManageLibraries } from './navigation';
 import { AppearancePicker } from './picker';
 import { AddToPlaylist } from './playlists/add-to-playlist';
 import { useLast } from '@vela/skin/src/presence';
@@ -200,6 +202,7 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
   useMediaAccess(store, signedIn ? auth.revision : null);
   usePlayerSettings(store);
   useSeriesTracks(store);
+  useLibraryOrders(store);
   const live = useLiveController(store, signedIn ? auth.revision : null);
   const multiview = useMultiviewController(store, signedIn ? auth.revision : null, live);
   useSignedOutGate(state);
@@ -224,14 +227,16 @@ function AppProvider({ store, children, consoleUrl }: { store: Store; children: 
     return prefetchLibrariesWhenIdle(store, libraryIds.split(','));
   }, [store, homeReady, libraryIds, auth.revision]);
 
+  const manageLibraries = canManageLibraries(auth);
   const serverSwitch = useMemo(
     () => ({ servers, actions: store.servers, selectServer: (id: string) => {
       if (id !== store.getState().servers.selectedId && store.servers.has(id)) router.dismissTo('/');
       return store.servers.select(id);
     }, brandingName: state.appearance.value?.branding?.name, consoleUrl, openConnect: () => router.push('/connect'),
       ...(state.downloads.supported ? { openDownloads: () => router.push('/downloads') } : {}),
+      ...(manageLibraries ? { openLibraries: () => router.push('/libraries') } : {}),
     }),
-    [servers, store, state.appearance.value?.branding?.name, consoleUrl, state.downloads.supported],
+    [servers, store, state.appearance.value?.branding?.name, consoleUrl, state.downloads.supported, manageLibraries],
   );
 
   // The providers wrap the app whether or not they have a value: wrapping on sign-in would remount

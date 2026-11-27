@@ -34,13 +34,13 @@ export function HomeSlowWidget(_props: WidgetProps) {
         {msg('home.stillPreparingHint')}
       </Text>
       <View style={{ paddingTop: 8 }}><Action testID="home-retry" label={msg('home.retry')} preferred onPress={() => host.dispatch('retry', '')} /></View>
-      {!!host.env.libraries.length && <>
+      {!!host.env.navigation.length && <>
         <Text style={look.text({ color: '$ui.inkSecondary', 'font-size': '15px', 'line-height': '1.4', 'text-align': 'center' })}>
           {msg('home.openLibraryInstead')}
         </Text>
         <View accessibilityRole={Platform.OS === 'web' ? 'navigation' as never : undefined} accessibilityLabel={msg('home.openLibraryInstead')}
           style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
-          {host.env.libraries.map(library => <Action key={library.id} testID={`home-library-${library.id}`} label={library.name}
+          {host.env.navigation.map(library => <Action key={library.id} testID={`home-library-${library.id}`} label={library.name}
             onPress={() => host.dispatch('library', library.id)} />)}
         </View>
       </>}
