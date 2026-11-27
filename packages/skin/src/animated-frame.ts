@@ -1,7 +1,9 @@
+import { liteRender } from './device-tier';
 import type { CssT, Layer, RNode } from './resolve';
 
 const choices = new WeakMap<RNode, boolean>();
-const transitions = (rows: CssT | undefined) => rows?.transition !== undefined;
+/** The lite tier draws no transitions (translate.ts), so they need no animated frame there. */
+const transitions = (rows: CssT | undefined) => rows?.transition !== undefined && !liteRender();
 const animatedLayer = (layer: Layer) => [layer.style, layer.hover, layer.focus, layer.groupHover, layer.groupFocus].some(transitions);
 
 /** Choose once from every authored look. A hover/state change must never replace the native

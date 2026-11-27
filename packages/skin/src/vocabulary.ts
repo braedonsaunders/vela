@@ -45,6 +45,9 @@ export interface Env {
   landscapePhone?: boolean;
   tv: boolean;
   still: boolean;
+  /** The lite render tier (device-tier.ts): TV hardware that cannot keep up with the full render gets the
+   * same look without its costliest effects (trailer previews, image blurs, fades, shadows). */
+  lite?: boolean;
   canLive: boolean;
   canPlaylists: boolean;
   canSwitchProfile: boolean;

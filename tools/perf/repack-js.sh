@@ -8,7 +8,10 @@
 # re-renders; leave it off for CPU and latency numbers. EXPO_PUBLIC_VELA_SERVER/USER/PASSWORD (or
 # EXPO_PUBLIC_VELA_MOCK=1) from the caller's environment sign the build in: such an APK holds the
 # credentials, so keep it under ~/.scratch and delete it when done. Needs Bun, ANDROID_HOME with
-# build-tools, python3 and keytool. The installed release must be uninstalled first (other key).
+# build-tools, python3 and keytool. The installed release must be uninstalled first (other key),
+# unless the release signing env is set (VELA_ANDROID_KEYSTORE, _KEY_ALIAS, _STORE_PASSWORD,
+# _KEY_PASSWORD): then the APK installs over the release with `install -r` and keeps the device's
+# sign-in. It keeps the base's version code, so the release reinstalls over it afterwards.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 base=$1 out=$2 probe=0
@@ -35,11 +38,17 @@ with zipfile.ZipFile(base) as src, zipfile.ZipFile(out, 'w') as dst:
     dst.write(bundle, 'assets/index.android.bundle', compress_type=zipfile.ZIP_STORED)
 EOF
 tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-key="$HOME/.scratch/vela-perf-key.jks"
-[ -f "$key" ] || keytool -genkeypair -keystore "$key" -storepass velaperf -keypass velaperf -alias perf \
-  -keyalg RSA -keysize 2048 -validity 3650 -dname CN=vela-perf >/dev/null 2>&1
 "$tools/zipalign" -f -p 4 "$work/unsigned.apk" "$work/aligned.apk"
-"$tools/apksigner" sign --ks "$key" --ks-pass pass:velaperf --key-pass pass:velaperf --out "$out" "$work/aligned.apk"
+if [ -n "${VELA_ANDROID_KEYSTORE:-}" ]; then
+  # The release key: the passwords stay in the environment, never on a command line.
+  "$tools/apksigner" sign --ks "$VELA_ANDROID_KEYSTORE" --ks-key-alias "$VELA_ANDROID_KEY_ALIAS" \
+    --ks-pass env:VELA_ANDROID_STORE_PASSWORD --key-pass env:VELA_ANDROID_KEY_PASSWORD --out "$out" "$work/aligned.apk"
+else
+  key="$HOME/.scratch/vela-perf-key.jks"
+  [ -f "$key" ] || keytool -genkeypair -keystore "$key" -storepass velaperf -keypass velaperf -alias perf \
+    -keyalg RSA -keysize 2048 -validity 3650 -dname CN=vela-perf >/dev/null 2>&1
+  "$tools/apksigner" sign --ks "$key" --ks-pass pass:velaperf --key-pass pass:velaperf --out "$out" "$work/aligned.apk"
+fi
 # A probe bundle's source stays beside the APK: the probe names timer callbacks by bundle line.
 [ "$probe" = 1 ] && cp "$work/index.android.bundle" "${out%.apk}.bundle.js"
 echo "repack-js: $out ($( [ "$probe" = 1 ] && echo probe || echo release ) bundle)"

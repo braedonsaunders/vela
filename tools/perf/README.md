@@ -166,3 +166,24 @@ bun tools/perf/tv-nav.ts --compare before.json after.json
   release build profileable (simpleperf `--app app.ether.vela`) and adds a broadcast that runs Hermes's
   sampling profiler; see the plugin for the commands.
 - `--keep <dir>` keeps each trace for ui.perfetto.dev. Needs `adb` and `trace_processor` (`--adb`, `--tp`).
+
+### Lab devices and kernels without tracing (`--lab`, `--light`)
+
+On the lab host (homeserver), `--lab <device> --owner <claim owner>` drives a claimed lab device through
+`lab shell` instead of adb: scripts go in as base64, traces come back over netcat on the lab network (else as
+gzip+base64 chunks under `lab shell`'s 100 kB cap). Android before 12 has no `input keyevent --duration`, so
+presses there are instant; Android 9 and 10 start `traced` only with `persist.traced.enable=1`.
+
+Some boxes' kernels have no tracing at all (the lab's `tx1-box`: no tracefs, so Perfetto records no ftrace).
+`--light` measures them from what they do give: a logcat mark as `input keyevent` returns (Android 10 waits for
+the app to handle the key), frames from `dumpsys gfxinfo framestats` dumped through each window, and the JS, UI
+and RenderThread run time from `/proc/<pid>/task/<tid>/schedstat`. It reports `frameMs` (first frame),
+`settleMs`, `jank` (frames over 16.7 ms), `worstMs` and CPU per thread, but no focus or mount times; a launch's
+`contentMs` is when its JS thread went quiet (under a quarter busy for 3 s). `--watch <titleId>` makes the
+`player` scenario reach playback through that title's watch link.
+
+```bash
+# On homeserver, with tx1-box claimed as $OWNER; let the SoC cool between runs (it idles near 69 C).
+bun tools/perf/tv-nav.ts --lab tx1-box --owner "$OWNER" --light --scenario cold,home,griddeep,title,transitions,idle \
+  --settle 30000 --out after.json
+```

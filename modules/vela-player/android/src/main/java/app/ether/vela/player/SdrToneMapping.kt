@@ -16,6 +16,7 @@ import androidx.media3.exoplayer.audio.AudioOutputProvider
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider
 import androidx.media3.exoplayer.audio.ForwardingAudioOutputProvider
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.text.TextOutput
@@ -24,14 +25,19 @@ import androidx.media3.exoplayer.video.VideoRendererEventListener
 
 /** DefaultRenderersFactory whose MediaCodec video renderer asks for SDR output when `wantsSdr` says so, whose
  * text renderer runs `subtitleDelay` behind the clock (SubtitleDelay.kt), and whose audio sink decodes every
- * encoded track to PCM when `decodeAll` (OutputPreferences) and applies speed to PCM at the AudioTrack, which
- * time-stretches float output too (Media3's own speed processor takes 16-bit PCM only). */
+ * encoded track to PCM when `decodeAll` (OutputPreferences) or the route takes no bitstream, shapes decoded PCM
+ * by `pcmLimit`, and applies speed to PCM at the AudioTrack, which time-stretches float output too (Media3's own
+ * speed processor takes 16-bit PCM only). */
 internal class VelaRenderersFactory(
   context: Context,
   private val wantsSdr: (Format) -> Boolean,
   private val onToneMapped: (Boolean) -> Unit,
   private val subtitleDelay: SubtitleDelay? = null,
   private val decodeAll: Boolean = false,
+  /** Whether the route may take a bitstream now (AudioRoute.takesBitstream): asked at each track selection. */
+  private val takesBitstream: () -> Boolean = { true },
+  /** Decoded PCM shaped for a low-RAM device or an unknown sink (PcmFit.kt), or null. */
+  private val pcmLimit: PcmLimit? = null,
 ) : DefaultRenderersFactory(context) {
   override fun buildTextRenderers(context: Context, output: TextOutput, outputLooper: Looper, extensionRendererMode: Int, out: ArrayList<Renderer>) {
     val first = out.size
@@ -41,10 +47,12 @@ internal class VelaRenderersFactory(
   }
 
   override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink {
-    val tracks = AudioTrackAudioOutputProvider.Builder(context).setMaxPlaybackSpeed(2f).build()
+    val tracks = AudioTrackAudioOutputProvider.Builder(context).setMaxPlaybackSpeed(2f).apply {
+      pcmLimit?.bufferUs?.let { setAudioTrackBufferSizeProvider(DefaultAudioTrackBufferSizeProvider.Builder().setTargetPcmBufferDurationUs(it).build()) }
+    }.build()
     val provider = object : ForwardingAudioOutputProvider(tracks) {
       override fun getFormatSupport(formatConfig: AudioOutputProvider.FormatConfig): AudioOutputProvider.FormatSupport =
-        if (decodeAll && formatConfig.format.sampleMimeType != MimeTypes.AUDIO_RAW) AudioOutputProvider.FormatSupport.UNSUPPORTED
+        if (formatConfig.format.sampleMimeType != MimeTypes.AUDIO_RAW && (decodeAll || !takesBitstream())) AudioOutputProvider.FormatSupport.UNSUPPORTED
         else super.getFormatSupport(formatConfig)
 
       // A bitstream for the receiver plays at 1×: never ask its AudioTrack for another speed.
@@ -53,9 +61,11 @@ internal class VelaRenderersFactory(
           else formatConfig.buildUpon().setEnablePlaybackParameters(false).build())
     }
     return DefaultAudioSink.Builder(context)
-      .setEnableFloatOutput(enableFloatOutput)
+      // The limit's processors run only on the sink's 16-bit path.
+      .setEnableFloatOutput(enableFloatOutput && pcmLimit == null)
       .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
       .setAudioOutputProvider(provider)
+      .apply { pcmLimit?.let { setAudioProcessors(it.processors()) } }
       .build()
   }
 

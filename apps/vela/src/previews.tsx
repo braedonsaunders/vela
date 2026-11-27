@@ -6,6 +6,7 @@ import { AppState } from 'react-native';
 import type { Vela as Store, VelaState } from '@vela/core';
 import { PreviewProvider } from '@vela/skin/src/widgets/common/preview';
 import { PreviewSurface } from './preview-surface';
+import { appRenderTier } from './render-tier';
 
 interface Props {
   store: Store;
@@ -44,7 +45,8 @@ export function Previews({ store, state, onHome, heroIndex, still, searchFocused
   }, []);
   const previewable = hero && home?.heroPreviewIds.includes(hero.id);
   const heroId = hero && previewable && visibleHeroes.has(hero.id) ? hero.id : '';
-  const offered = !!PreviewSurface && !!home?.trailerPreviewAvailable;
+  // The lite tier plays no trailers: a second video decode starves the UI on such hardware.
+  const offered = !!PreviewSurface && !!home?.trailerPreviewAvailable && appRenderTier() !== 'lite';
   const allowed = offered && onHome && foreground && !still && !searchFocused && state.search.query === '';
 
   useEffect(() => {
@@ -71,6 +73,7 @@ export function Previews({ store, state, onHome, heroIndex, still, searchFocused
     };
   }, [intent, heroVisible, heroEnded, cardId, url]);
 
-  if (!source) return <>{children}</>;
+  // The lite tier offers no previews: card widgets then report no intents at all.
+  if (!source || appRenderTier() === 'lite') return <>{children}</>;
   return <PreviewProvider value={source}>{children}</PreviewProvider>;
 }

@@ -26,6 +26,11 @@ class VelaPlayerModule : Module() {
       PlayerCapabilities.capabilities(appContext.reactContext)
     }
 
+    // What the device is (memory, low-RAM flag, CPU), for the app's render tier.
+    Function("deviceProfile") {
+      DeviceProfile.read(appContext.reactContext)
+    }
+
     Function("decoderCapabilities") {
       PlayerCapabilities.decoderDetails()
     }

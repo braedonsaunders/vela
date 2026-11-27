@@ -6,17 +6,21 @@
 //   bun tools/perf/tv-nav.ts --serial emulator-5704 --scenario home [--label before] [--out run.json]
 //   bun tools/perf/tv-nav.ts --compare before.json after.json      (Markdown table of the medians)
 //   --keep <dir> keeps each run's trace (<scenario>-<label>.pftrace) for ui.perfetto.dev
+//   bun tools/perf/tv-nav.ts --lab tx1-box --owner <claim owner> --scenario cold,home   (on the lab host,
+//     through the claimed device's `lab shell`; --settle <ms> and --buffer-mb for slow, small devices)
+//   --light: for a kernel without tracing (tx1-box): frames from framestats, CPU from schedstat (no focus
+//     or mount times); see lightScript and analyzeLightPress
 //
 // Scenarios start the app afresh (force-stop, launch, wait), so runs are comparable; the build decides
 // the server (a lab or mock sign-in build). Software-rendered emulators make renderMs and frame times
 // relative only: compare builds on the same emulator. Needs adb and trace_processor (Perfetto) on PATH,
-// or --adb / --tp. Kills nothing but the Perfetto session it started on the device.
+// or --adb / --tp. Kills nothing but the Perfetto session it started on the device (and its own netcat).
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  analyzePress, anchorPresses, cpuIn, parseMarks, parseProbe, parseProbeJs, pressStarts, summarizePresses, METRICS,
+  analyzeLightPress, analyzePress, anchorPresses, cpuIn, jsQuietMs, parseCpuSamples, parseFramestats, parseJsSamples, parseMarks, parseProbe, parseProbeJs, pressStarts, summarizePresses, METRICS,
   type PressMetrics, type Span, type TraceEvents, type Metric, type Summary,
 } from './tv-nav-analysis';
 
@@ -30,7 +34,10 @@ export type Step =
   | { key: string; label?: string; window?: number; burst?: number }
   | { wait: number }
   /** Opens a deep link (an unmeasured jump to where the presses start) and waits `wait` ms. */
-  | { link: string; wait: number };
+  | { link: string; wait: number }
+  /** Starts the app (force-stopped by the scenario) under the trace: measured like a press, from its
+   * marker (cold start to first content and to rest). */
+  | { launch: true; label: string; window: number };
 
 const press = (key: string, label: string, window = 1200): Step => ({ key, label, window });
 const repeat = (key: string, label: string, count: number, window = 1200): Step[] =>
@@ -45,7 +52,14 @@ const toMovies: Step[] = [...repeat('DPAD_UP', 'up to nav', 3, 900), press('DPAD
 
 /** A scenario: after launch and `settle` ms, `setup` presses (not measured) bring the app where
  * it starts, then `steps` run under the trace. */
-export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: Step[] }> = {
+export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: Step[]; cold?: boolean }> = {
+  /** Cold start: the app launched under the trace (contentMs: first content; settleMs: Home at rest),
+   * then the first presses on the Home it lands on. */
+  cold: {
+    settle: 0,
+    cold: true,
+    steps: [{ launch: true, label: 'cold start', window: 25000 }, ...repeat('DPAD_DOWN', 'first ↓', 2, 2000)],
+  },
   home: {
     settle: 15000,
     steps: [
@@ -97,9 +111,10 @@ export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: 
       press('DPAD_DOWN', 'rows ↓ after'),
     ],
   },
+  /** What Home costs just being on show: one press that does nothing (KEYCODE_UNKNOWN), measured for 10 s. */
   idle: {
     settle: 15000,
-    steps: [{ wait: 10000 }],
+    steps: [press('UNKNOWN', 'idle 10 s', 10000)],
   },
   /** Screen transitions, each measured to its first content (contentMs): Movies, a title page and
    * back, Movies' Library grid, Home. */
@@ -152,7 +167,25 @@ export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: 
   },
 };
 
-interface Options { serial: string; adb: string; tp: string; quietMs: number; keep?: string }
+/** `player` reaches playback through a title's watch link instead (--watch <id>): a library's first title
+ * may have no media, and only a stereo or decoded title is safe to play on a device with its sound on. */
+function withWatch(scenario: (typeof SCENARIOS)[string] | undefined, name: string, watch?: string) {
+  if (!scenario || name !== 'player' || !watch) return scenario;
+  return { ...scenario, setup: [{ link: `vela://watch/${watch}`, wait: 25000 }],
+    steps: scenario.steps.filter(step => !('label' in step) || step.label !== 'close title') };
+}
+
+interface Options { device: Device; tp: string; quietMs: number; keep?: string; settle?: number; bufferMb?: number; light?: boolean; watch?: string }
+
+/** How the runner reaches the device: adb, or the device lab's guarded shell (`lab shell`) on the
+ * lab host, which has no push or pull: files go in as base64 and traces come back over the lab
+ * network (netcat), else as base64 chunks. */
+export interface Device {
+  serial: string;
+  shell(command: string, timeoutS?: number): string;
+  push(local: string, remote: string): void;
+  pull(remote: string, local: string): Promise<void>;
+}
 
 function run(cmd: string[], input?: string): string {
   const result = Bun.spawnSync(cmd, { stdin: input === undefined ? 'ignore' : new TextEncoder().encode(input), stdout: 'pipe', stderr: 'pipe' });
@@ -160,14 +193,97 @@ function run(cmd: string[], input?: string): string {
   return result.stdout.toString();
 }
 
-const adb = (o: Options, ...args: string[]) => run([o.adb, '-s', o.serial, ...args]);
-const shell = (o: Options, command: string) => adb(o, 'shell', command);
+export function adbDevice(adbPath: string, serial: string): Device {
+  const adb = (...args: string[]) => run([adbPath, '-s', serial, ...args]);
+  return {
+    serial,
+    shell: command => adb('shell', command),
+    push: (local, remote) => { adb('push', local, remote); },
+    pull: async (remote, local) => { adb('pull', remote, local); },
+  };
+}
 
-function traceConfig(seconds: number): string {
-  return `buffers { size_kb: 98304 fill_policy: RING_BUFFER }
+/** `lab shell` prints the command's output, then `[stderr]` and its text if any, then `[exit N]`. */
+export function parseLabShell(text: string): { out: string; err: string; exit: number } {
+  const exit = /\n?\[exit (-?\d+)\]\s*$/.exec(text);
+  let body = exit ? text.slice(0, exit.index) : text;
+  let err = '';
+  const at = body.lastIndexOf('\n[stderr]\n');
+  if (at >= 0) { err = body.slice(at + 10); body = body.slice(0, at); }
+  return { out: body, err, exit: exit ? Number(exit[1]) : 1 };
+}
+
+export function labDevice(device: string, owner: string, address?: string): Device {
+  const shell = (command: string, timeoutS = 60) => {
+    const result = Bun.spawnSync(['lab', '--owner', owner, 'shell', '--timeout', String(timeoutS), device, command], { stdout: 'pipe', stderr: 'pipe' });
+    const parsed = parseLabShell(result.stdout.toString());
+    if (result.exitCode !== 0 || parsed.exit !== 0) {
+      throw new Error(`lab shell ${device} "${command.slice(0, 60)}" failed: ${(parsed.err || result.stderr.toString() || parsed.out).slice(0, 400)}`);
+    }
+    return parsed.out;
+  };
+  let ip = address;
+  const deviceIp = () => ip ??= /inet (?:addr:)?(\d+\.\d+\.\d+\.\d+)/.exec(shell('ifconfig wlan0 2>/dev/null || ip -4 addr show wlan0'))?.[1];
+  return {
+    serial: device,
+    shell,
+    push(local, remote) {
+      const data = readFileSync(local).toString('base64');
+      shell(`: > ${remote}`);
+      for (let i = 0; i < data.length; i += 48000) shell(`echo '${data.slice(i, i + 48000)}' | base64 -d >> ${remote}`);
+    },
+    async pull(remote, local) {
+      const size = Number(shell(`wc -c < ${remote}`).trim());
+      if (!(size > 0)) throw new Error(`${remote} is empty on ${device}`);
+      const host = deviceIp();
+      if (host) {
+        try { return writeFileSync(local, await netcatPull(shell, host, remote, size)); } catch (error) {
+          console.error(`netcat pull failed (${(error as Error).message}); falling back to base64`);
+        }
+      }
+      // gzip makes a trace several times smaller; each call returns under the lab's 100 kB cap.
+      shell(`gzip -c ${remote} > ${remote}.gz`);
+      const gz = Number(shell(`wc -c < ${remote}.gz`).trim());
+      const chunks: Buffer[] = [];
+      for (let block = 0; block * 65536 < gz; block++) {
+        chunks.push(Buffer.from(shell(`dd if=${remote}.gz bs=65536 skip=${block} count=1 2>/dev/null | base64`, 120).replace(/\s+/g, ''), 'base64'));
+      }
+      shell(`rm -f ${remote}.gz`);
+      writeFileSync(local, Bun.gunzipSync(Buffer.concat(chunks)));
+    },
+  };
+}
+
+/** The device serves the file once on a port (toybox nc), the host reads exactly `size` bytes. */
+async function netcatPull(shell: (command: string, timeoutS?: number) => string, host: string, remote: string, size: number): Promise<Buffer> {
+  const port = 47000 + Math.floor(Math.random() * 900);
+  shell(`(nohup nc -l -p ${port} < ${remote} > /dev/null 2>&1 &) ; sleep 1`);
+  const chunks: Buffer[] = [];
+  let got = 0;
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out after ${got} of ${size} bytes`)), 120000);
+    Bun.connect({
+      hostname: host, port,
+      socket: {
+        data(socket, data) {
+          chunks.push(Buffer.from(data)); got += data.length;
+          if (got >= size) { clearTimeout(timer); socket.end(); resolve(); }
+        },
+        close() { clearTimeout(timer); got >= size ? resolve() : reject(new Error(`closed after ${got} of ${size} bytes`)); },
+        error(_socket, error) { clearTimeout(timer); reject(error); },
+        connectError(_socket, error) { clearTimeout(timer); reject(error); },
+      },
+    }).catch(reject);
+  });
+  return Buffer.concat(chunks).subarray(0, size);
+}
+
+function traceConfig(seconds: number, bufferMb = 96): string {
+  return `buffers { size_kb: ${bufferMb * 1024} fill_policy: RING_BUFFER }
 buffers { size_kb: 4096 fill_policy: RING_BUFFER }
 data_sources { config { name: "linux.ftrace" target_buffer: 0 ftrace_config {
   ftrace_events: "sched/sched_switch" ftrace_events: "sched/sched_wakeup"
+  ftrace_events: "task/task_newtask" ftrace_events: "task/task_rename" ftrace_events: "sched/sched_process_free"
   atrace_categories: "gfx" atrace_categories: "view" atrace_categories: "input"
   atrace_apps: "${PACKAGE}" } } }
 data_sources { config { name: "linux.process_stats" target_buffer: 1 process_stats_config { scan_all_processes_on_start: true } } }
@@ -175,22 +291,135 @@ duration_ms: ${Math.ceil(seconds * 1000)}
 `;
 }
 
-/** One shell script on the device, so presses are paced by the device and not by adb round trips. */
-export function deviceScript(steps: Step[]): string {
+/** One shell script on the device, so presses are paced by the device and not by adb round trips.
+ * `hold` sends each key as an 80 ms press (`input keyevent --duration`, Android 12+): an instant
+ * down/up can let JS see the key-up before the focus change. Older Androids only have instant keys. */
+export function deviceScript(steps: Step[], hold = true): string {
   const lines = ['#!/system/bin/sh'];
   let press = 0;
   for (const step of steps) {
     if ('link' in step) lines.push(`am start -a android.intent.action.VIEW -d '${step.link}' ${PACKAGE} >/dev/null 2>&1`, `sleep ${step.wait / 1000}`);
     else if ('wait' in step) lines.push(`sleep ${step.wait / 1000}`);
-    else {
+    else if ('launch' in step) {
+      lines.push(`log -t ${MARK} ${press++}`, `am start -n ${PACKAGE}/.MainActivity >/dev/null 2>&1`, `sleep ${step.window / 1000}`);
+    } else {
       const keys = Array.from({ length: step.burst ?? 1 }, () => `KEYCODE_${step.key}`).join(' ');
       // A marker in the log names the press, so presses map to steps even if one leaves no input slice.
       lines.push(`log -t ${MARK} ${press++}`);
-      lines.push(step.burst ? `input keyevent ${keys}` : `input keyevent --duration 80 ${keys}`);
+      lines.push(step.burst || !hold ? `input keyevent ${keys}` : `input keyevent --duration 80 ${keys}`);
       lines.push(`sleep ${(step.window ?? 1200) / 1000}`);
     }
   }
   return lines.join('\n') + '\n';
+}
+
+
+/** The light-mode device script (no kernel tracing): per press a mark before the key, the key (Android 10's
+ * `input` returns once the app has handled it), a mark after it, the app's JS, UI and RenderThread run time
+ * from schedstat before the key and at the window's end, and framestats dumped through the window (its
+ * buffer holds about two seconds of continuous frames). */
+export function lightScript(steps: Step[], hold = true): string {
+  const lines = [
+    '#!/system/bin/sh',
+    'C=/data/local/tmp/tv-nav-cpu.txt; F=/data/local/tmp/tv-nav-frames.txt; : > $C; : > $F',
+    // The app's main thread, its busiest JS thread and its RenderThread. sort, not shell arithmetic: a
+    // 32-bit userland's mksh compares in 32 bits, and run times in ns pass 2^31 within seconds.
+    `threads() { P=$(pidof ${PACKAGE}); JS=$(for t in /proc/$P/task/*; do [ "$(cat $t/comm 2>/dev/null)" = mqt_v_js ] && ` +
+      `echo "$(cut -d' ' -f1 $t/schedstat) \${t##*/}"; done | sort -n | tail -1 | cut -d' ' -f2); R=; ` +
+      `for t in /proc/$P/task/*; do [ "$(cat $t/comm 2>/dev/null)" = RenderThread ] && R=\${t##*/}; done; }`,
+    'run() { [ -n "$P" ] && cut -d" " -f1 /proc/$P/task/$1/schedstat 2>/dev/null || echo 0; }',
+    'cpu() { echo "$1 $2 $(run $JS) $(run $P) $(run $R)" >> $C; }',
+    `frames() { dumpsys gfxinfo ${PACKAGE} framestats | grep -E '^(Flags|[0-9]+,|---)' >> $F; }`,
+    // While a launch window runs (LAUNCH=1), each chunk also logs the threads' run time, for when JS went quiet.
+    'wait_() { left=$1; while [ $left -gt 0 ]; do chunk=$(( left > 1500 ? 1500 : left )); sleep $(( chunk / 1000 )).$(printf %03d $(( chunk % 1000 ))); frames; ' +
+      '[ -n "$LAUNCH" ] && { threads; log -t VELACPU "$(run $JS) $(run $P) $(run $R)"; }; left=$(( left - chunk )); done; }',
+    'threads',
+  ];
+  let press = 0;
+  for (const step of steps) {
+    if ('link' in step) lines.push(`am start -a android.intent.action.VIEW -d '${step.link}' ${PACKAGE} >/dev/null 2>&1`, `sleep ${step.wait / 1000}`, 'threads');
+    else if ('wait' in step) lines.push(`wait_ ${step.wait}`);
+    else if ('launch' in step) {
+      const n = press++;
+      lines.push(`echo "p ${n} 0 0 0" >> $C`, `log -t ${MARK} ${n}`, `am start -n ${PACKAGE}/.MainActivity >/dev/null 2>&1`, `log -t VELAKEY ${n}`,
+        'LAUNCH=1', `wait_ ${step.window}`, 'LAUNCH=', 'threads', `cpu e ${n}`);
+    } else {
+      const n = press++;
+      const keys = Array.from({ length: step.burst ?? 1 }, () => `KEYCODE_${step.key}`).join(' ');
+      lines.push(`log -t ${MARK} ${n}`, `cpu p ${n}`, step.burst || !hold ? `input keyevent ${keys}` : `input keyevent --duration 80 ${keys}`,
+        `log -t VELAKEY ${n}`, `wait_ ${step.window ?? 1200}`, `cpu e ${n}`);
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+async function measureLight(o: Options, name: string, label: string): Promise<RunReport> {
+  const scenario = withWatch(SCENARIOS[name], name, o.watch);
+  if (!scenario) throw new Error(`unknown scenario ${name}; have ${Object.keys(SCENARIOS).join(', ')}`);
+  const work = mkdtempSync(join(tmpdir(), 'tv-nav-'));
+  const d = o.device;
+  try {
+    const presses = scenario.steps.filter((s): s is Extract<Step, { key: string } | { launch: true }> => 'key' in s || 'launch' in s);
+    const hold = Number(d.shell('getprop ro.build.version.sdk').trim()) >= 31;
+    d.shell(`am force-stop ${PACKAGE}`);
+    if (!scenario.cold) {
+      d.shell(`am start -n ${PACKAGE}/.MainActivity`);
+      await Bun.sleep(o.settle ?? scenario.settle);
+    } else await Bun.sleep(3000);
+    const runScript = async (file: string) => {
+      d.shell(`rm -f ${file}.done; (nohup sh -c 'sh ${file}; echo ok > ${file}.done' > /dev/null 2>&1 &)`);
+      while (d.shell(`cat ${file}.done 2>/dev/null; true`).trim() !== 'ok') await Bun.sleep(1500);
+    };
+    if (scenario.setup?.length) {
+      writeFileSync(join(work, 'setup.sh'), deviceScript(scenario.setup, hold));
+      d.push(join(work, 'setup.sh'), '/data/local/tmp/tv-nav-setup.sh');
+      await runScript('/data/local/tmp/tv-nav-setup.sh');
+    }
+    writeFileSync(join(work, 'steps.sh'), lightScript(scenario.steps, hold));
+    d.push(join(work, 'steps.sh'), '/data/local/tmp/tv-nav-steps.sh');
+    d.shell('logcat -c');
+    await runScript('/data/local/tmp/tv-nav-steps.sh');
+    await d.pull('/data/local/tmp/tv-nav-frames.txt', join(work, 'frames.txt'));
+    const cpu = parseCpuSamples(d.shell('cat /data/local/tmp/tv-nav-cpu.txt'));
+    const frames = parseFramestats(readFileSync(join(work, 'frames.txt'), 'utf8'));
+    const logcat = d.shell(`logcat -d -v monotonic -s ReactNativeJS:I ${MARK}:I ${MARK}:D VELAKEY:I VELAKEY:D VELACPU:I VELACPU:D`);
+    const before = parseMarks(logcat, MARK);
+    const handled = parseMarks(logcat, 'VELAKEY');
+    const probe = parseProbe(logcat);
+    const warnings: string[] = [];
+    if (!frames.length) warnings.push('no frames in framestats');
+    if (handled.length < presses.length) warnings.push(`saw ${handled.length} key marks for ${presses.length} presses`);
+    const metrics: PressMetrics[] = [];
+    presses.forEach((step, i) => {
+      const from = handled[i];
+      if (from === undefined) return;
+      const window = ('window' in step ? step.window : undefined) ?? 1200;
+      const to = before[i + 1] ?? from + window * 1e6;
+      const quiet = window >= 4000 ? 1000 : o.quietMs;
+      const press = analyzeLightPress(frames, cpu, i, step.label ?? ('key' in step ? step.key : 'launch'), from, to, quiet);
+      // A launch is interactive once its JS thread goes quiet (contentMs here).
+      if ('launch' in step) press.contentMs = jsQuietMs(parseJsSamples(logcat), from, to);
+      const commits = probe.filter(commit => commit.ts >= from && commit.ts < to);
+      metrics.push({ ...press, commits: commits.length, comps: commits.reduce((sum, c) => sum + c.comps, 0) });
+    });
+    const first = cpu.find(sample => sample.tag === 'p');
+    const last = [...cpu].reverse().find(sample => sample.tag === 'e');
+    const start = before[0] ?? 0;
+    const end = (handled[handled.length - 1] ?? start) + (((presses[presses.length - 1] as { window?: number })?.window ?? 1200) * 1e6);
+    const seconds = Math.max(0.001, (end - start) / 1e9);
+    const per = (ns: number) => Math.round((ns / 1e6 / seconds) * 10) / 10;
+    const totals: RunTotals = {
+      seconds: Math.round(seconds * 10) / 10,
+      framesPerSecond: Math.round((frames.filter(f => f.ts >= start && f.ts < end).length / seconds) * 10) / 10,
+      jsMsPerSecond: first && last ? per(last.js - first.js) : 0,
+      mainMsPerSecond: first && last ? per(last.main - first.main) : 0,
+      renderMsPerSecond: first && last ? per(last.render - first.render) : 0,
+    };
+    return { label, totals, scenario: name, serial: d.serial, measuredAt: new Date().toISOString(), presses: metrics, summary: summarizePresses(metrics), warnings };
+  } finally {
+    if (o.keep) Bun.spawnSync(['cp', join(work, 'frames.txt'), join(o.keep, `${name}-${label}.framestats.txt`)]);
+    rmSync(work, { recursive: true, force: true });
+  }
 }
 
 const EVENTS_SQL = `
@@ -209,11 +438,12 @@ union all select 'view', s.ts, s.dur from slice s join thread_track tt on s.trac
 union all select 'js', ts, dur from sched where utid in (select utid from js)
 union all select 'main', ts, dur from sched where utid in (select utid from main)
 union all select 'render', ts, dur from sched where utid in (select utid from render)
+union all select * from (select 'clock', ts - clock_value, 0 from clock_snapshot where clock_name = 'MONOTONIC' limit 1)
 order by ts;
 `;
 
 export function parseEvents(csv: string): TraceEvents {
-  const events: TraceEvents = { keys: [], focus: [], mounts: [], frames: [], views: [], sched: { js: [], main: [], render: [] } };
+  const events: TraceEvents = { keys: [], focus: [], mounts: [], frames: [], views: [], sched: { js: [], main: [], render: [] }, monotonicOffset: 0 };
   for (const line of csv.split('\n')) {
     const match = /^"(\w+)",(\d+),(-?\d+)/.exec(line.trim());
     if (!match) continue;
@@ -225,6 +455,7 @@ export function parseEvents(csv: string): TraceEvents {
       case 'frame': events.frames.push(span); break;
       case 'view': events.views!.push(span); break;
       case 'js': case 'main': case 'render': events.sched[match[1]].push(span); break;
+      case 'clock': events.monotonicOffset = span.ts; break;
     }
   }
   return events;
@@ -257,85 +488,103 @@ export interface RunReport {
 }
 
 async function measure(o: Options, name: string, label: string): Promise<RunReport> {
-  const scenario = SCENARIOS[name];
+  const scenario = withWatch(SCENARIOS[name], name, o.watch);
   if (!scenario) throw new Error(`unknown scenario ${name}; have ${Object.keys(SCENARIOS).join(', ')}`);
   const work = mkdtempSync(join(tmpdir(), 'tv-nav-'));
+  const d = o.device;
   try {
-    const presses = scenario.steps.filter((s): s is Extract<Step, { key: string }> => 'key' in s);
-    const seconds = scenario.steps.reduce((t, s) => t + ('key' in s ? (s.window ?? 1200) + 600 * (s.burst ?? 1) : s.wait), 0) / 1000 + 8;
-    shell(o, `am force-stop ${PACKAGE}`);
-    shell(o, `am start -n ${PACKAGE}/.MainActivity`);
-    await Bun.sleep(scenario.settle);
+    const presses = scenario.steps.filter((s): s is Extract<Step, { key: string } | { launch: true }> => 'key' in s || 'launch' in s);
+    // Slow devices take a second or more to start each `input`: the trace runs long and is stopped
+    // when the script is done.
+    const seconds = 3 * scenario.steps.reduce((t, s) => t + ('key' in s ? (s.window ?? 1200) + 600 * (s.burst ?? 1) : 'launch' in s ? s.window : s.wait), 0) / 1000 + 30;
+    const hold = Number(d.shell('getprop ro.build.version.sdk').trim()) >= 31;
+    d.shell(`am force-stop ${PACKAGE}`);
+    if (!scenario.cold) {
+      d.shell(`am start -n ${PACKAGE}/.MainActivity`);
+      await Bun.sleep(o.settle ?? scenario.settle);
+    } else await Bun.sleep(3000);
+    const runScript = async (file: string) => {
+      // In the background with a done marker: a run can outlast one shell call (`lab shell` stops at 120 s).
+      d.shell(`rm -f ${file}.done; (nohup sh -c 'sh ${file}; echo ok > ${file}.done' > /dev/null 2>&1 &)`);
+      while (d.shell(`cat ${file}.done 2>/dev/null; true`).trim() !== 'ok') await Bun.sleep(1500);
+    };
     if (scenario.setup?.length) {
-      writeFileSync(join(work, 'setup.sh'), deviceScript(scenario.setup));
-      adb(o, 'push', join(work, 'setup.sh'), '/data/local/tmp/tv-nav-setup.sh');
-      shell(o, 'sh /data/local/tmp/tv-nav-setup.sh');
+      writeFileSync(join(work, 'setup.sh'), deviceScript(scenario.setup, hold));
+      d.push(join(work, 'setup.sh'), '/data/local/tmp/tv-nav-setup.sh');
+      await runScript('/data/local/tmp/tv-nav-setup.sh');
     }
-    writeFileSync(join(work, 'steps.sh'), deviceScript(scenario.steps));
-    writeFileSync(join(work, 'trace.cfg'), traceConfig(seconds));
-    adb(o, 'push', join(work, 'steps.sh'), '/data/local/tmp/tv-nav-steps.sh');
-    adb(o, 'push', join(work, 'trace.cfg'), '/data/misc/perfetto-configs/tv-nav.cfg');
-    const out = '/data/misc/perfetto-traces/tv-nav.pftrace';
-    shell(o, `rm -f ${out}`);
-    adb(o, 'logcat', '-c');
-    const pid = shell(o, `perfetto --txt -c /data/misc/perfetto-configs/tv-nav.cfg -o ${out} --background`).trim().split('\n').pop()!.trim();
+    writeFileSync(join(work, 'steps.sh'), deviceScript(scenario.steps, hold));
+    writeFileSync(join(work, 'trace.cfg'), traceConfig(seconds, o.bufferMb));
+    d.push(join(work, 'steps.sh'), '/data/local/tmp/tv-nav-steps.sh');
+    d.push(join(work, 'trace.cfg'), '/data/local/tmp/tv-nav.cfg');
+    // Some Android 10 builds ship no perfetto-traces directory: the shell's own temp dir then.
+    const traces = d.shell('[ -d /data/misc/perfetto-traces ] && echo /data/misc/perfetto-traces || echo /data/local/tmp').trim();
+    const out = `${traces}/tv-nav.pftrace`;
+    d.shell(`rm -f ${out}`);
+    d.shell('logcat -c');
+    // The config on stdin, through a pipe: Android 10 has no /data/misc/perfetto-configs, and newer
+    // Androids do not let perfetto read a shell file handed over by redirection.
+    const pid = d.shell(`cat /data/local/tmp/tv-nav.cfg | perfetto --txt -c - -o ${out} --background`).trim().split('\n').pop()!.trim();
     await Bun.sleep(1500);
-    shell(o, 'sh /data/local/tmp/tv-nav-steps.sh');
+    await runScript('/data/local/tmp/tv-nav-steps.sh');
     await Bun.sleep(2000);
     // Stop our own session (it flushes on SIGTERM), then wait for the file to settle.
-    if (/^\d+$/.test(pid)) shell(o, `kill -TERM ${pid} 2>/dev/null; true`);
-    for (let i = 0; i < 30 && shell(o, `ls /proc/${pid} >/dev/null 2>&1 && echo up || echo done`).trim() === 'up'; i++) await Bun.sleep(500);
+    if (/^\d+$/.test(pid)) d.shell(`kill -TERM ${pid} 2>/dev/null; true`);
+    for (let i = 0; i < 30 && d.shell(`ls /proc/${pid} >/dev/null 2>&1 && echo up || echo done`).trim() === 'up'; i++) await Bun.sleep(500);
     // The service may still be finishing the file as the command exits: try a few times.
     for (let attempt = 1; ; attempt++) {
-      try { adb(o, 'pull', out, join(work, 'trace.pftrace')); break; } catch (error) {
+      try { await d.pull(out, join(work, 'trace.pftrace')); break; } catch (error) {
         if (attempt >= 10) throw error;
         await Bun.sleep(1000);
       }
     }
-    const logcat = adb(o, 'logcat', '-d', '-v', 'monotonic', '-s', 'ReactNativeJS:I', `${MARK}:I`, `${MARK}:D`);
+    const logcat = d.shell(`logcat -d -v monotonic -s ReactNativeJS:I ${MARK}:I ${MARK}:D`);
     writeFileSync(join(work, 'events.sql'), EVENTS_SQL);
     const events = parseEvents(run([o.tp, '-q', join(work, 'events.sql'), join(work, 'trace.pftrace')]));
-    const probe = parseProbe(logcat);
-    const probeJs = parseProbeJs(logcat);
-    const marks = parseMarks(logcat, MARK);
+    // Logcat's monotonic times on the trace's clock.
+    const shift = events.monotonicOffset ?? 0;
+    const probe = parseProbe(logcat).map(c => ({ ...c, ts: c.ts + shift }));
+    const probeJs = parseProbeJs(logcat).map(w => ({ ...w, ts: w.ts + shift }));
+    const marks = parseMarks(logcat, MARK).map(m => m + shift);
     const starts = marks.length ? anchorPresses(marks, pressStarts(events.keys)) : pressStarts(events.keys);
     const warnings: string[] = [];
     if (!events.sched.js.length) warnings.push('no JS thread scheduling in the trace');
+    if (!events.keys.length) warnings.push('no input slices in the trace: presses start at their markers');
     // A burst is one step: key-downs within its sending time belong to it.
     const metrics: PressMetrics[] = [];
     let at = 0;
     for (const step of presses) {
       const from = starts[at];
       if (from === undefined) {
-        warnings.push(`saw ${starts.length} press starts in the trace; ran out at "${step.label ?? step.key}"`);
+        warnings.push(`saw ${starts.length} press starts in the trace; ran out at "${step.label ?? ('key' in step ? step.key : 'launch')}"`);
         break;
       }
-      const span = step.burst ? step.burst * 150 * 1e6 : 0;
+      const span = 'burst' in step && step.burst ? step.burst * 150 * 1e6 : 0;
       if (marks.length) at++;
       else do at++; while (starts[at] !== undefined && starts[at] <= from + span);
       const next = starts[at];
       const to = next ?? from + (step.window ?? 1200) * 1e6;
-      metrics.push(analyzePress(events, probe, step.label ?? step.key, from, to, o.quietMs, probeJs));
+      metrics.push(analyzePress(events, probe, step.label ?? ('key' in step ? step.key : 'launch'), from, to, o.quietMs, probeJs));
     }
     // From the script's start (the trace began 1.5 s before it) to the trace's last scheduling.
     const traceEnd = events.sched.main.reduce((end, span) => Math.max(end, span.ts + span.dur), 0);
     const scriptStart = events.sched.main.reduce((start, span) => Math.min(start, span.ts), Infinity) + 1.5e9;
     const totals = runTotals(events, starts[0] ?? scriptStart, traceEnd);
-    return { label, totals, scenario: name, serial: o.serial, measuredAt: new Date().toISOString(), presses: metrics, summary: summarizePresses(metrics), warnings };
+    return { label, totals, scenario: name, serial: d.serial, measuredAt: new Date().toISOString(), presses: metrics, summary: summarizePresses(metrics), warnings };
   } finally {
     if (o.keep) Bun.spawnSync(['cp', join(work, 'trace.pftrace'), join(o.keep, `${name}-${label}.pftrace`)]);
     rmSync(work, { recursive: true, force: true });
   }
 }
 
-const cell = (s: Summary) => (s.median === null ? '–' : `${s.median} / ${s.p90}`);
+const cell = (s: Summary | undefined) => (!s || s.median === null ? '–' : `${s.median} / ${s.p90}`);
 
 export function formatReport(report: RunReport): string {
   const head = `| press | ${METRICS.join(' | ')} | heaviest commit | JS time |`;
   const rule = `|${' --- |'.repeat(METRICS.length + 3)}`;
   const rows = report.presses.map(p => `| ${p.label} | ${METRICS.map(m => p[m] ?? '–').join(' | ')} | ${p.top} | ${p.jsTop ?? ''} |`);
   const summary = `| **median / p90** | ${METRICS.map(m => cell(report.summary[m])).join(' | ')} | | |`;
-  const totals = `| **total** | ${METRICS.map(m => report.summary[m].total).join(' | ')} | | |`;
+  const totals = `| **total** | ${METRICS.map(m => report.summary[m]?.total ?? '–').join(' | ')} | | |`;
   const t = report.totals;
   const whole = t ? `whole run ${t.seconds} s: ${t.framesPerSecond} frames/s, CPU ms/s JS ${t.jsMsPerSecond}, main ${t.mainMsPerSecond}, RenderThread ${t.renderMsPerSecond}` : '';
   return [`### ${report.scenario} (${report.label}, ${report.serial}, ${report.measuredAt})`, ...report.warnings.map(w => `> ${w}`), whole, '', head, rule, ...rows, summary, totals].join('\n');
@@ -343,7 +592,8 @@ export function formatReport(report: RunReport): string {
 
 export function formatComparison(before: RunReport, after: RunReport): string {
   const lines = [`### ${after.scenario}: ${before.label} → ${after.label} (median / p90; total)`, '', '| metric | before | after |', '| --- | --- | --- |'];
-  for (const m of METRICS) lines.push(`| ${m} | ${cell(before.summary[m])}; ${before.summary[m].total} | ${cell(after.summary[m])}; ${after.summary[m].total} |`);
+  // Reports from before a metric existed have no summary for it.
+  for (const m of METRICS) lines.push(`| ${m} | ${cell(before.summary[m])}; ${before.summary[m]?.total ?? '–'} | ${cell(after.summary[m])}; ${after.summary[m]?.total ?? '–'} |`);
   for (const k of ['framesPerSecond', 'jsMsPerSecond', 'mainMsPerSecond', 'renderMsPerSecond'] as const) {
     if (before.totals && after.totals) lines.push(`| whole run ${k} | ${before.totals[k]} | ${after.totals[k]} |`);
   }
@@ -362,6 +612,13 @@ if (import.meta.main) {
       quiet: { type: 'string', default: '400' },
       keep: { type: 'string' },
       compare: { type: 'boolean', default: false },
+      lab: { type: 'string' },
+      owner: { type: 'string', default: process.env.LAB_OWNER ?? '' },
+      'device-ip': { type: 'string' },
+      settle: { type: 'string' },
+      'buffer-mb': { type: 'string', default: '96' },
+      light: { type: 'boolean', default: false },
+      watch: { type: 'string' },
     },
     allowPositionals: true,
   });
@@ -372,11 +629,16 @@ if (import.meta.main) {
       if (after) console.log(formatComparison(before, after) + '\n');
     }
   } else {
-    if (!values.serial) throw new Error('--serial (or ANDROID_SERIAL) is required');
-    const options: Options = { serial: values.serial, adb: values.adb!, tp: values.tp!, quietMs: Number(values.quiet), keep: values.keep };
+    if (!values.serial && !values.lab) throw new Error('--serial (or ANDROID_SERIAL), or --lab <device> --owner <claim owner>, is required');
+    if (values.lab && !values.owner) throw new Error('--lab needs --owner (the claim owner) or LAB_OWNER');
+    const device = values.lab ? labDevice(values.lab, values.owner!, values['device-ip']) : adbDevice(values.adb!, values.serial!);
+    const options: Options = {
+      device, tp: values.tp!, quietMs: Number(values.quiet), keep: values.keep,
+      settle: values.settle ? Number(values.settle) : undefined, bufferMb: Number(values['buffer-mb']), light: values.light, watch: values.watch,
+    };
     const reports: RunReport[] = [];
     for (const name of values.scenario!.split(',')) {
-      const report = await measure(options, name, values.label!);
+      const report = await (options.light ? measureLight : measure)(options, name, values.label!);
       reports.push(report);
       console.log(formatReport(report) + '\n');
     }

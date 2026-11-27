@@ -35,6 +35,9 @@ describe('drawing ahead while scrolling and while still', () => {
     expect(lazyReach('y', false, false)).toBe(2);
     expect(lazyReach('x', false, false)).toBe(1.5);
     expect(lazyReach('y', false, true)).toBe(1);
+    // The lite tier draws little past the edge, moving or still.
+    expect(lazyReach('y', false, true, true)).toBe(0.5);
+    expect(lazyReach('x', true, true, true)).toBe(0.25);
   });
 
   test('still-time drawing comes in small pieces', () => {
@@ -42,6 +45,8 @@ describe('drawing ahead while scrolling and while still', () => {
     expect(lazyBatch('y', 2, false)).toBe(1);
     expect(lazyBatch('x', 6, false)).toBe(3);
     expect(lazyBatch('x', 1, false)).toBe(1);
+    expect(lazyBatch('x', 6, true, true)).toBe(2);
+    expect(lazyBatch('y', 2, true, true)).toBe(1);
   });
 
   test('a grid draws one batch more while its spacer is within reach, from the count measured', () => {

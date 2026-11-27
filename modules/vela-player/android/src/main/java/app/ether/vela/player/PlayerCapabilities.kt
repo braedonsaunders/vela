@@ -32,10 +32,13 @@ internal object PlayerCapabilities {
       AvFormats.dolbyVisionProfiles(dolbyVisionDecoderProfiles(), DolbyVision.convertsProfile7)
     } else emptyList()
     val route = context?.let { runCatching { AudioRoute.probe(it) }.getOrNull() }
+    // Decoded PCM shaped for a low-RAM device or an unknown sink is 16-bit, at 48 kHz at most there (PcmFit).
+    val limit = context?.let { runCatching { AudioRoute.pcmLimit(it) }.getOrNull() }
     return probed + buildMap {
       put("hdr", if (dvProfiles.isEmpty()) hdr - "dv" else hdr)
       put("dolbyVisionProfiles", dvProfiles)
-      route?.let { put("audioOutput", AvFormats.audioOutput(it.passthrough, it.maxChannels, it.maxSampleRate, floatPcm = true)) }
+      route?.let { put("audioOutput", AvFormats.audioOutput(it.passthrough, it.maxChannels,
+        listOfNotNull(it.maxSampleRate, limit?.maxSampleRate).minOrNull(), floatPcm = limit == null)) }
     }
   }
 

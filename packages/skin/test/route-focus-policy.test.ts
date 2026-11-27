@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { openingFocusPriority, takesOpeningFocus, readLibraryOpeningFocus, restoreRouteFocus, returnFocusTarget } from '../src/route-focus-policy';
+import { openingFocusPriority, openingWindowOpen, takesOpeningFocus, readLibraryOpeningFocus, restoreRouteFocus, returnFocusTarget } from '../src/route-focus-policy';
 
 test('native touch navigation does not restore TV focus over the keyboard', () => {
   expect(restoreRouteFocus('android', false)).toBe(false);
@@ -42,4 +42,14 @@ test('a delayed series action takes precedence over trailer and episode-row focu
   expect(takesOpeningFocus(trailer, primary, false)).toBe(false);
   expect(takesOpeningFocus(primary, trailer, true)).toBe(false);
   expect(takesOpeningFocus(openingFocusPriority('toggle'), 0, false)).toBe(false);
+});
+
+test('a route that has placed no focus may still take it after its window; one that has, may not', () => {
+  // Within the window, either way.
+  expect(openingWindowOpen(1000, 5000, 0)).toBe(true);
+  expect(openingWindowOpen(1000, 5000, 2)).toBe(true);
+  // A slow box drew Home's hero after the window: nothing was focused, so the hero still takes focus.
+  expect(openingWindowOpen(12000, 5000, 0)).toBe(true);
+  // A page already focused keeps it when better content arrives late.
+  expect(openingWindowOpen(12000, 5000, 1)).toBe(false);
 });

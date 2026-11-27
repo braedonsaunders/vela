@@ -10,6 +10,7 @@ import { waitForResumeSeason, detailSeason, selectedDetailSeason } from './detai
 import { screenDestinationId, withScreens } from './plugin-screens';
 import type { ViewState } from './view-state';
 import { sameDestinations, sameFields } from './env-identity';
+import { appRenderTier } from './render-tier';
 
 export interface EnvInput {
   state: VelaState;
@@ -54,6 +55,7 @@ export function environment({ state, view, live, route, entry, library, width, h
     shortLandscape: !Platform.isTV && width < 1600 && height !== undefined && width > height && height < 500,
     tv: width >= 1600 || Platform.isTV,
     still: view.still,
+    lite: appRenderTier() === 'lite',
     canLive: home.value?.liveAvailable ?? false,
     canPlaylists: home.value?.playlistsAvailable ?? false,
     canSwitchProfile: state.auth.phase === 'signed-in' && state.auth.plexHomeAvailable,

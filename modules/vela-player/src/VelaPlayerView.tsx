@@ -40,6 +40,7 @@ interface NativeModule {
   claimPlayPause?(claimed: boolean): void;
   pictureInPicture?(): boolean;
   networkMetered?(): boolean;
+  deviceProfile?(): Record<string, unknown>;
   addListener?(event: 'onClaimedPlayPause', listener: () => void): { remove(): void };
   addListener?(event: 'onNetwork', listener: (event: { metered?: boolean }) => void): { remove(): void };
 }
@@ -96,6 +97,11 @@ export const pictureInPicture = (): boolean =>
  * (Apple), a metered network (Android). Apple TV and Android TV report unmetered unless the system
  * says otherwise. */
 export const networkMetered = (): boolean => nativeModule.networkMetered?.() ?? false;
+
+/** What the device is (Android: memory, the low-RAM flag, CPU cores and class, 64-bit userland), for the
+ * app's render tier; null where the platform or an older build has none. */
+export const deviceProfile = (): Record<string, unknown> | null =>
+  Platform.OS === 'android' ? nativeModule.deviceProfile?.() ?? null : null;
 
 /** Read the current network after subscribing so its first update cannot be missed. */
 export function onNetwork(listener: (metered: boolean) => void): () => void {

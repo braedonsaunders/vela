@@ -120,3 +120,43 @@ test('the store caps artWidth at 3840 even when a high-DPI 4K display reports 76
     restoreFetch();
   }
 });
+
+test('the quick path resolves exactly as the URL parser does, and declines what the parser might rewrite', async () => {
+  const { quickArtworkURL, urlArtworkURL } = await import('../src/discovery/artwork');
+  const urls = [
+    '/vela/v0/images/a?signature=a%2fb%2B+%20&w=3840&expiry=1000',
+    '/vela/v0/images/poster?w=0&signature=x',
+    '/vela/v0/images/poster?signature=x',
+    '/vela/v0/images/poster',
+    '/vela/v0/images/still?h=2160&w=3840&sig=1',
+    '/vela/v0/images/two?w=100&w=200',
+    '/vela/v0/images/bare?w&x=1',
+    '/vela/v0/images/empty?w=&x=1',
+    '/other/path.jpg?w=10',
+    'https://fixture.test/vela/v0/images/abs?w=900',
+    'https://other.test/vela/v0/images/a?w=3840',
+    'https://image.example.org/t/p/w500/abc.jpg',
+    'http://fixture.test:8080/vela/v0/images/port?w=1',
+    // Declined: the parser would rewrite these.
+    'https://Fixture.test/vela/v0/images/a?w=1', 'https://fixture.test:443/vela/v0/images/a', '/vela/v0/images/../x?w=1',
+    '/vela/v0/images/sp ace', '//cdn.test/x.jpg', 'relative/x.jpg', '/vela/v0/images/q?', '/vela/v0/images/e?%77=5', '/vela/v0/images/h#frag',
+  ];
+  const origins = ['https://fixture.test', 'https://fixture.test/', 'http://fixture.test:8080', 'https://FIXTURE.test'];
+  for (const origin of origins) {
+    for (const url of urls) {
+      for (const [w, h] of [[400, 600], [1440, 900], [5000, 3000]] as const) {
+        for (const fitProxyWidth of [false, true]) {
+          for (const size of [{ width: 3840, height: 2160, url }, { width: 0, height: 0, url }]) {
+            const images = { origin, fitProxyWidth };
+            const quick = quickArtworkURL(url, size, [size], w, h, images);
+            if (quick !== undefined) expect(quick).toBe(urlArtworkURL(url, size, [size], w, h, images)!);
+          }
+        }
+      }
+    }
+  }
+  // The common addresses do take the quick path.
+  expect(quickArtworkURL(urls[0]!, { width: 3840, height: 2160, url: urls[0]! }, [], 1440, 900, { origin, fitProxyWidth: true })).toBeDefined();
+  expect(quickArtworkURL('/vela/v0/images/../x?w=1', { width: 1, height: 1, url: '' }, [], 1, 1, { origin })).toBeUndefined();
+  expect(quickArtworkURL('https://Fixture.test/a', { width: 1, height: 1, url: '' }, [], 1, 1, { origin })).toBeUndefined();
+});

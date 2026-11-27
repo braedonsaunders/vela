@@ -68,6 +68,7 @@ import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { GEOMETRY, guidedScrollStyles, partition, scrollGuide, scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
 import { plainBox } from './plain-box';
+import { liteRender } from './device-tier';
 import { moveWebRowFocus } from './web-row-navigation';
 import { rowLinkAvailable } from './row-link-available';
 import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
@@ -1629,9 +1630,9 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
       if (!w && !h) return;
       const rect = { x, y, height: h };
       const screen = Dimensions.get('window');
-      if (!lazyNear(axis, rect, screen, lazyReach(axis, moving, Platform.isTV))) return;
+      if (!lazyNear(axis, rect, screen, lazyReach(axis, moving, Platform.isTV, liteRender()))) return;
       // Beyond what a scroll is about to reach, the page draws one piece at a time while still.
-      if (!moving && !lazyNear(axis, rect, screen, lazyReach(axis, true, Platform.isTV))) {
+      if (!moving && !lazyNear(axis, rect, screen, lazyReach(axis, true, Platform.isTV, liteRender()))) {
         const now = Date.now();
         if (now - lazyStillDrawnAt < LAZY_STILL_PIECE_MS) {
           clearTimeout(later.current);
@@ -1642,7 +1643,7 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
       }
       // A transition: drawing a batch of rows or cards yields to the remote, so a press made while
       // it draws moves focus at once instead of waiting for every card of the batch.
-      startTransition(() => setCount(n => (n === at && n < total.current ? n + lazyBatch(axis, batch, moving) : n)));
+      startTransition(() => setCount(n => (n === at && n < total.current ? n + lazyBatch(axis, batch, moving, liteRender()) : n)));
     });
   }, [axis, batch]);
   const aheadRef = useRef(ahead);
@@ -1948,7 +1949,7 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
           style={StyleSheet.absoluteFill}
           contentFit={fx.contentFit ?? 'fill'}
           blurRadius={fx.imageBlur}
-          transition={node.fade ? 420 : 0}
+          transition={node.fade && !liteRender() ? 420 : 0}
           accessible={!hidden}
           accessibilityLabel={hidden ? '' : alt}
           {...(node.fallback ? { onLoad: () => setLoadState({ src, ok: true }), onError: () => setLoadState({ src, ok: false }) } : {})}
