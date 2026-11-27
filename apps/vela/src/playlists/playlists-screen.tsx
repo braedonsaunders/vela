@@ -27,9 +27,8 @@ export function PlaylistsScreen() {
       onSubmitEditing={() => { const value = name; setName(''); void store.playlists.create(value); }} />
     <Pressable accessibilityRole="button" disabled={!name.trim()} onPress={() => { const value = name; setName(''); void store.playlists.create(value); }} style={[styles.button, !name.trim() && { opacity: .45 }]}><Text style={styles.buttonText}>New</Text></Pressable></>;
   return <View style={[styles.page, { paddingHorizontal: gutter }]}>
-    {stacked
-      ? <View style={styles.stack}><View style={styles.row}>{heading}</View><View style={styles.row}>{create}</View></View>
-      : <View style={styles.top}>{heading}{create}</View>}
+    {/* One tree at every width, only its styles change: a rotation keeps the name field mounted, with its text and focus. */}
+    <View style={stacked ? styles.stack : styles.top}><View style={[styles.row, !stacked && { flex: 1 }]}>{heading}</View><View style={styles.row}>{create}</View></View>
     {notice ? <Arrive key={notice} still={still}><Text accessibilityRole="alert" style={styles.error}>{notice}</Text></Arrive> : null}
     {list.load === 'loading' && !list.value ? <ActivityIndicator color="#d5a676" size="large" /> : null}
     {list.load === 'failed' && !list.value ? <Pressable onPress={() => void store.playlists.load()} style={styles.button}><Text style={styles.buttonText}>Try again</Text></Pressable> : null}
