@@ -2340,21 +2340,22 @@ test('an older switch reply for a version other than the one shown does not set 
 });
 
 test('a report of the requested track while the player buffers ends the guard against reports of the earlier one', async () => {
-  // From English 1, French 2 is asked for while the player buffers; the player reports French while buffering before the server
-  // accepts it without a generation change and again after (or only after); the viewer then returns to English, reported twice
-  // while playing; the session fails onto the replacement: English, its own default, with no track command.
-  for (const before of [true, false]) {
+  // From English 1, French 2 is asked for while the player buffers; the server takes it without a generation change and its reply is
+  // held; the player reports French while buffering before the reply comes in and again after (or only after, or only before); the
+  // viewer then returns to English, reported twice while playing; the session fails onto the replacement: English, its own default,
+  // with no track command.
+  for (const [before, after] of [[true, true], [false, true], [true, false]]) {
     let release = () => {};
     const reply = new Promise<void>(resolve => { release = resolve; });
     await lab([plexForced, plexReplacement], async ({ playback, box, commands, run }) => {
       await playback.start({ kind: 'title', id: 'movie' });
       const french = playback.command('s1', { kind: 'tracks', audioTrackId: '2', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'french' });
-      for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is on its way.
+      for (let i = 0; i < 5; i++) await Promise.resolve(); // The server takes it; its reply is held.
       if (before) playback.snapshot({ ...plexReport({ audioTrackId: '2' }), state: 'buffering' });
       release();
       expect(await french).toBe(true);
       expect(box.get().playback.plan?.sourceGeneration).toBe(0);
-      playback.snapshot({ ...plexReport({ audioTrackId: '2' }), state: 'buffering' });
+      if (after) playback.snapshot({ ...plexReport({ audioTrackId: '2' }), state: 'buffering' });
       playback.snapshot(plexReport({ audioTrackId: '1' }));
       playback.snapshot(plexReport({ audioTrackId: '1' }));
       const sent = commands.length;
@@ -3107,9 +3108,44 @@ test('a stale track command is sent again after a lost switch when the session n
 });
 
 test('a pick the player reported before it failed to reach the server still keeps an older stale track command from being sent again', async () => {
-  // Off is sent and held on its way; Regular 3 waits for session.ready(), the player reports Regular and ready() then fails; the
-  // source generation advances on the same file; Off is delivered and refused as stale: it is not sent again, and the session fails
-  // onto file C: Regular, as 8.
+  // Off is sent and held on its way; Regular 3 waits for session.ready(), the player reports Regular while playing or paused and
+  // ready() then fails; the source generation advances on the same file; Off is delivered and refused as stale: it is not sent
+  // again, and the session fails onto file C: Regular, as 8.
+  for (const state of ['playing', 'paused'] as const) {
+    let deliver = () => {};
+    const transit = new Promise<unknown>(resolve => { deliver = () => resolve('deliver'); });
+    await lab([forcedTwo, forcedNineRegularEight], async ({ playback, box, commands, files, run }) => {
+      const session = (playback as unknown as { session: { ready: () => Promise<unknown> } }).session;
+      await playback.start({ kind: 'title', id: 'movie' });
+      const off = playback.command('s1', offCommand);
+      for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is on its way.
+      const ready = session.ready;
+      let fail = () => {};
+      session.ready = () => new Promise((_, reject) => { fail = () => reject(new TypeError('fetch failed')); });
+      const regular = playback.command('s1', regularCommand);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      playback.snapshot({ sessionId: 's1', live: null, position: 60, state, sourceGeneration: 0, audioTrackId: '1', subtitleTrackId: '3' });
+      fail();
+      expect(await regular).toBe(false);
+      session.ready = ready;
+      files.set('s1', { ...files.get('s1')!, generation: 1, seek: 1 });
+      deliver();
+      expect(await off).toBe(false);
+      expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['off']);
+      const sent = commands.length;
+      playback.recover('s1');
+      await run();
+      expect(box.get().playback.sessionId).toBe('s2');
+      expect(commands.slice(sent).filter(c => c.kind === 'tracks').at(-1)?.subtitleTrackId).toBe('8');
+      expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('8');
+    }, c => c.idempotencyKey === 'off' ? transit : false);
+  }
+});
+
+test('a pick the player reported only while buffering before it failed to reach the server does not keep an older stale track command from being sent again', async () => {
+  // Off is sent and held on its way; Regular 3 waits for session.ready(), the player reports Regular only while buffering and
+  // ready() then fails; the source generation advances on the same file; Off is delivered and refused as stale: Regular was never
+  // recorded, so Off is sent again once, and the session fails onto file C: Off, not forced 9.
   let deliver = () => {};
   const transit = new Promise<unknown>(resolve => { deliver = () => resolve('deliver'); });
   await lab([forcedTwo, forcedNineRegularEight], async ({ playback, box, commands, files, run }) => {
@@ -3122,21 +3158,174 @@ test('a pick the player reported before it failed to reach the server still keep
     session.ready = () => new Promise((_, reject) => { fail = () => reject(new TypeError('fetch failed')); });
     const regular = playback.command('s1', regularCommand);
     for (let i = 0; i < 5; i++) await Promise.resolve();
-    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', sourceGeneration: 0, audioTrackId: '1', subtitleTrackId: '3' });
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'buffering', sourceGeneration: 0, audioTrackId: '1', subtitleTrackId: '3' });
     fail();
     expect(await regular).toBe(false);
     session.ready = ready;
     files.set('s1', { ...files.get('s1')!, generation: 1, seek: 1 });
     deliver();
-    expect(await off).toBe(false);
-    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['off']);
+    expect(await off).toBe(true);
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['off', 'key']);
+    expect(files.get('s1')!.selectedSubtitleTrackId).toBeNull();
     const sent = commands.length;
     playback.recover('s1');
     await run();
     expect(box.get().playback.sessionId).toBe('s2');
-    expect(commands.slice(sent).filter(c => c.kind === 'tracks').at(-1)?.subtitleTrackId).toBe('8');
-    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('8');
+    expect(commands.slice(sent).filter(c => c.kind === 'tracks').at(-1)?.subtitleTrackId).toBeNull();
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
   }, c => c.idempotencyKey === 'off' ? transit : false);
+});
+
+test('a pick still waiting for session.ready() that the player reported only while buffering does not keep an older stale track command from being sent again', async () => {
+  // Off is sent and held on its way; Regular 3 waits for session.ready() and the player reports Regular only while buffering; the
+  // source generation advances on the same file and Off is delivered while Regular still waits, and refused as stale: Off is sent
+  // again once; ready() then fails, and the session fails onto file C: Off, not forced 9.
+  let deliver = () => {};
+  const transit = new Promise<unknown>(resolve => { deliver = () => resolve('deliver'); });
+  await lab([forcedTwo, forcedNineRegularEight], async ({ playback, box, commands, files, run }) => {
+    const session = (playback as unknown as { session: { ready: () => Promise<unknown> } }).session;
+    await playback.start({ kind: 'title', id: 'movie' });
+    const off = playback.command('s1', offCommand);
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is on its way.
+    const ready = session.ready;
+    let fail = () => {};
+    const waiting = new Promise((_, reject) => { fail = () => reject(new TypeError('fetch failed')); });
+    waiting.catch(() => undefined);
+    session.ready = () => waiting;
+    const regular = playback.command('s1', regularCommand);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'buffering', sourceGeneration: 0, audioTrackId: '1', subtitleTrackId: '3' });
+    files.set('s1', { ...files.get('s1')!, generation: 1, seek: 1 });
+    deliver();
+    expect(await off).toBe(true);
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['off', 'key']);
+    expect(files.get('s1')!.selectedSubtitleTrackId).toBeNull();
+    fail();
+    expect(await regular).toBe(false);
+    session.ready = ready;
+    const sent = commands.length;
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.slice(sent).filter(c => c.kind === 'tracks').at(-1)?.subtitleTrackId).toBeNull();
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+  }, c => c.idempotencyKey === 'off' ? transit : false);
+});
+
+test('a pick still waiting for session.ready() that the player reported only while buffering is still sent after an older stale track command was sent again', async () => {
+  // Off is sent and held on its way; Regular 3 waits for session.ready() and the player reports Regular only while buffering; the
+  // source generation advances on the same file and Off is delivered, refused as stale and sent again; the player reports the Off
+  // its reply shows; the session is then ready: Regular is sent, refused as stale and sent again, and the session fails onto file C,
+  // where Regular is 3 again: Regular, not forced 9.
+  const regularThree: File = { ...forcedNine, subtitleTracks: [subtitle('9', 'eng', { forced: true }), subtitle('3', 'eng')] };
+  let deliver = () => {};
+  const transit = new Promise<unknown>(resolve => { deliver = () => resolve('deliver'); });
+  await lab([forcedTwo, regularThree], async ({ playback, box, commands, files, run }) => {
+    const session = (playback as unknown as { session: { ready: () => Promise<unknown> } }).session;
+    await playback.start({ kind: 'title', id: 'movie' });
+    const off = playback.command('s1', offCommand);
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is on its way.
+    const ready = session.ready;
+    let open = () => {};
+    const waiting = new Promise<unknown>(resolve => { open = () => resolve(ready()); });
+    session.ready = () => waiting;
+    const regular = playback.command('s1', regularCommand);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'buffering', sourceGeneration: 0, audioTrackId: '1', subtitleTrackId: '3' });
+    files.set('s1', { ...files.get('s1')!, generation: 1, seek: 1 });
+    deliver();
+    expect(await off).toBe(true);
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['off', 'key']);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    playback.snapshot({ sessionId: 's1', live: null, position: 61, state: 'playing', sourceGeneration: box.get().playback.plan!.sourceGeneration,
+      audioTrackId: '1', subtitleTrackId: null });
+    open();
+    expect(await regular).toBe(true);
+    session.ready = ready;
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['off', 'key', 'regular', 'key']);
+    expect(files.get('s1')!.selectedSubtitleTrackId).toBe('3');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('3');
+    const sent = commands.length;
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.slice(sent).filter(c => c.kind === 'tracks').at(-1)?.subtitleTrackId).toBe('3');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('3');
+  }, c => c.idempotencyKey === 'off' ? transit : false);
+});
+
+test('a report of subtitles off while they were already off does not keep a pick of off that failed to reach the server counting', async () => {
+  // With subtitles off, Regular 3 is sent and held on its way; Off waits for session.ready(), the player still reports Off while
+  // playing or paused and ready() then fails; the source generation advances on the same file; Regular is delivered and refused as
+  // stale: it is sent again once, and the session fails onto file C, where Regular is 3 again: Regular, not forced 9.
+  const regularThree: File = { ...forcedNine, subtitleTracks: [subtitle('9', 'eng', { forced: true }), subtitle('3', 'eng')] };
+  for (const state of ['playing', 'paused'] as const) {
+    let deliver = () => {};
+    const transit = new Promise<unknown>(resolve => { deliver = () => resolve('deliver'); });
+    await lab([{ ...forcedTwo, selectedSubtitleTrackId: null }, regularThree], async ({ playback, box, commands, files, run }) => {
+      const session = (playback as unknown as { session: { ready: () => Promise<unknown> } }).session;
+      await playback.start({ kind: 'title', id: 'movie' });
+      const regular = playback.command('s1', regularCommand);
+      for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is on its way.
+      const ready = session.ready;
+      let fail = () => {};
+      session.ready = () => new Promise((_, reject) => { fail = () => reject(new TypeError('fetch failed')); });
+      const off = playback.command('s1', offCommand);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      playback.snapshot({ sessionId: 's1', live: null, position: 60, state, sourceGeneration: 0, audioTrackId: '1', subtitleTrackId: null });
+      fail();
+      expect(await off).toBe(false);
+      session.ready = ready;
+      files.set('s1', { ...files.get('s1')!, generation: 1, seek: 1 });
+      deliver();
+      expect(await regular).toBe(true);
+      expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['regular', 'key']);
+      expect(files.get('s1')!.selectedSubtitleTrackId).toBe('3');
+      const sent = commands.length;
+      playback.recover('s1');
+      await run();
+      expect(box.get().playback.sessionId).toBe('s2');
+      expect(commands.slice(sent).filter(c => c.kind === 'tracks').at(-1)?.subtitleTrackId).toBe('3');
+      expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('3');
+    }, c => c.idempotencyKey === 'regular' ? transit : false);
+  }
+});
+
+test('a report of subtitles off that repeats an accepted off does not keep a pick of off that failed to reach the server counting', async () => {
+  // Off is accepted and reported; Regular 3 is sent and held on its way; Off waits for session.ready(), the player still reports
+  // Off while playing and ready() then fails; the source generation advances on the same file; Regular is delivered and refused as
+  // stale: it is sent again once, and the session fails onto file C, where Regular is 3 again: Regular, not forced 9.
+  const regularThree: File = { ...forcedNine, subtitleTracks: [subtitle('9', 'eng', { forced: true }), subtitle('3', 'eng')] };
+  let deliver = () => {};
+  const transit = new Promise<unknown>(resolve => { deliver = () => resolve('deliver'); });
+  await lab([forcedTwo, regularThree], async ({ playback, box, commands, files, run }) => {
+    const session = (playback as unknown as { session: { ready: () => Promise<unknown> } }).session;
+    await playback.start({ kind: 'title', id: 'movie' });
+    expect(await playback.command('s1', offCommand)).toBe(true);
+    playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', sourceGeneration: 1, audioTrackId: '1', subtitleTrackId: null });
+    const regular = playback.command('s1', { ...regularCommand, sourceGeneration: 1, seekGeneration: 1 });
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is on its way.
+    const ready = session.ready;
+    let fail = () => {};
+    session.ready = () => new Promise((_, reject) => { fail = () => reject(new TypeError('fetch failed')); });
+    const again = playback.command('s1', { ...offCommand, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'off again' });
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    playback.snapshot({ sessionId: 's1', live: null, position: 61, state: 'playing', sourceGeneration: 1, audioTrackId: '1', subtitleTrackId: null });
+    fail();
+    expect(await again).toBe(false);
+    session.ready = ready;
+    files.set('s1', { ...files.get('s1')!, generation: 2, seek: 2 });
+    deliver();
+    expect(await regular).toBe(true);
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['off', 'regular', 'key']);
+    expect(files.get('s1')!.selectedSubtitleTrackId).toBe('3');
+    const sent = commands.length;
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.slice(sent).filter(c => c.kind === 'tracks').at(-1)?.subtitleTrackId).toBe('3');
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBe('3');
+  }, c => c.idempotencyKey === 'regular' ? transit : false);
 });
 
 test('a track reply released after a seek keeps the plan shown', async () => {
