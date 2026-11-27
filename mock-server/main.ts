@@ -22,6 +22,7 @@ import { scaleGuide } from './guide-fixture';
 import { archivePlan, archiveRange, catchUpFeature, checkTimeshiftCommand, eventProgramme, flagProgramme, goLive, withArchives } from './catch-up';
 import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, setWatchProgramme, sportsAdmin, sportsEnabled, sportsLogo } from './sports';
 import { screensAdmin, screensApi, screensBootstrap } from './screens';
+import { embedStub, servedExtras, trailerEmbed, trailerEmbedAdmin, trailerEmbedFeature } from './trailer-embed';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
 const channels = scaleFixture?.channels ?? defaultChannels;
@@ -109,6 +110,13 @@ if (mediaEnabled && process.env.VELA_MOCK_LYRICS === '1') capabilities.features.
 const experiencesEnabled = mediaEnabled && process.env.VELA_MOCK_NO_EXPERIENCES !== '1';
 // Loudness levelling and AutoMix markers on music tracks; VELA_MOCK_NO_LOUDNESS=1 is an Ether without them.
 if (mediaEnabled && process.env.VELA_MOCK_NO_LOUDNESS !== '1') capabilities.features.loudness = { available: true, album: true, fades: true };
+// YouTube trailers in the client embed (trailer-embed.ts): VELA_MOCK_TRAILER_EMBED, POST /__admin/trailer-embed.
+function advertiseTrailerEmbed() {
+  const feature = trailerEmbedFeature();
+  if (feature) capabilities.features.trailerEmbed = feature;
+  else delete capabilities.features.trailerEmbed;
+}
+advertiseTrailerEmbed();
 if (experiencesEnabled) capabilities.features.libraryExperiences = { available: true, experiences: ['watch', 'listen', 'read', 'gallery', 'live'] };
 // Plugin levels (concerts under music artists, rows per recommended tab). VELA_MOCK_NO_LEVELS=1 is
 // a server from before them: no capability, no Concerts tab, no childCounts and no video children.
@@ -1076,7 +1084,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       return json({ accepted: true });
     }
     if (method === 'GET' && !titleMatch[2] && coldTitle(d.title.id)) return partial({ ...d, extras: [], pending: ['extras'], refreshAfterMs: 2000 });
-    if (method === 'GET' && titleMatch[2] !== 'download') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: d.extras } : d, g.id);
+    if (method === 'GET' && titleMatch[2] !== 'download') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: servedExtras(d).extras } : servedExtras(d), g.id);
   }
   if (method === 'POST' && path === '/search') {
     if (typeof body.query !== 'string' || !Number.isInteger(body.generation) || !['fast', 'descriptive', ...(capabilities.features.unifiedSearch ? ['auto'] : [])].includes(body.mode)) fail('request', 'invalid_search', 'Query, generation and mode required');
@@ -1286,7 +1294,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
 async function dispatch(req: Request): Promise<Response> {
   const url = new URL(req.url);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204 });
+  if (req.method === 'GET' && url.pathname.startsWith('/embed/')) return embedStub(url);
   if (url.pathname.startsWith('/__admin/')) {
+    if (req.method === 'GET' && url.pathname === '/__admin/trailer-embed') return json(trailerEmbed);
+    if (req.method === 'POST' && url.pathname === '/__admin/trailer-embed') { const state = trailerEmbedAdmin(await req.json()); advertiseTrailerEmbed(); return json(state); }
     if (req.method === 'GET' && url.pathname === '/__admin/live-faults') return json(liveFaults);
     if (req.method === 'POST' && url.pathname === '/__admin/live-faults') { const data = await req.json(); for (const key of Object.keys(liveFaults) as (keyof typeof liveFaults)[]) if (Number.isFinite(data[key]) && data[key] >= 0) liveFaults[key] = Math.min(60000, Math.floor(data[key])); return json(liveFaults); }
     if (url.pathname === '/__admin/original') {
