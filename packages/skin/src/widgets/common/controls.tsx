@@ -19,6 +19,7 @@ import { SYMBOLS } from '../../icons';
 import type { Css } from '../../translate';
 import { useLook } from './look';
 import { useFocusClaim } from './focus-claim';
+import { isFocusVisible } from '../../focus-visible';
 
 const web = Platform.OS === 'web';
 /** A pressable that runs the look's CSS transitions (background, scale) as a document box does. */
@@ -32,14 +33,19 @@ export interface Interaction {
   pressed: boolean;
 }
 
+const canHover = () => !web || typeof window === 'undefined' || !window.matchMedia || window.matchMedia('(hover: hover)').matches;
+
 /** Hover, focus and pressed for one control, with the handlers that keep them. */
 export function useInteraction() {
   const [state, setState] = useState<Interaction>({ hover: false, focus: false, pressed: false });
   const set = (key: keyof Interaction, on: boolean) => setState(s => (s[key] === on ? s : { ...s, [key]: on }));
   const handlers = {
-    onHoverIn: () => set('hover', true),
+    // A touch screen's browser reports a hover on the last tapped control and keeps it: only a
+    // pointer that can hover shows the hover look, so a tapped text action never keeps a pill.
+    onHoverIn: () => { if (canHover()) set('hover', true); },
     onHoverOut: () => set('hover', false),
-    onFocus: () => set('focus', true),
+    // A tap or click focuses the control on the web; only keyboard and remote focus shows the ring.
+    onFocus: (event?: { target?: unknown }) => set('focus', isFocusVisible(event?.target)),
     onBlur: () => set('focus', false),
     onPressIn: () => set('pressed', true),
     onPressOut: () => set('pressed', false),
