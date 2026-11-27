@@ -516,7 +516,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   if (method === 'GET' && path === '/appearance') return cached(req, appearance(), 'public');
   if (method === 'POST' && path === '/auth/plex') {
-    if (body.plexToken !== 'mock-plex-approved') return Response.json({ error: 'not_shared' }, {status: 403});
+    // VELA_MOCK_PLEX_ANY=1 (a hosted design preview): any Plex account that completed a real plex.tv
+    // link signs in as the demo viewer, so the whole Plex flow can be walked with a real account.
+    const approved = body.plexToken === 'mock-plex-approved' || (process.env.VELA_MOCK_PLEX_ANY === '1' && typeof body.plexToken === 'string' && body.plexToken.length > 0);
+    if (!approved) return Response.json({ error: 'not_shared' }, {status: 403});
     if (capabilities.plexHomeProfiles && body.selectProfile === true) return json(plexSelection(body.device?.id));
     return json(issue(body.device));
   }
