@@ -25,6 +25,13 @@ describe('Library tab strip layout release gate', () => {
     await screen.getByRole('tab', 'Collections').first().tap();
     await expect(screen.getByRole('textbox', 'Search Collections')).toBeVisible({ timeout: 30_000 });
     await expect.poll(async () => { const view = await geometry(); return view.search!.top >= view.strip!.bottom; }, { timeout: 10_000 }).toBe(true);
+    // The strip scrolls the selected tab into view, smoothly on WebKit: wait until it has settled
+    // wholly inside the strip and clear of the overflow arrows.
+    await expect.poll(async () => {
+      const view = await geometry();
+      return view.selected!.left >= view.strip!.left && view.selected!.right <= view.strip!.right
+        && view.arrows.every(arrow => arrow!.right <= view.selected!.left || arrow!.left >= view.selected!.right);
+    }, { timeout: 10_000 }).toBe(true);
     const phone = await geometry();
     // The selected tab is wholly inside the strip and clear of its overflow arrows; the search fills the row below.
     expect(phone.selected!.width).toBeGreaterThan(60);
