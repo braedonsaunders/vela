@@ -1,15 +1,18 @@
-import { downloadPercent, formatDownloadBytes, isPlayableDownload, type DownloadRecord } from '@vela/core';
+import { downloadPercent, formatDownloadBytes, isPlayableDownload, type DownloadRecord, type DownloadsState } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { HostContext, useHost } from '@vela/skin/src/host';
 import { Alert as Notice, Glyph, Heading, Pill, Words } from '@vela/skin/src/widgets/common/controls';
 import { useLook } from '@vela/skin/src/widgets/common/look';
 import { RoundButton } from '@vela/skin/src/widgets/media/parts';
+import { confirmAction } from '@vela/skin/src/widgets/common/confirm';
+import { FocusPressable } from '@vela/skin/src/focus';
 import { Image } from 'expo-image';
 import { router } from '../src/router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useVela as useApp } from '../src/vela';
+import { DOWNLOAD_SETTINGS, useVela as useApp } from '../src/vela';
+import { preferences } from '../src/data/preferences';
 
 const transferStatus: Record<DownloadRecord['status'], string> = {
   queued: 'Queued', downloading: 'Downloading', paused: 'Paused',
@@ -26,7 +29,12 @@ function DownloadLibrary() {
   const store = useVela();
   const { ui } = useLook();
   const wide = useHost().viewport.width >= 640;
-  const { items, usedBytes, hydrated, error } = useVelaState(state => state.downloads);
+  const { items, usedBytes, hydrated, error, traits, persisted, settings } = useVelaState(state => state.downloads);
+  const toggleWifi = () => {
+    store.downloads.setWifiOnly(!settings.wifiOnly);
+    preferences.set(DOWNLOAD_SETTINGS, JSON.stringify(store.getState().downloads.settings));
+  };
+  useEffect(() => { void store.downloads.refreshStorage(); }, [store]);
   const online = useVelaState(state => state.auth.phase === 'signed-in');
   const [busy, setBusy] = useState('');
   const [failure, setFailure] = useState('');
@@ -39,15 +47,13 @@ function DownloadLibrary() {
     catch (cause) { setFailure(cause instanceof Error ? cause.message : 'Could not update download'); }
     finally { setBusy(''); }
   };
-  const remove = (item: DownloadRecord) => Alert.alert('Delete download?', item.title.name, [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: () => {
-      const current = store.downloads.item(item.titleId);
-      if (current?.viewerId === item.viewerId && current.serverId === item.serverId) {
-        void perform(item.titleId, () => store.downloads.remove(item.titleId));
-      }
-    } },
-  ]);
+  const remove = async (item: DownloadRecord) => {
+    if (!await confirmAction('Delete download?', item.title.name, 'Delete')) return;
+    const current = store.downloads.item(item.titleId);
+    if (current?.viewerId === item.viewerId && current.serverId === item.serverId) {
+      void perform(item.titleId, () => store.downloads.remove(item.titleId));
+    }
+  };
   const back = () => {
     if (router.canGoBack()) router.back();
     else router.replace(online ? '/' : '/sign-in');
@@ -63,16 +69,28 @@ function DownloadLibrary() {
           </View>
         </View>
         {failure || error ? <Notice>{failure || error}</Notice> : null}
+        {traits.metered ? <View style={styles.setting}>
+          <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }} style={styles.settingText}>
+            {settings.wifiOnly ? 'Downloads wait for Wi-Fi.' : 'Downloads also use mobile data.'}
+          </Words>
+          <Pill label={settings.wifiOnly ? 'Allow mobile data' : 'Wi-Fi only'} height={40} onPress={toggleWifi} testID="downloads-wifi-only" />
+        </View> : null}
+        {storageNotice(traits, persisted) ? <View testID="downloads-storage-notice">
+          <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }}>{storageNotice(traits, persisted)}</Words>
+        </View> : null}
         {items.map(item => <DownloadRow key={item.titleId} item={item} online={online} wide={wide} busy={!!busy}
+          reveal={traits.reveal ? () => void perform(item.titleId, () => store.downloads.reveal(item.titleId)) : undefined}
+          exportCopy={traits.export ? () => void perform(item.titleId, () => store.downloads.exportCopy(item.titleId)) : undefined}
           play={() => router.push({ pathname: '/watch/[id]', params: { id: item.titleId } })}
           pause={() => void perform(item.titleId, () => store.downloads.pause(item.titleId))}
           resume={() => void perform(item.titleId, () => store.downloads.resume(item.titleId))}
-          remove={() => remove(item)} />)}
+          remove={() => void remove(item)} />)}
         {!items.length ? <View style={[styles.empty, { borderColor: ui.glassEdge, backgroundColor: ui.control }]}>
           <Glyph symbol="download" size={28} color={ui.inkQuiet} />
           <Words rows={{ 'font-size': '18px', 'font-weight': '650' }}>{hydrated ? 'No downloaded titles' : 'Loading downloads…'}</Words>
           {hydrated ? <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }}>
-            Open a movie or episode and tap Download to watch it without an internet connection.
+            {Platform.isTV ? 'Open a movie or episode and select Download to watch it without an internet connection.'
+              : 'Open a movie or episode and choose Download to watch it without an internet connection.'}
           </Words> : null}
         </View> : null}
       </ScrollView>
@@ -80,8 +98,17 @@ function DownloadLibrary() {
   );
 }
 
-function DownloadRow({ item, online, wide, busy, play, pause, resume, remove }: {
+/** Where a browser keeps downloads and when it may remove them; nothing for apps that own their storage. */
+function storageNotice(traits: DownloadsState['traits'], persisted: boolean | null): string {
+  if (traits.engine !== 'page') return '';
+  return persisted === false
+    ? 'This browser may clear stored videos, so Vela saves files to your computer instead. Downloads already here can still be removed by the browser.'
+    : 'Downloads are kept in this browser\'s storage for this site. Clearing site data or uninstalling the app removes them.';
+}
+
+function DownloadRow({ item, online, wide, busy, play, pause, resume, remove, reveal, exportCopy }: {
   item: DownloadRecord; online: boolean; wide: boolean; busy: boolean; play(): void; pause(): void; resume(): void; remove(): void;
+  reveal?: () => void; exportCopy?: () => void;
 }) {
   const store = useVela();
   const host = useHost();
@@ -89,6 +116,7 @@ function DownloadRow({ item, online, wide, busy, play, pause, resume, remove }: 
   const { ui } = look;
   const { title, titleId, status, bytesWritten, byteLength } = item;
   const [poster, setPoster] = useState<string>();
+  const [focused, setFocused] = useState(false);
   const [badLocal, setBadLocal] = useState<string>();
   const [badRemote, setBadRemote] = useState<string>();
   const storedPosterPath = item.posterPath ?? item.previousCompleted?.posterPath;
@@ -139,10 +167,13 @@ function DownloadRow({ item, online, wide, busy, play, pause, resume, remove }: 
           {online && (status === 'paused' || status === 'failed') ? (
             <Pill label={status === 'paused' ? 'Resume' : 'Retry'} height={44} onPress={resume} disabled={busy} />
           ) : null}
-          <Pressable accessibilityRole="button" accessibilityLabel="Delete" disabled={busy} onPress={remove}
-            style={({ pressed }) => [styles.delete, { opacity: pressed || busy ? 0.55 : 1 }]}>
+          {playable && reveal ? <Pill label={Platform.OS === 'web' && desktopMac() ? 'Show in Finder' : 'Show in folder'} height={44} onPress={reveal} disabled={busy} testID={`download-reveal-${titleId}`} /> : null}
+          {playable && exportCopy ? <Pill label="Save a copy…" height={44} onPress={exportCopy} disabled={busy} testID={`download-export-${titleId}`} /> : null}
+          <FocusPressable accessibilityRole="button" accessibilityLabel="Delete" disabled={busy} onPress={remove}
+            testID={`download-delete-${titleId}`} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+            style={({ pressed }) => [styles.delete, { borderColor: focused ? ui.accent : 'transparent', opacity: pressed || busy ? 0.55 : 1 }]}>
             <Text style={look.text({ 'font-size': '14px', color: '$ui.live', 'font-weight': '650' })}>Delete</Text>
-          </Pressable>
+          </FocusPressable>
         </View>
       </View>
     </View>
@@ -163,7 +194,14 @@ const styles = StyleSheet.create({
   wideMetadata: { flex: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 5 },
   wideActions: { marginTop: 0, justifyContent: 'flex-end', maxWidth: '50%' },
-  delete: { minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  delete: { minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: 12, borderWidth: 2, borderRadius: 22 },
   track: { height: 4, borderRadius: 2, overflow: 'hidden', marginVertical: 2 },
+  setting: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
+  settingText: { flex: 1, minWidth: 180 },
   empty: { borderWidth: 1, borderRadius: 16, padding: 20, gap: 8, alignItems: 'flex-start' },
 });
+
+/** The Mac desktop app calls its file manager Finder. */
+function desktopMac(): boolean {
+  return (globalThis as { __VELA_DESKTOP__?: { platform?: string } }).__VELA_DESKTOP__?.platform === 'mac';
+}

@@ -20,7 +20,8 @@ export const ANDROID_TV_MINIMUM_FREE_TO_OFFER = RESERVE_BYTES + 4_000_000_000;
 export function nativeDownloadsTraits(os: string, tv: boolean): NativeDownloadsTraits {
   return {
     engine: os === 'android' ? 'service' : 'background',
-    metered: true,
+    // A TV has no mobile data: the Wi-Fi-only setting means nothing there.
+    metered: !(os === 'android' && tv),
     reserveBytes: RESERVE_BYTES,
     reveal: false,
     export: false,
