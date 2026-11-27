@@ -3,7 +3,7 @@ import {
   analyzePress, anchorPresses, cpuIn, jsSources, parseMarks, parseProbe, parseProbeJs, pressStarts, settlingMount, sumCounts, summarize,
   type TraceEvents,
 } from './tv-nav-analysis';
-import { deviceScript, formatComparison, parseEvents, runTotals, type RunReport } from './tv-nav';
+import { deviceScript, formatComparison, parseEvents, parseLabShell, runTotals, type RunReport } from './tv-nav';
 
 const ms = (value: number) => value * 1e6;
 const span = (at: number, dur: number) => ({ ts: ms(at), dur: ms(dur) });
@@ -100,6 +100,23 @@ describe('tv-nav scenarios', () => {
       'sleep 2',
       'log -t VELANAV 1', 'input keyevent KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT', 'sleep 4',
     ].join('\n') + '\n');
+  });
+
+  test('older Androids get instant keys; a launch step is measured from its marker', () => {
+    expect(deviceScript([{ launch: true, label: 'cold', window: 20000 }, { key: 'DPAD_DOWN', window: 1500 }], false)).toBe([
+      '#!/system/bin/sh',
+      'log -t VELANAV 0', 'am start -n app.ether.vela/.MainActivity >/dev/null 2>&1', 'sleep 20',
+      'log -t VELANAV 1', 'input keyevent KEYCODE_DPAD_DOWN', 'sleep 1.5',
+    ].join('\n') + '\n');
+  });
+
+  test('the trace clock\'s offset from CLOCK_MONOTONIC comes with the events', () => {
+    expect(parseEvents('"clock",86400000000000,0\n"key",100,5\n').monotonicOffset).toBe(86400000000000);
+  });
+
+  test('lab shell output splits into the command\'s output, its stderr and exit code', () => {
+    expect(parseLabShell('29\n\n[exit 0]\n')).toEqual({ out: '29\n', err: '', exit: 0 });
+    expect(parseLabShell('\n[stderr]\nnope\n\n[exit 1]')).toEqual({ out: '', err: 'nope\n', exit: 1 });
   });
 
   test('a comparison reads before and after side by side', () => {

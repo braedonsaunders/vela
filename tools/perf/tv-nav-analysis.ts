@@ -25,6 +25,9 @@ export interface TraceEvents {
   /** Native views Fabric created (SurfaceMountingManager::createViewUnsafe). */
   views?: Span[];
   sched: { js: Span[]; main: Span[]; render: Span[] };
+  /** The trace clock (BOOTTIME) minus CLOCK_MONOTONIC, which logcat's `-v monotonic` uses. They
+   * differ by the time a device spent suspended: a TV box that has been in standby. */
+  monotonicOffset?: number;
 }
 
 /** Views created after a press for it to be a screen's content arriving, not a focus look. */
