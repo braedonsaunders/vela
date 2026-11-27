@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
   below: { position: 'absolute', left: 0, right: 0, top: 0 },
   sun: { position: 'absolute', bottom: 0, height: 260 },
   underglow: { position: 'absolute', top: 0, height: 140 },
-  glint: { position: 'absolute', height: 3, borderRadius: 1.5 },
+  glint: { position: 'absolute', height: 3, borderRadius: 1.5, opacity: 0.28 },
   glow: { position: 'absolute', top: -34, height: 68 },
   line: { position: 'absolute', left: 0, right: 0, top: -0.75, height: 1.5 },
   drift: { position: 'absolute', left: 0, top: -2, height: 4 },
