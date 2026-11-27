@@ -65,7 +65,7 @@ import { BlockView } from './screen/block-view';
 import { RichBlock } from './blocks/rich';
 import { useScopedReads } from './screen/scoped-reads';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
-import { scrollStyles } from './scroll-styles';
+import { GEOMETRY, guidedScrollStyles, partition, scrollGuide, scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
 import { plainBox } from './plain-box';
 import { moveWebRowFocus } from './web-row-navigation';
@@ -703,15 +703,6 @@ function a11yProps(node: RNode, c: Ctx, e: Env) {
 
 // ---- Box ----
 
-/** The rows that size and place a box, which a mask wrapper takes over from it. */
-const GEOMETRY = new Set(['position', 'top', 'right', 'bottom', 'left', 'zIndex', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight',
-  'aspectRatio', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft']);
-function partition(style: Record<string, unknown>, keys: Set<string>): [Record<string, unknown>, Record<string, unknown>] {
-  const inside: Record<string, unknown> = {}, outside: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(style)) (keys.has(k) ? inside : outside)[k] = v;
-  return [inside, outside];
-}
-
 interface StickyHeaderProps {
   children?: ReactNode;
   scrollAnimatedValue: RNAnimated.Value;
@@ -1143,7 +1134,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   let element: ReactNode;
   if (route || fx.scrollX || fx.scrollY) {
     const horizontal = !route && !!fx.scrollX && !fx.scrollY;
-    const [contentStyle, outerStyle] = scrollStyles(boxStyleFinal, !!route, web);
+    const [contentStyle, scrollerStyle] = scrollStyles(boxStyleFinal, !!route, web);
+    const guided = scrollGuide(Platform.isTV, !!route, horizontal, !!node.escape?.length);
+    // A menu that scrolls is still its escape scope's guide on TV: the guide holds its place.
+    const [scopeFrame, outerStyle] = guided === 'scope' ? guidedScrollStyles(scrollerStyle) : [undefined, scrollerStyle];
     const sticky = web || horizontal ? undefined : node.children.flatMap((child, i) => (child.base.style.position === 'sticky' && holds(child.when, ctx, env) ? [i] : []));
     const onPagerScroll = node.pager && rowId ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
@@ -1217,7 +1211,15 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         {content}
       </AScroll>
     );
-    if (horizontal && Platform.isTV) element = <RowGuide>{element as ReactElement<{ style: unknown }>}</RowGuide>;
+    if (guided === 'row') element = <RowGuide>{element as ReactElement<{ style: unknown }>}</RowGuide>;
+    else if (guided === 'scope') {
+      const Guide = AGuide as typeof AView;
+      element = (
+        <Guide ref={guideRef as never} style={scopeFrame as ViewStyle} {...(tvGuide(node, env, band, ctx) as object)}>
+          {element}
+        </Guide>
+      );
+    }
   } else {
     // A press box is the schema's full-size transparent button over its content: the button takes
     // focus (keyboard, tvOS focus engine, D-pad) and carries the label; the box keeps its motion.
