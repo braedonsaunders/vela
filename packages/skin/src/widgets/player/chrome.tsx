@@ -199,9 +199,15 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
   };
   const recentStep = () =>
     lastStep.current && Date.now() - lastStep.current.at < STEP_MEMORY_MS ? lastStep.current.seconds : null;
+  // Where the picture is now: a resting chrome draws its clock only every few seconds (session.ts), so a step
+  // taken from it counts from the engine's latest report, not from the last drawn one.
+  const currentPosition = () => {
+    const latest = state.latestSnapshot?.();
+    return latest && belongs(latest, state.plan) ? latest.seekTarget ?? latest.position : view.position;
+  };
   const seekBy = (delta: number) => {
     if (blocked) return;
-    const from = recentStep() ?? (rewind ? rewind.position : view.position);
+    const from = recentStep() ?? (rewind ? rewind.position : currentPosition());
     const limit = rewind ? rewind.edge : view.duration > 0 ? view.duration : Number.POSITIVE_INFINITY;
     const toLive = !!rewind && stepLandsLive({ edge: rewind.edge, position: from }, delta);
     seek(Math.max(rewind ? rewind.start : 0, Math.min(limit, from + delta)), toLive);
