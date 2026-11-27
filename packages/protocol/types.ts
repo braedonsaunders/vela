@@ -463,7 +463,8 @@ export interface ChildrenPage extends Page<Title>, PartialAnswer {}
 /** One-use console Watch hand-off; redeem against the same Ether instance. */
 export interface WebCodeRedeemRequest extends Mutation { code: string; device: Device }
 
-export interface DownloadRequest extends Mutation { versionId?: ID }
+/** `client`: the device's playback capabilities, as on PlaybackRequest, so the server grants an original it can play. */
+export interface DownloadRequest extends Mutation { versionId?: ID; client?: ClientCapabilities }
 export interface DownloadGrant {
   url: string; mimeType: string; container: string; byteLength?: number;
   /** Stable file identity, shared by fresh tickets for the same original. */

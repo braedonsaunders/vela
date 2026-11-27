@@ -506,6 +506,8 @@ export interface DownloadResolution {
 export interface ResolveDownloadOptions {
   versionId?: string;
   subtitleFormats?: readonly string[];
+  /** The device's declared playback capabilities (Ether grants an original this device can play). */
+  client?: V.ClientCapabilities;
   idempotencyKey?: string;
 }
 

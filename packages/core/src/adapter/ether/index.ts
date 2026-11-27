@@ -304,6 +304,7 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     const request: V.DownloadRequest = {
       idempotencyKey: options?.idempotencyKey ?? randomId(),
       ...(options?.versionId ? { versionId: options.versionId } : {}),
+      ...(options?.client ? { client: options.client } : {}),
     };
     const answer = await this.http.request<Partial<V.DownloadGrant> & { filename?: string }>('POST', `/titles/${segment(id)}/download`, request)
       .catch(error => { throw downloadRefusal(error); });

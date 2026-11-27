@@ -79,3 +79,10 @@ test('a minimal Ether grant (no track lists or container) still resolves from it
   expect(resolution).toMatchObject({ container: 'mp4', audioTracks: [], subtitleTracks: [], chapters: [], sidecars: [] });
   expect(resolution).not.toHaveProperty('filename');
 });
+
+test('Ether receives the device playback capabilities with the grant request', async () => {
+  const requests = routeFetch({ 'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] }, 'POST /vela/v0/titles/movie/download': grant });
+  const client = { subtitleFormats: ['webvtt'], containers: ['mp4'] } as unknown as V.ClientCapabilities;
+  await adapter().resolveDownload('movie', { idempotencyKey: 'grant-2', client });
+  expect(requests.find(request => request.method === 'POST')?.body).toEqual({ idempotencyKey: 'grant-2', client });
+});

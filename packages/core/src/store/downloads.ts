@@ -964,6 +964,7 @@ export class Downloads {
       const resolved = await adapter.resolveDownload(titleId, {
         versionId: options?.versionId,
         subtitleFormats: client?.subtitleFormats,
+        ...(client ? { client } : {}),
         idempotencyKey: grantKey,
       });
       const freeBytes = await this.port.freeBytes().catch(() => null);
@@ -1094,6 +1095,7 @@ export class Downloads {
       const resolved = await adapter.resolveDownload(titleId, {
         versionId: record.versionId,
         subtitleFormats: client?.subtitleFormats,
+        ...(client ? { client } : {}),
         idempotencyKey: grantKey,
       });
       if (this.item(titleId) !== record) return false;
@@ -1206,7 +1208,8 @@ export class Downloads {
       if (adapter.downloadsAvailable && !(await adapter.downloadsAvailable())) {
         throw new Error('Downloads are not allowed for this account on this server');
       }
-      const resolved = await adapter.resolveDownload(titleId, { versionId: options?.versionId, idempotencyKey: this.session.key() });
+      const client = await this.session.declared().catch(() => undefined);
+      const resolved = await adapter.resolveDownload(titleId, { versionId: options?.versionId, idempotencyKey: this.session.key(), ...(client ? { client } : {}) });
       await this.port.saveFile({
         url: resolved.url,
         headers: resolved.headers,
