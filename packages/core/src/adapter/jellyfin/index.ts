@@ -3,16 +3,18 @@ import { deviceLanguages, iso6392, KNOWN_SUBTITLE_LANGUAGES, pickSubtitleLanguag
 import { homeHeroes } from '../home-heroes';
 import type * as V from '../../wire';
 import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescription, TransportCommand } from '../index';
-import type { ClientDeclaration, LibraryRecommendations, LiveTv, PasswordSignIn, QuickConnectSignIn, Reading, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets } from '../capabilities';
+import type { ClientDeclaration, DownloadResolution, LibraryRecommendations, LiveTv, MediaDownloads, OfflineProgress, OfflineProgressEntry, PasswordSignIn, QuickConnectSignIn, Reading, ResolveDownloadOptions, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets } from '../capabilities';
 import { VelaError } from '../errors';
 import { seriesOrder } from '../series';
-import type { Item, Result, User, Auth, Info, MediaSource } from './types';
+import type { Item, Result, User, Auth, Info, MediaSource, Stream } from './types';
 import { audioMime, DIRECT_AUDIO, foldAudiobooks, isAudioItem, jellyfinMarkers, readingFormat, readingMime, shelfOf, titleProjection, type MediaHint, type MediaSegment, type Shelf } from './media';
 import { jellyfinTrickplay } from '../../protocol/trickplay';
 /** The wire offer, without the media source it was read for. */
 const offerOf = ({ sourceId: _source, ...offer }: V.TrickplayMetadata & { sourceId: string }): V.TrickplayMetadata => offer;
 const seconds = (ticks?: number) => ticks === undefined ? undefined : ticks / 10000000;
 const ticks = (value: number) => Math.round(value * 10000000);
+const isTextSubtitle = (s: Stream) => s.IsTextSubtitleStream || ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'mov_text'].includes(s.Codec?.toLowerCase() ?? '');
+const videoMime = (container?: string) => container === 'mp4' || container === 'm4v' ? 'video/mp4' : container === 'webm' ? 'video/webm' : 'video/x-matroska';
 const e = encodeURIComponent;
 const offered: V.Feature = { available: true };
 const fields = 'Overview,Genres,MediaSources,Chapters,People,PrimaryImageAspectRatio,UserData,Path,ChildCount,DateCreated,ParentId,ProductionYear,PremiereDate';
@@ -45,7 +47,9 @@ interface Session {
  * Jellyfin has no refresh tokens: the token is validated, never fictitiously rotated.
  */
 export class JellyfinAdapter
-    implements ServerAdapter, PasswordSignIn, QuickConnectSignIn, ClientDeclaration, LiveTv, TrackChanges, TitleChildren, Reading, LibraryRecommendations, TrickplaySheets {
+    implements ServerAdapter, PasswordSignIn, QuickConnectSignIn, ClientDeclaration, LiveTv, TrackChanges, TitleChildren, Reading, LibraryRecommendations, TrickplaySheets, MediaDownloads, OfflineProgress {
+    readonly downloadCredentials = 'headers' as const;
+    private downloadPolicy?: { viewerId: string; accessToken: string; allowed: Promise<boolean> };
     private base: URL;
     private sessions = new Map<string, Session>();
     private starts = new Map<string, Promise<V.PlaybackPlan>>();
@@ -85,7 +89,9 @@ export class JellyfinAdapter
         return { Authorization: authorization, ...(tokens ? { 'X-Emby-Token': tokens.accessToken } : {}) };
     }
     private async rejected(response: Response, tokens: V.Tokens | null): Promise<never> {
-        if (response.status === 401 && tokens) {
+        const current = response.status === 401 && tokens ? await this.credentials.get() : null;
+        if (tokens && current?.accessToken === tokens.accessToken && current.viewer.id === tokens.viewer.id) {
+            this.downloadPolicy = undefined;
             await this.credentials.set(null);
             this.sessions.clear();
             this.starts.clear();
@@ -97,6 +103,9 @@ export class JellyfinAdapter
         const tokens = auth ? await this.credentials.get() : null;
         if (auth && !tokens)
             throw this.error('auth', 'sign_in_required', 'Sign in required', 401);
+        return this.requestWithTokens<T>(tokens, method, path, body, signal);
+    }
+    private async requestWithTokens<T>(tokens: V.Tokens | null, method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
         const response = await fetch(this.url(path).href, {
             method, signal, redirect: 'error', headers: {
                 ...this.authorization(tokens), ...(body === undefined ? {} : {
@@ -804,6 +813,101 @@ export class JellyfinAdapter
         if (change.played !== undefined) await this.request(change.played ? 'POST' : 'DELETE', `${user}/PlayedItems/${e(id)}`);
         if (change.favorite !== undefined) await this.request(change.favorite ? 'POST' : 'DELETE', `${user}/FavoriteItems/${e(id)}`);
     }
+    async downloadsAvailable(): Promise<boolean> {
+        const tokens = await this.credentials.get();
+        if (!tokens) {
+            this.downloadPolicy = undefined;
+            return false;
+        }
+        return this.readDownloadPolicy(tokens);
+    }
+    private readDownloadPolicy(tokens: V.Tokens): Promise<boolean> {
+        const cached = this.downloadPolicy;
+        const viewerId = tokens.viewer.id;
+        if (cached?.accessToken === tokens.accessToken && cached.viewerId === viewerId) return cached.allowed;
+        const allowed = this.requestWithTokens<User>(tokens, 'GET', `Users/${e(viewerId)}`)
+            .then(user => user.Policy?.EnableContentDownloading !== false)
+            .catch(error => {
+                if (this.downloadPolicy?.allowed === allowed) this.downloadPolicy = undefined;
+                throw error;
+            });
+        this.downloadPolicy = { viewerId, accessToken: tokens.accessToken, allowed };
+        return allowed;
+    }
+    async resolveDownload(id: string, options?: ResolveDownloadOptions): Promise<DownloadResolution> {
+        const tokens = await this.credentials.get();
+        if (!tokens) {
+            this.downloadPolicy = undefined;
+            throw this.error('auth', 'sign_in_required', 'Sign in required', 401);
+        }
+        const denied = this.error('policy', 'download_not_allowed', 'Downloads are not allowed for this title or account', 403);
+        const itemPath = `Users/${e(tokens.viewer.id)}/Items/${e(id)}`;
+        let item: Item;
+        try {
+            if (!await this.readDownloadPolicy(tokens)) throw denied;
+            item = await this.requestWithTokens<Item>(tokens, 'GET', itemPath);
+        } catch (error) {
+            if (error instanceof VelaError && error.status === 403) throw denied;
+            throw error;
+        }
+        if (item.Type !== 'Movie' && item.Type !== 'Episode')
+            throw this.error('request', 'not_downloadable', 'Only movies and episodes can be downloaded for offline playback');
+        if (item.CanDownload === false) throw denied;
+        const sources = item.MediaSources ?? [];
+        const source = options?.versionId === undefined ? sources[0] : sources.find(s => s.Id === options.versionId);
+        if (!source) {
+            if (options?.versionId !== undefined) throw this.error('request', 'unknown_version', 'Unknown media version');
+            throw this.error('playback', 'no_downloadable_source', 'This title has no downloadable media');
+        }
+        const alternate = source !== sources[0];
+        const emby = source.Id !== id && await this.isEmby();
+        // Jellyfin resolves the file by item ID. Each local version's MediaSource.Id is its item ID.
+        const downloadId = source.ItemId || (emby ? id : source.Id);
+        const url = this.url(`Items/${e(downloadId)}/Download${query({ mediaSourceId: alternate && emby ? source.Id : undefined })}`).href;
+        const streams = source.MediaStreams ?? [];
+        const audioTracks = streams.filter(s => s.Type === 'Audio').map(s => ({
+            ...this.track(s, 'audio'),
+            default: source.DefaultAudioStreamIndex === undefined ? s.IsDefault : s.Index === source.DefaultAudioStreamIndex
+        }));
+        const subtitleTracks: V.Track[] = [];
+        const sidecars: DownloadResolution['sidecars'] = [];
+        const formats = options?.subtitleFormats?.map(format => format.toLowerCase()) ?? ['ass', 'webvtt'];
+        for (const stream of streams.filter(s => s.Type === 'Subtitle')) {
+            const track = this.track(stream, 'subtitle');
+            track.default = source.DefaultSubtitleStreamIndex === undefined ? stream.IsDefault : stream.Index === source.DefaultSubtitleStreamIndex;
+            if (!stream.IsExternal) {
+                subtitleTracks.push({ ...track, delivery: { kind: 'embedded' } });
+            } else if (isTextSubtitle(stream)) {
+                const ass = ['ass', 'ssa'].includes(track.codec.toLowerCase()) && (formats.includes('ass') || formats.includes('ssa'));
+                if (!ass && !formats.includes('webvtt') && !formats.includes('vtt')) continue;
+                const format = ass ? 'ass' : 'webvtt';
+                const url = this.url(`Videos/${e(id)}/${e(source.Id)}/Subtitles/${stream.Index}/0/Stream.${ass ? 'ass' : 'vtt'}`).href;
+                sidecars.push({ trackId: track.id, format, url });
+                subtitleTracks.push({ ...track, ...(ass ? {} : { url }), delivery: { kind: 'external', format, url } });
+            }
+        }
+        const container = (source.Container ?? item.Container ?? 'mkv').split(',')[0]!.trim().toLowerCase();
+        const title = this.title({ ...item, RunTimeTicks: source.RunTimeTicks ?? item.RunTimeTicks });
+        const posterUrl = title.artwork.find(a => a.kind === 'poster')?.sizes[0]?.url ?? title.artwork[0]?.sizes[0]?.url;
+        const video = streams.find(s => s.Type === 'Video');
+        // Resume uses the byte response's validator. The metadata ETag describes the server item.
+        return {
+            title, url, headers: this.authorization(tokens), container, mimeType: source.MimeType || videoMime(container),
+            byteLength: source.Size, sourceId: source.Id, versionId: source.Id, versionLabel: source.Name,
+            originalVideo: video && { codec: video.Codec, width: video.Width, height: video.Height, bitDepth: video.BitDepth, colorTransfer: video.ColorTransfer },
+            audioTracks, subtitleTracks, sidecars, chapters: this.chapters(item), posterUrl,
+            selectedAudioTrackId: audioTracks.find(t => t.default)?.id ?? audioTracks[0]?.id,
+            selectedSubtitleTrackId: subtitleTracks.find(t => t.default)?.id ?? null
+        };
+    }
+    async replayWatchProgress(id: string, entry: OfflineProgressEntry): Promise<V.Ack> {
+        await this.writeUserData(id, {
+            PlaybackPositionTicks: ticks(entry.positionSeconds),
+            ...(entry.completed ? { Played: true } : {}),
+            LastPlayedDate: entry.observedAt
+        });
+        return { accepted: true };
+    }
     /** A book's file, as the server's own download. The reader fetches it without headers, so the
      * URL carries the session token, minted per open and never stored. */
     async openReading(id: string, _r: V.ReadingRequest): Promise<V.ReadingGrant> {
@@ -823,14 +927,29 @@ export class JellyfinAdapter
         const fraction = Math.min(1, Math.max(0, r.fraction));
         const user = await this.userPath();
         const item = await this.request<Item>('GET', `${user}/Items/${e(id)}`);
-        const body = { PlaybackPositionTicks: Math.round(fraction * (item.RunTimeTicks || BOOK_TICKS)), Played: fraction >= 0.98, LastPlayedDate: new Date().toISOString() };
-        if (await this.isEmby()) await this.request('POST', `${user}/Items/${e(id)}/UserData`, body);
-        else await this.request('POST', `UserItems/${e(id)}/UserData${query({ userId: (await this.credentials.get())?.viewer.id })}`, body)
-            .catch(error => {
-                if (error instanceof VelaError && error.status === 404) return this.request('POST', `${user}/Items/${e(id)}/UserData`, body);
-                throw error;
-            });
+        await this.writeUserData(id, { PlaybackPositionTicks: Math.round(fraction * (item.RunTimeTicks || BOOK_TICKS)), Played: fraction >= 0.98, LastPlayedDate: new Date().toISOString() });
         return { accepted: true };
+    }
+    private async writeUserData(id: string, body: NonNullable<Item['UserData']>): Promise<void> {
+        const tokens = await this.credentials.get();
+        if (!tokens) throw this.error('auth', 'sign_in_required', 'Sign in required', 401);
+        const itemPath = `Items/${e(id)}/UserData`;
+        if (!await this.isEmby()) {
+            try {
+                await this.requestWithTokens(tokens, 'POST', `UserItems/${e(id)}/UserData${query({ userId: tokens.viewer.id })}`, body);
+                return;
+            } catch (error) {
+                if (!(error instanceof VelaError) || (error.status !== 404 && error.status !== 405)) throw error;
+            }
+        }
+        await this.requestWithTokens(tokens, 'POST', `Users/${e(tokens.viewer.id)}/${itemPath}`, body);
+    }
+    private track(s: Stream, kind: V.Track['kind']): V.Track {
+        return {
+            id: String(s.Index), streamIndex: s.Index, kind, language: s.Language ?? 'und',
+            name: s.DisplayTitle ?? s.Title ?? s.Language ?? `${s.Type} ${s.Index}`,
+            codec: s.Codec ?? '', channels: s.Channels, forced: s.IsForced, hearingImpaired: s.IsHearingImpaired, default: s.IsDefault
+        };
     }
     private cultures?: Promise<SubtitleLanguage[]>;
     /** The server's cultures (three-letter codes, its own names); the viewer's subtitle language preference first. */
@@ -926,7 +1045,7 @@ export class JellyfinAdapter
             })}`).href;
             const video = source.MediaStreams?.find(s => s.Type === 'Video');
             paths.push({
-                id: 'direct', kind: 'direct', transport: 'file', mimeType: source.Container === 'mp4' || source.Container === 'm4v' ? 'video/mp4' : source.Container === 'webm' ? 'video/webm' : 'video/x-matroska', sourceId: source.Id, original: true, range: true, byteLength: source.Size, originalVideo: video ? {
+                id: 'direct', kind: 'direct', transport: 'file', mimeType: videoMime(source.Container), sourceId: source.Id, original: true, range: true, byteLength: source.Size, originalVideo: video ? {
                     codec: video.Codec, width: video.Width, height: video.Height, bitDepth: video.BitDepth, colorTransfer: video.ColorTransfer
                 } : undefined, readiness: 'ready', url, qualities: [], boundaries: []
             });
@@ -942,10 +1061,10 @@ export class JellyfinAdapter
         if (!paths.length)
             throw this.error('playback', 'no_playable_source', 'No compatible direct or HLS stream');
         const tracks = (type: string): V.Track[] => (source.MediaStreams ?? []).filter(s => s.Type === type).map(s => {
-            const text = s.IsTextSubtitleStream || ['srt', 'subrip', 'ass', 'ssa', 'vtt', 'webvtt', 'mov_text'].includes(s.Codec ?? '');
+            const text = isTextSubtitle(s);
             const url = type === 'Subtitle' && text ? this.mediaURL(s.DeliveryUrl ?? this.url(`Videos/${e(id)}/${e(source.Id)}/Subtitles/${s.Index}/Stream.vtt`).href) : undefined;
             return {
-                id: String(s.Index), streamIndex: s.Index, kind: type === 'Audio' ? 'audio' : 'subtitle', language: s.Language ?? 'und', name: s.DisplayTitle ?? s.Title ?? s.Language ?? `${type} ${s.Index}`, codec: s.Codec ?? '', channels: s.Channels, forced: s.IsForced, hearingImpaired: s.IsHearingImpaired, default: s.IsDefault, ...(type === 'Subtitle' ? {
+                ...this.track(s, type === 'Audio' ? 'audio' : 'subtitle'), ...(type === 'Subtitle' ? {
                     ...(url ? {
                         url
                     } : {}), delivery: url ? {

@@ -3,6 +3,7 @@ export interface Item {
     Id: string;
     Name: string;
     Type?: string;
+    CanDownload?: boolean;
     Overview?: string;
     ProductionYear?: number;
     PremiereDate?: string;
@@ -90,12 +91,15 @@ export interface Stream {
     IsForced?: boolean;
     IsHearingImpaired?: boolean;
     IsTextSubtitleStream?: boolean;
+    IsExternal?: boolean;
     DeliveryUrl?: string;
 }
 export interface MediaSource {
     Name?: string;
     Id: string;
+    ItemId?: string;
     Container?: string;
+    MimeType?: string;
     Size?: number;
     RunTimeTicks?: number;
     MediaStreams?: Stream[];
@@ -123,6 +127,7 @@ export interface User {
     Name: string;
     PrimaryImageTag?: string;
     Policy?: {
+        EnableContentDownloading?: boolean;
         EnableLiveTvAccess?: boolean;
     };
     Configuration?: {
