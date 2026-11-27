@@ -187,3 +187,18 @@ and RenderThread run time from `/proc/<pid>/task/<tid>/schedstat`. It reports `f
 bun tools/perf/tv-nav.ts --lab tx1-box --owner "$OWNER" --light --scenario cold,home,griddeep,title,transitions,idle \
   --settle 30000 --out after.json
 ```
+
+### Where focus goes (`--focus`)
+
+`--focus` asks where focus ends up rather than what a press costs, with presses at a viewer's pace: Down
+presses 0.5, 1 and 1.6 s apart (`grid05`, `grid10`, `grid16`, each walked back up with as many slow Up
+presses, which should land on the first card again), a Down held for 5 s (`gridhold`) and Home's rows
+(`homefocus`). `input keyevent` cannot do either on Android 10 (it takes about a second to send each press
+and cannot hold a key), so the presses are the device's own remote input device's events (`sendevent` on the
+node `dumpsys input` names with a D-pad key layout, scan codes from that layout), held keys auto-repeat as a
+remote's do, and the device script keeps the timeline against `/proc/uptime`. Each checkpoint reports the
+focused view of a uiautomator dump, or that nothing had focus. No trace is taken, so it runs on tx1-box.
+
+```bash
+bun tools/perf/tv-nav.ts --lab tx1-box --owner "$OWNER" --focus --scenario grid05,grid10,grid16,gridhold --label after --out focus.json
+```

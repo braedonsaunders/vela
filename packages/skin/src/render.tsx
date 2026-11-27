@@ -2,6 +2,7 @@ import { ScreenActive } from './screen-active';
 import { pagerState, readsPager, reportPager, subscribePager } from './pager-book';
 export { ScreenActive } from './screen-active';
 import { sameRouteHost } from './route-host';
+import { GRID_DRAWN, GRID_OPEN, gridFocus, type GridFocus, type GridKey } from './grid-focus';
 import { LAZY_STILL_MS, gridDrawn, lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach, scrollAudience, type LazySample } from './lazy-items';
 import { WebLibraryGrid } from './web-library-grid';
 import { msg } from '@vela/core';
@@ -790,6 +791,26 @@ function bindAndroidHeroButton(target: Focusable, group: TVHeroGroup) {
   return () => { androidHeroButtons.delete(tag); };
 }
 
+/** Android TV grids drawn a batch at a time (GridTrack), and the remote's presses they keep: one
+ * listener for all of them, each taking the presses made on its own cards. */
+const androidGrids = new Set<GridFocus>();
+let androidGridKeysSubscribed = false;
+
+function listenGridKeys(grid: GridFocus) {
+  androidGrids.add(grid);
+  if (!androidGridKeysSubscribed) {
+    androidGridKeysSubscribed = true;
+    DeviceEventEmitter.addListener('velaAndroidTVKey', (event: GridKey) => {
+      for (const each of [...androidGrids]) each.key(event);
+    });
+  }
+  return () => { androidGrids.delete(grid); };
+}
+
+/** The grid card a button belongs to (GridTrack's cells on Android TV). */
+interface GridCellValue { grid: GridFocus; index: number }
+const GridCell = createContext<GridCellValue | null>(null);
+
 /** Native boxes that only draw take PlainBox (plain-box.ts). Android only: tvOS's focus bands and
  * the web's hover looks stay with Box. */
 const plainBoxes = Platform.OS === 'android';
@@ -916,6 +937,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const routeFocus = useRouteFocusContext();
   const episodeNav = useContext(EpisodeNavigation);
   const reveal = useContext(RevealContext);
+  const gridCell = useContext(GridCell);
   const offsetY = useRef(0);
   // A route scrolled off its top sets flag keep-page-scrolled (kept through flag resets), so a
   // shell can back its bar once the page moves under it (cleared as the route leaves).
@@ -1247,6 +1269,9 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       const arg = press ? fill(press.arg, ctx, env) : '';
       const kind = (node.id && fill(node.id, ctx, env).startsWith('episode-')) ? 'episode' : press?.action === 'select' && arg.includes('|season|') ? 'season' : press?.action === 'playExtra' ? 'extra' : undefined;
       const unepisode = kind && !disabled ? episodeNav?.register(target, kind, ctx.index) : undefined;
+      // A grid card: the grid moves focus to it once drawn (grid-focus.ts).
+      const ungrid = gridCell && cardPrimary && focusable && !disabled
+        ? gridCell.grid.register(gridCell.index, target, findNodeHandle(target as HostInstance) ?? null) : undefined;
       if (press && !disabled && !unfocusable && node.directionalFocus !== false && selectable(node)) {
         routeFocus?.offer(target, press.action, env.route === 'title' && press.action === 'play' && node.testId === 'detail-play');
       }
@@ -1266,6 +1291,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         leaveButton(target);
         if (contextTarget && contextHandler) contextTarget.removeEventListener('contextmenu', contextHandler);
         unepisode?.();
+        ungrid?.();
       };
       releaseButton.current = release;
       return release;
@@ -1341,9 +1367,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
           if ((Platform.isTV || web) && (inHero || (heroControl && visible))) holdHero(host.setFlag, true, Platform.isTV);
           routeFocus?.focused();
           if (buttonRef.current) episodeNav?.focused(buttonRef.current);
+          if (gridCell && cardPrimary) gridCell.grid.focused(gridCell.index);
           if (reveal && buttonRef.current) reveal(buttonRef.current);
         }}
-        onBlur={() => { set('focus', false); if (heroButton && buttonRef.current) buttonCarry?.focused(buttonRef.current, false); if ((Platform.isTV || web) && (inHero || heroControl)) holdHero(host.setFlag, false, Platform.isTV); }}
+        onBlur={() => { set('focus', false); if (gridCell && cardPrimary) gridCell.grid.blurred(gridCell.index); if (heroButton && buttonRef.current) buttonCarry?.focused(buttonRef.current, false); if ((Platform.isTV || web) && (inHero || heroControl)) holdHero(host.setFlag, false, Platform.isTV); }}
         onPointerDown={event => {
           set('focus', false);
           if (web && node.directionalFocus === false) (event as unknown as { preventDefault?(): void }).preventDefault?.();
@@ -1708,6 +1735,18 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
   // so the scroll extent and what follows the grid (its next-page sentinel) stay where they are.
   const [drawn, setDrawn] = useState(GRID_FIRST);
   const [rowHeight, setRowHeight] = useState(0);
+  // On Android TV a Down press past the drawn rows waits on its card for the row (grid-focus.ts): the
+  // grid draws at least `wanted` cards, wherever the spacer is.
+  const [wanted, setWanted] = useState(0);
+  const wantedRef = useRef(wanted);
+  wantedRef.current = wanted;
+  const focus = useMemo(() => androidTV ? gridFocus({
+    lead: columns => Math.max(1, Math.ceil(GRID_BATCH / columns)),
+    wanted: count => setWanted(count),
+    later: run => requestAnimationFrame(run),
+  }) : null, []);
+  useEffect(() => (focus ? listenGridKeys(focus) : undefined), [focus]);
+  const cellValues = useRef(new Map<number, GridCellValue>());
   const spacer = useRef<HostInstance>(null);
   const total = useRef(items.length);
   total.current = items.length;
@@ -1721,7 +1760,7 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
       if (!w && !h) return;
       // One batch per drawn state, however many scroll events asked for it; a transition, so the
       // remote's presses are not held while a batch of cards draws (as LazyRepeat).
-      startTransition(() => setDrawn(count => gridDrawn(count, at, total.current, y, Dimensions.get('window').height, GRID_REACH, GRID_BATCH)));
+      startTransition(() => setDrawn(count => gridDrawn(count, at, total.current, y, Dimensions.get('window').height, GRID_REACH, GRID_BATCH, wantedRef.current)));
     });
   }, []);
   const complete = drawn >= items.length;
@@ -1731,7 +1770,7 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
     if (complete) return;
     const frame = requestAnimationFrame(ahead);
     return () => cancelAnimationFrame(frame);
-  }, [drawn, complete, ahead, rowHeight, width, items.length]);
+  }, [drawn, complete, ahead, rowHeight, width, items.length, wanted]);
   useEffect(() => (complete || !layout ? undefined : layout.onScroll(ahead)), [complete, layout, ahead]);
   useLayoutEffect(() => { if (items.length) layout?.grid(); }, [layout, items.length]);
   const gap = grid.gap;
@@ -1743,8 +1782,16 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
   const shown = Math.min(drawn, items.length);
   const rowsLeft = Math.ceil((items.length - shown) / count);
   const gapPoints = typeof rowGap === 'number' ? rowGap : 0;
+  useLayoutEffect(() => { if (width > 0) focus?.shape({ columns: count, shown, total: items.length }); }, [focus, width, count, shown, items.length]);
+  const cellValue = (grid: GridFocus, index: number) => {
+    let value = cellValues.current.get(index);
+    if (!value || value.grid !== grid) cellValues.current.set(index, value = { grid, index });
+    return value;
+  };
+  // While rows are left to draw, the activity keeps a Down press that would leave the track on its card.
+  // It also brings a card focused before its layout (focus moved here as its row was drawn) on screen.
   return (
-    <View style={track} onLayout={e => {
+    <View style={track} nativeID={focus ? (width > 0 && rowsLeft > 0 ? GRID_OPEN : GRID_DRAWN) : undefined} collapsable={focus ? false : undefined} onLayout={e => {
       // Hidden retained sections report zero width. Keep their cells and scroll
       // extent mounted until a visible layout supplies the new usable width.
       const next = e.nativeEvent.layout.width;
@@ -1757,7 +1804,7 @@ function GridTrack({ grid, rowGap, items }: { grid: NonNullable<Effects['grid']>
         layout?.drawn();
         const height = e.nativeEvent.layout.height;
         if (height > 0) setRowHeight(height);
-      } : undefined}>{item}</View>) : null}
+      } : undefined}>{focus ? <GridCell.Provider value={cellValue(focus, index)}>{item}</GridCell.Provider> : item}</View>) : null}
       {width > 0 && rowsLeft > 0 ? <View ref={spacer} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
         style={{ width: '100%', height: Math.max(1, rowsLeft * (rowHeight + gapPoints) - gapPoints) }} /> : null}
     </View>

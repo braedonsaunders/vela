@@ -16,6 +16,52 @@ module.exports = function withAndroidTVKeys(config) {
     return id?.startsWith("vela-hero-action:") == true
   }
 
+  // A grid's track carries "vela-grid", or "vela-grid-open" while rows are left to draw
+  // (packages/skin/src/grid-focus.ts): the track around the view, an open one only if asked.
+  private fun velaGrid(view: android.view.View?, open: Boolean): android.view.View? {
+    var parent = view?.parent
+    while (parent is android.view.View) {
+      val id = parent.getTag(com.facebook.react.R.id.view_tag_native_id)
+      if (id == "vela-grid-open" || (!open && id == "vela-grid")) return parent
+      parent = parent.parent
+    }
+    return null
+  }
+
+  // A grid card focused from JavaScript as its row is drawn can take focus before it is laid out: the
+  // scroll then brings an empty box at the grid's top into view, and the card is left off screen, where
+  // the next press makes the scroll take focus itself. Before the next frame is drawn with the card laid
+  // out, the card is brought on screen.
+  private fun velaRevealGridCard(card: android.view.View?) {
+    if (card == null || velaGrid(card, false) == null) return
+    var frames = 0
+    val observer = card.viewTreeObserver
+    observer.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+      override fun onPreDraw(): Boolean {
+        if (!card.isFocused || frames++ > 60) {
+          card.viewTreeObserver.removeOnPreDrawListener(this)
+          return true
+        }
+        if (card.width == 0 || card.height == 0) return true
+        card.viewTreeObserver.removeOnPreDrawListener(this)
+        return !card.requestRectangleOnScreen(android.graphics.Rect(0, 0, card.width, card.height), true)
+      }
+    })
+  }
+
+  // Down from a card of such a grid whose next card down is not drawn yet: Android would take focus out
+  // of the grid (to what lies past it, or to the scroll itself), so the press stays on the card and the
+  // grid moves focus once the row is drawn.
+  private fun isVelaGridHeld(focused: android.view.View?): Boolean {
+    val grid = velaGrid(focused, true) ?: return false
+    var next: Any? = focused?.focusSearch(android.view.View.FOCUS_DOWN)
+    while (next is android.view.View) {
+      if (next === grid) return false
+      next = next.parent
+    }
+    return true
+  }
+
   private fun isVelaTelevision(): Boolean =
      (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) ==
       android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
@@ -49,6 +95,7 @@ module.exports = function withAndroidTVKeys(config) {
           focused?.focusSearch(heroDirection!!)
         } else null
         val withinHero = next !== focused && isVelaHeroButton(next)
+        val gridHeld = type == "down" && event.action == android.view.KeyEvent.ACTION_DOWN && isVelaGridHeld(focused)
         val data = com.facebook.react.bridge.Arguments.createMap().apply {
           putString("eventType", type)
           putInt("eventKeyAction", event.action)
@@ -58,6 +105,10 @@ module.exports = function withAndroidTVKeys(config) {
           putInt("repeatCount", event.repeatCount)
           if (hero && focused != null) putInt("heroTag", focused.id)
           putBoolean("withinHero", withinHero)
+          if (gridHeld && focused != null) {
+            putBoolean("gridHeld", true)
+            putInt("focusTag", focused.id)
+          }
           putString("focus", if (focused == null) "none" else (focused.getTag(com.facebook.react.R.id.react_test_id) as? String) ?: "")
         }
         reactHost?.currentReactContext?.emitDeviceEvent("velaAndroidTVKey", data)
@@ -65,6 +116,7 @@ module.exports = function withAndroidTVKeys(config) {
           if (withinHero) next?.requestFocus(heroDirection!!)
           return true
         }
+        if (gridHeld) return true
       }
     }
     return super.dispatchKeyEvent(event)
@@ -73,7 +125,10 @@ module.exports = function withAndroidTVKeys(config) {
     mod.modResults.contents = mod.modResults.contents.replace('class MainActivity : ReactActivity() {', 'class MainActivity : ReactActivity() {\n' + code);
     const superCreate = /^(\s*)super\.onCreate\([^)]*\)\s*$/m;
     if (!superCreate.test(mod.modResults.contents)) throw new Error('MainActivity.onCreate has no super.onCreate call');
-    const openingFocus = `    // A physical keyboard can make Android focus the first button as the tree mounts.
+    const openingFocus = `    if (isVelaTelevision()) {
+      window.decorView.viewTreeObserver.addOnGlobalFocusChangeListener { _, focused -> velaRevealGridCard(focused) }
+    }
+    // A physical keyboard can make Android focus the first button as the tree mounts.
     if (!isVelaTelevision()) {
       findViewById<android.view.ViewGroup>(android.R.id.content)?.apply {
         isFocusableInTouchMode = true
