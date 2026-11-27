@@ -9,6 +9,7 @@ const { attachLoadGuard } = require('./load-guard');
 const { bundleServer } = require('./bundle-server');
 const { Downloads, dispatch: downloadsCall } = require('./downloads');
 const { downloadsRoot, downloadsRoute } = require('./downloads-paths');
+const { attachEmbedReferrer } = require('./embed-referrer');
 const nativeAdapter = loadNativeHost();
 const fs = require('node:fs');
 const path = require('node:path');
@@ -299,6 +300,7 @@ if (!app.requestSingleInstanceLock()) {
       }
     });
     // Only fullscreen, and keeping the screen awake while a film plays, are ever granted to the page.
+    attachEmbedReferrer(session.defaultSession);
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'fullscreen' || permission === 'screen-wake-lock'));
     Menu.setApplicationMenu(menu());
     // A packaged app carries its icon; a development run would otherwise show Electron's.
