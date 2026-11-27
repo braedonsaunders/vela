@@ -440,6 +440,22 @@ export function belongs(snapshot: Snapshot | null, plan: PlaybackPlan | null): s
   );
 }
 
+/** Where Try again or a return to the foreground starts the session again: the last reported position, a zero
+ * only when the player presented it (a zero reported while loading is a reset clock, so the start point stands). */
+export function restartAt(position: number, presented: boolean): number | undefined {
+  return position > 0 || presented ? position : undefined;
+}
+
+/** Whether the position a report leaves was presented: a playing or paused report says so; a recovering,
+ * failed or ended one keeps what the report before it said at the same place and generations (the player
+ * retrying its read there, then failing); any other report (the player loading, buffering or idle) or a new
+ * generation does not. */
+export function presentedAfter(presented: boolean, last: Snapshot | null, next: Snapshot): boolean {
+  if (next.state === 'playing' || next.state === 'paused') return true;
+  return presented && (next.state === 'recovering' || next.state === 'failed' || next.state === 'ended') && !!last && last.sessionId === next.sessionId &&
+    last.sourceGeneration === next.sourceGeneration && last.seekGeneration === next.seekGeneration && last.position === next.position;
+}
+
 /** Server acceptance can precede the engine switching; only its fresh, ready snapshot settles the choice. */
 export function qualityReached(id: string, snapshot: Snapshot | null, plan: PlaybackPlan | null): boolean {
   if (!belongs(snapshot, plan) || snapshot.waiting || snapshot.state === 'failed') return false;

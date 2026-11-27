@@ -110,7 +110,13 @@ interface Intent {
   /** Asked again under a new key after the server answered with a session that had already ended. */
   fresh?: boolean;
   liveResume?: LiveResume;
+  /** A title restart: it asks at the restart position as it is just before its first dispatch, and its retries keep that request. */
+  atRestart?: boolean;
 }
+
+/** A version switch still waiting for its version: the session, the source generation it was asked from, the version asked
+ * for, and its number as sent. */
+interface VersionSwitch { sessionId: string; sourceGeneration: number; versionId: string; number: number }
 
 /** How many sessions this client stopped are remembered (`stoppedSessions`). */
 const STOPPED_REMEMBERED = 32;
@@ -161,7 +167,26 @@ export class Playback {
   private watch: { target: string; session: string; restarts: number } | undefined;
   private watchdog: ReturnType<typeof setTimeout> | undefined;
   private watchdogAt = 0;
-  private cursor = 0;
+  /** Where the viewer is, as the session's evidence says (`restartAt`: the newest of these): `settled`, the newest
+   * of the session's start, admitted reports, accepted seek replies, taken versions and reopens; and `open`, a
+   * published plan taken as the answer of a seek still waiting for its reply, one per seek, until that reply.
+   * Each session has its own `open`, so an answer that arrives for an earlier session changes nothing. */
+  private settled: Evidence = startOf(undefined);
+  private open = new Map<WaitingSeek, Evidence>();
+  /** Seeks sent and not yet answered, at the generations each was sent against, that a published plan can still
+   * answer (once; a plan on a newer source ends that for seeks sent on an older one). */
+  private seeking = new Set<WaitingSeek>();
+  /** The generations of the seek, version or reopen the restart position last followed: until a report is the
+   * restart position, a report there that does not present is the engine's old clock. */
+  private settling: { sourceGeneration: number; seekGeneration: number } | undefined;
+  /** The version switches still waiting for their version, in the order sent. A refusal removes its own; a lost reply
+   * leaves it. Its reply, or a plan on its session and a newer source that moves to its version, takes it and ends it
+   * and those sent before it; a new session ends them all. */
+  private switches: VersionSwitch[] = [];
+  private switchesSent = 0;
+  /** A version whose switch reply came behind a newer plan of another version: taken with that reply, but its tracks
+   * are its first usable plan's. Ended by that plan, by another switch taking effect and by a new session. */
+  private owedTracks: { sessionId: string; versionId: string } | undefined;
   /** The newest plan held back because it only moved the server's clock (plan-clock.ts): later
    * plans are ordered against it, though the one on show is older. */
   private clockAhead: V.PlaybackPlan | null = null;
@@ -257,7 +282,7 @@ export class Playback {
         if (plan) {
           await this.downloads.detailFor(target.id);
           if (this.run !== run) return;
-          this.cursor = plan.positionSeconds;
+          this.begin(plan);
           this.patch({ phase: 'playing', plan, sessionId: plan.sessionId });
           return;
         }
@@ -284,6 +309,7 @@ export class Playback {
     if (this.run !== run) return;
     const plan = connection.plan(existing);
     this.established = true;
+    this.begin(plan);
     // The session this watch's own restart started (the owner handing it back) goes on counting.
     const watch = this.watch;
     if (watch?.target !== watchOf(target) || watch.session !== plan.sessionId) this.watch = { target: watchOf(target), session: plan.sessionId, restarts: 0 };
@@ -306,7 +332,8 @@ export class Playback {
 
   /** One playback intent: every attempt and preparation re-request carries its idempotency key. */
   private async request(intent: Intent, attempt: number, preparation: number): Promise<void> {
-    const { run, target } = intent;
+    const { run } = intent;
+    let { target } = intent;
     const epoch = this.session.epoch;
     let connection: Connection;
     let viewerId = '';
@@ -326,6 +353,12 @@ export class Playback {
         if (!this.recovering && !initialShowId && serverId && viewerId && this.seriesTracks.hasForViewer(serverId, viewerId)) {
           showIdLookup = api.detail(target.id).then(detail => (detail.title.kind === 'episode' ? detail.title.showId : undefined)).catch(() => undefined);
         }
+      }
+      if (intent.atRestart && target.kind === 'title') {
+        // A restart asks at the restart position as it is now (a seek answered while it waited counts); retried
+        // under the same key, it sends the same request.
+        intent.target = target = { ...target, positionSeconds: this.restartAt() };
+        intent.atRestart = false;
       }
       const position = target.kind === 'title' || target.kind === 'programme' ? target.positionSeconds : undefined;
       if (target.kind === 'library-live') {
@@ -494,7 +527,8 @@ export class Playback {
     if (this.watch?.target !== watchOf(watchTarget)) this.watch = { target: watchOf(watchTarget), session: '', restarts: 0 };
     this.watch.session = plan.sessionId;
     this.stall = stallWatch(Date.now(), this.watch.restarts);
-    this.cursor = plan.positionSeconds ?? 0;
+    this.begin(plan);
+    this.switches = [];
     if (intent.liveResume && plan.live?.timeshift) {
       this.liveTransportIntent = { sessionId: plan.sessionId, atLive: evicted || intent.liveResume.kind === 'edge' };
     }
@@ -581,9 +615,12 @@ export class Playback {
     const controller = new AbortController();
     this.follow = controller;
     const present = (plan: V.PlaybackPlan) => connection.plan(plan);
-    const show = (plan: V.PlaybackPlan) => {
-      if (this.run !== run || controller.signal.aborted || plan.sessionId !== sessionId) return;
-      plan = this.withLocalTracks(plan);
+    const show = (raw: V.PlaybackPlan) => {
+      if (this.run !== run || controller.signal.aborted || raw.sessionId !== sessionId) return;
+      // A snapshot read, a poll or a plan replayed from it, behind the newest plan heard (a command the server has
+      // since accepted, a seek or a pause, or a version taken) would roll it back. An end is not held back.
+      if (raw.state !== 'ended' && olderThanShown(raw, this.newestShown())) return;
+      let plan = this.withLocalTracks(raw);
       if (this.stall && !this.recovering) {
         this.stall = heardServer(this.stall, plan, Date.now());
         this.armWatchdog(sessionId);
@@ -594,6 +631,11 @@ export class Playback {
         console.warn(`Vela playback: session ${sessionId} stopped by the server; giving up`);
         this.giveUp(true);
         return;
+      }
+      // A version taken here brings its own tracks, not the previous version's local choices.
+      if (!this.recovering) {
+        this.published(raw);
+        plan = this.withLocalTracks(raw);
       }
       // A plan that only moves the server's clock stays off the screen: a new plan every second
       // redrew the player (and handed the engine a new plan) for nothing.
@@ -633,9 +675,6 @@ export class Playback {
                 lost = true;
                 throw new Error('Session ended while its events were down');
               }
-              // A snapshot read, or a plan replayed from it, before a command the server has since accepted (a seek
-              // or a pause) would roll it back. An end is not held back.
-              if (plan.state !== 'ended' && olderThanShown(plan, this.newestShown())) return;
               show(plan);
             };
             const follow = followSession(adapter, present, sessionId, onPlan, attempt.signal, liveEvent => {
@@ -792,6 +831,7 @@ export class Playback {
     this.watch = { target: watchOf(current.target), session: '', restarts: attempt + 1 };
     this.stall = undefined;
     this.recovering = true;
+    this.switches = [];
     this.follow?.abort();
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = undefined;
@@ -806,11 +846,11 @@ export class Playback {
     const restart = plan && liveRestart(current.target, plan, Math.max(0, position),
       transport?.sessionId === sessionId ? transport.atLive : !current.live?.canCatchUp && atLiveEdge(plan, position));
     const target = current.target.kind === 'title'
-      ? { ...current.target, positionSeconds: this.cursor, audioTrackId: this.audio ?? current.plan?.selectedAudioTrackId }
+      ? { ...current.target, positionSeconds: this.restartAt(), audioTrackId: this.audio ?? current.plan?.selectedAudioTrackId }
       : restart?.target ?? current.target;
     this.abandoned = current.plan;
     this.patch({ phase: 'preparing', plan: null, error: '', errorClass: '', retryAfterSeconds: 1, versions: null });
-    this.scheduleRecovery({ run, target, key: `recover-${randomId()}`, liveResume: restart?.resume });
+    this.scheduleRecovery({ run, target, key: `recover-${randomId()}`, liveResume: restart?.resume, atRestart: current.target.kind === 'title' });
   }
 
   private scheduleRecovery(intent: Intent, old: V.PlaybackPlan | null = this.abandoned): void {
@@ -906,7 +946,7 @@ export class Playback {
   }
 
   /** Adds a found subtitle to the running session; the new track's id, or null when the server
-   * added none (it is still indexing) or the session moved on meanwhile. */
+   * added none (it is still indexing), the session moved on meanwhile, or the plan shown does not list it. */
   async downloadSubtitle(id: string): Promise<string | null> {
     const connection = await this.session.ready();
     const api = connection.adapter;
@@ -914,11 +954,35 @@ export class Playback {
     const sessionId = this.box.get().playback.sessionId;
     const previous = this.box.get().playback.plan;
     const plan = connection.plan(await api.downloadSubtitle(sessionId, id, this.session.key()));
-    if (this.box.get().playback.sessionId !== sessionId) return null;
-    this.patch({ plan });
+    if (this.box.get().playback.sessionId !== sessionId || this.recovering) return null;
     // A new track, or (the same file chosen again) the one the server selected for it.
     const added = plan.subtitleTracks.find(t => !previous?.subtitleTracks.some(p => p.id === t.id))?.id;
     const chosen = plan.selectedSubtitleTrackId && plan.selectedSubtitleTrackId !== previous?.selectedSubtitleTrackId ? plan.selectedSubtitleTrackId : null;
+    // Like a command reply, a reply behind the newest plan heard is not shown. Its track is given only when the plan
+    // shown is of the same version and lists it, after one read of the session when it does not yet; another version
+    // (the previous one) may lack it.
+    const shown = this.newestShown();
+    if (olderThanShown(plan, shown)) {
+      const track = added ?? chosen;
+      // Only while the same session and version are still playing.
+      const listed = () => {
+        const { phase, sessionId: current, plan: now } = this.box.get().playback;
+        return !this.recovering && phase === 'playing' && current === sessionId && now?.sessionId === sessionId &&
+          now.state !== 'ended' && now.selectedVersionId === plan.selectedVersionId &&
+          now.subtitleTracks.some(t => t.id === track);
+      };
+      if (!track || shown?.selectedVersionId !== plan.selectedVersionId) return null;
+      if (listed()) return track;
+      // Unless the read says the session ended or is gone, the plan shown then decides, also when the read fails (a
+      // plan heard meanwhile may list it).
+      let ended = false;
+      await this.refresh(sessionId, () => { ended = true; });
+      return !ended && listed() ? track : null;
+    }
+    // A reply naming the version a switch still waits for brings it, as a command reply would.
+    if (this.tookVersion(plan)) this.taken(plan);
+    this.expire(plan.sourceGeneration);
+    this.patch({ plan: this.withLocalTracks(plan) });
     return added ?? chosen;
   }
 
@@ -972,32 +1036,63 @@ export class Playback {
     const answered = (plan: V.PlaybackPlan | null) => {
       if (watch && this.stall && current.sessionId === sessionId && this.box.get().playback.sessionId === sessionId) this.stall = engineCommandAnswered(this.stall, plan);
     };
+    const seek: WaitingSeek | undefined = command.kind === 'seek'
+      ? { sessionId, seconds: command.positionSeconds, sourceGeneration: command.sourceGeneration, seekGeneration: command.seekGeneration, open: this.open } : undefined;
+    if (seek) this.seeking.add(seek);
     try {
       const connection = await this.session.ready();
       const plan = await this.send(connection.adapter, sessionId, command, origin);
       answered(plan);
+      // An accepted seek is the viewer's place at its reply's position and generations, also behind the plan shown,
+      // in place of a published plan taken as its answer, while its session is still the one shown.
+      if (seek) {
+        seek.open.delete(seek);
+        if (this.owns(seek)) this.offer(evidenceOf(plan, CONFIRMED));
+      }
       if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
+        // A late reply behind the plan already shown on its generations (a newer seek's, a version switch's)
+        // is not published, though an accepted seek's evidence was offered above. One behind it only on revision
+        // is not published either, but what it confirms (its seek, its tracks) still counts. The revision is the
+        // newest heard, a plan held back for moving only the clock included.
+        const shown = this.box.get().playback.plan;
         let nextPlan = connection.plan(plan);
-        if (command.kind === 'tracks') {
+        // A track reply on the shown plan's source records its selection even when its seek generation is behind.
+        if (command.kind === 'tracks' && !(shown && plan.sourceGeneration < shown.sourceGeneration)) {
           if (command.audioTrackId !== undefined && nextPlan.selectedAudioTrackId) this.audio = nextPlan.selectedAudioTrackId;
           if (command.subtitleTrackId !== undefined) this.subtitle = nextPlan.selectedSubtitleTrackId;
-          nextPlan = this.withLocalTracks(nextPlan);
-        } else {
-          nextPlan = this.withLocalTracks(nextPlan);
         }
         if (nextPlan.live && (command.kind === 'goLive' || command.kind === 'seek' || command.kind === 'pause')) {
           this.liveTransportIntent = { sessionId, atLive: command.kind === 'goLive' };
         }
         if (origin === 'viewer' && command.kind === 'goLive') this.resetRestartBudget(sessionId);
-        this.patch({ plan: nextPlan });
+        if (shown && olderPlan(plan, shown, false)) return true;
+        const behind = olderThanShown(plan, this.newestShown());
+        const newer = behind ? shown : undefined;
+        // A reply naming the version a switch still waits for brings it, as a published plan would; one behind the
+        // newest plan heard is not shown and brings nothing (that version's next plan still may).
+        if (!behind && this.tookVersion(nextPlan)) this.taken(nextPlan);
+        this.expire(plan.sourceGeneration);
+        nextPlan = this.withLocalTracks(nextPlan);
+        this.patch({ plan: newer ? this.withLocalTracks(newer) : nextPlan });
         return true;
       }
       return false;
     } catch (error) {
       answered(null);
+      // A plan published at the target of a seek the server refused did not answer it (a track change at that
+      // position), so it goes. A lost reply (no answer from the server) says nothing against that plan: it stays.
+      const match = seek?.open.get(seek);
+      if (seek && match) {
+        seek.open.delete(seek);
+        if (this.owns(seek) && !serverRefused(error)) this.offer(match);
+        // Left with a report or the session's start, there is no followed position whose old clock to wait out.
+        else if (this.owns(seek) && [REPORTED, UNPRESENTED, STARTED].includes(this.newest().rank)) this.settling = undefined;
+      }
       const words = commandFailure(command, error, origin);
       if (words && this.box.get().playback.sessionId === sessionId) this.patch({ error: words });
       return false;
+    } finally {
+      if (seek) this.seeking.delete(seek);
     }
   }
 
@@ -1007,23 +1102,71 @@ export class Playback {
     if (!plan) throw new Error('Playback session is unavailable');
     const connection = await this.session.ready();
     if (!hasVersions(connection.adapter)) throw new Error('Versions are unavailable');
-    const next = connection.plan(await connection.adapter.switchVersion(sessionId, {
-      kind: 'version', versionId, ...(positionSeconds !== undefined ? { positionSeconds } : {}),
-      sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
-      idempotencyKey: this.session.key(),
-    }));
+    // Until its version is taken, a published plan on this session that moves to this version is the one the viewer chose.
+    const switching: VersionSwitch = { sessionId, sourceGeneration: plan.sourceGeneration, versionId, number: ++this.switchesSent };
+    this.switches = [...this.switches, switching];
+    let next: V.PlaybackPlan;
+    try {
+      next = connection.plan(await connection.adapter.switchVersion(sessionId, {
+        kind: 'version', versionId, ...(positionSeconds !== undefined ? { positionSeconds } : {}),
+        sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration,
+        idempotencyKey: this.session.key(),
+      }));
+    } catch (error) {
+      // A refusal ends this switch only. A lost reply says nothing against it: a plan naming the version still counts as it.
+      if (serverRefused(error)) this.dropSwitch(switching);
+      throw error;
+    }
+    // Neither a published plan nor a later switch has taken it yet: the reply does, also when its source is already
+    // shown, but not when it shows this version unavailable, nor from behind a plan that does: its first usable plan
+    // still takes it.
+    const newest = this.newestShown();
+    const unavailable = next.sourceFailure === 'version_unavailable';
+    const unseen = !unavailable && this.switches.includes(switching) && !(olderThanShown(next, newest) &&
+      newest?.selectedVersionId === switching.versionId && newest.sourceFailure === 'version_unavailable');
+    if (unseen) this.applySwitch(switching.number);
     const now = this.box.get().playback;
-    // A restart (stall recovery) asks for the file now playing, not the one first asked for.
-    if (now.sessionId === sessionId) {
-      if (!this.recovering) this.resetRestartBudget(sessionId);
-      // Track IDs and local choices belong to the previous version. Keep the negotiated
-      // selection through later snapshots and recovery, even when a track ID is reused.
-      this.localTracks = false;
-      this.audio = next.selectedAudioTrackId;
-      this.subtitle = next.selectedSubtitleTrackId;
-      this.patch({ plan: next, error: '', ...(now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {}) });
+    // A restart (stall recovery) asks for the file now playing, not the one first asked for. Once a published plan
+    // brought this version or a later switch was taken, a reply behind the plan shown (that later version's, a
+    // seek's on this one) changes nothing, nor does a reply arriving while recovering. Any reply behind the newest
+    // plan heard (a seek, track change or pause on its version, also one held back for moving only the clock)
+    // neither replaces the plan shown nor takes its tracks.
+    const fresh = !olderThanShown(next, newest);
+    if (now.sessionId === sessionId && !this.recovering && (unseen || fresh)) {
+      // The version is taken once, with a fresh restart budget: here, unless a published plan already brought it.
+      if (unseen) {
+        this.resetRestartBudget(sessionId);
+        if (fresh) this.takeTracks(next);
+        // Behind a newer plan of another version, the reply's tracks are not the player's: the first usable plan of
+        // its version brings them.
+        else if (newest?.selectedVersionId !== switching.versionId) this.owedTracks = { sessionId, versionId: switching.versionId };
+        this.taken(next);
+      }
+      // A reply showing its version unavailable is shown, with the local choices, and changes nothing else.
+      if (!unavailable) this.expire(next.sourceGeneration);
+      const target = unseen && now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {};
+      this.patch(fresh ? { plan: unavailable ? this.withLocalTracks(next) : next, error: '', ...target } : target);
     }
     return next;
+  }
+
+  private dropSwitch(switching: VersionSwitch): void {
+    this.switches = this.switches.filter(other => other !== switching);
+  }
+
+  /** Switch `number` took effect: it and those sent before it are no longer awaited. */
+  private applySwitch(number: number): void {
+    this.switches = this.switches.filter(other => other.number > number);
+    this.owedTracks = undefined;
+  }
+
+  /** Track IDs and local choices belong to the previous version. Keep the negotiated
+   * selection through later snapshots and recovery, even when a track ID is reused. */
+  private takeTracks(plan: V.PlaybackPlan): void {
+    this.owedTracks = undefined;
+    this.localTracks = false;
+    this.audio = plan.selectedAudioTrackId;
+    this.subtitle = plan.selectedSubtitleTrackId;
   }
 
   private resetRestartBudget(sessionId: string): void {
@@ -1056,20 +1199,131 @@ export class Playback {
     }
   }
 
+  /** A plan the server published on the session: the version a switch still waits for or else, when it is newer
+   * than the plan shown, the answer of the oldest waiting seek at its target and past the seek generation that seek
+   * was sent against (each seek and each plan once). A track change can also land at a waiting seek's target: the
+   * plan counts until the seek's reply. It ends the matching of seeks sent on an older source. */
+  private published(plan: V.PlaybackPlan): void {
+    const shown = this.box.get().playback.plan;
+    if (this.tookVersion(plan)) this.taken(plan);
+    else if (!shown || plan.sourceGeneration > shown.sourceGeneration || plan.seekGeneration > shown.seekGeneration) {
+      const seek = [...this.seeking].find(seek => seek.sessionId === plan.sessionId && plan.sourceGeneration >= seek.sourceGeneration &&
+        plan.seekGeneration > seek.seekGeneration && Math.abs(seek.seconds - plan.positionSeconds) < 0.001);
+      if (seek) {
+        this.seeking.delete(seek);
+        const entry = evidenceOf(plan, MATCHED);
+        this.open.set(seek, entry);
+        this.fence(entry);
+      }
+    }
+    this.expire(plan.sourceGeneration);
+  }
+
+  /** A usable plan on the session that moves from the version shown to the version a switch still waits for, on a newer
+   * source than that switch was sent against, is that version (the oldest such switch): recovery asks for it and its
+   * tracks, as after the switch reply, with a fresh restart budget. One that moves to a version owed its tracks
+   * (`owedTracks`) brings only those. */
+  private tookVersion(plan: V.PlaybackPlan): boolean {
+    // A version shown only as unavailable has not been brought yet: its first usable plan still is.
+    if (plan.sourceFailure === 'version_unavailable') return false;
+    const shown = this.box.get().playback.plan;
+    if (plan.selectedVersionId === shown?.selectedVersionId && shown?.sourceFailure !== 'version_unavailable') return false;
+    const switching = this.switches.find(other => other.sessionId === plan.sessionId && other.versionId === plan.selectedVersionId &&
+      plan.sourceGeneration > other.sourceGeneration);
+    if (!switching) {
+      const owed = this.owedTracks;
+      if (owed?.sessionId === plan.sessionId && owed.versionId === plan.selectedVersionId) this.takeTracks(plan);
+      return false;
+    }
+    this.applySwitch(switching.number);
+    this.resetRestartBudget(plan.sessionId);
+    this.takeTracks(plan);
+    const { target } = this.box.get().playback;
+    if (target?.kind === 'title') this.patch({ target: { ...target, versionId: plan.selectedVersionId } });
+    return true;
+  }
+
+  /** A version taken or an original reopened is where the viewer is, at its plan's position; seeks sent on the
+   * older source no longer answer for it. */
+  private taken(plan: V.PlaybackPlan): void {
+    for (const seek of this.open.keys()) if (seek.sourceGeneration < plan.sourceGeneration) this.open.delete(seek);
+    this.offer(evidenceOf(plan, CONFIRMED));
+  }
+
+  /** A plan on a newer source ends the matching of seeks sent on an older one; their replies still count. */
+  private expire(sourceGeneration: number): void {
+    for (const seek of this.seeking) if (seek.sourceGeneration < sourceGeneration) this.seeking.delete(seek);
+  }
+
+  /** Settled evidence: it replaces the settled entry when it is at least as new. */
+  private offer(entry: Evidence): void {
+    if (compareEvidence(entry, this.settled) >= 0) this.settled = entry;
+    this.fence(entry);
+  }
+
+  /** New evidence that is now the restart position: a report lifts the fence on old clocks; a followed seek,
+   * version or reopen puts it at its generations, never back from newer ones it was put at. */
+  private fence(entry: Evidence): void {
+    if (this.newest() !== entry) return;
+    if (entry.rank === REPORTED || entry.rank === UNPRESENTED) this.settling = undefined;
+    else if (!this.settling || (entry.sourceGeneration - this.settling.sourceGeneration || entry.seekGeneration - this.settling.seekGeneration) >= 0) {
+      this.settling = { sourceGeneration: entry.sourceGeneration, seekGeneration: entry.seekGeneration };
+    }
+  }
+
+  /** A seek's reply is evidence only while its session is the one shown, in the same incarnation (its own `open`). */
+  private owns(seek: WaitingSeek): boolean {
+    return seek.open === this.open && seek.sessionId === this.box.get().playback.sessionId;
+  }
+
+  /** The newest evidence by source generation, seek generation and rank; a waiting seek's match wins a tie. */
+  private newest(): Evidence {
+    let newest = this.settled;
+    for (const entry of this.open.values()) if (compareEvidence(entry, newest) >= 0) newest = entry;
+    return newest;
+  }
+
+  /** Where a title restarts: the newest evidence's position. */
+  private restartAt(): number {
+    return this.newest().seconds;
+  }
+
+  /** The newest source and seek generations the session has shown or has evidence at. */
+  private marks(): { sourceGeneration: number; seekGeneration: number } {
+    const { plan } = this.box.get().playback;
+    let sourceGeneration = Math.max(plan?.sourceGeneration ?? 0, this.settled.sourceGeneration);
+    let seekGeneration = Math.max(plan?.seekGeneration ?? 0, this.settled.seekGeneration);
+    for (const entry of this.open.values()) {
+      sourceGeneration = Math.max(sourceGeneration, entry.sourceGeneration);
+      seekGeneration = Math.max(seekGeneration, entry.seekGeneration);
+    }
+    return { sourceGeneration, seekGeneration };
+  }
+
+  /** A new session: its evidence starts at its plan. */
+  private begin(plan: V.PlaybackPlan | undefined): void {
+    this.settled = startOf(plan);
+    this.open = new Map();
+    this.settling = undefined;
+    this.owedTracks = undefined;
+  }
+
   private offersPath(sessionId: string, pathId: string): boolean {
     const { plan } = this.box.get().playback;
     return plan?.sessionId === sessionId && plan.paths.some(path => path.id === pathId);
   }
 
   /** Read the session's authoritative plan again (the player found its grant expired or a reply stale).
-   * False when the session is gone (the server ended it, or it cannot be read): the caller starts over. */
-  async refresh(sessionId: string): Promise<boolean> {
+   * False when the session is gone (the server ended it, or it cannot be read): the caller starts over. `ended` is
+   * called when the read says the session ended or is no longer known. */
+  async refresh(sessionId: string, ended?: () => void): Promise<boolean> {
     if (sessionId.startsWith('local-')) return this.box.get().playback.sessionId === sessionId;
     try {
       const connection = await this.session.ready();
       const snapshot = await connection.adapter.sessionSnapshot(sessionId);
       if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
       if (snapshot.plan.state === 'ended') {
+        ended?.();
         const current = this.box.get().playback;
         const playerEnded = this.lastPosition?.sessionId === sessionId && this.lastPosition.ended;
         if (this.recovering || current.sessionId !== sessionId || current.phase !== 'playing' || serverEnd(current.target, playerEnded) !== 'stopped') return false;
@@ -1078,9 +1332,18 @@ export class Playback {
         this.giveUp(true);
         return true;
       }
-      if (!this.recovering && this.box.get().playback.sessionId === sessionId) this.patch({ plan: this.withLocalTracks(connection.plan(snapshot.plan)) });
+      if (!this.recovering && this.box.get().playback.sessionId === sessionId) {
+        const plan = connection.plan(snapshot.plan);
+        // As on the event stream, a read from before a command the server has since accepted is not put back.
+        if (!olderThanShown(plan, this.newestShown())) {
+          this.published(plan);
+          this.patch({ plan: this.withLocalTracks(plan) });
+        }
+      }
       return true;
-    } catch {
+    } catch (error) {
+      // A session the server no longer knows has ended as well.
+      if (error instanceof VelaError && error.detail.code === 'session_not_found') ended?.();
       // The caller starts over; the server's words are not the viewer's.
       return false;
     }
@@ -1112,15 +1375,26 @@ export class Playback {
       const snapshot = await connection.adapter.sessionSnapshot(sessionId);
       if (!ownsRead()) return 'superseded';
       if (snapshot.plan.sessionId !== sessionId) return 'gone';
-      const plan = this.withLocalTracks(connection.plan(snapshot.plan));
+      const raw = connection.plan(snapshot.plan);
+      let plan = this.withLocalTracks(raw);
       if (plan.sourceFailure === 'version_unavailable') {
-        this.cursor = Math.max(0, positionSeconds);
-        this.lastPosition = { sessionId, seconds: this.cursor, ended: false };
+        // The caller's position is where the viewer is, as a report there at the newest generations, the returned
+        // plan's included; no published plan stands for a seek.
+        const seconds = Math.max(0, positionSeconds);
+        const shown = this.marks();
+        const marks = { sourceGeneration: Math.max(shown.sourceGeneration, plan.sourceGeneration), seekGeneration: Math.max(shown.seekGeneration, plan.seekGeneration) };
+        this.open.clear();
+        this.offer({ ...marks, rank: REPORTED, seconds });
+        this.lastPosition = { sessionId, seconds, ended: false };
         this.patch({ plan, phase: 'playing', versions: sessionVersionsOf(plan) ?? this.box.get().playback.versions });
         return 'version_unavailable';
       }
       if (plan.state === 'ended' || plan.sourceGeneration <= (failedSourceGeneration ?? before.sourceGeneration)) return 'gone';
-      this.cursor = plan.positionSeconds;
+      // A version taken (or owed its tracks) here brings its own tracks, not the previous version's local choices.
+      plan = this.tookVersion(raw) ? raw : this.withLocalTracks(raw);
+      // The reopened source is where playback is.
+      this.taken(plan);
+      this.expire(plan.sourceGeneration);
       this.lastPosition = { sessionId, seconds: plan.positionSeconds, ended: false };
       this.patch({ plan, phase: 'playing', error: '', errorCode: '', errorClass: '' });
       return 'reopened';
@@ -1164,7 +1438,7 @@ export class Playback {
       const { playback } = this.box.get();
       if (playback.sessionId === sessionId && !observation.error && observation.state !== 'buffering') {
         const ended = observation.state === 'ended';
-        this.cursor = observation.positionSeconds;
+        this.offer({ ...this.marks(), rank: REPORTED, seconds: observation.positionSeconds });
         this.lastPosition = { sessionId, seconds: observation.positionSeconds, ended };
         await this.checkpointDownload(observation.observedAt);
       }
@@ -1209,8 +1483,25 @@ export class Playback {
   snapshot(snapshot: LiveObservation & StallSample & { audioTrackId?: string | null; subtitleTrackId?: string | null; timeshiftRecoveryEvicted?: boolean | null }): void {
     const current = this.box.get().playback;
     if (snapshot.sessionId !== current.sessionId || this.recovering) return;
-    if (snapshot.position !== undefined) this.cursor = snapshot.position;
-    const { plan } = current;
+    const presenting = snapshot.state === 'playing' || snapshot.state === 'paused';
+    // A report is at the generations it gives, a missing one at the newest the session has. One behind those
+    // (a late report from before an accepted seek or a version) is not the viewer's place; one ahead of the
+    // plan is newer than a reply the store has heard.
+    const plan = current.plan;
+    const marks = this.marks();
+    const at = { sourceGeneration: snapshot.sourceGeneration ?? marks.sourceGeneration, seekGeneration: snapshot.seekGeneration ?? marks.seekGeneration };
+    const stale = at.sourceGeneration < marks.sourceGeneration || at.seekGeneration < marks.seekGeneration;
+    // An engine (re)loading a source reports a reset clock of zero before it presents: not the viewer's place.
+    // Nor, after the restart position followed a seek, a version or a reopen, is a report at its generations
+    // before the engine presents it (an old clock while it loads, buffers or seeks).
+    const settling = !presenting && this.settling?.sourceGeneration === at.sourceGeneration && this.settling.seekGeneration === at.seekGeneration;
+    if (snapshot.position !== undefined && !stale && !settling && (snapshot.position > 0 || presenting)) {
+      // Until the player presents at these generations, a report there that does not present ranks below a seek's
+      // answer at them; once it has, later ones advance the clock as any report.
+      const shown = presenting || (this.settled.rank === REPORTED &&
+        this.settled.sourceGeneration === at.sourceGeneration && this.settled.seekGeneration === at.seekGeneration);
+      this.offer({ ...at, rank: shown ? REPORTED : UNPRESENTED, seconds: snapshot.position });
+    }
     if (snapshot.timeshiftRecoveryEvicted && plan?.live?.timeshift
       && current.timeshiftRecovery?.sessionId === plan.sessionId && current.timeshiftRecovery.seekGeneration === plan.seekGeneration
       && snapshot.sourceGeneration === plan.sourceGeneration && snapshot.seekGeneration === plan.seekGeneration) {
@@ -1227,7 +1518,9 @@ export class Playback {
       this.liveCursor = { sessionId: plan.sessionId, sourceGeneration: plan.sourceGeneration,
         seekGeneration: plan.seekGeneration, seconds: snapshot.position };
     }
-    if (!this.localTracks && (snapshot.state === 'playing' || snapshot.state === 'paused')) {
+    // A report behind the newest generations the session has shown or has evidence at (an older source, or a seek
+    // since accepted on the same one) names tracks the player has since left; one without generations is at the newest.
+    if (!this.localTracks && presenting && !stale) {
       if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
       if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
     }
@@ -1302,7 +1595,7 @@ export class Playback {
     this.run = run;
     this.established = true;
     this.watch = { target: watchOf(target), session: plan.sessionId, restarts: 0 };
-    this.cursor = plan.positionSeconds ?? 0;
+    this.begin(plan);
     this.patch({ ...initialPlayback, phase: 'playing', target, plan, sessionId: plan.sessionId });
     this.snapshot({ sessionId: plan.sessionId, live: null, position: plan.positionSeconds ?? 0, state: 'loading' });
     void this.session.ready().then(connection => { if (this.run === run) this.followSession(run, connection, plan.sessionId); }, () => undefined);
@@ -1319,7 +1612,7 @@ export class Playback {
     if (!sessionId.startsWith('local-') || !plan?.titleId || this.lastPosition?.sessionId !== sessionId) return;
     return this.downloads?.recordProgress({
       titleId: plan.titleId,
-      positionSeconds: this.cursor,
+      positionSeconds: this.restartAt(),
       durationSeconds: plan.durationSeconds,
       completed: this.lastPosition.ended,
       observedAt,
@@ -1460,7 +1753,9 @@ export class Playback {
     this.established = false;
     this.recoveryAttempt = 0;
     this.stall = undefined;
-    this.cursor = 0;
+    this.begin(undefined);
+    this.seeking.clear();
+    this.switches = [];
     this.liveCursor = undefined;
     this.liveTransportIntent = undefined;
     this.localTracks = false;
@@ -1637,6 +1932,33 @@ export class Playback {
     }
     return sent;
   }
+}
+
+/** A seek sent and not yet answered, at the generations it was sent against, with the open evidence of its session. */
+type WaitingSeek = { sessionId: string; seconds: number; sourceGeneration: number; seekGeneration: number; open: Map<WaitingSeek, Evidence> };
+
+/** A position the viewer was at, with the generations it belongs to and its rank among evidence at those
+ * generations: a report the player made, then an accepted seek reply, a taken version or a reopen, then a
+ * published plan taken as a waiting seek's answer, then a report that does not present (loading, buffering)
+ * made before the player presented at those generations, then the session's start. */
+type Evidence = { sourceGeneration: number; seekGeneration: number; rank: number; seconds: number };
+const STARTED = 0, UNPRESENTED = 1, MATCHED = 2, CONFIRMED = 3, REPORTED = 4;
+
+const evidenceOf = (plan: V.PlaybackPlan, rank: number): Evidence =>
+  ({ sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration, rank, seconds: plan.positionSeconds });
+
+const startOf = (plan: V.PlaybackPlan | undefined): Evidence =>
+  ({ sourceGeneration: plan?.sourceGeneration ?? 0, seekGeneration: plan?.seekGeneration ?? 0, rank: STARTED, seconds: plan?.positionSeconds ?? 0 });
+
+const compareEvidence = (a: Evidence, b: Evidence) =>
+  a.sourceGeneration - b.sourceGeneration || a.seekGeneration - b.seekGeneration || a.rank - b.rank;
+
+/** A plan older than the one shown: behind on its source generation, then its seek generation, then (unless
+ * `revision` is false) its revision when both carry one. */
+function olderPlan(plan: V.PlaybackPlan, shown: V.PlaybackPlan, revision = true): boolean {
+  if (plan.sourceGeneration !== shown.sourceGeneration) return plan.sourceGeneration < shown.sourceGeneration;
+  if (plan.seekGeneration !== shown.seekGeneration) return plan.seekGeneration < shown.seekGeneration;
+  return revision && typeof plan.revision === 'number' && typeof shown.revision === 'number' && plan.revision < shown.revision;
 }
 
 /** What a watch is of, whatever position or track a restart asks it again at. */
