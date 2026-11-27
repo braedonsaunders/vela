@@ -20,8 +20,12 @@ interface StepState {
   leaving: boolean;
   /** The stage is showing: until then blocks wait, unseen, to enter. */
   ready: boolean;
+  /** When the step began showing. */
+  since: number;
 }
-const StepContext = createContext<StepState>({ direction: 'forward', first: false, leaving: false, ready: true });
+const StepContext = createContext<StepState>({ direction: 'forward', first: false, leaving: false, ready: true, since: 0 });
+/** A block mounting this long after its step began arrived later (servers found): it comes at once. */
+const LATE_MS = 450;
 
 /** The current step, keyed by `id`; when the id changes the previous one dissolves over it. */
 export function Steps({ id, direction, children }: { id: string; direction: StepDirection; children: ReactNode }) {
@@ -29,7 +33,8 @@ export function Steps({ id, direction, children }: { id: string; direction: Step
   const last = useRef<ReactNode>(children);
   const [shown, setShown] = useState<{ id: string; leaving: { id: string; node: ReactNode; direction: StepDirection } | null }>({ id, leaving: null });
   // A new step: the previous one's last drawing leaves; the new one enters.
-  if (shown.id !== id) setShown({ id, leaving: { id: shown.id, node: last.current, direction } });
+  const since = useRef(Date.now());
+  if (shown.id !== id) { setShown({ id, leaving: { id: shown.id, node: last.current, direction } }); since.current = Date.now(); }
   else last.current = children;
   useEffect(() => {
     if (!shown.leaving) return;
@@ -43,11 +48,11 @@ export function Steps({ id, direction, children }: { id: string; direction: Step
     <View style={{ flexGrow: 1 }}>
       {shown.leaving ? (
         <Animated.View key={shown.leaving.id} pointerEvents="none" style={[{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }, exit(shown.leaving.direction)]}>
-          <StepContext.Provider value={{ direction: shown.leaving.direction, first: false, leaving: true, ready: true }}>{shown.leaving.node}</StepContext.Provider>
+          <StepContext.Provider value={{ direction: shown.leaving.direction, first: false, leaving: true, ready: true, since: 0 }}>{shown.leaving.node}</StepContext.Provider>
         </Animated.View>
       ) : null}
       <Animated.View key={id} style={{ flexGrow: 1 }}>
-        <StepContext.Provider value={{ direction, first: entering.current, leaving: false, ready: stage?.ready ?? true }}>{children}</StepContext.Provider>
+        <StepContext.Provider value={{ direction, first: entering.current, leaving: false, ready: stage?.ready ?? true, since: since.current }}>{children}</StepContext.Provider>
       </Animated.View>
     </View>
   );
@@ -65,10 +70,14 @@ function exit(direction: StepDirection): ViewStyle {
 /** A block of a step, rising into place `index` beats after the step begins. */
 export function Rise({ index, children, style }: { index: number; children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const look = useLook();
-  const { direction, first, leaving, ready } = useContext(StepContext);
+  const { direction, first, leaving, ready, since } = useContext(StepContext);
+  const from = useContext(StepIndex);
   // The entrance is chosen once, when the stage first shows the block: re-renders never restart it.
   const entrance = useRef<ViewStyle | null>(null);
-  if (!entrance.current && (ready || leaving)) entrance.current = (leaving ? {} : animation(blockEntrance(index, direction, first), {}, look.still, 0) ?? {}) as ViewStyle;
+  if (!entrance.current && (ready || leaving)) {
+    const late = !first && since > 0 && Date.now() - since > LATE_MS;
+    entrance.current = (leaving ? {} : animation(blockEntrance(late ? Math.max(0, index - from) : index, direction, first, late), {}, look.still, 0) ?? {}) as ViewStyle;
+  }
   return <Animated.View style={[style, entrance.current ?? { opacity: 0 }]}>{children}</Animated.View>;
 }
 
@@ -131,7 +140,8 @@ export function StepFrame({ title, subtitle, heading, body, actions, align = 'sp
             {subtitle ? <Rise index={index++}><Subtitle>{subtitle}</Subtitle></Rise> : null}
           </View>
         ) : null}
-        {body ? <StepIndex.Provider value={index + 1}>{body}</StepIndex.Provider> : null}
+        {/* The body enters as one block; lists inside it then arrive row by row. */}
+        {body ? <StepIndex.Provider value={index + 1}><Rise index={index} style={{ gap: gap + 4 }}>{body}</Rise></StepIndex.Provider> : null}
       </View>
       {!split ? <View style={{ flexGrow: align === 'centre' ? 1.6 : 1, minHeight: actions ? between : 0 }} /> : actions ? <View style={{ height: gap + 8 }} /> : null}
       {actions ? (

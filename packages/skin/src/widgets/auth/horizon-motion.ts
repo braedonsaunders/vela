@@ -49,3 +49,12 @@ export const HORIZON_MOTION: Record<string, Motion> = {
 /** How long the horizon takes to move between steps: an unhurried, decelerating glide. */
 export const HORIZON_MS = 820;
 export const HORIZON_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
+/** While the iOS keyboard moves: its own duration on a curve close to its own (nearly linear,
+ * settling softly), so the horizon and the step rise with the keys rather than ahead of them. */
+export const KEYBOARD_EASE = 'cubic-bezier(0.25, 0.25, 0.2, 1)';
+
+export interface Move {
+  ms: number;
+  ease: string;
+}

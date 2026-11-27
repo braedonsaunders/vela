@@ -31,7 +31,7 @@ const EASE_OUT = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
 /** The n-th block of an entering step: it rises (or, going back, settles down) into place after
  * the one before it, capped so a long list does not keep the viewer waiting. */
-export function blockEntrance(index: number, direction: StepDirection, first = false): Motion {
+export function blockEntrance(index: number, direction: StepDirection, first = false, late = false): Motion {
   const offset = direction === 'back' ? -14 : 18;
   return {
     keyframes: direction === 'back' ? 'velaStepSettle' : 'velaStepRise',
@@ -39,8 +39,9 @@ export function blockEntrance(index: number, direction: StepDirection, first = f
       velaStepRise: { from: { opacity: 0, transform: [{ translateY: offset }] } },
       velaStepSettle: { from: { opacity: 0, transform: [{ translateY: offset }] } },
     },
-    // The first screen waits for the sail to draw; later steps follow the outgoing one's fade.
-    delay: (first ? 900 : 140) + Math.min(index, 8) * 70,
+    // The first screen waits for the sail to draw; later steps follow the outgoing one's fade;
+    // blocks arriving into a step already showing (servers found) come at once, in turn.
+    delay: (first ? 900 : late ? 40 : 140) + Math.min(index, 8) * 70,
     duration: 620,
     easing: EASE_OUT,
     fill: 'both',

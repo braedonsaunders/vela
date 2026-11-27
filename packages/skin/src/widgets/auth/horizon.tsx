@@ -9,7 +9,7 @@ import Animated from 'react-native-reanimated';
 import { useHost } from '../../host';
 import { animation, easing } from '../../motion';
 import { useLook } from '../common/look';
-import { HORIZON_EASE, HORIZON_MOTION } from './horizon-motion';
+import { HORIZON_EASE, HORIZON_MOTION, type Move } from './horizon-motion';
 import type { HorizonPlan } from './layout';
 import { SAIL_ASPECT, SAIL_DRAWN_MS, SailMark, SailReflection } from './sail';
 
@@ -48,7 +48,7 @@ const GLINTS = [
   { y: 76, width: 0.44, x: -0.03 },
 ];
 
-export function Horizon({ plan, width, height, maxSail, waiting, branding, draw, moveMs }: {
+export function Horizon({ plan, width, height, maxSail, waiting, branding, draw, move }: {
   plan: HorizonPlan;
   width: number;
   height: number;
@@ -58,8 +58,8 @@ export function Horizon({ plan, width, height, maxSail, waiting, branding, draw,
   branding?: SceneBranding;
   /** Play the mark's entrance (the first appearance of the stage). */
   draw: boolean;
-  /** How long the horizon takes to reach a new place (a keyboard's own duration while one moves). */
-  moveMs: number;
+  /** How the horizon reaches a new place (at a keyboard's own pace while one moves). */
+  move: Move;
 }) {
   const look = useLook();
   const host = useHost();
@@ -71,10 +71,10 @@ export function Horizon({ plan, width, height, maxSail, waiting, branding, draw,
     const shifted = preset && delay !== undefined ? { ...preset, delay } : preset;
     return (animation(shifted, host.doc.keyframes, still, 0) ?? {}) as ViewStyle;
   };
-  const glide = (ms: number): ViewStyle => (still || ms <= 0 ? {} : {
+  const glide = ({ ms, ease }: Move): ViewStyle => (still || ms <= 0 ? {} : {
     transitionProperty: ['transform', 'opacity'],
     transitionDuration: ms,
-    transitionTimingFunction: easing(HORIZON_EASE),
+    transitionTimingFunction: easing(ease),
   } as unknown as ViewStyle);
   const centre = plan.split ? plan.pane / 2 : width / 2;
   const sailWidth = maxSail * SAIL_ASPECT;
@@ -88,7 +88,7 @@ export function Horizon({ plan, width, height, maxSail, waiting, branding, draw,
       {/* First appearance: the dusk comes up out of the dark as the sail draws. */}
       <Animated.View style={[StyleSheet.absoluteFill, draw && !still ? fadeIn(0, 1400) : null]}>
       {/* Everything hangs from the horizon: one transform moves the whole world. */}
-      <Animated.View style={[styles.anchor, { width, transform: [{ translateY: plan.horizon }] }, glide(moveMs)]}>
+      <Animated.View style={[styles.anchor, { width, transform: [{ translateY: plan.horizon }] }, glide(move)]}>
         {/* Sky */}
         <View style={[styles.above, { height: height + 40 }]}>
           {backdrop ? <Image source={backdrop} contentFit="cover" style={[StyleSheet.absoluteFill, { opacity: 0.62 }]} /> : null}
@@ -114,26 +114,26 @@ export function Horizon({ plan, width, height, maxSail, waiting, branding, draw,
           <View style={[styles.highlight, { left: width * 0.3, width: width * 0.4, backgroundImage: `linear-gradient(90deg, #ffffff00, #ffffffcc, #ffffff00)` } as ViewStyle]} />
         </Animated.View>
         {/* Waiting: a brighter light travelling the line. */}
-        <Animated.View style={[styles.drift, { width, opacity: waiting ? 1 : 0 }, glide(600), waiting ? motion('velaHorizonSweep') : null]}>
+        <Animated.View style={[styles.drift, { width, opacity: waiting ? 1 : 0 }, glide({ ms: 600, ease: HORIZON_EASE }), waiting ? motion('velaHorizonSweep') : null]}>
           <View style={[styles.sweep, { left: width / 2 - 70, backgroundImage: `radial-gradient(ellipse 50% 50% at 50% 50%, #ffffffee 0%, ${palette.line}88 30%, ${palette.glow}00 100%)` } as ViewStyle]} />
         </Animated.View>
         {/* The sail and its reflection, drawn at the largest size and scaled onto the line. */}
         {mark ? (
-          <Animated.View style={[styles.brand, { left: centre - Math.min(width * 0.36, 180), width: Math.min(width * 0.72, 360), height: Math.max(plan.sail, 40) * 0.6, opacity: plan.sail > 0 ? 1 : 0 }, glide(moveMs)]}>
+          <Animated.View style={[styles.brand, { left: centre - Math.min(width * 0.36, 180), width: Math.min(width * 0.72, 360), height: Math.max(plan.sail, 40) * 0.6, opacity: plan.sail > 0 ? 1 : 0 }, glide(move)]}>
             <Image source={mark} contentFit="contain" style={StyleSheet.absoluteFill} />
           </Animated.View>
         ) : branding?.name ? (
-          <Animated.View style={[styles.brand, { left: 0, width: plan.split ? plan.pane : width, alignItems: 'center', opacity: plan.sail > 0 ? 1 : 0 }, glide(moveMs)]}>
+          <Animated.View style={[styles.brand, { left: 0, width: plan.split ? plan.pane : width, alignItems: 'center', opacity: plan.sail > 0 ? 1 : 0 }, glide(move)]}>
             <Text numberOfLines={1} adjustsFontSizeToFit style={look.text({ 'font-family': '$ui.fontDisplay', 'font-size': `${Math.round(Math.max(28, Math.min(56, plan.sail * 0.34)))}px`, 'line-height': '1.3' })}>{branding.name}</Text>
           </Animated.View>
         ) : (
           <>
-            <Animated.View style={[styles.reflection, { left: centre - sailWidth / 2, width: sailWidth, height: maxSail, opacity: plan.sail > 0 ? 1 : 0, transform: [{ scaleX: scale }, { scaleY: scale * 0.7 }] }, glide(moveMs)]}>
+            <Animated.View style={[styles.reflection, { left: centre - sailWidth / 2, width: sailWidth, height: maxSail, opacity: plan.sail > 0 ? 1 : 0, transform: [{ scaleX: scale }, { scaleY: scale * 0.7 }] }, glide(move)]}>
               <Animated.View style={[{ transformOrigin: 'top' } as ViewStyle, motion('velaReflectionRipple'), draw && !still ? fadeIn(SAIL_DRAWN_MS - 500) : null]}>
                 <SailReflection height={maxSail} paper={paper} strength={reflectionStrength} />
               </Animated.View>
             </Animated.View>
-            <Animated.View style={[styles.sail, { left: centre - sailWidth / 2, width: sailWidth, height: maxSail, opacity: plan.sail > 0 ? 1 : 0, transform: [{ scale }] }, glide(moveMs)]}>
+            <Animated.View style={[styles.sail, { left: centre - sailWidth / 2, width: sailWidth, height: maxSail, opacity: plan.sail > 0 ? 1 : 0, transform: [{ scale }] }, glide(move)]}>
               <Animated.View style={[{ transformOrigin: 'bottom' } as ViewStyle, motion('velaSailSway', draw ? SAIL_DRAWN_MS : 0)]}>
                 <SailMark height={maxSail} draw={draw && !still} paper={paper} />
               </Animated.View>

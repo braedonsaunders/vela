@@ -80,8 +80,10 @@ export function Words({
   testID?: string;
 }) {
   const look = useLook();
+  // The signed-out stage keeps its composition at the largest text sizes: words grow, within reason.
+  const auth = !!useAuthLayout();
   return (
-    <Text style={[look.text(rows), style]} numberOfLines={lines} ellipsizeMode={lines ? 'tail' : undefined} maxFontSizeMultiplier={maxScale} {...a11y}>
+    <Text style={[look.text(rows), style]} numberOfLines={lines} ellipsizeMode={lines ? 'tail' : undefined} maxFontSizeMultiplier={maxScale ?? (auth ? 1.5 : undefined)} {...a11y}>
       {children}
     </Text>
   );
@@ -280,7 +282,7 @@ export function Pill({
       ) : null}
       {busy ? <Pulse /> : null}
       {children}
-      <Text style={ink}>{label}</Text>
+      <Text style={ink} numberOfLines={1} maxFontSizeMultiplier={1.3}>{label}</Text>
     </APressable>
   );
 }
@@ -421,6 +423,7 @@ function SystemField({ label, value, onChangeText, onSubmit, kind = 'username', 
           spellCheck={false}
           placeholder={placeholder}
           placeholderTextColor={look.ui.inkQuiet}
+          maxFontSizeMultiplier={1.3}
           accessibilityLabel={label}
           testID={testID}
           onFocus={handlers.onFocus}

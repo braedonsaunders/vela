@@ -13,7 +13,7 @@ import { easing } from '../../motion';
 import { APressable, Glyph, NO_RING, overlaid, useInteraction } from '../common/controls';
 import { useLook } from '../common/look';
 import { Horizon, type SceneBranding } from './horizon';
-import { HORIZON_EASE, HORIZON_MS } from './horizon-motion';
+import { HORIZON_EASE, HORIZON_MS, KEYBOARD_EASE, type Move } from './horizon-motion';
 import { authLayout, horizonPlan, keyboardAvoidanceEnabled, type AuthLayout, type HorizonPlan } from './layout';
 import { AuthLayoutContext } from './layout-context';
 
@@ -94,11 +94,11 @@ export function Stage({ children, branding }: { children: ReactNode; branding?: 
   const maxSail = horizonPlan({ viewport, height, keyboard: 0, content: 1, tv, touch }).split ? 132 : tv ? 240 : layout.compact ? 172 : 220;
   // The horizon glides to new steps; while the keyboard moves it keeps the keyboard's pace; the
   // very first placement (before the step was measured) is not a move at all.
-  const lastKeyboard = useRef(keyboard.height);
+  const keyboardAt = useRef({ height: keyboard.height, at: 0 });
   const placed = useRef(false);
-  const keyboardMoving = lastKeyboard.current !== keyboard.height;
-  lastKeyboard.current = keyboard.height;
-  const moveMs = !placed.current ? 0 : keyboardMoving ? keyboard.ms : HORIZON_MS;
+  if (keyboardAt.current.height !== keyboard.height) keyboardAt.current = { height: keyboard.height, at: Date.now() };
+  const withKeyboard = Date.now() - keyboardAt.current.at < keyboard.ms + 120;
+  const move: Move = !placed.current ? { ms: 0, ease: HORIZON_EASE } : withKeyboard ? { ms: keyboard.ms, ease: KEYBOARD_EASE } : { ms: HORIZON_MS, ease: HORIZON_EASE };
   if (ready) placed.current = true;
   const reportContent = useCallback((h: number) => setContent(previous => (Math.abs(previous - h) < 1 ? previous : h)), []);
   const api = useMemo<StageApi>(() => ({ layout, plan, first, ready, reportContent, setWaiting, setBack, setDeep }),
@@ -106,17 +106,17 @@ export function Stage({ children, branding }: { children: ReactNode; branding?: 
   // The host pads screens by the side safe areas already; these are only what is left inside.
   const sideLeft = viewport.insets.left;
   const sideRight = viewport.insets.right;
-  const glide = moveMs > 0 && !look.still ? {
+  const glide = move.ms > 0 && !look.still ? {
     transitionProperty: ['top', 'bottom'],
-    transitionDuration: moveMs,
-    transitionTimingFunction: easing(HORIZON_EASE),
+    transitionDuration: move.ms,
+    transitionTimingFunction: easing(move.ease),
   } as unknown as ViewStyle : null;
   const column: ViewStyle = plan.split
     ? { position: 'absolute', left: plan.pane, right: sideRight, top: viewport.insets.top + 12, bottom: plan.contentBottom }
     : { position: 'absolute', left: sideLeft, right: sideRight, top: plan.contentTop, bottom: plan.contentBottom };
   const stage = (
     <View style={StyleSheet.absoluteFill} onLayout={event => { setHeight(event.nativeEvent.layout.height); setWidth(event.nativeEvent.layout.width); }}>
-      {ready ? <Horizon plan={plan} width={width} height={height} maxSail={maxSail} waiting={waiting} branding={branding} draw={first} moveMs={moveMs} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.page }]} />}
+      {ready ? <Horizon plan={plan} width={width} height={height} maxSail={maxSail} waiting={waiting} branding={branding} draw={first} move={move} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.page }]} />}
       <Animated.View style={[column, glide]}>
         <ScrollView
           testID="auth-stage-scroll"

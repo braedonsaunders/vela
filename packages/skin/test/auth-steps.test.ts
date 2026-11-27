@@ -51,3 +51,7 @@ describe('auth step choreography', () => {
     expect(stepCopy({ page: 'signin', first: true, name: 'Den', savedOffline: true }).title).toBe("You're offline");
   });
 });
+test('blocks arriving into a showing step come at once, in turn', () => {
+  expect(blockEntrance(0, 'forward', false, true).delay!).toBeLessThan(blockEntrance(0, 'forward').delay!);
+  expect(blockEntrance(1, 'forward', false, true).delay! - blockEntrance(0, 'forward', false, true).delay!).toBe(70);
+});
