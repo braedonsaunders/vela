@@ -10,6 +10,7 @@ import {
   focusRing,
   ghost,
   is,
+  pillSmall,
   placeholder,
   pulse,
   ready,
@@ -265,7 +266,7 @@ export const band: Node = {
                 'object-fit': 'contain',
                 'align-self': 'flex-start',
               },
-              small: { height: '92px', 'max-width': '80%' },
+              small: { height: '80px', 'max-width': '80%' },
             },
             {
               type: 'text',
@@ -275,7 +276,7 @@ export const band: Node = {
               level: 1,
               motion: enter(200),
               style: { ...display, 'font-size': '84px', 'line-height': '1.04', 'text-shadow': '0px 4px 40px $ui.shadow' },
-              small: { 'font-size': '46px' },
+              small: { 'font-size': '40px' },
             },
           ],
         },
@@ -336,8 +337,9 @@ export const band: Node = {
             'flex-wrap': 'wrap',
             'margin-top': '10px',
           },
-          // Phones stack the actions full width: nothing runs past the edge.
-          small: { 'margin-top': '6px', 'flex-direction': 'column', 'flex-wrap': 'nowrap', 'align-items': 'stretch', gap: '10px' },
+          // Phones: play (with Restart's mark and Versions) spans the row; the trailer and the round
+          // actions share the line below it, wrapping before anything runs past the edge.
+          small: { 'margin-top': '6px', 'flex-wrap': 'wrap', gap: '10px 8px' },
           children: [
             {
               type: 'box',
@@ -360,7 +362,7 @@ export const band: Node = {
                 'font-weight': '650',
                 transition: 'background-color 180ms linear',
               },
-              small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px', 'justify-content': 'center' },
+              small: { ...pillSmall(true), width: '100%' },
               hover: { 'background-color': '$ui.inkHover' },
               focus: { 'box-shadow': focusRing },
               children: [
@@ -370,10 +372,12 @@ export const band: Node = {
                   children: [
                     { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' } },
                     { type: 'text', text: '{detail.playLabel}', style: { 'font-size': '16px', 'white-space': 'nowrap' } },
-                    // Progress belongs to Resume, as on Home's hero.
+                    // Progress belongs to Resume, as on Home's hero. A phone's label already says
+                    // the time left, and the row beside Restart's mark has no room for both.
                     {
                       type: 'box',
                       when: [{ test: 'detail.hasResume' }],
+                      small: { display: 'none' },
                       style: {
                         width: '44px',
                         height: '3px',
@@ -406,13 +410,14 @@ export const band: Node = {
                 'padding-left': '22px',
                 'padding-right': '26px',
               },
-              small: { height: '52px', 'justify-content': 'center' },
+              small: { ...pillSmall(false), 'padding-left': '14px', 'padding-right': '16px', 'flex-shrink': '0' },
               hover: { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
               focus: { 'box-shadow': focusRing },
               children: [
                 {
                   type: 'box',
                   style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' },
+                  small: { gap: '8px' },
                   children: [
                     { type: 'icon', symbol: 'play', style: { width: '16px', height: '16px' } },
                     { type: 'text', text: '{t:ui.watchTrailer}', style: { 'font-size': '15px' } },

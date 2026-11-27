@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router } from '../router';
 import { useCallback, type ReactNode } from 'react';
 import type { SkinHost } from '@vela/skin';
 import { ExperienceView } from '@vela/skin/src/screen/experience';

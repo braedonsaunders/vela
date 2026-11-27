@@ -1,6 +1,7 @@
 // Reading a book (docs/media-kinds.md): the reader full screen, its document asked of the server
 // when it opens, the viewer's place saved as they read and when they leave.
-import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
+import { useIsFocused, useLocalSearchParams } from 'expo-router';
+import { router } from '../../src/router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

@@ -6,6 +6,7 @@ import { photoSwipe, type PhotoDirection } from './viewer-nav-model';
 interface PhotoTouchProps {
   ratio?: number;
   onSwipe?(direction: PhotoDirection): void;
+  embedded?: boolean;
   onTap?(): void;
   onTouch?(): void;
   children: ReactNode;
@@ -37,7 +38,7 @@ export function PhotoTouchSurface(props: PhotoTouchProps) {
 }
 
 /** The image is painted inside a fixed, clipped touch surface. Controls stay outside its transform. */
-function TouchSurface({ ratio, onSwipe, onTap, onTouch, children }: PhotoTouchProps) {
+function TouchSurface({ ratio, onSwipe, embedded, onTap, onTouch, children }: PhotoTouchProps) {
   const [viewport, setViewport] = useState<PhotoSize>({ width: 0, height: 0 });
   const [pose, setPose] = useState(FIT_PHOTO);
   const current = useRef(FIT_PHOTO);
@@ -142,6 +143,7 @@ function TouchSurface({ ratio, onSwipe, onTap, onTouch, children }: PhotoTouchPr
     const dx = Math.abs(location.x - start.x);
     return dx > MOVE_SLOP && dx > Math.abs(location.y - start.y) * 1.4;
   };
+  const blockParentScroll = Platform.OS === 'android' && !!embedded && !!onSwipe;
   return (
     <View testID="gallery-photo-touch-surface" collapsable={false}
       style={[StyleSheet.absoluteFill, { overflow: 'hidden' }, Platform.OS === 'web' ? { touchAction: pose.scale > 1 ? 'none' : 'pan-y' } as ViewStyle : null]}
@@ -150,7 +152,10 @@ function TouchSurface({ ratio, onSwipe, onTap, onTouch, children }: PhotoTouchPr
         setViewport(old => old.width === width && old.height === height ? old : { width, height });
       }}
       onTouchStart={begin} onTouchMove={move} onTouchEnd={finish} onTouchCancel={() => { contact.current = null; }}
-      onStartShouldSetResponderCapture={() => current.current.scale > 1}
+      // Android's enclosing title ScrollView can intercept the move before JS sees its direction.
+      // Start the responder on the photo; the caption and surrounding frame still scroll.
+      onStartShouldSetResponderCapture={() => current.current.scale > 1 || blockParentScroll}
+      onResponderGrant={() => blockParentScroll}
       onMoveShouldSetResponderCapture={handlesPan} onResponderTerminationRequest={() => !contact.current}
       onResponderTerminate={() => { contact.current = null; }}>
       <View testID="gallery-photo-transform" pointerEvents="none" style={[StyleSheet.absoluteFill,

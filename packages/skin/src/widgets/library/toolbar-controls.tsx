@@ -3,13 +3,19 @@
 import { forwardRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { FocusPressable } from '../../focus';
-import { InheritedContext } from '../../host';
+import { InheritedContext, useHost } from '../../host';
 import { Glyph } from '../common/controls';
 import { useFocusClaim } from '../common/focus-claim';
 import { useLook } from '../common/look';
 
 export const control = { height: '$ui.controlHeight', padding: '0px 12px', 'border-radius': '$ui.radiusControl', 'background-color': '$ui.control', border: '1px solid $ui.glassEdge', 'justify-content': 'center', 'flex-shrink': '0' };
 export const controlText = { color: '$ui.ink', 'font-size': '$ui.controlFontSize', 'font-weight': '500' };
+/** A phone's chips (the compact scale, vela-base/look.ts `phone`): drawn 36pt tall inside the
+ * control's 44pt touch target, which stays the pressable. */
+export const COMPACT_CHIP = 36;
+export function useCompactControls(): boolean {
+  return !!useHost().env.small && !Platform.isTV;
+}
 
 /** A control label centred on its line: Android otherwise pads the line for accents above it. */
 export const CENTRED = { textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center' } as const;
@@ -42,6 +48,7 @@ export const Button = forwardRef<ComponentRef<typeof FocusPressable>, ButtonProp
   label, onPress, selected = false, role = 'button', id, testID, quiet = false, preferred = false, onLayout, onFocus, icon, trailing, iconOnly = false, badge, accessibilityLabel, expanded,
 }, ref) {
   const look = useLook();
+  const compact = useCompactControls();
   const [focused, focus] = useState(false);
   const claim = useFocusClaim(preferred);
   const tab = role === 'tab';
@@ -49,14 +56,12 @@ export const Button = forwardRef<ComponentRef<typeof FocusPressable>, ButtonProp
   const ink = tab && selected ? look.ui.onAccent : quiet ? look.ui.inkSecondary : look.ui.ink;
   const text = look.text({ ...controlText, color: tab && selected ? '$ui.onAccent' : quiet ? '$ui.inkSecondary' : '$ui.ink', 'font-weight': tab && selected ? '700' : '500' });
   const glyphSize = Math.round((Number(text.fontSize) || 15) * 1.15);
-  return <FocusPressable ref={ref} onLayout={onLayout} nativeID={id} testID={testID} accessibilityRole={role === 'radio' ? 'radio' : role} accessibilityLabel={accessibilityLabel ?? label}
-    accessibilityState={{ selected, checked: checked ? selected : undefined, expanded }}
-    {...(Platform.OS === 'web' ? { 'aria-selected': tab ? selected : undefined, 'aria-checked': checked ? selected : undefined, 'aria-expanded': expanded } : {})}
-    hasTVPreferredFocus={claim} onFocus={event => { focus(true); onFocus?.(); if (Platform.OS === 'web') (event.target as unknown as HTMLElement).scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }} onBlur={() => focus(false)} onPress={onPress}
-    style={[look.box({ ...control, position: 'relative',
-      'background-color': tab && selected ? '$ui.accent' : focused || selected ? '$ui.controlHover' : '$ui.control',
-      'border-color': focused && tab && selected ? '$ui.ink' : focused ? '$ui.accent' : checked && selected ? '$ui.ink' : '$ui.glassEdge' }),
-      iconOnly ? { paddingLeft: 0, paddingRight: 0, aspectRatio: 1, alignItems: 'center' } : null]}>
+  const pill = [look.box({ ...control, position: 'relative',
+    'background-color': tab && selected ? '$ui.accent' : focused || selected ? '$ui.controlHover' : '$ui.control',
+    'border-color': focused && tab && selected ? '$ui.ink' : focused ? '$ui.accent' : checked && selected ? '$ui.ink' : '$ui.glassEdge' }),
+  compact ? { height: 'auto' as const, minHeight: COMPACT_CHIP } : null,
+  iconOnly ? { paddingLeft: 0, paddingRight: 0, aspectRatio: 1, alignItems: 'center' as const } : null];
+  const content = <>
     {/* A tab's bold selected label must not resize the strip while its scenes are moving. */}
     {tab && <Text accessible={false} numberOfLines={1} style={[look.text({ ...controlText, 'font-weight': '700' }), CENTRED,
       Platform.OS === 'web' ? { visibility: 'hidden' } as never : { opacity: 0 }]}>{label}</Text>}
@@ -71,11 +76,19 @@ export const Button = forwardRef<ComponentRef<typeof FocusPressable>, ButtonProp
         {icon && <Glyph symbol={icon} size={glyphSize} color={ink} />}
         {!iconOnly && <Text accessible={false} numberOfLines={1} style={[text, CENTRED]}>{label}</Text>}
         {!!badge && <View style={[look.box({ 'min-width': '20px', height: '20px', padding: '0px 6px', 'border-radius': '10px', 'background-color': '$ui.accent', 'align-items': 'center', 'justify-content': 'center' }),
-          iconOnly ? { position: 'absolute', top: -14, right: -14 } : null]}>
+          iconOnly ? { position: 'absolute', top: compact ? -10 : -14, right: compact ? -10 : -14 } : null]}>
           <Text accessible={false} style={[look.text({ color: '$ui.onAccent', 'font-size': '12px', 'font-weight': '700' }), CENTRED]}>{badge}</Text>
         </View>}
         {trailing && <Glyph symbol={trailing} size={Math.round(glyphSize * 0.8)} color={look.ui.inkSecondary} />}
       </View>}
+  </>;
+  return <FocusPressable ref={ref} onLayout={onLayout} nativeID={id} testID={testID} accessibilityRole={role === 'radio' ? 'radio' : role} accessibilityLabel={accessibilityLabel ?? label}
+    accessibilityState={{ selected, checked: checked ? selected : undefined, expanded }}
+    {...(Platform.OS === 'web' ? { 'aria-selected': tab ? selected : undefined, 'aria-checked': checked ? selected : undefined, 'aria-expanded': expanded } : {})}
+    hasTVPreferredFocus={claim} onFocus={event => { focus(true); onFocus?.(); if (Platform.OS === 'web') (event.target as unknown as HTMLElement).scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }} onBlur={() => focus(false)} onPress={onPress}
+    // A phone's pressable is the 44pt target, the pill drawn inside it (taller with larger text).
+    style={compact ? { minHeight: 44, justifyContent: 'center', flexShrink: 0 } : pill}>
+    {compact ? <View style={pill}>{content}</View> : content}
   </FocusPressable>;
 });
 

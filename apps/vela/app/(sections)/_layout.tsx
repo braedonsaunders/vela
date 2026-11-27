@@ -1,4 +1,5 @@
-import { Navigator, router, useIsFocused, usePathname } from 'expo-router';
+import { Navigator, useIsFocused, usePathname } from 'expo-router';
+import { router } from '../../src/router';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Platform, View } from 'react-native';
 import { useVelaState } from '@vela/core/react';

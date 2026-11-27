@@ -128,7 +128,8 @@ describe('Gallery deterministic release gate', { session: 'mock-gallery', serial
     expect(await postAlert('sports:sports:nfl-nyg-phi')).toBe(200);
     await expect(alerts).toBeHidden();
     await stage.press('Escape');
-    await expect(alerts.getByText(/Giants.*Eagles/)).toBeVisible();
+    // The held alert is delivered once full screen has closed; on WebKit that can take a few seconds.
+    await expect(alerts.getByText(/Giants.*Eagles/)).toBeVisible({ timeout: 15_000 });
     await expect(screen.getByTestId('gallery-photo-info-panel')).toBeHidden();
   });
 });

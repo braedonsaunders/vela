@@ -265,6 +265,7 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
               label={msg('live.view')}
               value={mode}
               onPick={setMode}
+              compact
               options={[
                 { value: 'now', label: msg('live.onNow'), name: msg('live.onNow') },
                 { value: 'guide', label: msg('live.guide'), name: msg('live.guide') },
@@ -278,12 +279,13 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
               on={favourites}
               color={favourites ? look.accent : look.inkSecondary}
               onPress={toggleFavourites}
+              compact
             />
-            {showGrid ? <NowChip look={look} still={still} onPress={jumpNow} /> : null}
+            {showGrid ? <NowChip look={look} still={still} onPress={jumpNow} compact /> : null}
           </View>
           {showGrid ? (
-            <View style={{ paddingBottom: 12 }}>
-              <DayChips look={look} model={model} onPick={pickDay} side={side} />
+            <View style={{ paddingBottom: 8 }}>
+              <DayChips look={look} model={model} onPick={pickDay} side={side} compact />
             </View>
           ) : null}
         </View>

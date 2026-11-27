@@ -1,7 +1,7 @@
 // What a plugin screen's presses do in the app (docs/plugin-screens.md: Actions): open a page
 // (apps/vela/app/screen/[id]/[page].tsx) or a built-in route, play through the watch routes, add to
 // the multiview while it is available, open a vetted link outside the app, confirm, go back.
-import { router } from 'expo-router';
+import { router } from './router';
 import { useMemo } from 'react';
 import { Alert, Linking, Platform } from 'react-native';
 import type { ScreenAppActions, ScreenDestination } from '@vela/skin/src/screen/host';

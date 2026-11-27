@@ -174,6 +174,8 @@ function LibraryScenes({ host, node, openingFocus, draw, active: routeActive }: 
   host: SkinHost; node: RNode; openingFocus?: boolean; draw?: Props['libraryScene']; active: boolean;
 }) {
   const request = host.env.library?.viewRequest ?? '';
+  // A Series drill-in keeps the same tab but opens a fresh grid on TV.
+  const series = Platform.isTV && host.env.library?.tabId === 'series' ? host.env.library.facetTitle : undefined;
   const view = host.env.library?.view ?? 'library';
   const order: string[] = host.env.library?.model?.tabs?.map(tab => tab.kind) ?? ['recommended', 'library', 'collections', 'genres'];
   const still = host.env.still || Platform.isTV;
@@ -248,12 +250,11 @@ function LibraryScenes({ host, node, openingFocus, draw, active: routeActive }: 
   }, [request, still, complete]);
   const scene = (sceneHost: SkinHost, isCurrent: boolean) => {
     const active = transition.current.active && !still;
-    // Keyed by the request alone: the view that was current stays mounted as it leaves, rather
-    // than being drawn again from nothing alongside the view coming in.
-    return <SectionScene key={`scene:${isCurrent ? request : outgoing.current?.request}`} current={isCurrent}
+    // Keep the outgoing view mounted through its slide. A TV Series drill-in also resets focus.
+    return <SectionScene key={JSON.stringify([isCurrent ? request : outgoing.current?.request, series])} current={isCurrent}
       animated={active} direction={transition.current.direction} offset={isCurrent ? incomingOffset : outgoingOffset}>
       {draw ? draw(sceneHost, routeActive && isCurrent)
-        : <SkinRoute host={sceneHost} node={node} openingFocus={openingFocus} hideLibraryViews={!!fixedNav.current && active} />}
+        : <SkinRoute host={sceneHost} node={node} openingFocus={series && sceneHost.env.library?.viewLoad !== 'ready' ? false : openingFocus} hideLibraryViews={!!fixedNav.current && active} />}
     </SectionScene>;
   };
   return <View ref={frame as never} style={{ flex: 1, overflow: 'hidden' }}>

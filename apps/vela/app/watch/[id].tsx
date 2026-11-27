@@ -3,8 +3,9 @@ import { useVelaState } from '@vela/core/react';
 // screen through VelaPlayerView, under the player chrome in the active document's look. Core's
 // playback slice starts, follows and stops the session; this route is the trusted host that hands
 // the server's media authorization to the player.
-import { router, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
-import { useCallback, useEffect, useMemo, type ComponentProps } from 'react';
+import { useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { router } from '../../src/router';
+import { useCallback, useEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { msg, type PlaybackTarget } from '@vela/core';
@@ -97,11 +98,52 @@ function WatchPlayer() {
 
   // An episode's next one: the chrome offers it (and on the final credits, in place of Skip
   // credits). Starting it keeps this route, so the session in hand stops before the next begins.
-  const next = useNextEpisode(!offline && !local && target.kind === 'title' ? skin?.env.detail?.title[0] : undefined);
+  const detailTitle = skin?.env.detail?.title[0];
+  const next = useNextEpisode(!offline && !local && target.kind === 'title' && detailTitle?.id === id ? detailTitle : undefined);
   const nextEpisode = useMemo<NextEpisode | null>(() => next ? {
     label: episodeLabel(next),
     play: () => router.setParams({ id: next.id, kind: undefined, positionSeconds: undefined, mediaSourceId: undefined, audioTrackId: undefined, versionId: undefined, showId: next.showId ?? showId }),
   } : null, [next, showId]);
+  const plex = useVelaState(state => state.servers.list.some(server => server.selected && server.kind === 'plex'));
+  const handledEnd = useRef('');
+  const sleepingEnd = useRef('');
+  // Wait for Plex to confirm completion. An earlier end can still be a transition between parts.
+  const ended = session.view.plan?.state === 'ended' && session.view.plan.titleId === id;
+  useEffect(() => {
+    if (!plex || !focused || !ended || !sessionId || !nextEpisode || handledEnd.current === sessionId || sleepingEnd.current === sessionId) return;
+    handledEnd.current = sessionId;
+    nextEpisode.play();
+  }, [plex, focused, ended, sessionId, nextEpisode]);
+  type ObservationEvent = Parameters<NonNullable<typeof session.view.onObservation>>[0];
+  const lastReport = useRef<ObservationEvent | null>(null);
+  const onObservation = (event: ObservationEvent) => {
+    if (event.sessionId !== sessionId) return;
+    lastReport.current = event;
+    session.view.onObservation?.(event);
+  };
+  const onSnapshot: typeof session.view.onSnapshot = snapshot => {
+    // The session clears its sleep timer on the final snapshot.
+    session.view.onSnapshot?.(snapshot);
+    if (snapshot.state !== 'ended' || !sessionId || snapshot.sessionId !== sessionId) return;
+    if (session.chrome.sleep && session.chrome.sleep.value.mode !== 'off') sleepingEnd.current = sessionId;
+    if (Platform.OS !== 'web' || !plex || target.kind !== 'title' || local || !snapshot.sourceId) return;
+    const { sourceGeneration, seekGeneration, position, sourceId } = snapshot;
+    // Web emits snapshots before observations. If its progress throttle skipped this final report,
+    // forward the terminal snapshot once the player's synchronous observation handler has run.
+    queueMicrotask(() => {
+      const plan = store.getState().playback.plan;
+      if (plan?.sessionId !== sessionId || plan.state === 'ended' ||
+        plan.sourceGeneration !== sourceGeneration || plan.seekGeneration !== seekGeneration) return;
+      const last = lastReport.current?.sessionId === sessionId ? lastReport.current.observation : undefined;
+      if (last?.state === 'ended' && last.sourceGeneration === sourceGeneration && last.seekGeneration === seekGeneration) return;
+      const sequence = (last?.sequence ?? 0) + 1;
+      onObservation({ sessionId, observation: {
+        idempotencyKey: `${sessionId}:${sourceGeneration}:${seekGeneration}:${sequence}`,
+        sourceGeneration, seekGeneration, sequence, state: 'ended', observedAt: new Date().toISOString(),
+        positionSeconds: position, selectedPathId: sourceId, playableRanges: [],
+      } });
+    });
+  };
 
   const { stop } = session;
   const close = useCallback(() => {
@@ -128,7 +170,7 @@ function WatchPlayer() {
     <RouteSurface host={skin} state={{ ...session.chrome, title, close, nextEpisode, episode: target.kind === 'title' && skin.env.detail?.title[0]?.kind === 'episode' }}>
       {captionInsets => session.view.plan ? (
         <View pointerEvents={Platform.OS === 'android' ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
-          <VelaPlayerView {...session.view} metadata={metadata} captionInsets={captionInsets} style={StyleSheet.absoluteFill} />
+          <VelaPlayerView {...session.view} onSnapshot={onSnapshot} onObservation={onObservation} metadata={metadata} captionInsets={captionInsets} style={StyleSheet.absoluteFill} />
         </View>
       ) : null}
     </RouteSurface>

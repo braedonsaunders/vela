@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { router } from 'expo-router';
+import { router } from '../router';
 import type { SkinHost } from '@vela/skin';
 import { builtinHref, builtinScreenId } from '@vela/skin/src/resolve/builtin';
 import { ScreenView } from '@vela/skin/src/screen/host';

@@ -1,6 +1,6 @@
 import { createElement, useRef, useState, type ComponentRef } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router } from '../router';
 import { useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '@vela/skin/src/focus';
 import { SheetModal } from '@vela/skin/src/widgets/common/sheet-modal';

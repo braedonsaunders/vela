@@ -1065,12 +1065,42 @@ describe('Plex progress beside commands on a slow server', () => {
     const reports = [adapter.reportObservation(plan.sessionId, at(1, 17))];
     await settle();
     reports.push(adapter.reportObservation(plan.sessionId, at(2, 18)), adapter.reportObservation(plan.sessionId, at(3, 19)),
-      adapter.reportObservation(plan.sessionId, at(4, 600, 'ended')), adapter.reportObservation(plan.sessionId, at(5, 600, 'ended')));
+      adapter.reportObservation(plan.sessionId, at(4, 600.001, 'ended')), adapter.reportObservation(plan.sessionId, at(5, 600.001, 'ended')));
     server.release();
     await Promise.all(reports);
     expect(posts()).toEqual(['playing 17', 'playing 19', 'stopped 600']);
+    const stopped = seen.find(r => r.url.searchParams.get('state') === 'stopped')!;
+    expect(stopped.method).toBe('POST');
+    expect(stopped.url.pathname).toBe('/:/timeline');
+    expect(Object.fromEntries(stopped.url.searchParams)).toEqual({
+      ratingKey: '3', key: '/library/metadata/3', time: '600000', duration: '600000', state: 'stopped',
+      session: plan.sessionId, hasMDE: '1', identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': plan.sessionId,
+    });
+    expect(Object.fromEntries(stopped.headers)).toEqual({
+      accept: 'application/json', 'x-plex-product': 'Vela', 'x-plex-version': '0.1.0',
+      'x-plex-client-identifier': 'client-1', 'x-plex-platform': 'Web', 'x-plex-device': 'Browser',
+      'x-plex-device-name': 'Test Device', 'x-plex-token': 'token-1',
+    });
     expect(seen.filter(r => r.url.pathname === '/:/scrobble')).toHaveLength(1);
     expect((await adapter.sessionSnapshot(plan.sessionId)).plan.state).toBe('ended');
+  });
+
+  test('a refused stopped timeline still scrobbles, cleans up, and ends the session', async () => {
+    const seen = routeFetch({
+      'GET /library/metadata/3': { MediaContainer: { Metadata: [single] } },
+      'POST /:/timeline': new Response(null, { status: 400 }),
+      'PUT /:/scrobble': new Response(null, { status: 204 }),
+      'GET /video/:/transcode/universal/stop': new Response(null, { status: 204 }),
+    });
+    const adapter = plex();
+    const { sessionId } = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'eos' } as never);
+    expect(await adapter.reportObservation(sessionId, at(1, 601, 'ended'))).toEqual({ accepted: true });
+    expect(await adapter.reportObservation(sessionId, at(2, 601, 'ended'))).toEqual({ accepted: true });
+    expect(seen.slice(1).map(r => [r.method, r.url.pathname])).toEqual([
+      ['POST', '/:/timeline'], ['PUT', '/:/scrobble'], ['GET', '/video/:/transcode/universal/stop'],
+    ]);
+    expect(Object.fromEntries(seen[2]!.url.searchParams)).toEqual({ key: '3', identifier: 'com.plexapp.plugins.library' });
+    expect((await adapter.sessionSnapshot(sessionId)).plan.state).toBe('ended');
   });
 
   test('a burned-in subtitle chosen behind a slow post starts the stream at the newest position, without its post', async () => {

@@ -65,7 +65,7 @@ import { BlockView } from './screen/block-view';
 import { RichBlock } from './blocks/rich';
 import { useScopedReads } from './screen/scoped-reads';
 import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
-import { scrollStyles } from './scroll-styles';
+import { GEOMETRY, guidedScrollStyles, partition, scrollGuide, scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
 import { plainBox } from './plain-box';
 import { liteRender } from './device-tier';
@@ -704,15 +704,6 @@ function a11yProps(node: RNode, c: Ctx, e: Env) {
 
 // ---- Box ----
 
-/** The rows that size and place a box, which a mask wrapper takes over from it. */
-const GEOMETRY = new Set(['position', 'top', 'right', 'bottom', 'left', 'zIndex', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight',
-  'aspectRatio', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft']);
-function partition(style: Record<string, unknown>, keys: Set<string>): [Record<string, unknown>, Record<string, unknown>] {
-  const inside: Record<string, unknown> = {}, outside: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(style)) (keys.has(k) ? inside : outside)[k] = v;
-  return [inside, outside];
-}
-
 interface StickyHeaderProps {
   children?: ReactNode;
   scrollAnimatedValue: RNAnimated.Value;
@@ -1144,7 +1135,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   let element: ReactNode;
   if (route || fx.scrollX || fx.scrollY) {
     const horizontal = !route && !!fx.scrollX && !fx.scrollY;
-    const [contentStyle, outerStyle] = scrollStyles(boxStyleFinal, !!route, web);
+    const [contentStyle, scrollerStyle] = scrollStyles(boxStyleFinal, !!route, web);
+    const guided = scrollGuide(Platform.isTV, !!route, horizontal, !!node.escape?.length);
+    // A menu that scrolls is still its escape scope's guide on TV: the guide holds its place.
+    const [scopeFrame, outerStyle] = guided === 'scope' ? guidedScrollStyles(scrollerStyle) : [undefined, scrollerStyle];
     const sticky = web || horizontal ? undefined : node.children.flatMap((child, i) => (child.base.style.position === 'sticky' && holds(child.when, ctx, env) ? [i] : []));
     const onPagerScroll = node.pager && rowId ? (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
@@ -1193,7 +1187,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         && pinOpeningScroll(opened.current, Date.now(), openingMoved.current || viewerPressedSince(opened.current) || viewerScrolledSince(opened.current));
       if (pin) {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
-        if (web) (e.currentTarget as unknown as HTMLElement).scrollTop = 0;
+        // react-native-web may hand over a scroll event without its currentTarget; the element the
+        // event came from is then its target.
+        const element = (e.currentTarget ?? e.target) as unknown as HTMLElement | null | undefined;
+        if (web && element) element.scrollTop = 0;
       } else trackScroll?.(e);
     } : trackScroll;
     if (rowScroll) content = <RowScroll.Provider value={rowScroll}>{content}</RowScroll.Provider>;
@@ -1215,7 +1212,15 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         {content}
       </AScroll>
     );
-    if (horizontal && Platform.isTV) element = <RowGuide>{element as ReactElement<{ style: unknown }>}</RowGuide>;
+    if (guided === 'row') element = <RowGuide>{element as ReactElement<{ style: unknown }>}</RowGuide>;
+    else if (guided === 'scope') {
+      const Guide = AGuide as typeof AView;
+      element = (
+        <Guide ref={guideRef as never} style={scopeFrame as ViewStyle} {...(tvGuide(node, env, band, ctx) as object)}>
+          {element}
+        </Guide>
+      );
+    }
   } else {
     // A press box is the schema's full-size transparent button over its content: the button takes
     // focus (keyboard, tvOS focus engine, D-pad) and carries the label; the box keeps its motion.
@@ -1401,12 +1406,15 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       || (env.detail?.title[0]?.id === id && env.detail.resumeSeconds > 0);
     if (resumable && arg.split('|')[3] === undefined) {
       const [titleId, source = '', audio = ''] = arg.split('|');
-      // On a phone a title page stacks Resume and Restart full width. The hero (whose height is
-      // fixed, under any skin's pill sizes) and an episode row have no room for the word: Resume
-      // fills the row beside Restart's labelled mark.
-      const stack = env.small && !ctx.heroAct && id === env.detail?.title[0]?.id;
-      const restart = restartAction(node, secondaryPlayAction(host.doc.routes.title), `${titleId}|${source}|${audio}|0`, msg('ui.restart'), env.small && !stack);
-      const resumeLayout = env.small && ctx.heroAct ? heroResumeLayout(parentDirection) : undefined;
+      // On a phone the hero and an episode row have no room for the word: Resume fills the row
+      // beside Restart's labelled mark. A title page whose play action spans the phone's width (the
+      // Vela base's compact scale) does the same; one drawn at its own width stacks Resume and a
+      // labelled Restart full width, as that document laid them out.
+      const page = env.small && !ctx.heroAct && id === env.detail?.title[0]?.id;
+      const pair = page && style.width === '100%';
+      const restart = restartAction(node, secondaryPlayAction(host.doc.routes.title), `${titleId}|${source}|${audio}|0`, msg('ui.restart'), env.small && (!page || pair));
+      const resumeLayout = env.small && (ctx.heroAct || pair) ? heroResumeLayout(pair ? 'column' : parentDirection) : undefined;
+      const stack = page && !pair;
       element = resumeLayout
         ? <View style={resumeLayout.pair}><View style={resumeLayout.resume}>{element}</View><SkinNode node={restart} ctx={ctx} /></View>
         : <View style={stack ? stackedActions : { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>{element}<SkinNode node={restart} ctx={ctx} /></View>;
@@ -1444,7 +1452,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   return node.fit === 'nav' && reportNav ? <>{drawnBox}<NavFitMeasure node={node} ctx={ctx} report={reportNav} /></> : drawnBox;
 }
 
-const stackedActions: ViewStyle = { flexDirection: 'column', alignItems: 'stretch', alignSelf: 'stretch', gap: 10 };
+// Full width in a column of actions and in a wrapping row of them (a phone's title page) alike.
+const stackedActions: ViewStyle = { flexDirection: 'column', alignItems: 'stretch', alignSelf: 'stretch', width: '100%', gap: 10 };
 
 /** On TV, the boxes the focus engine must treat as one region. A navigation bar or rail is one
  * destination: focus moving onto it from anywhere in line with the bar (a centred search field

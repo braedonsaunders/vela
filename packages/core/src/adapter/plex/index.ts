@@ -284,9 +284,7 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       return u.href;
     };
     const requests: UnloadRequest[] = [];
-    if (!s.plan.channelId && !s.timelineStopped) requests.push({ method: 'POST', url: url('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`,
-      time: Math.round(s.plan.positionSeconds * 1000), duration: s.metadata.duration, state: 'stopped', session: sessionId, hasMDE: 1,
-      identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': sessionId }) });
+    if (!s.plan.channelId && !s.timelineStopped) requests.push({ method: 'POST', url: url('/:/timeline', this.timelineQuery(s, 'stopped')) });
     requests.push({ method: 'GET', url: url(`/${s.plan.media === 'audio' ? 'music' : 'video'}/:/transcode/universal/stop`, { session: s.transcodeId ?? sessionId }) });
     if (s.plan.channelId && s.metadata.subscriptionId) requests.push({ method: 'DELETE', url: url(`/media/subscriptions/${enc(s.metadata.subscriptionId)}`) });
     s.plan.state = 'ended';
@@ -1038,12 +1036,20 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return { accepted: true };
   }
 
+  private timelineQuery(s: PlexSession, state: string) {
+    // PMS bounds the clock by the library item's duration. The player clock is for the selected file.
+    const time = Math.round(inside(s.plan.positionSeconds, seconds(s.metadata.duration)) * 1000);
+    const session = s.plan.sessionId;
+    return { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`,
+      time, duration: s.metadata.duration, state, session, hasMDE: 1,
+      identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': session };
+  }
+
   private async timeline(s: PlexSession, state: string, retried = false) {
     if (s.plan.channelId || s.timelineStopped) return;
     // Once dispatched, the terminal timeline outlives pagehide. Pagehide still stops the stream.
     const keepaliveStarted = state === 'stopped' ? () => { s.timelineStopped = true; } : undefined;
-    const post = this.request('/:/timeline', { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`, time: Math.round(s.plan.positionSeconds * 1000),
-      duration: s.metadata.duration, state, session: s.plan.sessionId, hasMDE: 1, identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': s.plan.sessionId },
+    const post = this.request('/:/timeline', this.timelineQuery(s, state),
     'POST', true, retried ? undefined : s.sessionWork.signal, undefined, keepaliveStarted).catch(error => {
       // An explicit HTTP refusal allows a retry. A missing reply may follow an accepted timeline.
       if (keepaliveStarted && error instanceof VelaError && error.detail.code === 'plex_http') {
@@ -1089,10 +1095,17 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       // not); a change from the state last posted is still sent.
       const state = r.state === 'ended' ? 'stopped' : r.state;
       const posts = !slot?.by || state !== s.posted;
-      if (posts) await this.timeline(s, state);
+      const completedTitle = r.state === 'ended' && !!s.plan.titleId;
+      if (posts) {
+        try { await this.timeline(s, state); }
+        catch (error) {
+          // A refusal to record progress should not prevent Plex from recording completion.
+          if (!completedTitle || !(error instanceof VelaError) || error.detail.code !== 'plex_http') throw error;
+        }
+      }
       if (signal.aborted) return true;
       // A natural end is completion; a user's partial stop is only a timeline update.
-      if (r.state === 'ended' && s.plan.titleId && !s.scrobbled) {
+      if (completedTitle && !s.scrobbled) {
         await this.request('/:/scrobble', { key: s.metadata.ratingKey, identifier: 'com.plexapp.plugins.library' }, 'PUT', true, signal);
         if (signal.aborted) return true;
         s.scrobbled = true;

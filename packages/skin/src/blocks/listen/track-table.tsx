@@ -153,7 +153,7 @@ function TrackRow({ track, index, tracks, options, wide, disc, drag }: { track: 
   const play = () => {
     const audio = tracks.filter(t => t.media?.audio && !isUnreleased(t.airDate || options.albumAirDate));
     const at = audio.indexOf(track);
-    if (at >= 0) app.play(audio, at, options.source);
+    if (at >= 0) app.play(audio, at, options.source, false, undefined, true);
   };
   const openMenu: MenuOpen = (anchor, mode, opener) => app.menu({ card: menuCard, anchor, mode, opener, entry });
   const openFromMore = () => more.current?.measureInWindow((x: number, y: number, width: number, height: number) =>

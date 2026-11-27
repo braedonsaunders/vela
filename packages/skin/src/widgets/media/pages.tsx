@@ -5,14 +5,15 @@
 // these in place of the document's title page; each takes the document's `ui` look.
 import { joinMeta } from '../../meta-line';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, msg, number, plural, podcastOrder, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { dayLabel } from '../../blocks/media/day';
 import { heroCover, MediaTitlePending } from '../../blocks/media/title-pending';
 import { useMediaActions } from './context';
 import { Cover, CoverTile, ListRow, PillButton, Progress, SectionHeading, Segmented, TextLink, TileGrid, useMediaLook, VideoTile, type MediaLook } from './parts';
-import { Buttons, Eyebrow, FactList, Facts, Hero, MediaFrame as Frame, openByline, Summary, tilesPerRow, Title } from '../../blocks/media/title';
+import { Buttons, Eyebrow, FactList, Facts, Hero, MediaFrame as Frame, openByline, Summary, Title } from '../../blocks/media/title';
+import { tilesPerRow } from '../../blocks/media/tile-layout';
 
 /** `framed`: drawn inside the document's title frame (the `mediaPage` widget), which brings the
  * scrim, the opening motion and the close control; otherwise a page of its own. */
@@ -68,7 +69,7 @@ function AlbumPage({ card, detail: _detail }: { card: Card; detail: DetailModel 
   const total = tracks.reduce((sum, track) => sum + track.durationSeconds, 0);
   const artist = card.media?.parents.find(parent => parent.role === 'artist');
   const source = { id: card.id, name: card.name };
-  const play = (index: number, shuffle = false) => actions.play({ items: playable(tracks), index, shuffle, source });
+  const play = (index: number, shuffle = false, picked = false) => actions.play({ items: playable(tracks), index, shuffle, source, picked });
   const count = tracks.length || card.media?.childCount || 0;
   return (
     <View>
@@ -96,7 +97,7 @@ function AlbumPage({ card, detail: _detail }: { card: Card; detail: DetailModel 
               subtitle={track.media?.byline && track.media.byline !== card.media?.byline ? track.media.byline : undefined}
               trailing={track.media?.clockLabel || (track.durationSeconds ? clock(track.durationSeconds) : '')}
               current={actions.nowPlaying?.id === track.id} playing={actions.nowPlaying?.playing}
-              onPress={() => play(playable(tracks).findIndex(t => t.id === track.id))} testID={`media-track-${track.id}`} />
+              onPress={() => play(playable(tracks).findIndex(t => t.id === track.id), false, true)} testID={`media-track-${track.id}`} />
           </View>
         ))}
       </View>
@@ -126,12 +127,16 @@ function ListSkeleton({ rows }: { rows: number }) {
 function MoreBy({ artistId, name, exclude }: { artistId: string; name: string; exclude: string }) {
   const m = useMediaLook();
   const actions = useMediaActions();
+  const [width, setWidth] = useState<number>();
   // Albums only: an artist's video children (concerts) carry no media facts and are not "more by".
   const albums = (useChildren(artistId)?.value?.items ?? []).filter(album => album.id !== exclude && !!album.media);
   if (!albums.length) return null;
-  const { size, gap } = tilesPerRow(m, m.small ? 140 : 190);
+  const { size, gap } = tilesPerRow(m, m.small ? 140 : 190, m.small ? width : undefined);
   return (
-    <View style={{ marginBottom: 32 }}>
+    <View style={{ marginBottom: 32 }} onLayout={m.small ? ({ nativeEvent: { layout } }) => {
+      // React Native Web rounds the layout width to the nearest pixel.
+      if (layout.width > 0) setWidth(layout.width - (Platform.OS === 'web' ? 0.5 : 0));
+    } : undefined}>
       <SectionHeading title={msg('media.ui.moreBy', { name })} />
       <TileGrid gap={gap}>
         {albums.map(album => <CoverTile key={album.id} card={album} size={size} subtitle={album.yearLabel} onPress={() => actions.openTitle(album)} testID={`media-album-${album.id}`} />)}
@@ -206,7 +211,7 @@ function ArtistPage({ card }: { card: Card }) {
             {top.map((track, i) => (
               <ListRow key={track.id} number={number(i + 1)} title={track.name} subtitle={track.media?.parent?.name}
                 trailing={track.media?.clockLabel} current={actions.nowPlaying?.id === track.id} playing={actions.nowPlaying?.playing}
-                onPress={() => actions.play({ items: playable(songs), index: playable(songs).findIndex(t => t.id === track.id), source: { id: newest!.id, name: newest!.name } })}
+                onPress={() => actions.play({ items: playable(songs), index: playable(songs).findIndex(t => t.id === track.id), source: { id: newest!.id, name: newest!.name }, picked: true })}
                 testID={`media-track-${track.id}`} />
             ))}
           </View>
@@ -329,7 +334,7 @@ function AudiobookPage({ card, detail }: { card: Card; detail: DetailModel }) {
           <SectionHeading title={msg('media.ui.parts')} />
           {parts.map((part, i) => <ListRow key={part.id} number={number(part.media?.index || i + 1)} title={part.name} trailing={part.durationSeconds ? durationLabel(part.durationSeconds) : ''}
             current={actions.nowPlaying?.id === part.id} playing={actions.nowPlaying?.playing} dim={part.played}
-            onPress={() => actions.play({ items: parts, index: i, source })} testID={`media-part-${part.id}`} />)}
+            onPress={() => actions.play({ items: parts, index: i, source, picked: true })} testID={`media-part-${part.id}`} />)}
         </View>
       ) : chapters.length ? (
         <View style={{ marginBottom: 40 }}>

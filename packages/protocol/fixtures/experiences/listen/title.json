@@ -850,23 +850,6 @@
    "padding-bottom": "48pt",
    "padding-right": "32pt"
   },
-  "testId": "music-main",
-  "states": [
-   {
-    "when": [
-     {
-      "test": "env.form",
-      "is": "eq",
-      "value": "small"
-     },
-     {
-      "test": "src.queue.current"
-     }
-    ],
-    "style": {
-     "padding-bottom": "110px"
-    }
-   }
-  ]
+  "testId": "music-main"
  }
 }

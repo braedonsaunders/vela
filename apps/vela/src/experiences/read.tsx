@@ -1,6 +1,6 @@
 // Read supplies the experience shell and its home document. The slot still uses the
 // shared library route vocabulary. The Watch migration replaces that projection.
-import { router } from 'expo-router';
+import { router } from '../router';
 import { useCallback, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import type { SkinHost } from '@vela/skin';

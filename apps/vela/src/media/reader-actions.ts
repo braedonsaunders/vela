@@ -1,5 +1,5 @@
 // A book's Read button opens the reader route, out of the book's cover on the web.
-import { router } from 'expo-router';
+import { router } from '../router';
 import { useCallback } from 'react';
 import { Platform } from 'react-native';
 import type { MediaActions } from '@vela/skin/src/widgets/media';

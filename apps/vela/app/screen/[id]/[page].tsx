@@ -1,7 +1,8 @@
 // A page of a plugin screen (the Sports game page), drawn from its document. Like a title page it
 // opens over the page it came from: framed on desktop, web and tablets, the whole screen on a TV and
 // a phone. Back, Menu and Escape close it; on the web so does a click on the dimmed page around it.
-import { Redirect, router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router';
+import { Redirect, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router';
+import { router } from '../../../src/router';
 import { useCallback, useMemo } from 'react';
 import { BackHandler, Platform, View } from 'react-native';
 import { screenDocumentHref } from '@vela/core';

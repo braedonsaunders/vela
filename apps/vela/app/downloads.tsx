@@ -5,7 +5,7 @@ import { Alert as Notice, Glyph, Heading, Pill, Words } from '@vela/skin/src/wid
 import { useLook } from '@vela/skin/src/widgets/common/look';
 import { RoundButton } from '@vela/skin/src/widgets/media/parts';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router } from '../src/router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

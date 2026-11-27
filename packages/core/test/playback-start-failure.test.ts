@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { VelaError } from '../src/adapter/errors';
 import { Playback, initialPlayback } from '../src/store/playback';
-import { finalRefusal, startRefusal, startRetry } from '../src/store/start-retry';
+import { codeOnlyMessage, finalRefusal, noPlayableCopy, refusalWords, startRefusal, startRetry } from '../src/store/start-retry';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
@@ -147,13 +147,33 @@ test('startRefusal carries the server\'s message and class, or a fallback', () =
   expect(startRefusal('weird', 'Playback failed').message).toBe('Playback failed');
 });
 
+test('a refusal worded as nothing but its code never reaches the viewer as such', () => {
+  const ether = (code: string, message = code.replace(/_/g, ' ')) => new VelaError({ class: 'source', code, message, retry: { allowed: false } }, 409);
+  // Known codes have the viewer's words.
+  expect(startRefusal(ether('not_available'), 'Playback failed')).toEqual({ message: 'Your server doesn’t have a copy of this yet.', code: 'not_available', errorClass: 'source' });
+  expect(startRefusal(ether('source_unavailable'), 'Playback failed').message).toBe('The server couldn’t reach this title’s source. Try again in a moment.');
+  // An unknown code spelt out is a diagnostic: the fallback is shown instead.
+  expect(startRefusal(ether('mystery_state'), 'Playback failed').message).toBe('Playback failed');
+  expect(startRefusal(ether('mystery_state', ''), 'Playback failed').message).toBe('Playback failed');
+  // A server's own sentence stands.
+  expect(startRefusal(ether('mystery_state', 'All encoders are busy. Try again in a minute.'), 'x').message).toBe('All encoders are busy. Try again in a minute.');
+  expect(codeOnlyMessage('Not Available', 'not_available')).toBe(true);
+  expect(codeOnlyMessage('not-available', 'not_available')).toBe(true);
+  expect(codeOnlyMessage('This title is not available here.', 'not_available')).toBe(false);
+  expect(refusalWords('title_unreleased')).toBe('');
+  expect(noPlayableCopy('not_available')).toBe(true);
+  expect(noPlayableCopy('source_unavailable')).toBe(true);
+  expect(noPlayableCopy('forbidden')).toBe(false);
+  expect(noPlayableCopy('playback_capacity')).toBe(false);
+});
+
 // Ether's answer for a title with no source at all (frontends/vela: ErrNotAvailable), verbatim.
 const notAvailable = () => new VelaError({ class: 'source', code: 'not_available', message: 'not available', retry: { allowed: false } }, 409, null);
 
-test('Ether\'s terminal 409 not_available fails at once with its message after exactly one request', async () => {
+test('Ether\'s terminal 409 not_available fails at once, in the viewer\'s words, after exactly one request', async () => {
   const { box, playback, requests } = harness([async () => { throw notAvailable(); }]);
   await playback.start({ kind: 'title', id: 'plugin-item' });
-  expect(box.get().playback).toMatchObject({ phase: 'failed', error: 'not available', errorCode: 'not_available', errorClass: 'source', retryAfterSeconds: 0, retryAttempt: 0 });
+  expect(box.get().playback).toMatchObject({ phase: 'failed', error: 'Your server doesn’t have a copy of this yet.', errorCode: 'not_available', errorClass: 'source', retryAfterSeconds: 0, retryAttempt: 0 });
   // Engine and stale view reports cannot turn a refused first start into a recovery.
   playback.recover('');
   playback.recover(box.get().playback.sessionId);
@@ -209,7 +229,7 @@ test('a terminal refusal while recovering a session ends recovery in the failed 
     expect(box.get().playback.phase).toBe('preparing');
     await clock.run(1000);
     expect(requests).toHaveLength(2);
-    expect(box.get().playback).toMatchObject({ phase: 'failed', error: 'not available', errorClass: 'source', retryAfterSeconds: 0 });
+    expect(box.get().playback).toMatchObject({ phase: 'failed', error: 'Your server doesn’t have a copy of this yet.', errorClass: 'source', retryAfterSeconds: 0 });
     // No backoff left behind, and a late engine report for the old session starts nothing.
     expect(clock.pending(2000)).toBe(false);
     playback.recover('s1');

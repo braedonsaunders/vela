@@ -2,7 +2,7 @@
 // documents (ExperienceView), given the app's router, player, the card menu and the playlist drawer,
 // worded for what the library holds (music, audiobooks, podcasts). The page in view lives in the
 // address (`?m=`).
-import { router } from 'expo-router';
+import { router } from '../router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { audioCardsOf, isUnreleased, likedTitleIds, setTitleLiked, type Card } from '@vela/core';
@@ -84,7 +84,7 @@ export function ListenSection({ libraryId, at }: { libraryId: string; at: string
     listening,
     place,
     go,
-    play: (items: Card[], index: number, source, shuffle, positionSeconds) => store.audio.play({ items, index: Math.max(0, index), source, shuffle, positionSeconds }),
+    play: (items: Card[], index: number, source, shuffle, positionSeconds, picked) => store.audio.play({ items, index: Math.max(0, index), source, shuffle, positionSeconds, picked }),
     playCard: (card: Card, shuffle?: boolean) => {
       if (isUnreleased(card.airDate)) return;
       const role = card.media?.role;

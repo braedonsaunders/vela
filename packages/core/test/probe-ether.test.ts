@@ -12,7 +12,7 @@ test('detects only a public Vela JSON capabilities response', async () => {
   } });
   try {
     const origin = `http://127.0.0.1:${server.port}`;
-    expect(await probeEther(origin)).toEqual({ origin, name: 'Ether', plexAccountSignIn: false });
+    expect(await probeEther(origin)).toEqual({ origin, id: 'a', name: 'Ether', plexAccountSignIn: false });
     for (mode of ['html', 'missing', 'bad', 'slow']) expect(await probeEther(origin, 10)).toBeNull();
   } finally { server.stop(true); }
 });
