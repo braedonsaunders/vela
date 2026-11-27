@@ -848,8 +848,14 @@ function collectionContinuation(tree: RNode, r: Context): RNode {
 }
 
 /** Resolve a document for a viewport width and locale. A document that needs a newer renderer
- * is refused on its version, never half-drawn. */
-export function resolveDocument(own: SkinDocument, width: number, locale = 'en', branding?: Branding): ResolvedDocument {
+ * is refused on its version, never half-drawn.
+ *
+ * `lazy` resolves only the shell, the library switch and home now, and every other route (and the
+ * media title frame) the first time it is read: an app's cold start draws home, and resolving every
+ * route of a large document took over a second and a half of a 32-bit TV box's start. Validation
+ * (tests, installed and previewed documents) stays eager, so a document's errors are still found
+ * before it is used; a lazily resolved route that fails is logged and left out. */
+export function resolveDocument(own: SkinDocument, width: number, locale = 'en', branding?: Branding, options: { lazy?: boolean } = {}): ResolvedDocument {
   if (own.schema !== 1) throw new Error(`Skin document schema ${String(own.schema)} is not supported`);
   if (own.renderer > RENDERER_VERSION) throw new Error(`${own.name} needs renderer ${own.renderer}; this client draws ${RENDERER_VERSION}`);
   const inherited = own.id === velaBase.id ? own : withBase(own, velaBase);
@@ -857,25 +863,55 @@ export function resolveDocument(own: SkinDocument, width: number, locale = 'en',
   const strings = { ...doc.strings?.en, ...doc.strings?.[locale.split('-')[0]], ...doc.strings?.[locale] };
   const r: Context = { doc, ui: resolveUi(doc.ui), strings, width, count: 0, unsupported: new Set() };
   const home = doc.slots?.home ?? doc.routes?.home;
-  const mediaTitle = mediaTitleTree(doc.routes?.title);
-  const resolvedMediaTitle = mediaTitle && convert(mediaTitle, 1, { ...r, count: 0 });
-  return {
+  const route = (name: string, tree: Node) => {
+    const resolved = convert(tree, 1, r);
+    return name === 'collection' ? collectionContinuation(resolved, r) : resolved;
+  };
+  const media = () => {
+    const tree = mediaTitleTree(doc.routes?.title);
+    const resolved = tree && convert(tree, 1, { ...r, count: 0 });
+    return { mediaTitle: resolved, mediaTitleSlot: resolved && inlineMediaTitleTree(resolved) };
+  };
+  const others = Object.entries(doc.routes ?? {}).filter(([name, tree]) => name !== 'home' && tree) as [string, Node][];
+  const shell = doc.slots?.shell && convert(doc.slots.shell, 1, r);
+  const libraryViews = doc.templates?.velaLibraryViews && convert({ type: 'use', template: 'velaLibraryViews' }, 1, r);
+  const routes: Record<string, RNode> = home ? { home: convert(withHeroArtwork(home), 1, r) } : {};
+  const resolved: ResolvedDocument = {
     id: doc.id,
     name: doc.name,
     document: doc,
     guideLayout: doc.routes?.live?.type === 'widget' && doc.routes.live.widget === 'guide'
       && doc.routes.live.params?.layout === 'cinematic' ? 'cinematic' : undefined,
-    shell: doc.slots?.shell && convert(doc.slots.shell, 1, r),
-    libraryViews: doc.templates?.velaLibraryViews && convert({ type: 'use', template: 'velaLibraryViews' }, 1, r),
-    routes: Object.fromEntries([
-      ...(home ? [['home', convert(withHeroArtwork(home), 1, r)]] : []),
-      ...Object.entries(doc.routes ?? {}).filter(([name, tree]) => name !== 'home' && tree).map(([name, tree]) => { const resolved = convert(tree as Node, 1, r); return [name, name === 'collection' ? collectionContinuation(resolved, r) : resolved]; }),
-    ]) as ResolvedDocument['routes'],
-    // Derived by the client, so it never counts against the document's own node budget.
-    mediaTitle: resolvedMediaTitle,
-    mediaTitleSlot: resolvedMediaTitle && inlineMediaTitleTree(resolvedMediaTitle),
+    shell,
+    libraryViews,
+    routes: routes as ResolvedDocument['routes'],
+    ...(options.lazy ? {} : media()),
     motion: (doc.motion ?? {}) as Record<string, Motion>,
     keyframes: documentKeyframes(doc.keyframes),
-    unsupported: [...r.unsupported],
+    unsupported: [],
   };
+  if (!options.lazy) {
+    for (const [name, tree] of others) routes[name] = route(name, tree);
+    resolved.unsupported = [...r.unsupported];
+    return resolved;
+  }
+  // Each the first time it is read, then kept; `unsupported` names what has been resolved so far.
+  const once = <T,>(make: () => T) => {
+    let value: { v: T } | undefined;
+    return () => (value ??= { v: make() }).v;
+  };
+  for (const [name, tree] of others) {
+    const read = once(() => {
+      try { return route(name, tree); } catch (error) {
+        console.warn(`${doc.name}: route ${name} could not be resolved: ${String(error)}`);
+        return undefined;
+      }
+    });
+    Object.defineProperty(routes, name, { enumerable: true, configurable: true, get: read });
+  }
+  const frames = once(media);
+  Object.defineProperty(resolved, 'mediaTitle', { enumerable: true, get: () => frames().mediaTitle });
+  Object.defineProperty(resolved, 'mediaTitleSlot', { enumerable: true, get: () => frames().mediaTitleSlot });
+  Object.defineProperty(resolved, 'unsupported', { enumerable: true, get: () => [...r.unsupported] });
+  return resolved;
 }

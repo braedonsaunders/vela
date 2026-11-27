@@ -417,7 +417,8 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const lastGoodSkin = useRef<ResolvedDocument | null>(null);
   const resolved = useMemo(() => {
     try {
-      const doc = resolveDocument(raw, width, 'en', branding);
+      // Home first: other routes resolve as they are first drawn (a Studio preview is checked whole).
+      const doc = resolveDocument(raw, width, 'en', branding, { lazy: !previewSkin });
       lastGoodSkin.current = doc;
       return { doc, error: null };
     } catch (error) {
