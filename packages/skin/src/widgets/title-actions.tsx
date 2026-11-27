@@ -311,6 +311,9 @@ function ActionButton({ label, icon, active, testID, run, disabled, round, value
         }),
         Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as ViewStyle) : null,
         pressed ? { opacity: 0.7, transform: [{ scale: 0.985 }] } : null,
+        // Android draws no box shadows and a 1px tan edge reads like an active fill: a TV shows focus
+        // as a ring in ink and a lift, as the media pages' round buttons do.
+        Platform.isTV ? { borderWidth: 3, borderColor: focus ? look.ui.ink : 'transparent', transform: [{ scale: focus ? 1.1 : 1 }] } : null,
         disabled ? { opacity: 0.5 } : null,
       ]}
     >

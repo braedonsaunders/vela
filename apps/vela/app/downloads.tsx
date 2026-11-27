@@ -66,7 +66,8 @@ function DownloadLibrary() {
     <SafeAreaView style={[styles.page, { backgroundColor: ui.page }]}>
       <ScrollView contentContainerStyle={[styles.content, wide && styles.wideContent, roomy && styles.roomyContent]} testID="downloads-screen">
         <View style={styles.header}>
-          <RoundButton icon="back" label="Back" onPress={back} testID="downloads-back" />
+          {/* A TV gives a new page no focus: the first row's action takes it, or Back once the list is empty. */}
+          <RoundButton icon="back" label="Back" onPress={back} testID="downloads-back" preferFocus={hydrated && !items.length} />
           <View style={styles.heading}>
             <Heading title="Downloads" />
             {hydrated ? <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }}>{formatDownloadBytes(usedBytes)} used on this device</Words> : null}
@@ -92,7 +93,7 @@ function DownloadLibrary() {
         {storageNotice(traits, persisted) ? <View testID="downloads-storage-notice">
           <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }}>{storageNotice(traits, persisted)}</Words>
         </View> : null}
-        {items.map(item => <DownloadRow key={item.titleId} item={item} online={online} wide={wide} busy={!!busy}
+        {items.map((item, index) => <DownloadRow key={item.titleId} item={item} first={index === 0} online={online} wide={wide} busy={!!busy}
           reveal={traits.reveal ? () => void perform(item.titleId, () => store.downloads.reveal(item.titleId)) : undefined}
           exportCopy={traits.export ? () => void perform(item.titleId, () => store.downloads.exportCopy(item.titleId)) : undefined}
           play={() => router.push({ pathname: '/watch/[id]', params: { id: item.titleId } })}
@@ -126,8 +127,8 @@ function storageNotice(traits: DownloadsState['traits'], persisted: boolean | nu
     : 'Downloads are kept in this browser\'s storage for this site. Clearing site data or uninstalling the app removes them.';
 }
 
-function DownloadRow({ item, online, wide, busy, play, pause, resume, remove, reveal, exportCopy }: {
-  item: DownloadRecord; online: boolean; wide: boolean; busy: boolean; play(): void; pause(): void; resume(): void; remove(): void;
+function DownloadRow({ item, first, online, wide, busy, play, pause, resume, remove, reveal, exportCopy }: {
+  item: DownloadRecord; first: boolean; online: boolean; wide: boolean; busy: boolean; play(): void; pause(): void; resume(): void; remove(): void;
   reveal?: () => void; exportCopy?: () => void;
 }) {
   const store = useVela();
@@ -181,10 +182,10 @@ function DownloadRow({ item, online, wide, busy, play, pause, resume, remove, re
           {item.error ? <Notice>{item.error}</Notice> : null}
         </View>
         <View style={[styles.actions, wide && styles.wideActions]}>
-          {playable ? <Pill label="Play" primary height={40} onPress={play} disabled={busy} /> : null}
-          {transferring ? <Pill label="Pause" height={40} onPress={pause} disabled={busy} /> : null}
+          {playable ? <Pill label="Play" primary height={40} onPress={play} disabled={busy} preferFocus={first} /> : null}
+          {transferring ? <Pill label="Pause" height={40} onPress={pause} disabled={busy} preferFocus={first && !playable} /> : null}
           {online && (status === 'paused' || status === 'failed') ? (
-            <Pill label={status === 'paused' ? 'Resume' : 'Retry'} height={40} onPress={resume} disabled={busy} />
+            <Pill label={status === 'paused' ? 'Resume' : 'Retry'} height={40} onPress={resume} disabled={busy} preferFocus={first && !playable && !transferring} />
           ) : null}
           {playable && reveal ? <Pill label={Platform.OS === 'web' && desktopMac() ? 'Show in Finder' : 'Show in folder'} height={40} onPress={reveal} disabled={busy} testID={`download-reveal-${titleId}`} /> : null}
           {playable && exportCopy ? <Pill label="Save a copy…" height={40} onPress={exportCopy} disabled={busy} testID={`download-export-${titleId}`} /> : null}
