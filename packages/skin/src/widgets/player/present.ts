@@ -389,6 +389,14 @@ export function qualityLimitReason(code: string | undefined): string {
   return /^[a-z0-9_.-]+$/.test(code) ? msg('player.qualityReason.other') : code;
 }
 
+/** The server's reason a plan has no adaptive path, in the viewer's words: its own text, or a plain line for a
+ * bare machine code it does not explain. */
+export function adaptiveUnavailableText(reason: string | undefined): string {
+  const text = reason?.trim() ?? '';
+  if (!text) return '';
+  return /^[a-z0-9_.-]+$/.test(text) ? msg('player.quality.adaptiveUnavailable') : text;
+}
+
 /** The resolution a release label leads with ("1080p WEB-DL · …" → "1080p"), or ''. */
 export function labelResolution(label: string): string {
   const lead = /^\s*(4K|UHD|2160p|1440p|1080p|1080i|720p|576p|480p|SD)\b/i.exec(label)?.[1] ?? '';

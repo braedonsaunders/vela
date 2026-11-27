@@ -92,3 +92,11 @@ test('a paused title\'s reports with the clock where it was draw nothing new', (
   expect(clockMoved(drawn, snapshot({ position: 41, playable: [{ start: 41, end: 70 }] }))).toBe(true);
   expect(clockMoved(null, drawn)).toBe(true);
 });
+
+test('the server\'s reason for no adaptive path reads as its own words, a bare code as a plain line', async () => {
+  const { adaptiveUnavailableText } = await import('../src/widgets/player/present');
+  expect(adaptiveUnavailableText(undefined)).toBe('');
+  expect(adaptiveUnavailableText('  ')).toBe('');
+  expect(adaptiveUnavailableText('The source has no regular keyframes')).toBe('The source has no regular keyframes');
+  expect(adaptiveUnavailableText('keyframe_grid')).toBe("Automatic quality isn't available for this title");
+});

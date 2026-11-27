@@ -85,6 +85,8 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       ...(description.features.loudness ? { loudness: description.features.loudness } : {}),
       // Plugin levels describe answers to existing reads (rows per tab, children per role): stated by the server.
       ...(description.features.pluginLevels ? { pluginLevels: description.features.pluginLevels } : {}),
+      // Multi-variant HLS for a client that adapts (Ether 0.3.25): a property of the server's plans, stated by it.
+      ...(description.features.adaptiveHLS ? { adaptiveHLS: description.features.adaptiveHLS } : {}),
     },
   };
 }

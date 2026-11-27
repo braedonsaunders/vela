@@ -4,6 +4,7 @@
 // the epoch moves on and every slice drops what it read under the old one.
 import type * as V from '../wire';
 import type { ServerAdapter } from '../adapter';
+import { capabilitiesOf } from '../adapter/advertise';
 import { hasClientDeclaration, hasPasswordSignIn } from '../adapter/capabilities';
 import { etherConnection, nativeConnection, type Connection } from '../adapter/connection';
 import { EtherAdapter } from '../adapter/ether';
@@ -35,6 +36,8 @@ export class Session {
   /** The selected server's feature statements, as its home advertised them. */
   searchCapabilities: Pick<V.ServerCapabilities, 'searchSorts' | 'searchKinds' | 'searchLibraries'> | undefined;
   features: V.ServerCapabilities['features'] | undefined;
+  /** A features read for a start that came before Home (knowFeatures), shared by starts in the same server session. */
+  private featuresRead: { epoch: number; pending: Promise<V.ServerCapabilities['features'] | undefined> } | undefined;
   /** Server names as they describe themselves, by record ID. */
   readonly names = new Map<string, string>();
 
@@ -260,6 +263,19 @@ export class Session {
 
   tokens(connection: Connection): Promise<V.Tokens | null> {
     return connection.credentials.get();
+  }
+
+  /**
+   * The server's features, read once per server session when no Home read has brought them yet: a watch opened by
+   * a deep link starts before Home, and what the client declares (adaptive HLS) depends on them.
+   */
+  async knowFeatures(api: ServerAdapter): Promise<void> {
+    if (this.features) return;
+    const epoch = this.epoch;
+    const reading = this.featuresRead?.epoch === epoch ? this.featuresRead.pending
+      : (this.featuresRead = { epoch, pending: capabilitiesOf(api).then(c => c.features, () => undefined) }).pending;
+    const features = await reading;
+    if (epoch === this.epoch && !this.features && features) this.features = features;
   }
 
   /** The player declares new media capabilities: servers that tailor plans to them are told again. */
