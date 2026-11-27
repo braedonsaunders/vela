@@ -68,13 +68,17 @@ export function aboutApp(): { version: string; build: string; platform: string }
 }
 
 export function platform(): VelaPlatform {
-  const development = __DEV__ ? config.server || DEVELOPMENT_SERVER : '';
+  // `same-origin`: a development page served beside its server on one origin (a remote preview),
+  // where `?server=none` previews a fresh install with no server (as a native app first opens).
+  const sameOrigin = __DEV__ && config.server === 'same-origin';
+  const development = __DEV__ && !sameOrigin ? config.server || DEVELOPMENT_SERVER : '';
+  const standalone = sameOrigin && new URLSearchParams(location.search).get('server') === 'none';
   const desktop = desktopShell();
   const link = webHandoff(!!desktop);
   return {
     // Only an http(s) page was served by an Ether server. A desktop bundle whose shell declaration
     // is missing (vela-app://app) must still reach sign-in rather than fail on its own origin.
-    etherOrigin: development || (desktop ? undefined : pageServerOrigin(location.origin)),
+    etherOrigin: development || (desktop || standalone ? undefined : pageServerOrigin(location.origin)),
     secrets,
     device: desktop
       ? { name: `Vela for ${DESKTOP_NAMES[desktop.platform]}`, platform: desktop.platform === 'mac' ? 'macos' : desktop.platform }
