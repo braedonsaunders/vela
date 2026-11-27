@@ -105,6 +105,12 @@ internal object OfflineDownloads {
     return mapOf("items" to items, "outbox" to outbox)
   }
 
+  fun readSnapshotJson(): String = json(readSnapshot()).toString()
+
+  /** A JSON object from JavaScript as a map (JSON null as null). */
+  fun parse(text: String): Map<String, Any?> = try { map(JSONObject(text)) }
+    catch (_: Exception) { throw IllegalArgumentException("Invalid downloads JSON") }
+
   fun writeSnapshot(snapshot: Map<String, Any?>) {
     val items = snapshot["items"] as? List<*> ?: emptyList<Any?>()
     val outbox = snapshot["outbox"] as? List<*> ?: emptyList<Any?>()

@@ -127,15 +127,16 @@ class VelaPlayerModule : Module() {
     // Offline original-file downloads on Android phones, tablets and TVs (OfflineDownloads, DownloadService).
     Function("downloadsBaseDirectoryUrl") { downloads().baseDirectoryUrl() }
     AsyncFunction("downloadsFreeBytes") { downloads().freeBytes()?.toDouble() }
-    AsyncFunction("downloadsReadSnapshot") { downloads().readSnapshot() }
-    AsyncFunction("downloadsWriteSnapshot") { snapshot: Map<String, Any?> -> downloads().writeSnapshot(snapshot) }
-    AsyncFunction("downloadsStartTransfer") { request: Map<String, Any?> ->
-      val parsed = DownloadRequest.from(request)
+    // Snapshots and requests cross as JSON text: Expo's map conversion refuses the nulls records carry.
+    AsyncFunction("downloadsReadSnapshot") { downloads().readSnapshotJson() }
+    AsyncFunction("downloadsWriteSnapshot") { snapshot: String -> downloads().writeSnapshot(OfflineDownloads.parse(snapshot)) }
+    AsyncFunction("downloadsStartTransfer") { request: String ->
+      val parsed = DownloadRequest.from(OfflineDownloads.parse(request))
       askForDownloadNotifications()
       downloads().startTransfer(parsed)
     }
-    AsyncFunction("downloadsResumeTransfer") { request: Map<String, Any?> ->
-      downloads().resumeTransfer(DownloadRequest.from(request))
+    AsyncFunction("downloadsResumeTransfer") { request: String ->
+      downloads().resumeTransfer(DownloadRequest.from(OfflineDownloads.parse(request)))
     }
     AsyncFunction("downloadsPauseTransfer") { serverId: String, viewerId: String, titleId: String ->
       downloads().pauseTransfer(serverId, viewerId, titleId)
