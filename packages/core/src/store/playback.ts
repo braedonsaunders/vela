@@ -1104,7 +1104,8 @@ export class Playback {
     // A track command belongs to the file and version it was chosen on: refused as stale, it is sent again only
     // while no switch of the session awaits its answer and it still plays that file (`stillOn`), and only for the
     // kinds no newer command the server did not refuse was sent for and no newer choice confirmed since (`latest`), nor those
-    // the player showed and then left.
+    // the player showed and then left. A switch whose request timed out or was lost may have moved the session to its version:
+    // then it is sent again only when a read of the session shows that file and version, at the generations read.
     const at = current.plan?.sessionId === sessionId ? current.plan : undefined;
     const sent: SentOn = { sessionId, sourceGeneration: at?.sourceGeneration, file: fileOf(at), versions: this.versionsTaken };
     let tracks = command.kind === 'tracks' && current.sessionId === sessionId ? command : undefined;
@@ -1117,11 +1118,18 @@ export class Playback {
       sourceGeneration: at?.sourceGeneration, reported: { audio: false, subtitle: false } };
     const pick: Pick | undefined = command.kind === 'tracks' && at
       ? { at, sent, command, origin, number, before, left: { audio: false, subtitle: false }, inFlight: true, confirmed: {} } : undefined;
-    const retry = command.kind === 'tracks' ? (): V.SessionCommand | undefined => {
-      if (this.switches.some(s => s.sessionId === sessionId && s.inFlight && s.number > this.appliedSwitch)
-        || !this.stillOn(sent, this.box.get().playback.plan)) return undefined;
+    const retry = command.kind === 'tracks' ? async (generations: { sourceGeneration: number; seekGeneration: number }): Promise<V.SessionCommand | undefined> => {
+      const switching = () => this.switches.filter(s => s.sessionId === sessionId && s.number > this.appliedSwitch);
+      const blocked = () => switching().some(s => s.inFlight) || !this.stillOn(sent, this.box.get().playback.plan);
+      if (blocked()) return undefined;
+      if (switching().length) {
+        const read = await this.server.sessionSnapshot(sessionId).then(snapshot => withPlaying(snapshot.plan, snapshot), () => undefined);
+        if (!read || !sent.file || fileOf(read) !== sent.file || read.selectedVersionId !== at?.selectedVersionId
+          || !this.stillOn(sent, read) || blocked()) return undefined;
+        generations = { sourceGeneration: read.sourceGeneration, seekGeneration: read.seekGeneration };
+      }
       const { audioTrackId, subtitleTrackId, ...rest } = command;
-      const again = { ...rest,
+      const again = { ...rest, ...generations,
         ...(audioTrackId !== undefined && (!tracks || this.latest('audio') === number) && !pick?.left.audio ? { audioTrackId } : {}),
         ...(subtitleTrackId !== undefined && (!tracks || this.latest('subtitle') === number) && !pick?.left.subtitle ? { subtitleTrackId } : {}) };
       if (again.audioTrackId === undefined && again.subtitleTrackId === undefined) return undefined;
@@ -1139,7 +1147,13 @@ export class Playback {
     if (pick) this.picks.push(pick);
     try {
       let connection: Connection;
-      try { connection = await this.session.ready(); } catch (error) { if (pick) this.dropPick(pick); throw error; }
+      // A command that never left is no choice sent, as a refused one, unless the player already showed it.
+      try { connection = await this.session.ready(); } catch (error) {
+        if (pick) this.dropPick(pick);
+        if (tracks && !pick?.before.reported.audio) chosen.audio.delete(number);
+        if (tracks && !pick?.before.reported.subtitle) chosen.subtitle.delete(number);
+        throw error;
+      }
       // A command lost on its way stays to be confirmed by a plan the session publishes; a reply or a refusal ends it. Refused,
       // it is no longer a choice sent: an earlier one of its kinds is the newest again.
       const plan = await this.send(connection.adapter, sessionId, command, origin, undefined, retry)
@@ -1165,8 +1179,26 @@ export class Playback {
             if (this.stillOn(sent, shown)) this.takeTracks(asked, nextPlan, origin, number, before);
             return false;
           }
+          // A kind takes when it was asked for and no later choice was recorded for it. For the others the plan shown keeps its
+          // selection when a later choice was recorded or the player left it, unless the reply already shows the choice recorded;
+          // a reply older than the newest plan heard only brings in the kinds that take.
+          const kinds = ['audio', 'subtitle'] as const;
+          const takes = (kind: 'audio' | 'subtitle') => sent.versions === this.versionsTaken
+            && (kind === 'audio' ? asked.audioTrackId : asked.subtitleTrackId) !== undefined && number >= this.applied[kind];
+          const recorded = (kind: 'audio' | 'subtitle') => kind === 'audio'
+            ? this.audio !== undefined && nextPlan.selectedAudioTrackId === this.audio
+            : this.subtitle !== undefined && (nextPlan.selectedSubtitleTrackId ?? null) === this.subtitle;
+          const keeps = (kind: 'audio' | 'subtitle') => !takes(kind) && (number < this.applied[kind] || !!pick?.left[kind]) && !recorded(kind);
+          const older = shown?.sessionId === sessionId && olderThanShown(nextPlan, this.newestShown());
+          const from = older ? kinds.filter(takes) : shown?.sessionId === sessionId ? kinds.filter(keeps) : [];
           // A command sent before a version was taken does not choose on that version.
           if (sent.versions === this.versionsTaken) this.takeTracks(asked, nextPlan, origin, number, before);
+          if (older && !from.length) return true;
+          if (from.length) {
+            const [base, other] = older ? [shown!, nextPlan] : [nextPlan, shown!];
+            nextPlan = { ...base, ...(from.includes('audio') ? { selectedAudioTrackId: other.selectedAudioTrackId } : {}),
+              ...(from.includes('subtitle') ? { selectedSubtitleTrackId: other.selectedSubtitleTrackId } : {}) };
+          }
           nextPlan = this.withLocalTracks(nextPlan);
         } else {
           nextPlan = this.withLocalTracks(nextPlan);
@@ -1393,7 +1425,7 @@ export class Playback {
   }
 
   private async send(api: ServerAdapter, sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer',
-    canRetry?: () => Promise<boolean>, again?: () => V.SessionCommand | undefined): Promise<V.PlaybackPlan> {
+    canRetry?: () => Promise<boolean>, again?: (generations: { sourceGeneration: number; seekGeneration: number }) => Promise<V.SessionCommand | undefined>): Promise<V.PlaybackPlan> {
     try {
       return await sendCommand(api, sessionId, command);
     } catch (error) {
@@ -1409,10 +1441,10 @@ export class Playback {
       const wanted = command.kind === 'switch' && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
       if ((!absolute && !wanted) || !generations) throw error;
       if (canRetry && !(await canRetry())) throw error;
-      // What to send again is decided as it is sent: a command may have been superseded meanwhile.
-      const retry = again ? again() : command;
+      // What to send again, and at which generations, is decided as it is sent: a command may have been superseded meanwhile.
+      const retry = again ? await again(generations) : { ...command, ...generations };
       if (!retry) throw error;
-      return sendCommand(api, sessionId, { ...retry, ...generations, idempotencyKey: this.session.key() });
+      return sendCommand(api, sessionId, { ...retry, idempotencyKey: this.session.key() });
     }
   }
 
