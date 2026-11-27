@@ -32,6 +32,8 @@
       "native-player.js",
       "load-guard.js",
       "bundle-server.js",
+      "downloads.js",
+      "downloads-paths.js",
       "mac/**/*.js",
       "linux/**/*.js"
     ],

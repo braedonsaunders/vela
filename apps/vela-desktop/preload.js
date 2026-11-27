@@ -52,6 +52,30 @@ function start(shell) {
   });
   ipcRenderer.on('vela:find', () => window.dispatchEvent(new Event('vela:find')));
 
+  // Offline downloads (docs/downloads.md, "Desktop bridge (version 1)"): a fixed call and subscribe
+  // over IPC to main's downloads.js, never ipcRenderer itself. Main answers only the trusted main frame.
+  if (shell.downloads) {
+    const listeners = new Set();
+    let subscribed = false;
+    ipcRenderer.on('vela:downloads-event', (_event, data) => {
+      for (const listener of listeners) { try { listener(data); } catch {} }
+    });
+    contextBridge.exposeInMainWorld('__VELA_DOWNLOADS__', {
+      version: 1,
+      base: 'vela-app://app/vela-downloads/',
+      call: (method, ...args) => ipcRenderer.invoke('vela:downloads-call', String(method), args).catch(error => {
+        // Electron prefixes the main process's message with the channel; the page sees the message alone.
+        throw new Error(String(error?.message ?? error).replace(/^Error invoking remote method '[^']*': (?:Error: )?/, ''));
+      }),
+      subscribe: listener => {
+        if (typeof listener !== 'function') return () => {};
+        listeners.add(listener);
+        if (!subscribed) { subscribed = true; ipcRenderer.send('vela:downloads-subscribe'); }
+        return () => { listeners.delete(listener); };
+      },
+    });
+  }
+
   // Expose only the fixed playback transport, never ipcRenderer itself.
   if (shell.native) {
     const listeners = new Set();
