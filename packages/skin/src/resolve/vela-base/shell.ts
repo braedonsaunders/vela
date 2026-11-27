@@ -1,5 +1,5 @@
 import type { BoxNode, Condition, Node, Style } from '../../../../protocol/skin';
-import { display, focusRing, gutter, gutterSmall, is, navFocus, sans, small, veil, wordmark } from './look';
+import { belowBar, chromeDisc, display, focusRing, gutter, gutterSmall, is, navFocus, phone, sans, small, veil, wordmark } from './look';
 
 // A primary destination: the current one in full ink and weight, with the underline that
 // glides between destinations (a shared element).
@@ -129,35 +129,51 @@ const moreNavItem: Node = {
 
 // On phones one labelled control opens every destination in a modal menu. Keeping library view
 // tabs in their page toolbar leaves the library name and selected view visible together.
+const compactLabel: Style = { 'font-size': '14px', 'font-weight': '650', 'line-clamp': '1' };
+// A 44pt target holding the 36pt pill (the compact scale's chrome); the pill takes its hover and focus.
 const compactNavigation: Node = {
   type: 'box',
+  group: true,
+  controlStates: false,
   style: { display: 'none' },
   small: {
     position: 'relative', display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px',
-    height: '44px', 'box-sizing': 'border-box', padding: '0px 12px', gap: '8px', 'align-items': 'center',
-    'border-radius': '$ui.radiusControl', border: '1px solid $ui.glassEdge',
-    'background-color': '$ui.control', color: '$ui.ink',
+    height: `${phone.target}px`, 'align-items': 'center',
   },
   press: { action: 'toggle', arg: 'navigation' },
   label: 'Open navigation',
   testId: 'mobile-navigation',
   id: 'mobile-navigation-trigger',
   a11y: { expanded: [{ test: 'flag:navigation' }], haspopup: 'menu' },
-  hover: { 'background-color': '$ui.controlHover' },
-  focus: { 'box-shadow': focusRing },
   children: [
-    { type: 'icon', symbol: 'menu', style: { width: '18px', height: '18px', 'flex-shrink': '0' } },
-    { type: 'text', when: [is('env.section', 'home')], text: '{t:ui.home}', style: { 'font-size': '13px', 'font-weight': '650', 'line-clamp': '1' } },
-    // Live TV is named once, below, whether or not the server lists it as a library.
-    { type: 'repeat', over: 'nav.destinations', item: { type: 'text', when: [{ test: 'dest.on' }, { test: 'dest.kind', is: 'ne', value: 'live' }], text: '{dest.name}', style: { 'font-size': '13px', 'font-weight': '650', 'line-clamp': '1' } } },
-    { type: 'text', when: [is('env.section', 'live')], text: '{t:ui.live}', style: { 'font-size': '13px', 'font-weight': '650', 'line-clamp': '1' } },
+    {
+      type: 'box',
+      style: {
+        position: 'relative', display: 'flex', 'flex-direction': 'row', flex: '1', 'min-width': '0px',
+        'min-height': `${phone.chrome}px`, 'box-sizing': 'border-box', padding: '0px 14px 0px 12px', gap: '8px', 'align-items': 'center',
+        'border-radius': '$ui.radiusControl', border: '1px solid $ui.glassEdge',
+        'background-color': '$ui.control', color: '$ui.ink', transition: 'background-color 180ms linear',
+      },
+      groupHover: { 'background-color': '$ui.controlHover' },
+      groupFocus: { 'box-shadow': focusRing },
+      children: [
+        { type: 'icon', symbol: 'menu', style: { width: '16px', height: '16px', 'flex-shrink': '0', color: '$ui.inkSecondary' } },
+        { type: 'text', when: [is('env.section', 'home')], text: '{t:ui.home}', style: compactLabel },
+        // Live TV is named once, below, whether or not the server lists it as a library.
+        { type: 'repeat', over: 'nav.destinations', item: { type: 'text', when: [{ test: 'dest.on' }, { test: 'dest.kind', is: 'ne', value: 'live' }], text: '{dest.name}', style: compactLabel } },
+        { type: 'text', when: [is('env.section', 'live')], text: '{t:ui.live}', style: compactLabel },
+        { type: 'box', style: { flex: '1' } },
+        { type: 'icon', paths: ['M6.7 9.3a1 1 0 0 1 1.4 0L12 13.2l3.9-3.9a1 1 0 1 1 1.4 1.4l-4.6 4.6a1 1 0 0 1-1.4 0l-4.6-4.6a1 1 0 0 1 0-1.4z'], viewBox: '0 0 24 24',
+          style: { width: '16px', height: '16px', 'flex-shrink': '0', color: '$ui.inkQuiet' } },
+      ],
+    },
   ],
 };
 
 const compactDestination = (on: Condition[], press: BoxNode['press'], label: string): Node => ({
   type: 'box', press, label, a11y: { current: on },
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center',
-    height: '48px', 'flex-shrink': '0', padding: '0px 14px', 'border-radius': '$ui.radiusControl', color: '$ui.ink', 'font-size': '15px' },
+    height: `${phone.target}px`, 'flex-shrink': '0', padding: '0px 14px', 'border-radius': '$ui.radiusControl', color: '$ui.ink', 'font-size': '15px' },
   states: [{ when: on, style: { 'background-color': '$ui.controlHover', 'font-weight': '700' } }],
   hover: { 'background-color': '$ui.control' }, focus: navFocus,
   children: [{ type: 'text', text: label, style: { 'line-clamp': '1' } }],
@@ -169,7 +185,7 @@ const compactMenu: Node = {
   escape: 'navigation',
   returnFocus: 'mobile-navigation-trigger',
   style: { display: 'none' },
-  small: { position: 'absolute', top: 'calc(56px + env(safe-area-inset-top))', left: '0px', right: '0px', bottom: '0px',
+  small: { position: 'absolute', top: belowBar(), left: '0px', right: '0px', bottom: '0px',
     display: 'flex', 'align-items': 'stretch', 'z-index': '29' },
   children: [
     { type: 'box', press: { action: 'close', arg: 'navigation' }, label: 'Close navigation',
@@ -177,8 +193,8 @@ const compactMenu: Node = {
         'background-color': '$ui.scrim', 'backdrop-filter': 'blur(4px)' } },
     { type: 'box', role: 'navigation', label: 'Main navigation', motion: 'velaPop',
       style: { position: 'relative', display: 'flex', 'flex-direction': 'column', gap: '4px',
-        margin: '10px 12px auto 12px', padding: '12px',
-        'max-height': 'calc(100dvh - 76px - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
+        margin: '8px 12px auto 12px', padding: '8px',
+        'max-height': `calc(100dvh - ${phone.bar + 20}px - env(safe-area-inset-top) - env(safe-area-inset-bottom))`,
         'overflow-y': 'auto', 'border-radius': '20px', border: '1px solid $ui.glassEdge',
         'background-color': '$ui.popover', 'box-shadow': '0px 24px 70px $ui.shadow' },
       children: [
@@ -192,8 +208,9 @@ const compactMenu: Node = {
 
 // The viewer's badge: their initial on a warm disc. The renderer draws their avatar over it where
 // the server gives one (viewer-avatar.ts), so a missing or failed picture leaves the initial showing.
-export const viewerBadge = (size: number, fontSize: string): Node => ({
+export const viewerBadge = (size: number, fontSize: string, compact?: { size: number; fontSize: string }): Node => ({
   type: 'text',
+  ...(compact ? { small: { width: `${compact.size}px`, height: `${compact.size}px`, 'border-radius': `${compact.size / 2}px`, 'font-size': compact.fontSize } } : {}),
   text: '{env.viewerInitial}',
   style: {
     width: `${size}px`,
@@ -277,7 +294,7 @@ export const shell: Node = {
             'align-items': 'center',
             gap: '10px',
           },
-          small: { height: '56px', ...gutterSmall, gap: '8px' },
+          small: { height: `${phone.bar}px`, ...gutterSmall, 'padding-left': '12px', 'padding-right': '10px', gap: '4px' },
           states: [{ when: [is('env.section', 'live'), { ...small, not: true }], style: { height: '56px' } }],
           children: [
             {
@@ -286,8 +303,8 @@ export const shell: Node = {
               label: '{t:ui.velaHome}',
               controlStates: false,
               style: { position: 'relative', 'margin-right': '22px', 'min-height': '44px', 'min-width': '44px', display: 'flex', 'align-items': 'center', 'justify-content': 'center' } as Style,
-              small: { 'margin-right': '0px' } as Style,
-              children: [wordmark(24, 24)],
+              small: { 'margin-right': '2px', 'padding-left': '6px', 'padding-right': '6px' } as Style,
+              children: [wordmark(24, 20)],
             },
             // The room the destinations fit to (`fit`): the row keeps what fits, More the rest.
             {
@@ -353,9 +370,23 @@ export const shell: Node = {
                 'backdrop-filter': 'blur(20px) saturate(1.3)',
                 'flex-shrink': '0',
               },
+              // Phones: the 44pt target stays; the circle inside it draws at the chrome's 36pt.
+              small: { border: 'none', 'background-color': 'transparent', 'backdrop-filter': 'none' },
+              group: true,
               hover: { 'background-color': '$ui.controlHover' },
               focus: { 'box-shadow': focusRing },
-              children: [{ type: 'icon', symbol: 'search', style: { width: '18px', height: '18px' } }],
+              states: [{ when: [small], style: {}, hover: {}, focus: {} }],
+              children: [
+                { type: 'icon', when: [{ ...small, not: true }], symbol: 'search', style: { width: '18px', height: '18px' } },
+                {
+                  type: 'box',
+                  when: [small],
+                  style: chromeDisc(),
+                  groupHover: { 'background-color': '$ui.controlHover' },
+                  groupFocus: { 'box-shadow': focusRing },
+                  children: [{ type: 'icon', symbol: 'search', style: { width: '16px', height: '16px' } }],
+                },
+              ],
             },
             {
               type: 'box',
@@ -379,9 +410,9 @@ export const shell: Node = {
               },
               hover: { 'background-color': '$ui.control', color: '$ui.ink' },
               focus: navFocus,
-              small: { padding: '4px', 'min-width': '44px' },
+              small: { height: `${phone.target}px`, padding: '0px', width: `${phone.target}px`, 'justify-content': 'center' },
               children: [
-                viewerBadge(32, '14px'),
+                viewerBadge(32, '14px', { size: 30, fontSize: '13px' }),
                 {
                   type: 'text',
                   text: '{env.viewer}',
@@ -462,7 +493,7 @@ export const shell: Node = {
         'backdrop-filter': 'blur(24px)',
         'box-shadow': '0px 24px 70px $ui.shadow',
       },
-      small: { top: 'calc(56px + env(safe-area-inset-top))', right: '12px' },
+      small: { top: belowBar(), right: '12px', 'max-height': `calc(100vh - ${phone.bar + 12}px - env(safe-area-inset-top) - env(safe-area-inset-bottom))` },
       children: [
         {
           type: 'box',

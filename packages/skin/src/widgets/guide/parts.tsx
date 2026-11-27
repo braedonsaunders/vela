@@ -96,6 +96,8 @@ interface PressProps {
   hasTVPreferredFocus?: boolean;
   /** The surrounding TV focus guide already contains directional focus. */
   containedFocus?: boolean;
+  /** Touch reach past the drawn edge (a phone's 36pt control in its 44pt target). */
+  hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
 }
 
 /** A pressable that tracks its own hover and focus, so focus looks work on web, TV and touch alike. */
@@ -172,6 +174,7 @@ export function Press(props: PressProps) {
       testID={testID}
       focusable={props.focusable}
       hasTVPreferredFocus={props.hasTVPreferredFocus}
+      hitSlop={props.hitSlop}
       style={[style(state), props.lift ? elevation : null, Platform.OS === 'web' ? WEB_PRESS : null]}
       {...(Platform.OS === 'web' && props.lift ? { dataSet: { velaFocus: 'frame' } } : {})}
       {...keys}

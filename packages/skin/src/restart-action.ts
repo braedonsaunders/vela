@@ -9,7 +9,7 @@ type Box = Extract<RNode, { kind: 'box' }>;
  * a row of them (Late Night's, wrapping) it grows into the line's spare room, and the next action
  * moves to a line of its own when Resume and the mark already fill this one. */
 export function heroResumeLayout(parent: 'row' | 'column'): { pair: ViewStyle; resume: ViewStyle } {
-  const pair: ViewStyle = { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 10 };
+  const pair: ViewStyle = { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 8 };
   return {
     pair: parent === 'row' ? { ...pair, flexGrow: 1, flexShrink: 1, minWidth: 0 } : pair,
     resume: { flexGrow: 1, flexShrink: 1, minWidth: 0 },
