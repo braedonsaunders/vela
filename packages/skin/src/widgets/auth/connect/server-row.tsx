@@ -85,7 +85,8 @@ export function ServerRow({
         </View>
         {server.selected ? <Glyph symbol="checkmark" size={14} color={look.ui.accent} /> : null}
       </APressable>
-      {server.selected ? null : (
+      {/* The current server cannot be removed; its slot stays, so every row has the same width. */}
+      {server.selected ? <View style={{ width: 44 }} /> : (
         <APressable
           onPress={() => onRemove(server.id)}
           disabled={busy}

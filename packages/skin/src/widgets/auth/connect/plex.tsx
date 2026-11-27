@@ -178,7 +178,7 @@ function ProfileCard({ profile, columns, disabled, current, onPress }: { profile
     accessibilityState={{ selected: current }} hasTVPreferredFocus={preferred}
     disabled={disabled} onPress={onPress} testID={`plex-profile-${profile.id}`} {...handlers}
     style={[look.box(rows), { width: `${Math.floor(100 / columns) - 2}%` }, NO_RING]}>
-    <View style={{ width: size, height: size }}>
+    <View style={{ width: size, height: size, marginBottom: 6 }}>
       <View style={[look.box({ width: `${size}px`, height: `${size}px`, 'border-radius': `${size / 2}px`, overflow: 'hidden', 'background-color': '$ui.controlHover', border: '2px solid $ui.glassEdgeStrong', 'align-items': 'center', 'justify-content': 'center' })]}>
         {profile.avatarUrl && !failed ? <Image source={{ uri: profile.avatarUrl }} contentFit="cover" style={{ width: size, height: size }} onError={() => setFailed(true)} accessibilityElementsHidden />
           : <Words rows={{ 'font-size': `${Math.round(size * .33)}px`, 'font-weight': '700', color: '$ui.accent' }}>{profileInitials(profile.name)}</Words>}
@@ -186,11 +186,14 @@ function ProfileCard({ profile, columns, disabled, current, onPress }: { profile
       {profile.protected ? <View style={[look.box({ position: 'absolute', right: '-2px', bottom: '-2px', width: '26px', height: '26px', 'border-radius': '13px', 'background-color': '$ui.accent', border: '2px solid $ui.page', 'align-items': 'center', 'justify-content': 'center' })]}>
         <Glyph symbol="lock" size={14} color={look.ui.onAccent} />
       </View> : null}
+      {/* Current, Kids or Restricted: a small tag on the avatar's lower edge, so the grid stays even. */}
+      {marker ? <View style={{ position: 'absolute', left: -12, right: -12, bottom: -7, alignItems: 'center' }}>
+        <View style={look.box({ padding: '2px 7px', 'border-radius': '999px', 'background-color': '$ui.raised', border: '1px solid $ui.glassEdgeStrong' })}>
+          <Words rows={{ 'font-size': '10px', 'font-weight': '700', color: '$ui.inkSecondary', 'letter-spacing': '0.04em' }} maxScale={1.2}>{marker.toUpperCase()}</Words>
+        </View>
+      </View> : null}
     </View>
     <Words rows={{ 'font-size': '14px', 'font-weight': '650' }} lines={2} style={{ textAlign: 'center', minHeight: 34 }}>{profile.name}</Words>
-    {marker ? <View style={look.box({ padding: '2px 7px', 'border-radius': '999px', 'background-color': '$ui.control' })}>
-      <Words rows={{ 'font-size': '10px', 'font-weight': '700', color: '$ui.inkSecondary', 'letter-spacing': '0.04em' }}>{marker.toUpperCase()}</Words>
-    </View> : null}
   </APressable>;
 }
 
