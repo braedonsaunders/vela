@@ -3,7 +3,8 @@ import { useVelaState } from '@vela/core/react';
 // screen through VelaPlayerView, under the player chrome in the active document's look. Core's
 // playback slice starts, follows and stops the session; this route is the trusted host that hands
 // the server's media authorization to the player.
-import { router, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { router } from '../../src/router';
 import { useCallback, useEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';

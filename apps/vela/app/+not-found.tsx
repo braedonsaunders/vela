@@ -1,4 +1,5 @@
-import { Link, router } from 'expo-router';
+import { Link } from 'expo-router';
+import { router } from '../src/router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { msg } from '@vela/core';
 import { useVelaState } from '@vela/core/react';

@@ -1,7 +1,7 @@
 // What a document's presses do. Navigation goes through expo-router; data goes through the core
 // store; view state through the view-state hook. An action this app does not carry out yet is
 // logged, never silently swallowed.
-import { router } from 'expo-router';
+import { router } from './router';
 import { useCallback, useMemo } from 'react';
 import { Platform } from 'react-native';
 import { opensMediaPage, type Vela as Store } from '@vela/core';

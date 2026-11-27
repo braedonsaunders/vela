@@ -1,7 +1,7 @@
 // The app's side of a media page (docs/media-kinds.md): where its presses go. Titles open the
 // title route (which draws the media page again), people the person route, books the reader and
 // audio the player.
-import { router } from 'expo-router';
+import { router } from '../router';
 import { useMemo } from 'react';
 import type { MediaActions } from '@vela/skin/src/widgets/media';
 import { noteTitleNavigation } from '../title-origin';

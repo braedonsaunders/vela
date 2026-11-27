@@ -2,7 +2,7 @@
 // extra played full screen, and a live hit from search (a channel's guide, or a programme: watched
 // while it airs, else the guide at its time).
 import { startTransition } from 'react';
-import { router } from 'expo-router';
+import { router } from '../router';
 import type { Vela as Store } from '@vela/core';
 import { screenOf } from '../plugin-screens';
 

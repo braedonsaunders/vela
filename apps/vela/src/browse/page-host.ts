@@ -1,7 +1,7 @@
 // The host a library or collection page draws with: the app's host, with the page in the
 // environment (its model, load state and section) and the page's own actions. Sorting and
 // filtering set the route's parameters; paging and retrying read through core's store.
-import { router } from 'expo-router';
+import { router } from '../router';
 import { facetCollectionQuery, type LibraryQuery } from '@vela/core';
 import type { SkinHost } from '@vela/skin';
 import type { CollectionState } from './collection-page';

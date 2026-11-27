@@ -1,7 +1,8 @@
 // A plugin screen as a top-level section (docs/plugin-screens.md): its landing page's document from
 // bootstrap navigation, drawn natively inside the active document's shell, live while it is the
 // section on show.
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { router } from '../../../src/router';
 import { useCallback, useMemo } from 'react';
 import { View } from 'react-native';
 import { useVelaState } from '@vela/core/react';

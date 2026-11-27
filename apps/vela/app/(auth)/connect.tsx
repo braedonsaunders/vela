@@ -4,7 +4,8 @@
 import { useVela as useSession, useVelaState } from '@vela/core/react';
 import { Connect, Stage } from '@vela/skin/src/widgets/auth';
 import { HostContext } from '@vela/skin/src/host';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { router } from '../../src/router';
 import { useCallback, useRef } from 'react';
 import { View } from 'react-native';
 import { useVela } from '../../src/vela';

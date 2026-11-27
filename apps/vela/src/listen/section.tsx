@@ -2,7 +2,7 @@
 // documents (ExperienceView), given the app's router, player, the card menu and the playlist drawer,
 // worded for what the library holds (music, audiobooks, podcasts). The page in view lives in the
 // address (`?m=`).
-import { router } from 'expo-router';
+import { router } from '../router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { audioCardsOf, isUnreleased, likedTitleIds, setTitleLiked, type Card } from '@vela/core';

@@ -1,7 +1,7 @@
 // Multiview for the signed-in server: one MultiviewController per server and viewer with live TV,
 // disposed when either changes. "Add to multiview" anywhere adds a channel and opens /multiview.
 import { quietPlayback } from '@vela/skin/src/quiet-playback';
-import { router } from 'expo-router';
+import { router } from './router';
 import { useEffect, useMemo, useState } from 'react';
 import type { Vela as Store } from '@vela/core';
 import type { LiveController } from '@vela/skin/src/widgets/guide';
