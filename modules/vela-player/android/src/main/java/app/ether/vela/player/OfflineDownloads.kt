@@ -145,15 +145,17 @@ internal object OfflineDownloads {
     enqueue(request)
   }
 
-  /** Resume with fresh headers, keeping the partial file. A transfer already running takes the new headers for
-   * its next attempt and is not restarted. */
+  /** Resume with fresh headers, keeping the partial file. Idempotent for a transfer already queued or running
+   * (the core and the network callback may both resume it): the fresh request (URL, headers, Wi-Fi rule) is
+   * swapped in for the next attempt, and the running connection is neither restarted nor doubled. */
   fun resumeTransfer(request: DownloadRequest) {
     synchronized(lock) {
       val current = queue[request.key]
-      if (current != null && current.sameFile(request) && current.url == request.url && current.wifiOnly == request.wifiOnly) {
+      if (current != null && current.sameFile(request)) {
         queue[request.key] = request
-        // Fresh headers try again now, without waiting out a backoff.
+        // Fresh credentials try again now, without waiting out a backoff.
         retryAt = 0
+        if (activeKey == request.key && networkBlocks(request) != null) active?.cancel()
         wakeLocked()
         return
       }
