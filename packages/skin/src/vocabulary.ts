@@ -313,6 +313,11 @@ export const VOCABULARY: Record<string, Accessor> = {
   'dest.kind': c => c.dest?.kind ?? '',
   'dest.backdrop': c => c.dest?.backdrop ?? '',
   'dest.more': (c, e) => (c.dest ? yes(!e.navMeasuring && (e.navOut ?? []).includes(c.dest.id)) : ''),
+  'nav.sectionName': (_, e) => {
+    if (e.section === 'home') return t('ui.home');
+    if (e.section === 'live') return t('ui.live');
+    return e.libraries.find(library => library.id === e.section)?.name.trim() || t('ui.library');
+  },
   'nav.more': (_, e) => yes(!!e.navMeasuring || (e.navOut?.length ?? 0) > 0),
   'nav.liveMore': (_, e) => yes(!e.navMeasuring && (e.navOut ?? []).includes('live')),
   'nav.moreOn': (_, e) => yes(!e.navMeasuring && (e.navOut ?? []).some(key => key === e.section

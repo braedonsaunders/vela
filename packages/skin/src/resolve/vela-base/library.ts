@@ -223,7 +223,7 @@ const makeLibrary = (header: LibraryHeaderOffset | undefined): Node => ({
     !header ? { ...libraryLoading, style: { ...libraryLoading.style, 'padding-top': '24px' }, small: { 'padding-top': '18px' } } : libraryLoading,
     { ...libraryFailure,
       style: { ...libraryFailure.style, 'padding-top': header?.wide ?? '0px' },
-      small: { 'padding-top': header?.small ?? '0px' } },
+      small: { 'padding-top': header?.small ?? '0px', 'margin-top': '12px' } },
     {
       type: 'box',
       when: [ready, { test: 'library.backdrop' }],
