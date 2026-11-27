@@ -71,6 +71,10 @@ const within = (node: RNode, predicate: (node: RNode) => boolean): boolean => pr
   || node.kind === 'repeat' && within(node.item, predicate);
 const signsOut = (node: RNode) => node.kind === 'box' && node.press?.action === 'signOut';
 const isAbout = (node: RNode): node is Box => node.kind === 'box' && node.readingStop === true;
+function stopIn(node: RNode): Box | undefined {
+  if (node.kind !== 'box') return undefined;
+  return node.readingStop === true ? node : node.children.map(stopIn).find(Boolean);
+}
 
 test.each(documents)('%s ends its profile menu with the About line', (_name, doc) => {
   const env = { about: android, viewer: 'Demo', flags: [] } as unknown as Env;
@@ -83,12 +87,15 @@ test.each(documents)('%s ends its profile menu with the About line', (_name, doc
       const out = node.children.findIndex(signsOut);
       if (out >= 0) {
         menus++;
-        const about = node.children.slice(out + 1).find(isAbout);
+        // The line after Sign out is the stop, or holds it (the Vela base keeps its rule outside the stop).
+        const line = node.children.slice(out + 1).find(child => within(child, isAbout));
+        expect(line).toBeDefined();
+        const about = isAbout(line!) ? line : stopIn(line!);
         expect(about).toBeDefined();
-        expect(holds(about!.when, { index: 0 }, env)).toBe(true);
+        expect(holds(line!.when, { index: 0 }, env)).toBe(true);
         expect(fill(about!.label!, { index: 0 }, env)).toBe(aboutLabel(android));
         expect(within(about!, n => n.kind === 'text' && fill(n.text, { index: 0 }, env) === 'Vela 0.2.48 (2048) · Android · Ether 0.3.19')).toBe(true);
-        expect(holds(about!.when, { index: 0 }, { ...env, about: undefined })).toBe(false);
+        expect(holds(line!.when, { index: 0 }, { ...env, about: undefined })).toBe(false);
       }
       node.children.forEach(walk);
     };

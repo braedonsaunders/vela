@@ -1,16 +1,23 @@
 /** A paired light/dark inset ring stays visible on either artwork or a solid fill.
- * Keeping it inside the control also survives clipped rows, cards and guide cells. */
-export function focusStyle(transform?: unknown, still = false) {
+ * Keeping it inside the control also survives clipped rows, cards and guide cells.
+ *
+ * `around` is for a line of text the document marks as a reading stop (a menu's About line): such a
+ * box has no padding of its own, so the inset ring and its dark band fell on the glyphs and clipped
+ * them. Its ring sits just outside the box instead, clear of the text. */
+export function focusStyle(transform?: unknown, still = false, around = false) {
   return {
     opacity: 1,
     outlineColor: '#ffffff',
     outlineStyle: 'solid' as const,
-    outlineWidth: 3,
-    outlineOffset: -3,
-    boxShadow: 'inset 0px 0px 0px 5px #101216',
+    outlineWidth: around ? 2 : 3,
+    outlineOffset: around ? AROUND_OFFSET : -3,
+    ...(around ? {} : { boxShadow: 'inset 0px 0px 0px 5px #101216' }),
     ...(!still ? { transform: [...(Array.isArray(transform) ? transform : []), { scale: 1.025 }] } : {}),
   };
 }
+
+/** How far outside a marked reading stop its ring sits: room for the glyphs' side bearings. */
+export const AROUND_OFFSET = 6;
 
 /** A final web fallback for controls and native selects. Text fields are left out: every one draws
  * its own focus look (its box's border and halo), and a browser counts any clicked field as
