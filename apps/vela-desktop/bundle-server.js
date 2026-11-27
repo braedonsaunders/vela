@@ -1,6 +1,7 @@
 'use strict';
 // The app's own origin answered from the bundled web release: /vela/... from the bundle, the app's
-// routes by index.html, anything else a 404.
+// routes by index.html, /vela-downloads/... from the offline downloads folder (downloads-paths.js),
+// anything else a 404.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -13,10 +14,11 @@ const TYPES = {
 
 const missing = () => new Response(null, { status: 404 });
 
-function bundleServer(root) {
+function bundleServer(root, { downloads } = {}) {
   const UI = path.resolve(root);
   return async function serve(request) {
     const url = new URL(request.url);
+    if (downloads && url.host === 'app' && url.pathname.startsWith('/vela-downloads/')) return downloads(request);
     if (url.host !== 'app' || request.method !== 'GET' || !(url.pathname === '/vela' || url.pathname.startsWith('/vela/'))) return missing();
     let relative;
     try { relative = decodeURIComponent(url.pathname.slice('/vela'.length)).replace(/^\/+/, ''); } catch { return missing(); }

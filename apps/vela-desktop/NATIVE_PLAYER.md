@@ -68,6 +68,19 @@ required build hook changes to shared owner. Native addon is preferred on macOS
 because an in-process NSView can be ordered below Electron's web contents
 without cross-process window compositing.
 
+## Downloaded titles
+
+A local plan (docs/downloads.md) names its original and sidecars on the shell's own route,
+`vela-app://app/vela-downloads/<serverId>/<viewerId>/<titleId>/…`. Each host passes props through
+`localizePlayback` (`downloads-paths.js`), which maps those URLs to `file://` URLs of the files under
+`userData/vela-downloads`, after the shared path validation and realpath containment. A `file:` URL
+from the page, or a download that is not stored, is refused (browser fallback). Aether opens the
+`file://` URL; mpv opens the path, re-validated by `localFileOf`, without the media proxy. No grant
+or header applies to them, and `setAccess` keeps its exact origin and path scoping for every server
+URL. The Swift session stops on every grant change, so while a local file plays the Mac host holds
+grant changes and applies the latest one before the next plan that isn't local. Linux replaces the
+proxy and leaves a playing local file running.
+
 ## Apple authorized HLS attachment
 
 `setAccess` includes monotonically increasing `generation`. Renderer waits for
