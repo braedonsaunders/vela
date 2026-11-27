@@ -1624,6 +1624,22 @@ const LAZY_REPEATS: Record<string, { axis: 'x' | 'y'; first: number; batch: numb
   'library.rows': { axis: 'y', first: 3, batch: 2 },
   'row.items': { axis: 'x', first: 8, batch: 6 },
 } : {};
+/** Android TV: a press waiting for rows (or a row's cards) not drawn yet keeps the scroll still, and drawing
+ * ahead follows the scroll; the activity asks the lazily drawn repeats of that axis to draw on
+ * (`velaLazyHeld`, apps/vela/plugins/android-tv-keys.js). Each draws if within reach, as on a scroll. */
+const lazyHeld = new Set<{ axis: 'x' | 'y'; ahead: () => void }>();
+let lazyHeldSubscribed = false;
+function onLazyHeld(entry: { axis: 'x' | 'y'; ahead: () => void }) {
+  lazyHeld.add(entry);
+  if (!lazyHeldSubscribed) {
+    lazyHeldSubscribed = true;
+    DeviceEventEmitter.addListener('velaLazyHeld', (event: { axis?: string }) => {
+      for (const each of [...lazyHeld]) if (each.axis === event.axis) each.ahead();
+    });
+  }
+  return () => { lazyHeld.delete(entry); };
+}
+
 /** When the route or a row last scrolled (lazily drawn items draw further ahead once it is still),
  * and when still-time drawing last added to the page: one piece at a time, across the page. */
 let lazyScrolledAt = 0;
@@ -1649,7 +1665,8 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
   const shown = Math.min(count, children.length);
   const complete = shown >= children.length;
   const later = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const ahead = useCallback(() => {
+  // `waiting`: a press waits on what is not drawn yet; the spacer next to the screen draws on whatever the reach.
+  const ahead = useCallback((waiting?: boolean) => {
     const at = counted.current;
     const moving = Date.now() - lazyScrolledAt < LAZY_STILL_MS;
     spacer.current?.measureInWindow((x, y, w, h) => {
@@ -1657,9 +1674,9 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
       if (!w && !h) return;
       const rect = { x, y, height: h };
       const screen = Dimensions.get('window');
-      if (!lazyNear(axis, rect, screen, lazyReach(axis, moving, Platform.isTV, liteRender()))) return;
+      if (!lazyNear(axis, rect, screen, lazyReach(axis, moving, Platform.isTV, liteRender())) && !(waiting && lazyNear(axis, rect, screen, 1))) return;
       // Beyond what a scroll is about to reach, the page draws one piece at a time while still.
-      if (!moving && !lazyNear(axis, rect, screen, lazyReach(axis, true, Platform.isTV, liteRender()))) {
+      if (!waiting && !moving && !lazyNear(axis, rect, screen, lazyReach(axis, true, Platform.isTV, liteRender()))) {
         const now = Date.now();
         if (now - lazyStillDrawnAt < LAZY_STILL_PIECE_MS) {
           clearTimeout(later.current);
@@ -1685,20 +1702,23 @@ function LazyRepeat({ axis, first, batch, children }: { axis: 'x' | 'y'; first: 
   useEffect(() => () => clearTimeout(later.current), []);
   useEffect(() => {
     if (complete) return;
-    const frame = requestAnimationFrame(ahead);
+    const frame = requestAnimationFrame(() => ahead());
     return () => cancelAnimationFrame(frame);
   }, [count, complete, ahead]);
   useEffect(() => (complete || !route ? undefined : route.onScroll(scrolled)), [complete, route, scrolled]);
   useEffect(() => (complete || !row || axis !== 'x' ? undefined : row.onScroll(scrolled)), [complete, row, scrolled, axis]);
+  useEffect(() => (complete || !androidTV ? undefined : onLazyHeld({ axis, ahead: () => aheadRef.current(true) })), [complete, axis]);
   // Until two counts have been laid out, a row's items are taken to start its content and a page's
   // rows to be a third of the screen apart.
   const guess = axis === 'x' ? 0 : Dimensions.get('window').height / 3;
   const extent = lazyExtent(children.length - shown, pitch, guess);
   // The same two slots whether or not anything is left to draw, so drawn items are never remounted.
+  // On Android TV the spacer's native ID tells the activity that a press finding nothing past the
+  // drawn items should wait for them (apps/vela/plugins/android-tv-keys.js).
   return (
     <>
       {children.slice(0, shown)}
-      {complete ? null : <View key="lazy-rest" ref={spacer} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+      {complete ? null : <View key="lazy-rest" ref={spacer} nativeID={androidTV ? `vela-lazy-rest-${axis}` : undefined} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
         style={axis === 'x' ? { width: extent, alignSelf: 'stretch' } : { height: extent }}
         onLayout={e => {
           const at = axis === 'x' ? e.nativeEvent.layout.x : e.nativeEvent.layout.y;
