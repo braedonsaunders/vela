@@ -41,7 +41,7 @@ require a nonempty body `idempotencyKey`; no tokens in URL query parameters.
 | GET | /titles/:id | — | TitleDetail |
 | GET, HEAD | /themes/:grant/theme.m4a | opaque URL grant; optional Range header | theme audio bytes |
 | GET | /titles/:id/children | cursor, limit, role or level (query; role/level with features.pluginLevels.childRoles) | ChildrenPage |
-| GET | /titles/:id/extras | — | ExtrasResponse |
+| GET | /titles/:id/extras | — | ExtrasResponse (Extra.clientPlayback with features.trailerEmbed) |
 | POST | /titles/:id/trailer-preview | TrailerPreviewRequest | TrailerPreviewResponse |
 | GET | /titles/:id/trailer-preview | — | TrailerPreviewResponse |
 | POST | /titles/:id/watch | WatchRequest | Ack |
@@ -774,6 +774,26 @@ idempotent response. Trailer playback uses the existing `extraId` playback targe
 `extraPlayback` capability. An unresolved trailer can be started on explicit
 request. Its independent broker session does not update watch history, resume,
 Continue Watching or scrobbles. Other extras remain unavailable unless offered.
+
+### YouTube trailers in the client embed
+
+An extra may carry `source: "youtube"` (omitted for any other source). When the
+owner chooses "client embed when possible", a YouTube trailer or teaser with a
+valid 11-character id also carries
+`clientPlayback: { provider: "youtube", videoId, embedUrl }`, where `embedUrl` is
+exactly `https://www.youtube-nocookie.com/embed/<videoId>`. The server omits
+`clientPlayback` in every other case. `features.trailerEmbed` is
+`{ available, mode }`, with `mode` either `server` or `clientWhenPossible`.
+
+`availability` still describes the server-played extra (`POST /playback`
+`extraId`). A client plays `clientPlayback` itself only when the capability is
+available with mode `clientWhenPossible` and the platform can embed. Vela does
+this in web browsers, the desktop apps, iPhone, iPad and Android phones and
+tablets. Apple TV and Android TV always play the server's extra. A client
+refuses any other URL or id. It falls back to the server-played extra when the
+embed reports an error, refuses to embed, or does not start. The embed loads with
+`autoplay=1` and `rel=0`, stays on the nocookie origin and keeps no cookies of its
+own. Hero and card previews (`trailer-preview`) are always server-played.
 
 A live `PlaybackPlan` may include `livePolicy: { latencyProfile, targetLatencySeconds }`.
 The profile is `auto`, `low`, or `stable`; the positive finite target is a

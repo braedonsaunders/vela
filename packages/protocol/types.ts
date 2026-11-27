@@ -45,6 +45,10 @@ export interface ClientCapabilities {
 export interface Feature { available: boolean; reason?: string }
 export type LivePreviewMode = 'auto' | 'on-click' | 'off';
 export interface LivePreviewFeature extends Feature { mode: LivePreviewMode }
+/** How the owner lets trailers play: `server` (Ether plays every extra), or `clientWhenPossible` (a client
+ * that can embed plays an extra's `clientPlayback` itself, and falls back to the server-played extra). */
+export type TrailerEmbedMode = 'server' | 'clientWhenPossible';
+export interface TrailerEmbedFeature extends Feature { mode: TrailerEmbedMode }
 export type SearchSort = string;
 export type SearchDirection = 'asc' | 'desc';
 export type SearchKind = string;
@@ -69,6 +73,8 @@ export interface ServerCapabilities {
     descriptiveSearch: Feature; aiSearch: Feature;
     /** One ranked search list (`mode: 'auto'`): titles first, description matches as the server's fallback. */
     unifiedSearch?: Feature; proactiveFallback: Feature; liveTV: Feature; livePreview?: LivePreviewFeature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
+    /** YouTube trailers in YouTube's privacy-enhanced embed on the client (Extra.clientPlayback). */
+    trailerEmbed?: TrailerEmbedFeature;
     playlists?: Feature & { maxEntries: number };
     /** GET /favorites/titles?role=: a viewer's likes of one role (Liked Songs, saved albums, followed artists). */
     favoritesList?: Feature;
@@ -205,8 +211,18 @@ export interface Title {
   showId?: ID; showName?: string; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
   /** Media class, role and relations; omitted for video by servers that predate it. */ media?: TitleMedia;
 }
+/** Where an extra comes from, when the server knows: `youtube` (a TMDB trailer). Omitted otherwise. */
+export type ExtraSource = 'youtube';
+/** An extra the client may play itself, in YouTube's privacy-enhanced embed. `embedUrl` is exactly
+ * `https://www.youtube-nocookie.com/embed/<videoId>`, and `videoId` is YouTube's 11-character id. */
+export interface ExtraClientPlayback { provider: 'youtube'; videoId: string; embedUrl: string }
 export interface Extra { id: ID; parentId: ID; kind: 'trailer' | 'clip' | 'featurette' | 'other'; name: string;
-  durationSeconds?: number; artwork?: ArtworkRef; cachedPlayback?: { status: 'ready'; url: string; expiresAt: Timestamp }; availability: 'ready' | 'unresolved' | 'unavailable' }
+  durationSeconds?: number; artwork?: ArtworkRef; cachedPlayback?: { status: 'ready'; url: string; expiresAt: Timestamp };
+  /** The server-played option (POST /playback extraId), also the fallback when an embed fails. */
+  availability: 'ready' | 'unresolved' | 'unavailable';
+  source?: ExtraSource;
+  /** Only when features.trailerEmbed allows client embeds and this is a YouTube trailer or teaser with a valid id. */
+  clientPlayback?: ExtraClientPlayback }
 export interface Chapter { id: ID; name: string; startSeconds: number; endSeconds?: number }
 /** Verified source stream facts only; omitted when streams are estimated or unknown.
  * audio.default marks the preferred track; an absent subtitleCount means the count is unknown. */
