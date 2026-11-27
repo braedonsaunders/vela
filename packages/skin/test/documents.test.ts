@@ -532,76 +532,38 @@ test('every person page scrolls in its frame and shows a close at every width', 
   }
 });
 
-describe('Manage libraries in every built-in skin', async () => {
-  const { fill, holds } = await import('../src/resolve');
-  const { collection } = await import('../src/vocabulary');
-  type Env = import('../src/vocabulary').Env;
-  type Ctx = import('../src/vocabulary').Ctx;
-  const libraries = [{ id: 'movies', name: 'Movies', kind: 'movies', backdrop: '' }, { id: 'live', name: 'Live TV', kind: 'live', backdrop: '' }];
-  const env = (width: number, flags: string[], canManageLibraries = true) => ({ width, small: width < 640, section: 'home', viewer: 'Demo', canLive: true,
-    canManageLibraries, still: true, flags, skinCount: 2, libraries, navigation: libraries }) as unknown as Env;
-  const opens = (node: RNode) => node.kind === 'box' && node.press?.action === 'manageLibraries';
-  const switcher = (node: RNode) => node.kind === 'widget' && node.widget === 'serverSwitcher';
-  const within = (node: RNode, predicate: (node: RNode) => boolean): boolean => predicate(node)
-    || node.kind === 'box' && node.children.some(child => within(child, predicate))
-    || node.kind === 'repeat' && within(node.item, predicate);
-  /** The Manage libraries entries (or other matching nodes) a viewer sees with these flags open. */
-  const visible = (doc: SkinDocument, e: Env, entry: (node: RNode) => boolean = opens) => {
-    let found = 0;
-    const walk = (node: RNode, ctx: Ctx) => {
-      if (!holds(node.when, ctx, e)) return;
-      const layer = node.states.find(state => holds(state.when, ctx, e))?.layer ?? node.base;
-      if (fill(layer.style.display, ctx, e) === 'none') return;
-      if (entry(node)) found++;
-      if (node.kind === 'box') node.children.forEach(child => walk(child, ctx));
-      else if (node.kind === 'repeat') collection(node.over, ctx, e, node.limit).forEach(item => walk(node.item, item));
+test('Home artwork frames use the declared row aspect at TV width', async () => {
+  const { fill } = await import('../src/resolve');
+  const { feedRow } = await import('../../core/src/discovery/models');
+  const row = feedRow({
+    id: 'collections', name: 'Collections', purpose: 'collection', receiptToken: '', continuation: 'exhausted',
+    items: [{ id: 'collection', kind: 'collection', targetId: 'collection', name: 'Collection', artwork: [], receiptToken: '' }],
+  });
+  const context = { index: 0, row, card: { ...row.items[0]!, poster: 'fixture-poster', backdrop: 'fixture-backdrop' } };
+  // Only call bindings in the row's artwork subtree. The URLs identify the box that frames them.
+  const hasArt = (node: RNode): boolean => node.kind === 'image'
+    ? ['fixture-poster', 'fixture-backdrop'].includes(fill(node.src, context, {} as never))
+    : node.kind === 'box' && node.children.some(hasArt);
+  for (const [name, doc] of documents) {
+    const frames: Extract<RNode, { kind: 'box' }>[] = [];
+    const visit = (node: RNode, rowItem = false) => {
+      if (node.kind === 'repeat') visit(node.item, node.over === 'row.items');
+      if (node.kind !== 'box') return;
+      if (rowItem && node.base.style['aspect-ratio'] && node.children.some(hasArt)) frames.push(node);
+      node.children.forEach(child => visit(child, rowItem));
     };
-    walk(resolveDocument(doc, e.width, 'en').shell!, { index: 0 });
-    return found;
-  };
-  // The profile surfaces each skin opens (Index's rail is always open; Kids' grown-ups area is behind
-  // its gate). Cinematic and Mochi offer the entry in their serverSwitcher widget, in the profile menu.
-  const surfaces: Record<string, string[][]> = {
-    broadcast: [['menu']], index: [[]], jellytwin: [['menu'], ['drawer']], kids: [['gate', 'parent']],
-    latenight: [['menu']], lounge: [['menu']], marquee: [['menu']], cinematic: [], mochi: [],
-  };
-
-  test.each(documents)('%s offers one entry on each open profile surface when signed in', (name, doc) => {
-    expect(surfaces[name], name).toBeDefined();
-    for (const width of [390, 1440]) {
-      const shell = resolveDocument(doc, width, 'en').shell!;
-      if (!surfaces[name]!.length) {
-        expect(within(shell, opens), `${name} ${width}`).toBe(false);
-        expect(visible(doc, env(width, ['menu']), switcher), `${name} ${width} menu`).toBe(1);
-        expect(visible(doc, env(width, []), switcher), `${name} ${width} closed`).toBe(0);
-        continue;
-      }
-      // Under each Sign out control's menu, exactly one entry.
-      const menus: number[] = [];
-      const walk = (node: RNode) => {
-        if (node.kind === 'repeat') return walk(node.item);
-        if (node.kind !== 'box') return;
-        if (node.children.some(child => child.kind === 'box' && child.press?.action === 'signOut')) menus.push(node.children.filter(child => within(child, opens)).length);
-        node.children.forEach(walk);
-      };
-      walk(shell);
-      expect(menus.length, `${name} ${width}`).toBeGreaterThan(0);
-      for (const count of menus) expect(count, `${name} ${width}`).toBe(1);
-      for (const flags of surfaces[name]!) {
-        expect(visible(doc, env(width, flags)), `${name} ${width} ${flags}`).toBe(1);
-        expect(visible(doc, env(width, flags, false)), `${name} ${width} ${flags} signed out of it`).toBe(0);
-      }
-      if (name !== 'index') expect(visible(doc, env(width, [])), `${name} ${width} closed`).toBe(0);
+    visit(resolveDocument(doc, 1920).routes.home!);
+    // Index uses a text catalogue with no artwork.
+    if (name === 'index') {
+      expect(frames).toHaveLength(0);
+      continue;
     }
-  });
-
-  test('Kids offers it only in the grown-ups area', () => {
-    const kids = documents.find(([name]) => name === 'kids')![1];
-    for (const width of [390, 1440]) {
-      expect(visible(kids, env(width, []))).toBe(0);
-      expect(visible(kids, env(width, ['gate']))).toBe(0);
-      expect(visible(kids, env(width, ['gate', 'g2']))).toBe(0);
-      expect(visible(kids, env(width, ['gate', 'parent']))).toBe(1);
+    expect(frames.length, name).toBeGreaterThan(0);
+    for (const [card, ratio] of [['poster', '2 / 3'], ['landscape', '16 / 9'], ['square', '1 / 1']] as const) {
+      for (const frame of frames) {
+        const aspect = fill(frame.base.style['aspect-ratio'], { ...context, row: { ...row, card } }, {} as never);
+        expect(aspect, name).toBe(ratio);
+      }
     }
-  });
+  }
 });

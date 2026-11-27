@@ -63,6 +63,8 @@ export type Action =
   | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'switchProfile' | 'playlists' | 'addToPlaylist' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
   /** Open Manage libraries, the viewer's order and hidden libraries for the navigation (`env.canManageLibraries`). */
   | 'manageLibraries'
+  /** Renderer 22: open this device's downloads (`env.canDownloads`); open Connect to add a server. */
+  | 'downloads' | 'addServer'
   /** A failed route asks again for what failed (`env.canRetry`). */
   | 'retry'
   /** Shell: open this flag alone, closing the others (keep- flags stay); pressed again it closes. */
@@ -86,7 +88,7 @@ export type Action =
   /** Renderer 19, plugin screens and surfaces (docs/plugin-screens.md): structured `args`. */
   | 'navigate' | 'setParam' | 'plugin' | 'openLink' | 'dismiss';
 
-interface NodeBase extends Breakpoints {
+export interface NodeBase extends Breakpoints {
   /** Overrides by viewport: `small` under 640 px, `wide` from 1200 px, `tv` on a TV (renderer 19). */
   style?: Style; small?: Style; wide?: Style; tv?: Style;
   /** Renderer 20: on a foldable held partly open (env.fold), after `tv`. */
@@ -230,7 +232,57 @@ export interface TitleCardNode extends BlockBase { type: 'titleCard'; item: Temp
 export interface MarqueeNode extends ItemsBase { type: 'marquee'; gap?: string; speed?: number }
 export type BlockNode = SectionsNode | ShelfNode | GridNode | TabsNode | TableNode | LineGraphNode | PlayerNode | ParamInputNode | TitleCardNode | MarqueeNode
   | RichNode | VisualizerNode;
-export type Node = BoxNode | TextNode | ImageNode | IconNode | RepeatNode | UseNode | SlotNode | WidgetNode | BlockNode;
+export type Node = BoxNode | TextNode | ImageNode | IconNode | RepeatNode | UseNode | SlotNode | WidgetNode | BlockNode | ProfileMenuNode;
+
+/** Renderer 22: the profile menu's entries, which the app supplies (docs/skin-schema.md: Profile menu). */
+export type ProfileMenuEntryId = 'viewer' | 'switchProfile' | 'playlists' | 'downloads' | 'manageLibraries' | 'appearance'
+  | 'servers' | 'addServer' | 'signOut' | 'about';
+
+/** Renderer 22: the profile menu. The node is the menu's box (its style, variants, motion, role, `escape` and
+ * `returnFocus` make it a panel, or it sits in the document's own drawer or dialog); it holds every entry the
+ * app offers, arranged and drawn by the document's look `look` in `profileMenus` (else the Vela base's). */
+export interface ProfileMenuNode extends NodeBase { type: 'profileMenu'; look?: string }
+
+/** Renderer 22: how a document draws the profile menu (docs/skin-schema.md: Profile menu). Whatever is left
+ * out is the Vela base's; an entry no section names (one the app adds later) joins its default section. */
+export interface ProfileMenuLook {
+  /** Part templates by name. Built-in parts: `row` (an action entry), `header` (the viewer), `picker`
+   *  (Appearance; else `row`, its detail the skin's name), `title` (the look's `title`), `section` (a
+   *  section's title), `divider`, `about` (the About line's stop) and `servers` (a box around the server
+   *  list). A part reads its entry as {entry.label}, {entry.detail}, {entry.id}, {entry.testId}; an icon
+   *  whose symbol is `{entry.icon}` draws the entry's icon (or its `glyph`). A condition on `entry.*` is
+   *  decided as the menu is drawn. The entry's press, label, testId, a11y and visibility go to the node
+   *  whose testId is `{entry.testId}`, else to the part's root box. Other names are parts an entry or an
+   *  extra chooses with `part`. */
+  parts?: Record<string, Node>;
+  /** The menu's own title, drawn first by the `title` part (Late Night's "Setup menu"). */
+  title?: Template;
+  /** The arrangement: sections in order, each naming entries and extras. Default: viewer | you | servers | session | about. */
+  sections?: ProfileMenuSection[];
+  /** Per entry: its label, icon (a symbol), glyph (the document's own icon node), detail or part. */
+  entries?: Partial<Record<ProfileMenuEntryId, ProfileMenuEntryLook>>;
+  /** The document's own rows by id, drawn with the `row` part (or their `part`); placed by naming the id in a section. */
+  extras?: Record<string, ProfileMenuExtra>;
+  /** The documented opt-out: only `viewer`, for a menu whose surroundings already show the viewer. Every other entry is always offered. */
+  hide?: 'viewer'[];
+}
+export interface ProfileMenuSection {
+  id?: string;
+  /** A heading drawn by the `section` part. */
+  title?: Template;
+  /** Draw the `divider` part before this section. */
+  divider?: boolean;
+  /** Entry ids (ProfileMenuEntryId) and extra ids, in order. */
+  entries: string[];
+}
+export interface ProfileMenuEntryLook { label?: Template; icon?: string; glyph?: Node; detail?: Template; part?: string }
+export interface ProfileMenuExtra extends ProfileMenuEntryLook {
+  label: Template;
+  press: Press;
+  when?: Condition[];
+  testId?: Template;
+  a11y?: NodeBase['a11y'];
+}
 
 export interface MotionPreset {
   /** A compiled keyframes name (docs/skin-schema.md lists them) or `none`. */
@@ -268,6 +320,8 @@ export interface SkinDocument {
   /** The document's own keyframes (`keyframes: "doc:<name>"` in a preset): opacity, translate (px/%), scale, rotate (deg). */
   keyframes?: Record<string, Record<string, { opacity?: number; translate?: string; scale?: number; rotate?: number }>>;
   templates?: Record<string, Node>;
+  /** Renderer 22: the profile menu's looks by name (a `profileMenu` node's `look`; `default` when it names none). */
+  profileMenus?: Record<string, ProfileMenuLook>;
   /** One tree per foundation slot; a slot left out is the Vela base's (renderer 15). */
   slots?: Partial<Record<'shell' | 'home' | 'row' | 'card' | 'status', Node>>;
   /** A tree per route the document draws whole (the route view); a route left out is the Vela base's.

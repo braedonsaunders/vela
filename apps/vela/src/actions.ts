@@ -16,6 +16,7 @@ import { openMediaTitle } from './media/actions';
 import { isTitleNavigation, noteTitleNavigation } from './title-origin';
 import { closeModal } from './modal-motion';
 import { systemSearch } from '@vela/skin/src/widgets/search/system-search';
+import { confirmAction } from '@vela/skin/src/widgets/common/confirm';
 
 const TITLE_KINDS = ['', 'movie', 'show', 'season', 'episode'];
 const SYSTEM_SEARCH = systemSearch(Platform.OS, Platform.isTV);
@@ -192,13 +193,26 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'manageLibraries':
         actions.resetFlags();
         return router.push('/libraries');
+      case 'downloads':
+        actions.resetFlags();
+        return router.push('/downloads');
+      case 'addServer':
+        actions.resetFlags();
+        return router.push('/connect');
       case 'addToPlaylist': {
         const [titleId, titleKind] = arg.split('|');
         if (titleId) openAddToPlaylist(titleId, titleKind || undefined);
         return;
       }
       case 'signOut':
-        void store.auth.signOut();
+        void (async () => {
+          // Signing out deletes this viewer's downloads on this device: ask first when there are any.
+          const count = store.getState().downloads.items.length;
+          if (count && !await confirmAction('Sign out?', count === 1
+            ? 'Your download on this device will be deleted.'
+            : `Your ${count} downloads on this device will be deleted.`, 'Sign out')) return;
+          await store.auth.signOut();
+        })();
         return;
       case 'retry':
         return retry(place);

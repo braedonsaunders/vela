@@ -270,5 +270,83 @@ fun main() {
     check(read("/outside") == "0123456789")
     check(seen.takeLast(2).all { it.second == null })
   } finally { server.stop(0); outside.stop(0) }
+  localDownloads()
   println("Android recovery and scoped HTTP passed")
+}
+
+/** The one local allowance: a file: URL inside the canonical downloads root, never with credentials. */
+private fun localDownloads() {
+  val scratch = java.nio.file.Files.createTempDirectory("vela-local-scope").toFile().canonicalFile
+  try {
+    val root = java.io.File(scratch, "no_backup/vela-downloads").apply { mkdirs() }
+    val title = java.io.File(root, "server/viewer/title").apply { mkdirs() }
+    java.io.File(title, "media.mkv").writeText("0123456789")
+    java.io.File(title, "sidecars").mkdirs()
+    java.io.File(title, "sidecars/en.srt").writeText("1\n")
+    val sibling = java.io.File(scratch, "no_backup/vela-downloads-evil").apply { mkdirs() }
+    java.io.File(sibling, "media.mkv").writeText("secret")
+    java.io.File(scratch, "outside.txt").writeText("secret")
+    java.nio.file.Files.createSymbolicLink(java.io.File(title, "escape.mkv").toPath(), java.io.File(scratch, "outside.txt").toPath())
+    // Android's /data/user/0 is a link to /data/data: a root named through a link still holds its files.
+    val linked = java.io.File(scratch, "user0")
+    java.nio.file.Files.createSymbolicLink(linked.toPath(), java.io.File(scratch, "no_backup").toPath())
+    val scope = LocalMediaScope(java.io.File(linked, "vela-downloads"))
+    val base = "file://" + root.path
+    check(scope.file("$base/server/viewer/title/media.mkv")?.readText() == "0123456789")
+    check(scope.file("file:" + root.path + "/server/viewer/title/media.mkv") != null)
+    check(scope.file("file://" + linked.path + "/vela-downloads/server/viewer/title/sidecars/en.srt") != null)
+    check(scope.file("$base/server/viewer/title/media%2Emkv") != null) // an encoded dot inside a name is a name
+    listOf(
+      "$base/server/viewer/title/../../../../outside.txt",
+      "$base/server/viewer/title/%2e%2e/%2e%2e/%2e%2e/%2e%2e/outside.txt",
+      "$base/server/viewer/title/./media.mkv",
+      "$base/server/viewer//title/media.mkv",
+      "$base/server/viewer/title%2fmedia.mkv",
+      "$base/server/viewer/title%2Fmedia.mkv",
+      "$base/server/viewer/title%5cmedia.mkv",
+      "$base/server/viewer/title/media.mkv%00",
+      "$base/server/viewer/title/media.mkv%0a",
+      "$base/server/viewer/title/escape.mkv", // a symlink out of the root
+      "$base/server/viewer/title", // a directory, not a file
+      "$base", "$base/",
+      "file://" + sibling.path + "/media.mkv", // a sibling sharing the root's prefix
+      "file://" + scratch.path + "/no_backup/vela-downloads-evil/media.mkv",
+      "file://" + scratch.path + "/outside.txt",
+      "file://evil.example" + root.path + "/server/viewer/title/media.mkv", // a file: URL with a host
+      "file://localhost" + root.path + "/server/viewer/title/media.mkv",
+      "file://user@" + root.path.removePrefix("/") + "/server/viewer/title/media.mkv",
+      "$base/server/viewer/title/media.mkv?x=1",
+      "$base/server/viewer/title/media.mkv#x",
+      "file:server/viewer/title/media.mkv",
+      "http://example.com" + root.path + "/server/viewer/title/media.mkv", // an http URL that mimics the path
+      "https://example.com" + root.path + "/server/viewer/title/media.mkv",
+      "content://downloads" + root.path + "/server/viewer/title/media.mkv",
+      "$base/server/viewer/title/c:/media.mkv",
+      "$base/server/viewer/title/a\\b.mkv",
+    ).forEach { check(scope.file(it) == null) { it } }
+
+    // The player's data source reads an allowed file with no grant at all, and with a grant attaches nothing.
+    LocalMedia.scope = scope
+    val grant = MediaAccess.from(mapOf("origin" to "http://example.com", "pathPrefix" to "/", "headers" to mapOf("Authorization" to "fixture")))
+    for (access in listOf(null, grant)) {
+      val source = ScopedMediaDataSource(access)
+      try {
+        check(source.open(DataSpec(Uri.parse("$base/server/viewer/title/media.mkv"), 3, 4)) == 4L)
+        val bytes = ByteArray(20)
+        val count = source.read(bytes, 0, bytes.size)
+        check(String(bytes, 0, count) == "3456")
+        check(source.read(bytes, 0, bytes.size) == -1)
+        check(source.getUri().toString() == "$base/server/viewer/title/media.mkv")
+      } finally { source.close() }
+      val whole = ScopedMediaDataSource(access)
+      try { check(whole.open(DataSpec(Uri.parse("$base/server/viewer/title/media.mkv"))) == 10L) } finally { whole.close() }
+    }
+    // Outside the root, or before the engine set a root: refused as any other scheme is.
+    for (url in listOf("$base/server/viewer/title/escape.mkv", "file://" + sibling.path + "/media.mkv", "$base/server/viewer/title/../../../../outside.txt")) {
+      check(runCatching { ScopedMediaDataSource(grant).open(DataSpec(Uri.parse(url))) }.exceptionOrNull()?.message == "Media request failed") { url }
+    }
+    check(runCatching { ScopedMediaDataSource(null).open(DataSpec(Uri.parse("$base/server/viewer/title/media.mkv"), 11)) }.isFailure)
+    LocalMedia.scope = null
+    check(runCatching { ScopedMediaDataSource(null).open(DataSpec(Uri.parse("$base/server/viewer/title/media.mkv"))) }.isFailure)
+  } finally { scratch.deleteRecursively() }
 }

@@ -1,15 +1,17 @@
-import { downloadPercent, formatDownloadBytes, isPlayableDownload, type DownloadRecord } from '@vela/core';
+import { downloadPercent, formatDownloadBytes, isPlayableDownload, type DownloadRecord, type DownloadsState } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { HostContext, useHost } from '@vela/skin/src/host';
 import { Alert as Notice, Glyph, Heading, Pill, Words } from '@vela/skin/src/widgets/common/controls';
 import { useLook } from '@vela/skin/src/widgets/common/look';
 import { RoundButton } from '@vela/skin/src/widgets/media/parts';
+import { confirmAction } from '@vela/skin/src/widgets/common/confirm';
 import { Image } from 'expo-image';
 import { router } from '../src/router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useVela as useApp } from '../src/vela';
+import { DOWNLOAD_SETTINGS, useVela as useApp } from '../src/vela';
+import { preferences } from '../src/data/preferences';
 
 const transferStatus: Record<DownloadRecord['status'], string> = {
   queued: 'Queued', downloading: 'Downloading', paused: 'Paused',
@@ -25,9 +27,19 @@ export default function Downloads() {
 function DownloadLibrary() {
   const store = useVela();
   const { ui } = useLook();
-  const wide = useHost().viewport.width >= 640;
-  const { items, usedBytes, hydrated, error } = useVelaState(state => state.downloads);
+  const width = useHost().viewport.width;
+  const wide = width >= 640;
+  // A desktop window gives the list more room, so a row's actions sit on one line beside its title.
+  const roomy = width >= 1200;
+  const { items, usedBytes, hydrated, error, traits, persisted, settings, awaitingElsewhere } = useVelaState(state => state.downloads);
+  const serverName = useVelaState(state => state.auth.serverName);
+  const toggleWifi = () => {
+    store.downloads.setWifiOnly(!settings.wifiOnly);
+    preferences.set(DOWNLOAD_SETTINGS, JSON.stringify(store.getState().downloads.settings));
+  };
+  useEffect(() => { void store.downloads.refreshStorage(); }, [store]);
   const online = useVelaState(state => state.auth.phase === 'signed-in');
+  const waitingForSignIn = !online && items.some(item => item.awaitingSignIn);
   const [busy, setBusy] = useState('');
   const [failure, setFailure] = useState('');
   const perform = async (id: string, action: () => Promise<unknown>) => {
@@ -39,49 +51,85 @@ function DownloadLibrary() {
     catch (cause) { setFailure(cause instanceof Error ? cause.message : 'Could not update download'); }
     finally { setBusy(''); }
   };
-  const remove = (item: DownloadRecord) => Alert.alert('Delete download?', item.title.name, [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: () => {
-      const current = store.downloads.item(item.titleId);
-      if (current?.viewerId === item.viewerId && current.serverId === item.serverId) {
-        void perform(item.titleId, () => store.downloads.remove(item.titleId));
-      }
-    } },
-  ]);
+  const remove = async (item: DownloadRecord) => {
+    if (!await confirmAction('Delete download?', item.title.name, 'Delete')) return;
+    const current = store.downloads.item(item.titleId);
+    if (current?.viewerId === item.viewerId && current.serverId === item.serverId) {
+      void perform(item.titleId, () => store.downloads.remove(item.titleId));
+    }
+  };
   const back = () => {
     if (router.canGoBack()) router.back();
     else router.replace(online ? '/' : '/sign-in');
   };
   return (
     <SafeAreaView style={[styles.page, { backgroundColor: ui.page }]}>
-      <ScrollView contentContainerStyle={[styles.content, wide && styles.wideContent]} testID="downloads-screen">
+      <ScrollView contentContainerStyle={[styles.content, wide && styles.wideContent, roomy && styles.roomyContent]} testID="downloads-screen">
         <View style={styles.header}>
-          <RoundButton icon="back" label="Back" onPress={back} testID="downloads-back" />
+          {/* A TV gives a new page no focus: the first row's action takes it, or Back once the list is empty. */}
+          <RoundButton icon="back" label="Back" onPress={back} testID="downloads-back" preferFocus={hydrated && !items.length} />
           <View style={styles.heading}>
             <Heading title="Downloads" />
             {hydrated ? <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }}>{formatDownloadBytes(usedBytes)} used on this device</Words> : null}
           </View>
         </View>
         {failure || error ? <Notice>{failure || error}</Notice> : null}
-        {items.map(item => <DownloadRow key={item.titleId} item={item} online={online} wide={wide} busy={!!busy}
+        {waitingForSignIn ? <View style={styles.setting} testID="downloads-sign-in">
+          <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }} style={styles.settingText}>
+            {`Sign in to ${serverName || 'your server'} to keep watching these. They still play offline.`}
+          </Words>
+          <Pill label="Sign in" height={40} onPress={() => router.replace('/sign-in')} testID="downloads-sign-in-button" />
+        </View> : null}
+        {online && awaitingElsewhere ? <View style={styles.setting} testID="downloads-elsewhere">
+          <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }} style={styles.settingText}>
+            {awaitingElsewhere === 1 ? 'A download from another account on this server is waiting for that account to sign in.'
+              : `${awaitingElsewhere} downloads from another account on this server are waiting for that account to sign in.`}
+          </Words>
+          <Pill label="Delete them" height={40} disabled={!!busy} testID="downloads-elsewhere-delete" onPress={() => void (async () => {
+            if (!await confirmAction('Delete these downloads?', 'They belong to another account on this server. That account can download them again after signing in.', 'Delete')) return;
+            void perform('elsewhere', () => store.downloads.removeAwaitingElsewhere());
+          })()} />
+        </View> : null}
+        {storageNotice(traits, persisted) ? <View testID="downloads-storage-notice">
+          <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }}>{storageNotice(traits, persisted)}</Words>
+        </View> : null}
+        {items.map((item, index) => <DownloadRow key={item.titleId} item={item} first={index === 0} online={online} wide={wide} busy={!!busy}
+          reveal={traits.reveal ? () => void perform(item.titleId, () => store.downloads.reveal(item.titleId)) : undefined}
+          exportCopy={traits.export ? () => void perform(item.titleId, () => store.downloads.exportCopy(item.titleId)) : undefined}
           play={() => router.push({ pathname: '/watch/[id]', params: { id: item.titleId } })}
           pause={() => void perform(item.titleId, () => store.downloads.pause(item.titleId))}
           resume={() => void perform(item.titleId, () => store.downloads.resume(item.titleId))}
-          remove={() => remove(item)} />)}
+          remove={() => void remove(item)} />)}
         {!items.length ? <View style={[styles.empty, { borderColor: ui.glassEdge, backgroundColor: ui.control }]}>
           <Glyph symbol="download" size={28} color={ui.inkQuiet} />
           <Words rows={{ 'font-size': '18px', 'font-weight': '650' }}>{hydrated ? 'No downloaded titles' : 'Loading downloads…'}</Words>
           {hydrated ? <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }}>
-            Open a movie or episode and tap Download to watch it without an internet connection.
+            {Platform.isTV ? 'Open a movie or episode and select Download to watch it without an internet connection.'
+              : 'Open a movie or episode and choose Download to watch it without an internet connection.'}
           </Words> : null}
+        </View> : null}
+        {traits.metered && hydrated ? <View style={[styles.setting, styles.footerSetting, { borderColor: ui.glassEdge }]} testID="downloads-wifi-setting">
+          <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }} style={styles.settingText}>
+            {settings.wifiOnly ? 'Downloads use Wi-Fi only.' : 'Downloads can use mobile data.'}
+          </Words>
+          <Pill label={settings.wifiOnly ? 'Allow mobile data' : 'Wi-Fi only'} height={40} onPress={toggleWifi} testID="downloads-wifi-only" />
         </View> : null}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function DownloadRow({ item, online, wide, busy, play, pause, resume, remove }: {
-  item: DownloadRecord; online: boolean; wide: boolean; busy: boolean; play(): void; pause(): void; resume(): void; remove(): void;
+/** Where a browser keeps downloads and when it may remove them; nothing for apps that own their storage. */
+function storageNotice(traits: DownloadsState['traits'], persisted: boolean | null): string {
+  if (traits.engine !== 'page') return '';
+  return persisted === false
+    ? 'This browser may clear stored videos, so Vela saves files to your downloads instead. Downloads already here can still be removed by the browser.'
+    : 'Downloads are kept in this browser\'s storage for this site. Clearing site data or uninstalling the app removes them.';
+}
+
+function DownloadRow({ item, first, online, wide, busy, play, pause, resume, remove, reveal, exportCopy }: {
+  item: DownloadRecord; first: boolean; online: boolean; wide: boolean; busy: boolean; play(): void; pause(): void; resume(): void; remove(): void;
+  reveal?: () => void; exportCopy?: () => void;
 }) {
   const store = useVela();
   const host = useHost();
@@ -134,15 +182,14 @@ function DownloadRow({ item, online, wide, busy, play, pause, resume, remove }: 
           {item.error ? <Notice>{item.error}</Notice> : null}
         </View>
         <View style={[styles.actions, wide && styles.wideActions]}>
-          {playable ? <Pill label="Play" primary height={44} onPress={play} disabled={busy} /> : null}
-          {transferring ? <Pill label="Pause" height={44} onPress={pause} disabled={busy} /> : null}
+          {playable ? <Pill label="Play" primary height={40} onPress={play} disabled={busy} preferFocus={first} /> : null}
+          {transferring ? <Pill label="Pause" height={40} onPress={pause} disabled={busy} preferFocus={first && !playable} /> : null}
           {online && (status === 'paused' || status === 'failed') ? (
-            <Pill label={status === 'paused' ? 'Resume' : 'Retry'} height={44} onPress={resume} disabled={busy} />
+            <Pill label={status === 'paused' ? 'Resume' : 'Retry'} height={40} onPress={resume} disabled={busy} preferFocus={first && !playable && !transferring} />
           ) : null}
-          <Pressable accessibilityRole="button" accessibilityLabel="Delete" disabled={busy} onPress={remove}
-            style={({ pressed }) => [styles.delete, { opacity: pressed || busy ? 0.55 : 1 }]}>
-            <Text style={look.text({ 'font-size': '14px', color: '$ui.live', 'font-weight': '650' })}>Delete</Text>
-          </Pressable>
+          {playable && reveal ? <Pill label={Platform.OS === 'web' && desktopMac() ? 'Show in Finder' : 'Show in folder'} height={40} onPress={reveal} disabled={busy} testID={`download-reveal-${titleId}`} /> : null}
+          {playable && exportCopy ? <Pill label="Save a copy…" height={40} onPress={exportCopy} disabled={busy} testID={`download-export-${titleId}`} /> : null}
+          <Pill label="Delete" height={40} onPress={remove} disabled={busy} testID={`download-delete-${titleId}`} />
         </View>
       </View>
     </View>
@@ -153,6 +200,7 @@ const styles = StyleSheet.create({
   page: { flex: 1 },
   content: { width: '100%', maxWidth: 800, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32, gap: 14 },
   wideContent: { paddingHorizontal: 40 },
+  roomyContent: { maxWidth: 1120 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 12 },
   heading: { flex: 1, gap: 2 },
   row: { flexDirection: 'row', alignItems: 'flex-start', padding: 14, gap: 14, borderRadius: 16, borderWidth: 1 },
@@ -162,8 +210,15 @@ const styles = StyleSheet.create({
   metadata: { minWidth: 0, gap: 5 },
   wideMetadata: { flex: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 5 },
-  wideActions: { marginTop: 0, justifyContent: 'flex-end', maxWidth: '50%' },
-  delete: { minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  wideActions: { marginTop: 0, justifyContent: 'flex-end', flexShrink: 0, maxWidth: '62%' },
   track: { height: 4, borderRadius: 2, overflow: 'hidden', marginVertical: 2 },
+  setting: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
+  settingText: { flex: 1, minWidth: 180 },
+  footerSetting: { marginTop: 18, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth },
   empty: { borderWidth: 1, borderRadius: 16, padding: 20, gap: 8, alignItems: 'flex-start' },
 });
+
+/** The Mac desktop app calls its file manager Finder. */
+function desktopMac(): boolean {
+  return (globalThis as { __VELA_DESKTOP__?: { platform?: string } }).__VELA_DESKTOP__?.platform === 'mac';
+}

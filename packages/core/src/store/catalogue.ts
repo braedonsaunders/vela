@@ -7,6 +7,7 @@ import { libraryCardArtwork } from '../library-presentation';
 import { pluginLevelsOf, type PluginLevels } from '../plugin-levels';
 import { VelaError } from '../adapter/errors';
 import { hasTitleManagement } from '../adapter/capabilities';
+import { trailerEmbedAllowed } from '../trailer-embed';
 import { capabilitiesOf } from '../adapter/advertise';
 import { hasLibraryFacets, hasLibraryJumpIndex, supportsLibraryBrowse, hasLibraryLive, hasLibraryRecommendations, hasPersonFilmography, hasVersions } from '../adapter/capabilities';
 import { personDates } from '../discovery/person-date';
@@ -80,20 +81,45 @@ export class Catalogue {
     const api = (await this.session.ready()).adapter;
     return hasTitleManagement(api) ? api.titleActions(id) : null;
   }
-  async setTitleWatch(id: string, change: { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false }) {
+  async setTitleWatch(id: string, change: Omit<V.WatchRequest, 'idempotencyKey'>) {
     const epoch = this.session.epoch;
     const api = (await this.session.ready()).adapter;
     this.session.check?.(epoch, 'watch action');
     if (!hasTitleManagement(api)) throw new Error('Title actions are unavailable');
+    const feedbackChange = change.notInterested !== undefined || change.thumbsUp !== undefined;
+    if (feedbackChange) {
+      const actions = await api.titleActions(id);
+      this.session.check?.(epoch, 'title feedback');
+      if (!actions?.notInterested || change.thumbsUp !== undefined && !actions.thumbsUp) {
+        throw new Error(msg('cardMenu.actionFailed'));
+      }
+    }
     const before = this.box.get();
-    this.box.replace(optimisticWatchState(before, id, change));
+    const next = optimisticWatchState(before, id, change);
+    if (feedbackChange && before.titleFeedback) {
+      const hidden = new Set(before.titleFeedback.hidden);
+      if (change.notInterested === true) hidden.add(id);
+      else if (change.notInterested === false || change.thumbsUp === true) hidden.delete(id);
+      next.titleFeedback = { ...before.titleFeedback, hidden };
+    }
+    this.box.replace(next);
     try {
-      await api.setTitleWatch(id, { ...change, idempotencyKey: this.session.key() });
+      const result = await api.setTitleWatch(id, { ...change, idempotencyKey: this.session.key() });
       if (epoch !== this.session.epoch) return;
+      if (feedbackChange && result?.watch) {
+        const { notInterested, thumbsUp } = result.watch;
+        this.box.replace(optimisticWatchState(this.box.get(), id, { notInterested, thumbsUp }));
+      }
       void this.title(id, true);
+      if (feedbackChange && this.box.get().titleFeedback) {
+        this.box.update('titleFeedback', state => ({ ...state, revision: state.revision + 1 }));
+      }
+      if (change.watchlisted !== undefined || change.favorite !== undefined || change.played !== undefined || change.continueWatching === false || feedbackChange) {
+        void this.refreshHome();
+      }
       // A library's recommended rows (a plugin library's Continue watching, say) live outside the
       // store: patch the held answers at once, and let any library on show read its rows again.
-      if (change.played !== undefined || change.continueWatching === false) {
+      if (change.played !== undefined || change.continueWatching === false || feedbackChange) {
         for (const [key, held] of this.partsHeld) {
           if (!key.startsWith('rows') || !Array.isArray(held.value)) continue;
           this.partsHeld.set(key, { ...held, value: (held.value as Row[]).map(item => watchRow(item, id, change)) });
@@ -247,6 +273,9 @@ export class Catalogue {
     private readonly session: Session,
     private readonly artWidth: () => number,
     private readonly retryOptions: Pick<ReadRetryOptions, 'sleep'> = {},
+    private readonly refreshHome: () => void = () => {},
+    /** This device plays YouTube trailers in the privacy-enhanced embed (VelaPlatform.trailerEmbed). */
+    private readonly platformEmbedsTrailers = false,
   ) {
     session.onReset(() => {
       for (const controller of this.viewControllers) controller.abort();
@@ -255,6 +284,7 @@ export class Catalogue {
       this.librarySnapshots.clear();
       this.collectionReads.clear();
       this.pending.clear();
+      this.box.update('titleFeedback', () => ({ hidden: new Set(), revision: 0 }));
       this.box.update('titles', () => ({}));
       this.box.update('related', () => ({}));
       this.box.update('library', () => ({}));
@@ -320,6 +350,7 @@ export class Catalogue {
       features.extraPlayback?.available === true,
       features.themeMusic?.available === true,
       hasPersonFilmography(connection.adapter),
+      trailerEmbedAllowed(this.platformEmbedsTrailers, features.trailerEmbed),
     );
     this.pending.answered(id, answer);
     return { model, answer };

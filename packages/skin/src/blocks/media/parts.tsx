@@ -119,14 +119,17 @@ export function PillButton({ label, icon, primary = false, onPress, testID, nati
 }
 
 /** A round icon control (shuffle, repeat, back). */
-export function RoundButton({ icon, label, onPress, size = 44, active = false, testID, nativeID, iconSize }: {
+export function RoundButton({ icon, label, onPress, size = 44, active = false, testID, nativeID, iconSize, preferFocus }: {
   icon: string; label: string; onPress(): void; size?: number; active?: boolean; testID?: string; nativeID?: string; iconSize?: number;
+  /** On a TV, take focus when this turns on (once). */
+  preferFocus?: boolean;
 }) {
   const { ui, box } = useMediaLook();
   const { state, handlers } = useInteraction();
+  const claim = useFocusClaim(preferFocus);
   const lit = state.hover || state.focus;
   return (
-    <Pressable {...handlers} ref={focusTarget(nativeID)} onPress={onPress} testID={testID} nativeID={nativeID} accessibilityRole="button" accessibilityLabel={label}
+    <Pressable {...handlers} ref={focusTarget(nativeID)} onPress={onPress} testID={testID} nativeID={nativeID} hasTVPreferredFocus={claim} accessibilityRole="button" accessibilityLabel={label}
       accessibilityState={{ selected: active }}
       style={[NO_RING, { width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center',
         backgroundColor: lit ? ui.controlHover : ui.control, transform: [{ scale: state.pressed ? 0.94 : 1 }] },

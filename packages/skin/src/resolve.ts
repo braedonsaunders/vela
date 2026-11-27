@@ -3,6 +3,7 @@ import { selectEnv } from './host-source';
 import { brandDocument } from './branding';
 import type { Branding } from '../../protocol/types';
 import { withRowLinks } from './resolve/row-links';
+import { isRowCardFrame, rowCardAspect } from './resolve/row-presentation';
 import { withLibraryPresentation } from './resolve/library-presentation';
 import { withHeroArtwork } from './resolve/hero-artwork';
 import { inlineMediaTitleTree, mediaTitleTree } from './resolve/media-title';
@@ -29,6 +30,8 @@ import { fold, halfPoints, lineHeightPoints, pointsToPx, screenStyleRow } from '
 import { takesDirectionalFocus } from './focus-stop-policy';
 
 import { RENDERER_VERSION } from './resolve/version';
+import { expandProfileMenu } from './profile-menu/expand';
+import { velaProfileMenu } from './resolve/vela-base/profile-menu';
 export { RENDERER_VERSION };
 
 /** The renderer 19 blocks (docs/plugin-screens.md: Building blocks), drawn by ./blocks. */
@@ -41,7 +44,7 @@ const SCREEN_ARRAY_ITEMS = SCREEN_LIMITS.arrayItems;
 const MAX_DEPTH = 32;
 
 /** A template: literal text, or text with compiled holes. */
-export type Template = string | { parts: (string | Accessor)[] };
+export type Template = string | { parts: (string | Accessor)[]; fallback?: Template };
 export type CssT = Record<string, Template>;
 
 export interface Test { read: Accessor | ((c: Ctx, e: Env) => string); is: NonNullable<Condition['is']>; value: string; not: boolean;
@@ -269,7 +272,8 @@ function read(key: string): Accessor {
 export function fill(template: Template | undefined, c: Ctx, e: Env): string {
   if (template === undefined) return '';
   if (typeof template === 'string') return template;
-  return template.parts.map(p => (typeof p === 'string' ? p : p(c, e))).join('');
+  const value = template.parts.map(p => (typeof p === 'string' ? p : p(c, e))).join('');
+  return value || (template.fallback === undefined ? '' : fill(template.fallback, c, e));
 }
 
 /** A style row as drawn. A value filled from data never loads an image through CSS: only a
@@ -297,6 +301,11 @@ function screenRead(key: string, scope: HoleScope): Accessor {
   // `{arg.loser}` reads as `arg.loser`: a test may be written as a hole.
   const value = holeValue(singleHole(key) ?? key, scope);
   return (c, e) => valueText(value(c, e), c.screen?.record);
+}
+
+/** Whether every condition holds, compiled now: data that carries conditions (the profile menu's entries) asks this. */
+export function conditionsHold(list: Condition[] | undefined, c: Ctx, e: Env): boolean {
+  return holds(tests(list), c, e);
 }
 
 export function holds(list: Test[] | undefined, c: Ctx, e: Env): boolean {
@@ -396,9 +405,13 @@ function statesOf(node: Node): NonNullable<Node['states']> {
   return states;
 }
 
-function convert(node: Node, depth: number, r: Context): RNode {
+const readRowCardAspect = flagBinding((c: Ctx) => rowCardAspect(c.row?.card) ?? '', null);
+
+function convert(node: Node, depth: number, r: Context, rowItem = false): RNode {
   if (++r.count > MAX_NODES) throw new Error(`A skin document draws at most ${MAX_NODES} nodes`);
   if (depth > MAX_DEPTH) throw new Error(`A skin document nests at most ${MAX_DEPTH} deep`);
+  // Renderer 22: the profile menu primitive, expanded into the document's own nodes.
+  if (node.type === 'profileMenu') return convert(expandProfileMenu(node, r.doc, velaProfileMenu), depth, r);
   if (node.type === 'use' && r.screen) return useScreen(node, depth, r);
   if (node.type === 'use') {
     const template = r.doc.templates?.[node.template];
@@ -411,21 +424,24 @@ function convert(node: Node, depth: number, r: Context): RNode {
       small: { ...template.small, ...node.small }, wide: { ...template.wide, ...node.wide }, tv: { ...template.tv, ...node.tv },
       below: breakpoints(template.below, node.below), above: breakpoints(template.above, node.above),
       when: [...(template.when ?? []), ...(node.when ?? [])],
-      motion: node.motion ?? template.motion, stagger: node.stagger ?? template.stagger } as Node, depth, r);
+      motion: node.motion ?? template.motion, stagger: node.stagger ?? template.stagger } as Node, depth, r, rowItem);
   }
   // The app's own rewrites of skin routes (row links, loaders, library guards) read the vocabulary:
   // a screen document has none of it.
   if (!r.screen) node = skinRewrites(node, r);
   const n = node as Node & { below?: Record<string, Style>; above?: Record<string, Style> };
   const style = variant(n, r, node.style);
-  const layer = (s: Style, extra: { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; label?: string }): Layer => ({
-    style: css(s, r),
-    hover: extra.hover && css(extra.hover, r),
-    focus: extra.focus && css(extra.focus, r),
-    groupHover: extra.groupHover && css(extra.groupHover, r),
-    groupFocus: extra.groupFocus && css(extra.groupFocus, r),
-    label: compile(extra.label, r),
-  });
+  const rowCardFrame = rowItem && node.type === 'box' && isRowCardFrame(node, style);
+  const layer = (s: Style, extra: { hover?: Style; focus?: Style; groupHover?: Style; groupFocus?: Style; label?: string }): Layer => {
+    const rows = css(s, r);
+    const aspect = rows['aspect-ratio'];
+    if (rowCardFrame && aspect !== undefined) {
+      rows['aspect-ratio'] = { parts: [readRowCardAspect], fallback: aspect };
+    }
+    return { style: rows, hover: extra.hover && css(extra.hover, r), focus: extra.focus && css(extra.focus, r),
+      groupHover: extra.groupHover && css(extra.groupHover, r), groupFocus: extra.groupFocus && css(extra.groupFocus, r),
+      label: compile(extra.label, r) };
+  };
   const motion = node.motion ? r.doc.motion?.[node.motion] as Motion | undefined : undefined;
   if (node.motion && !motion) throw new Error(`Unknown motion ${node.motion}`);
   const onChange = r.screen && node.onChange ? { value: compile(node.onChange.value, r)!, motion: r.doc.motion?.[node.onChange.motion] as Motion | undefined } : undefined;
@@ -467,7 +483,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
 
   switch (node.type) {
     case 'box': {
-      const children = r.screen ? screenChildren(node.children ?? [], depth, r) : (node.children ?? []).map(child => convert(child, depth + 1, r));
+      const children = r.screen ? screenChildren(node.children ?? [], depth, r) : (node.children ?? []).map(child => convert(child, depth + 1, r, rowItem));
       if (children.some(child => child.order !== 0)) children.sort((a, b) => a.order - b.order);
       return { ...common, kind: 'box', children, controlStates: node.controlStates !== false,
         press: node.press && pressOf(node.press, r), pager: node.pager,
@@ -488,7 +504,7 @@ function convert(node: Node, depth: number, r: Context): RNode {
         return { ...common, kind: 'repeat', over: items.path, limit: items.limit, items, item: withAlias(r, items.as, () => convert(node.item, depth + 1, r)) };
       }
       return { ...common, kind: 'repeat', over: node.over, limit: node.limit ?? 1000,
-        ...(node.limit === undefined ? { implicitLimit: true } : {}), item: convert(node.item, depth + 1, r) };
+        ...(node.limit === undefined ? { implicitLimit: true } : {}), item: convert(node.item, depth + 1, r, node.over === 'row.items') };
     }
     case 'slot': return slotNode(node, common, r);
     case 'widget': {

@@ -4,9 +4,9 @@ import { episodePage } from '../../../episode-page';
 // screen, faint scanlines, an on-screen display (channel bug, preset buttons, tape
 // counter) and a burst of static when a channel (section, row, featured title) tunes in.
 // Posters and text stay crisp. Under reduced motion every flicker, roll and burst is gone.
-import type { Node, SkinDocument, Style } from '../../../skin';
+import type { Node, ProfileMenuLook, SkinDocument, Style } from '../../../skin';
 
-const id = 'latenight', version = '1.0.18';
+const id = 'latenight', version = '1.0.19';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 // Fonts (licences in ./licences): VT323 for the on-screen display, Michroma for the
@@ -116,43 +116,48 @@ const nav: Node = { type: 'box', role: 'navigation', when: [{ test: 'env.viewer'
     ] },
   ] };
 
-const menuRow = (label: string, icon: string, press: { action: 'openPicker' | 'manageLibraries' | 'signOut' }, testId?: string): Node & { type: 'box' } => ({ type: 'box', press, label, testId,
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '12px 12px', 'align-items': 'center', padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', color: '$ink', ...osdText('22px', '$ink'), 'text-shadow': 'none' },
-  hover: { 'background-color': '$glass-hi' }, focus: { 'background-color': '$vcr-blue' }, children: [
-    { type: 'icon', symbol: icon, style: { width: '16px', height: '16px', color: '$osd' } },
-    { type: 'text', text: label, style: { flex: '1' } },
-  ] });
+const menuRowStyle: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', gap: '12px 12px', 'align-items': 'center', padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', color: '$ink', ...osdText('22px', '$ink'), 'text-shadow': 'none' };
+const tapeBadge = (size: number, font: string): Node => ({ type: 'text', text: '{env.viewerInitial}', style: { width: `${size}px`, height: `${size}px`, 'border-radius': '3px', 'flex-shrink': '0', display: 'flex', 'align-items': 'center', 'justify-content': 'center', ...osdText(font, '$ink-on-label'), 'text-shadow': 'none', 'background-image': 'linear-gradient(180deg, $tape-red 0%, $tape-red 33%, $tape-orange 33%, $tape-orange 66%, $tape-yellow 66%, $tape-yellow 100%)' } });
 
-// The profile menu, drawn as a VCR setup menu on the classic blue.
-const menu: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'pop', role: 'dialog', label: '{s:menu}', escape: 'menu', returnFocus: 'latenight-profile',
+// The profile menu, drawn as a VCR setup menu on the classic blue: the app's entries (the profile
+// menu primitive) in OSD type, its sections headed like the setup screen's pages.
+const setupMenu: ProfileMenuLook = {
+  title: '{s:menuTitle}',
+  parts: {
+    title: { type: 'text', text: '{entry.label}', style: { ...osdText('20px', '$ink'), 'text-shadow': 'none', 'letter-spacing': '0.16em', opacity: '0.75' } },
+    header: { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '12px 12px', 'align-items': 'center' }, children: [
+      tapeBadge(40, '28px'),
+      { type: 'text', text: '{entry.label}', style: { 'font-family': print, 'font-size': '13px', 'letter-spacing': '0.1em', 'text-transform': 'uppercase', flex: '1', 'line-clamp': '1' } },
+    ] },
+    divider: { type: 'box', style: { height: '0px', 'flex-shrink': '0', border: '1px dashed $edge', 'margin-top': '4px' } },
+    section: { type: 'text', text: '{section.title}', role: 'heading', level: 2, style: { ...osdText('17px', '$osd'), 'text-shadow': 'none', 'letter-spacing': '0.16em', 'padding-top': '6px' } },
+    row: { type: 'box', style: menuRowStyle, hover: { 'background-color': '$glass-hi' }, focus: { 'background-color': '$vcr-blue' }, children: [
+      { type: 'icon', symbol: '{entry.icon}', style: { width: '16px', height: '16px', 'flex-shrink': '0', color: '$osd' } },
+      { type: 'text', text: '{entry.label}', style: { flex: '1' } },
+    ] },
+    picker: { type: 'box', style: menuRowStyle, hover: { 'background-color': '$glass-hi' }, focus: { 'background-color': '$vcr-blue' }, children: [
+      { type: 'icon', symbol: 'play-fill', style: { width: '12px', height: '12px', color: '$osd' } },
+      { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px 3px', flex: '1' }, children: [
+        { type: 'text', text: '{entry.label}' },
+        { type: 'text', text: '{entry.detail}', style: { 'font-family': print, 'font-size': '10px', 'letter-spacing': '0.14em', opacity: '0.7' } },
+      ] },
+      { type: 'icon', symbol: 'forward-chevron', style: { width: '12px', height: '12px' } },
+    ] },
+    // The server list in the menu's OSD type.
+    servers: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'font-family': osd, 'font-size': '22px', 'letter-spacing': '0.04em', 'text-transform': 'uppercase' } },
+    // Which Vela this is, where it runs and the server, typed small on the label: selectable, and on TV a stop the remote reaches.
+    // Not upper-cased: a copied build hash or version must read as the server states it.
+    about: { type: 'box', testId: '{entry.testId}', style: { 'padding-top': '4px' }, children: [
+      { type: 'text', text: '{entry.label}', style: { 'font-family': print, 'font-size': '10px', 'line-height': '14px', 'letter-spacing': '0.08em', opacity: '0.7' } }] },
+  },
+};
+
+const menu: Node = { type: 'profileMenu', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'pop', role: 'dialog', label: '{s:menu}', escape: 'menu', returnFocus: 'latenight-profile',
   style: { position: 'absolute', top: 'calc(12px + 74px)', right: 'calc(12px + max(30px, 3.6vw))',
     'max-height': 'calc(100vh - 106px - env(safe-area-inset-bottom))', 'overflow-y': 'auto',
     'z-index': '30', width: '290px', 'box-sizing': 'border-box', padding: '18px 22px 16px', display: 'flex', 'flex-direction': 'column', gap: '10px 10px', 'border-radius': '4px', border: '2px solid $ink', 'background-color': '$vcr-menu', 'box-shadow': '8px 8px 0px $shadow, 0px 30px 80px $shadow' },
   wide: { top: 'calc(18px + 74px)', right: 'calc(18px + max(30px, 3.6vw))', 'max-height': 'calc(100vh - 118px - env(safe-area-inset-bottom))' },
-  small: { top: '62px', right: '10px', width: 'calc(100% - 20px)', 'max-width': '320px', 'max-height': 'calc(100vh - 70px - env(safe-area-inset-bottom))' }, children: [
-    { type: 'text', text: '{s:menuTitle}', style: { ...osdText('20px', '$ink'), 'text-shadow': 'none', 'letter-spacing': '0.16em', opacity: '0.75' } },
-    { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '12px 12px', 'align-items': 'center' }, children: [
-      { type: 'text', text: '{env.viewerInitial}', style: { width: '40px', height: '40px', 'border-radius': '3px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', ...osdText('28px', '$ink-on-label'), 'text-shadow': 'none', 'background-image': 'linear-gradient(180deg, $tape-red 0%, $tape-red 33%, $tape-orange 33%, $tape-orange 66%, $tape-yellow 66%, $tape-yellow 100%)' } },
-      { type: 'text', text: '{env.viewer}', style: { 'font-family': print, 'font-size': '13px', 'letter-spacing': '0.1em', 'text-transform': 'uppercase', flex: '1', 'line-clamp': '1' } },
-    ] },
-    { type: 'box', style: { height: '0px', border: '1px dashed $edge', 'margin-top': '4px' } },
-    { ...menuRow('{s:appearance}', 'forward-chevron', { action: 'openPicker' }, 'skin-picker'), children: [
-      { type: 'icon', symbol: 'play-fill', style: { width: '12px', height: '12px', color: '$osd' } },
-      { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '3px 3px', flex: '1' }, children: [
-        { type: 'text', text: '{s:appearance}' },
-        { type: 'text', text: '{s:skinName}', style: { 'font-family': print, 'font-size': '10px', 'letter-spacing': '0.14em', opacity: '0.7' } },
-      ] },
-      { type: 'icon', symbol: 'forward-chevron', style: { width: '12px', height: '12px' } },
-    ] },
-    { ...menuRow('{s:manageLibraries}', 'library', { action: 'manageLibraries' }, 'manage-libraries'), when: [{ test: 'env.canManageLibraries' }] },
-    { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
-    { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-    menuRow('{s:signOut}', 'sign-out', { action: 'signOut' }),
-    // Which Vela this is, where it runs and the server, typed small on the label: selectable, and on TV a stop the remote reaches.
-    { type: 'box', when: [{ test: 'env.aboutLine' }], readingStop: true, label: '{env.aboutLabel}', testId: 'about-line', style: { 'padding-top': '4px' }, children: [
-      // Not upper-cased: a copied build hash or version must read as the server states it.
-      { type: 'text', text: '{env.aboutLine}', style: { 'font-family': print, 'font-size': '10px', 'line-height': '14px', 'letter-spacing': '0.08em', opacity: '0.7' } }] },
-  ] };
+  small: { top: '62px', right: '10px', width: 'calc(100% - 20px)', 'max-width': '320px', 'max-height': 'calc(100vh - 70px - env(safe-area-inset-bottom))' } };
 
 // The glass: bezel and curved corners, vignette, faint scanlines, a sheen, and now and
 // then a tracking band rolling down. Nothing here takes pointer input.
@@ -492,7 +497,7 @@ const fadeStill = { keyframes: 'dissolve', duration: 200 };
 const osdIn = (delay: number) => ({ keyframes: 'dissolve', duration: 240, delay, easing: 'steps(3, jump-end)', fill: 'both' as const, still: fadeStill });
 
 export default {
-  schema: 1, renderer: 21, id, name: 'Late Night', version,
+  schema: 1, renderer: 22, id, name: 'Late Night', version,
   tagline: 'Your library on an old TV set: channel flips, tape labels and a glowing on-screen display.',
   preview: asset('preview.svg'), swatches: ['#07080b', '#f3eee0', '#7dffa1', '#e8452c', '#f4cf3a'],
   // Late Night's dark set, OSD green and the VCR's blue menus, for the routes it inherits (search, library, collection, sign-in).
@@ -555,6 +560,7 @@ export default {
     tracking: { keyframes: 'scan', duration: 19000, delay: 6000, easing: 'linear(0, 0 91%, 1)', iterations: 'infinite', fill: 'both' },
   },
   templates: { card, rankedCard, row },
+  profileMenus: { default: setupMenu },
   slots: { shell, home },
   routes: { title: episodePage(title) },
   detail: { wide: 'fullscreen', small: 'fullscreen' },

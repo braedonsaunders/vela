@@ -1,6 +1,7 @@
 // A skin document's `ui` block (docs/skin-schema.md, renderer 15): the look of the Vela base,
 // the built-in routes every document inherits. Styles name a value as `$ui.<name>`; a key the
 // document leaves out takes Cinematic's value (ui-defaults.ts).
+import { hexColour, parseColour } from '../screen/colour';
 import { uiDefaults, type UiTokens } from './ui-defaults';
 
 type UiName = keyof UiTokens;
@@ -38,6 +39,13 @@ export function resolveUi(block: Record<string, unknown> | undefined): UiTokens 
   // A document that sets its ink but not its hover keeps the ink under the pointer.
   if (block?.ink !== undefined && block.inkHover === undefined) tokens.inkHover = tokens.ink;
   return tokens;
+}
+
+/** The card menu covers catalogue content with the skin's popover hue at full opacity. */
+export function cardMenuBackground(ui: Pick<UiTokens, 'popover' | 'raised'>): string {
+  const popover = parseColour(ui.popover);
+  const surface = popover && popover.a > 0 ? popover : parseColour(ui.raised);
+  return surface && surface.a > 0 ? hexColour({ ...surface, a: 1 }) : uiDefaults.raised;
 }
 
 /** `$ui.<name>` as a style value: a colour or font as written, a radius in px. */

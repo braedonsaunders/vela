@@ -8,10 +8,10 @@ import { episodePage } from '../../../episode-page';
 //
 // Deliberate difference from the compiled Index (agreed with the orchestrator): opening a title
 // from 900 px keeps the 360 px home pane where the reader was; compiled reset it to the top.
-import type { Condition, Node, SkinDocument, Style } from '../../../skin';
+import type { Condition, Node, ProfileMenuLook, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.15';
+const version = '1.0.16';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -77,36 +77,17 @@ const nav: Node = {
     plain('{s:home}', { action: 'home' }, [{ test: 'env.viewer' }]),
     plain('{s:search}', { action: 'search' }, [{ test: 'env.viewer' }]),
     plain('{s:live}', { action: 'live' }, [{ test: 'nav.showLive' }]),
-    {
-      type: 'box',
-      press: { action: 'openPicker' },
-      a11y: { haspopup: 'dialog' },
-      label: '{s:choose}',
-      testId: 'skin-picker',
-      when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
-      style: {
-        display: 'flex',
-        'flex-direction': 'column',
-        padding: '6px 12px',
-        'text-align': 'center',
-        'background-color': '$field',
-        border: '1px solid $line',
-      },
+    // The reader's plate (their avatar where the server gives one, else their initial) and name opens
+    // their menu: the profile menu primitive, printed plain below.
+    { type: 'box', id: 'index-profile', when: [{ test: 'env.viewer' }], press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu',
+      a11y: { expanded: [{ test: 'flag:menu' }], haspopup: 'dialog' },
+      style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', padding: '4px' },
       ...inkWash,
-      children: [{ type: 'text', text: '{s:choose}', style: { 'font-size': '13px' } }],
-    },
-    { ...plain('{s:manageLibraries}', { action: 'manageLibraries' }, [{ test: 'env.canManageLibraries' }]), testId: 'manage-libraries' } as Node,
-    { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
-    { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-    // The reader: a small printed plate (their avatar where the server gives one, else their initial) and their name.
-    { type: 'box', when: [{ test: 'env.viewer' }], style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', padding: '4px' }, children: [
-      { type: 'text', text: '{env.viewerInitial}', style: { width: '22px', height: '22px', 'flex-shrink': '0', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '1px solid $line', 'background-color': '$field', 'font-size': '12px' } },
-      { type: 'text', text: '{env.viewer}', style: { 'font-size': '12px' } },
-    ] },
-    plain('{s:signOut}', { action: 'signOut' }, [{ test: 'env.viewer' }]),
-    // Which Vela this is, where it runs and the server, as the rail's colophon: selectable, and on TV a stop the remote reaches.
-    { type: 'box', when: [{ test: 'env.viewer' }, { test: 'env.aboutLine' }], readingStop: true, label: '{env.aboutLabel}', testId: 'about-line', style: { padding: '4px' },
-      children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '11px', 'line-height': '15px', color: '$secondary' } }] },
+      children: [
+        { type: 'text', text: '{env.viewerInitial}', style: { width: '22px', height: '22px', 'flex-shrink': '0', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '1px solid $line', 'background-color': '$field', 'font-size': '12px' } },
+        { type: 'text', text: '{env.viewer}', style: { 'font-size': '12px' } },
+        { type: 'text', text: '▾', style: { 'font-size': '10px', color: '$secondary' } },
+      ] },
   ],
 };
 
@@ -173,6 +154,46 @@ const shell: Node = {
         width: '100%',
       } as Style,
     },
+    // A press outside the reader's menu closes it (and goes nowhere else).
+    { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], press: { action: 'close', arg: 'menu' }, label: '{s:close}', testId: 'profile-menu-dismiss',
+      style: { position: 'absolute', top: '0px', right: '0px', bottom: '0px', left: '0px', 'z-index': '29', 'background-color': 'transparent' } },
+    { type: 'profileMenu', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], role: 'dialog', label: '{s:profile}', escape: 'menu', returnFocus: 'index-profile',
+      ...responsive(
+        { position: 'absolute', top: '12px', left: 'calc(11.25rem + 12px)', 'z-index': '30', width: '17rem', 'max-height': 'calc(100vh - 24px)', 'overflow-y': 'auto',
+          'box-sizing': 'border-box', padding: '12px 16px', display: 'flex', 'flex-direction': 'column', gap: '2px',
+          'background-color': '$field', border: '1px solid $line', 'box-shadow': '4px 4px 0px $rail' } as Style,
+        { top: '100px', left: '12px', right: '12px', width: 'auto', 'max-height': 'calc(100vh - 112px)' },
+      ) },
+  ],
+};
+
+// The reader's menu, printed plain: text buttons as the rail's, a rule between its parts.
+const plainRow: Style = { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '8px', padding: '6px 4px', 'text-align': 'left' };
+const readerMenu: ProfileMenuLook = {
+  parts: {
+    header: { type: 'box', style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'align-items': 'center', padding: '4px 4px 8px' }, children: [
+      { type: 'text', text: '{env.viewerInitial}', style: { width: '28px', height: '28px', 'flex-shrink': '0', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'box-sizing': 'border-box', border: '1px solid $line', 'background-color': '$page', 'font-size': '14px' } },
+      { type: 'text', text: '{entry.label}', style: { 'font-size': '15px', 'font-weight': '700', flex: '1', 'line-clamp': '1' } },
+    ] },
+    divider: { type: 'box', style: { height: '1px', 'flex-shrink': '0', 'background-color': '$line', margin: '6px 0px' } },
+    section: { type: 'text', text: '{section.title}', role: 'heading', level: 2, style: { 'font-size': '11px', 'font-weight': '700', 'letter-spacing': '0.12em', 'text-transform': 'uppercase', color: '$secondary', padding: '8px 4px 2px' } },
+    row: { type: 'box', style: plainRow, ...inkWash, children: [{ type: 'text', text: '{entry.label}' }] },
+    picker: { type: 'box', style: plainRow, ...inkWash, children: [
+      { type: 'text', text: '{entry.label}', style: { flex: '1' } },
+      { type: 'text', text: '{entry.detail}', style: { 'font-size': '12px', 'font-style': 'italic', color: '$secondary' } },
+    ] },
+    // The server rows reach 10px past their column, so it is inset to the rows' text.
+    servers: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', padding: '0px 4px', 'font-size': '14px' } },
+    // Which Vela this is, where it runs and the server, as the menu's colophon: selectable, and on TV a stop the remote reaches.
+    about: { type: 'box', testId: '{entry.testId}', style: { padding: '8px 4px 4px' }, children: [
+      { type: 'text', text: '{entry.label}', style: { 'font-size': '11px', 'line-height': '15px', color: '$secondary' } }] },
+  },
+  entries: { appearance: { label: '{s:choose}' } },
+  sections: [
+    { id: 'viewer', entries: ['viewer'] },
+    { id: 'you', divider: true, entries: [] },
+    { id: 'servers', title: '{t:connect.servers}', divider: true, entries: [] },
+    { id: 'session', divider: true, entries: [] },
   ],
 };
 
@@ -1255,7 +1276,7 @@ const title: Node = {
 
 export default {
   schema: 1,
-  renderer: 21,
+  renderer: 22,
   status: true,
   id,
   name: 'Index',
@@ -1334,6 +1355,8 @@ export default {
       search: 'Search',
       live: 'Live TV',
       choose: 'Change appearance',
+      profile: 'Your menu',
+      close: 'Close your menu',
       manageLibraries: 'Manage libraries',
       install: 'Install Vela',
       update: 'Update ready, reload',
@@ -1465,6 +1488,7 @@ export default {
     },
   },
   templates: { card, row },
+  profileMenus: { default: readerMenu },
   slots: { shell, home },
   routes: { title: episodePage(title, { card }), library, collection, auth },
   // Below 900 px the title page covers home; from 900 it stacks beside a 360 px home pane.

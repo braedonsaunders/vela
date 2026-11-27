@@ -1,12 +1,13 @@
 // The store's platform on the web: the serving page's origin is the Ether server (a development
 // build may point elsewhere; a desktop shell implies no server), secrets in the page's storage, a sign-in link's one-time code read
 // once from the address and removed from it, and what the browser engine's probe says it plays.
-import { Dimensions, PixelRatio } from 'react-native';
-import type { VelaPlatform } from '@vela/core';
-import { VelaPlayer } from '@vela/player';
+import { Dimensions, PixelRatio, Platform } from 'react-native';
+import { platformEmbedsTrailers, type VelaPlatform } from '@vela/core';
+import { canEmbed, VelaPlayer } from '@vela/player';
 import { config, DEVELOPMENT_SERVER } from './config';
 import { consoleURL, pageServerOrigin, parseWebHandoff } from '@vela/core';
 import { secrets } from './secrets';
+import { webDownloads } from './downloads-web';
 
 let handoff: { code?: string; consoleUrl?: string } | undefined;
 function webHandoff(desktop: boolean): NonNullable<typeof handoff> {
@@ -82,6 +83,7 @@ export function platform(): VelaPlatform {
     appVersion: config.appVersion,
     media: VelaPlayer.capabilities(),
     audio: VelaPlayer.audioCapabilities(),
+    downloads: webDownloads(),
     page: { origin: location.origin, webCode: link.code, consoleUrl: link.consoleUrl },
     beginExternalAuth: () => {
       // WebView desktop shells hand a requested window to the system browser. Ordinary browsers
@@ -96,6 +98,7 @@ export function platform(): VelaPlatform {
         close: () => { if (popup && !popup.closed) popup.close(); },
       };
     },
+    trailerEmbed: platformEmbedsTrailers({ os: Platform.OS, isTV: Platform.isTV }) && canEmbed(),
     mock: config.mock,
     artWidth: screenArtWidth(),
   };

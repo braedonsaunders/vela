@@ -11,6 +11,8 @@ export interface TitleActions {
   watched: boolean;
   favorite: boolean;
   watchlist: boolean;
+  notInterested?: boolean;
+  thumbsUp?: boolean;
   removeFromContinue: boolean;
   watch: V.WatchState;
   versions: MediaVersion[];
@@ -18,7 +20,7 @@ export interface TitleActions {
 /** Viewer-specific title mutations. Each independently advertised boolean hides unsupported UI. */
 export interface TitleManagement {
   titleActions(id: string): Promise<TitleActions>;
-  setTitleWatch(id: string, request: V.WatchRequest): Promise<V.Ack | void>;
+  setTitleWatch(id: string, request: V.WatchRequest): Promise<V.WatchResponse | void>;
 }
 export function hasTitleManagement(api: ServerAdapter): api is ServerAdapter & TitleManagement {
   return 'titleActions' in api && typeof api.titleActions === 'function'
@@ -506,13 +508,18 @@ export interface DownloadResolution {
 export interface ResolveDownloadOptions {
   versionId?: string;
   subtitleFormats?: readonly string[];
+  /** The device's declared playback capabilities (Ether grants an original this device can play). */
+  client?: V.ClientCapabilities;
   idempotencyKey?: string;
 }
 
-/** Original-file download resolution for offline playback on iPhone and iPad. */
+/** Original-file download resolution for offline playback (docs/downloads.md). */
 export interface MediaDownloads {
   /** Whether the server offers original-file downloads to the viewer (e.g. Plex root `allowSync`). */
   downloadsAvailable?(): Promise<boolean>;
+  /** `none`: the resolved URL is a capability link (an Ether grant); `headers` (default): the
+   * request needs the resolution's credential headers (Plex, Jellyfin, Emby). */
+  readonly downloadCredentials?: 'none' | 'headers';
   resolveDownload(id: string, options?: ResolveDownloadOptions): Promise<DownloadResolution>;
 }
 export function hasMediaDownloads(adapter: ServerAdapter): adapter is ServerAdapter & MediaDownloads {

@@ -215,6 +215,8 @@ interface PillProps {
   /** Fill the column (sign-in buttons), or hug the label where the column places it (Cancel). */
   align?: 'stretch' | 'center' | 'flex-start';
   children?: ReactNode;
+  /** On a TV, take focus when this turns on (once; see focus-claim.ts). */
+  preferFocus?: boolean;
 }
 
 /** The base's pill button: primary in ink, or ghost glass. */
@@ -228,9 +230,11 @@ export function Pill({
   testID,
   align = 'stretch',
   children,
+  preferFocus,
 }: PillProps) {
   const look = useLook();
   const { state, handlers } = useInteraction();
+  const claim = useFocusClaim(preferFocus);
   const rows = overlaid(
     {
       ...pill(primary, height),
@@ -255,6 +259,7 @@ export function Pill({
       onPress={onPress}
       disabled={disabled}
       focusable={!disabled}
+      hasTVPreferredFocus={claim}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled, busy }}

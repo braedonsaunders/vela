@@ -8,16 +8,20 @@ import androidx.media3.datasource.DataSpec
 import java.io.EOFException
 import java.io.IOException
 import java.io.InputStream
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.ProtocolException
 import java.net.URL
 import java.util.concurrent.atomic.AtomicLong
 
 /** Each player captures one immutable grant. Manifests, segments, seeks and subtitles all use it.
- * `received` counts the media bytes read, as they arrive (the snapshot's loadProgress). */
+ * `received` counts the media bytes read, as they arrive (the snapshot's loadProgress).
+ * A `file:` URL opens only inside the downloads root (LocalMediaScope), never with the grant's headers. */
 internal class ScopedMediaDataSource(private val grant: MediaAccess?, private val received: AtomicLong? = null,
   private val isOriginal: (Uri) -> Boolean = { false }) : BaseDataSource(true) {
   private var connection: HttpURLConnection? = null
+  private var local: RandomAccessFile? = null
+  private var localUri: Uri? = null
   private var input: InputStream? = null
   private var remaining = C.LENGTH_UNSET.toLong()
   private var opened = false
@@ -26,6 +30,7 @@ internal class ScopedMediaDataSource(private val grant: MediaAccess?, private va
   override fun open(dataSpec: DataSpec): Long {
     transferInitializing(dataSpec)
     original = isOriginal(dataSpec.uri)
+    if (dataSpec.uri.scheme.equals("file", true)) return openLocal(dataSpec)
     var url = URL(dataSpec.uri.toString())
     var authorized = grant?.contains(dataSpec.uri) == true
     try {
@@ -83,9 +88,38 @@ internal class ScopedMediaDataSource(private val grant: MediaAccess?, private va
     }
   }
 
+  /** A downloaded file: the local scope resolves it, and no request header or grant is involved. */
+  private fun openLocal(dataSpec: DataSpec): Long {
+    val target = LocalMedia.scope?.file(dataSpec.uri.toString()) ?: throw IOException("Media request failed")
+    try {
+      val file = RandomAccessFile(target, "r").also { local = it }
+      val size = file.length()
+      if (dataSpec.position > size) throw EOFException("Media range exceeds source")
+      file.seek(dataSpec.position)
+      val available = size - dataSpec.position
+      remaining = if (dataSpec.length == C.LENGTH_UNSET.toLong()) available else minOf(dataSpec.length, available)
+      localUri = dataSpec.uri
+      opened = true
+      transferStarted(dataSpec)
+      return remaining
+    } catch (_: Exception) {
+      close()
+      throw IOException("Media request failed")
+    }
+  }
+
   override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
     if (length == 0) return 0
     if (remaining == 0L) return C.RESULT_END_OF_INPUT
+    local?.let { file ->
+      val count = try { file.read(buffer, offset, minOf(length.toLong(), remaining).toInt()) }
+        catch (_: IOException) { throw IOException("Media read failed") }
+      if (count < 0) throw EOFException("Incomplete media file")
+      remaining -= count
+      received?.addAndGet(count.toLong())
+      bytesTransferred(count)
+      return count
+    }
     val count = try {
       input!!.read(buffer, offset, if (remaining < 0) length else minOf(length.toLong(), remaining).toInt())
     } catch (error: IOException) {
@@ -106,11 +140,14 @@ internal class ScopedMediaDataSource(private val grant: MediaAccess?, private va
     return count
   }
 
-  override fun getUri(): Uri? = connection?.url?.toString()?.let(Uri::parse)
+  override fun getUri(): Uri? = localUri ?: connection?.url?.toString()?.let(Uri::parse)
   override fun getResponseHeaders(): Map<String, List<String>> = connection?.headerFields?.filterKeys { it != null }.orEmpty()
   override fun close() {
     try { input?.close() } catch (_: IOException) { }
     input = null
+    try { local?.close() } catch (_: IOException) { }
+    local = null
+    localUri = null
     connection?.disconnect()
     connection = null
     if (opened) { opened = false; transferEnded() }

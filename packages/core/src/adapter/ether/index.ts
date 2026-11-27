@@ -284,12 +284,23 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   async titleActions(id: string): Promise<TitleActions> {
     const [detail, capabilities] = await Promise.all([this.detail(id, true), this.describe()]);
-    return { watched: true, favorite: true, watchlist: true, removeFromContinue: capabilities.features.removeFromContinue?.available === true, watch: detail.title.watch ?? { positionSeconds: 0, played: false, favorite: false, watchlisted: false }, versions: [] };
+    const feedback = capabilities.features.notInterested;
+    return {
+      watched: true, favorite: true, watchlist: true,
+      removeFromContinue: capabilities.features.removeFromContinue?.available === true,
+      notInterested: feedback?.available === true,
+      thumbsUp: feedback?.available === true && feedback.thumbsUp === true,
+      watch: detail.title.watch ?? { positionSeconds: 0, played: false, favorite: false, watchlisted: false },
+      versions: [],
+    };
   }
 
-  setTitleWatch(id: string, request: V.WatchRequest): Promise<V.Ack> {
-    return this.http.request<V.Ack>('POST', `/titles/${segment(id)}/watch`, request);
+  setTitleWatch(id: string, request: V.WatchRequest): Promise<V.WatchResponse> {
+    return this.http.request<V.WatchResponse>('POST', `/titles/${segment(id)}/watch`, request);
   }
+
+  /** Ether's download grant URL is a capability link: no credential headers. */
+  readonly downloadCredentials = 'none' as const;
 
   async downloadsAvailable(): Promise<boolean> {
     const capabilities = await this.http.request<V.ServerCapabilities>('GET', '/capabilities', undefined, CACHED);
@@ -301,8 +312,28 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     const request: V.DownloadRequest = {
       idempotencyKey: options?.idempotencyKey ?? randomId(),
       ...(options?.versionId ? { versionId: options.versionId } : {}),
+      ...(options?.client ? { client: options.client } : {}),
     };
-    const grant = await this.http.request<V.DownloadGrant>('POST', `/titles/${segment(id)}/download`, request);
+    const answer = await this.http.request<Partial<V.DownloadGrant> & { filename?: string }>('POST', `/titles/${segment(id)}/download`, request)
+      .catch(error => { throw downloadRefusal(error); });
+    if (!answer || typeof answer.url !== 'string' || typeof answer.mimeType !== 'string') {
+      throw new Error('The server answered the download request with an incomplete grant');
+    }
+    // A minimal grant (some Ether builds send no track lists or container) still downloads the
+    // original: the player reads its embedded tracks, and the container comes from the file name.
+    const extension = /\.([a-z0-9]{1,8})$/i.exec(answer.filename ?? '')?.[1]?.toLowerCase();
+    const { filename: _filename, ...rest } = answer;
+    const grant: V.DownloadGrant = {
+      ...rest,
+      url: answer.url,
+      mimeType: answer.mimeType,
+      container: typeof answer.container === 'string' && answer.container ? answer.container : extension ?? containerOf(answer.mimeType),
+      etag: answer.etag as string,
+      expiresAt: answer.expiresAt as string,
+      audioTracks: Array.isArray(answer.audioTracks) ? answer.audioTracks : [],
+      subtitleTracks: Array.isArray(answer.subtitleTracks) ? answer.subtitleTracks : [],
+      chapters: Array.isArray(answer.chapters) ? answer.chapters : [],
+    };
     const origin = new URL(this.origin).origin;
     const url = new URL(grant.url, origin);
     if (url.origin !== origin || url.username || url.password || !/^\/vela\/v0\/download\/[^/]+$/.test(url.pathname)) {
@@ -799,4 +830,23 @@ function query(values: object): string {
     .filter(([, value]) => value !== undefined)
     .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`);
   return pairs.length ? `?${pairs.join('&')}` : '';
+}
+
+/** Ether's download refusals in words a viewer can act on; the server's message when it is already a sentence. */
+function downloadRefusal(error: unknown): unknown {
+  if (!(error instanceof VelaError)) return error;
+  const code = error.detail.code;
+  const words: Record<string, string> = {
+    version_unavailable: 'This version can\'t be downloaded from the server right now.',
+    download_limit: 'You\'ve reached today\'s download limit on this server.',
+    download_not_allowed: 'Downloads aren\'t allowed for this title or account on this server.',
+    media_not_generated: 'This title isn\'t ready to download yet.',
+  };
+  const message = words[code];
+  if (!message || (error.detail.message && error.detail.message !== code && /\s/.test(error.detail.message))) return error;
+  return new VelaError({ ...error.detail, message }, error.status, error.retryAfter);
+}
+
+function containerOf(mimeType: string): string {
+  return ({ 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/x-matroska': 'mkv' } as Record<string, string>)[mimeType.toLowerCase()] ?? 'mkv';
 }

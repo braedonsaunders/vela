@@ -24,6 +24,20 @@ const scratchRoot = existsSync(join(homedir(), '.scratch/tmp')) ? join(homedir()
   } finally { await rm(scratch, { recursive: true, force: true }); }
 }, 60_000);
 
+(compiler ? test : test.skip)('Android offline downloads resume, refuse and stay in their origin on the JVM', async () => {
+  const scratch = await mkdtemp(join(scratchRoot, 'vela-android-downloads-'));
+  const source = join(import.meta.dir, '../android/src/main/java/app/ether/vela/player');
+  try {
+    const compile = Bun.spawn([compiler!, join(source, 'OfflineTransfer.kt'), join(import.meta.dir, 'fixtures/android/DownloadProbe.kt'),
+      '-include-runtime', '-d', join(scratch, 'downloads.jar')], { stdout: 'pipe', stderr: 'pipe' });
+    const output = await new Response(compile.stderr).text();
+    expect(await compile.exited, output).toBe(0);
+    const runtime = process.env.VELA_KOTLIN_STDLIB;
+    const run = Bun.spawn(['java', '-cp', [join(scratch, 'downloads.jar'), runtime].filter(Boolean).join(':'), 'app.ether.vela.player.DownloadProbeKt'], { stdout: 'pipe', stderr: 'pipe' });
+    expect(await run.exited, await new Response(run.stderr).text()).toBe(0);
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+}, 60_000);
+
 (compiler ? test : test.skip)('Android display matching, format facts, subtitle appearance and output preferences run on the JVM', async () => {
   const scratch = await mkdtemp(join(scratchRoot, 'vela-android-formats-'));
   const source = join(import.meta.dir, '../android/src/main/java/app/ether/vela/player');

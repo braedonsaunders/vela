@@ -13,8 +13,8 @@ test('version presentation applies badge priority and tidy, de-duplicated chips'
   expect(versionBadge(version)).toBe('Your choice');
   expect(versionBadge({ ...version, remembered: undefined })).toBe('Pinned by owner');
   expect(versionBadge({ ...version, remembered: undefined, pinned: undefined })).toBe('Recommended');
-  expect(versionChips(version)).toEqual(['4K', 'Dolby Vision', 'HEVC', 'Dolby Atmos', 'TrueHD', '7.1', 'Remux', 'Director’s Cut', 'English', '68 GB']);
-  expect(versionMenuChips(version)).toEqual(['Your choice', '4K', 'Dolby Vision', 'Dolby Atmos', '68 GB']);
+  expect(versionChips(version)).toEqual(['4K', 'Dolby Vision', 'HEVC', 'Dolby Atmos', 'TrueHD', '7.1', 'Remux', 'Director’s Cut', 'English', '63.1 GB']);
+  expect(versionMenuChips(version)).toEqual(['Your choice', '4K', 'Dolby Vision', 'Dolby Atmos', '63.1 GB']);
   expect(versionAvailability(version)).toBe('May take a moment to prepare');
 });
 
@@ -71,4 +71,12 @@ test('conversions are named from the release actually playing, Auto\'s pick incl
   expect(convertedFrom([auto, top, web], 'auto-id', '1080p WEB-DL · DD+ 5.1 · 4.2 GB')).toBe('1080p WEB-DL');
   expect(convertedFrom([auto, top, web], 'v4k', '1080p WEB-DL · DD+ 5.1')).toBe('1080p WEB-DL');
   expect(convertedFrom([auto, top, web], 'v4k', '')).toBe('4K Dolby Vision Remux');
+});
+
+test('a version size chip counts as the server label does, so it never contradicts the title', () => {
+  const base = { id: 'v', label: '', kind: 'original', resolution: '1080p', availability: 'fetch' } as unknown as Parameters<typeof versionChips>[0];
+  // Ether's labels read "7.3 GB" and "11.7 GB" for these files.
+  expect(versionChips({ ...base, sizeBytes: 7_838_000_000 } as never)).toContain('7.3 GB');
+  expect(versionChips({ ...base, sizeBytes: 12_560_000_000 } as never)).toContain('11.7 GB');
+  expect(versionChips({ ...base, sizeBytes: 150 * 1024 ** 3 } as never)).toContain('150 GB');
 });

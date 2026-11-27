@@ -5,7 +5,7 @@ import { useVelaState } from '@vela/core/react';
 // the server's media authorization to the player.
 import { useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
 import { router } from '../../src/router';
-import { useCallback, useEffect, useMemo, useRef, type ComponentProps } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { msg, type PlaybackTarget } from '@vela/core';
@@ -16,6 +16,8 @@ import { backFromNavigation, episodeLabel, useBackHeld, useNextEpisode, usePlayb
 import { playerUsesHandheldGeometry } from '@vela/skin/src/widgets/player/look';
 import { phoneControlLayout, watchSideInsets } from '@vela/skin/src/widgets/player/phone-layout';
 import { startPosition } from '../../src/play-action';
+import { watchAllowed } from '../../src/watch-gate';
+import { embeddedExtra, TrailerEmbedWatch } from '../../src/trailer-embed';
 import { useVela } from '../../src/vela';
 
 /** "S1 · E2 · Name" for an episode, the name otherwise. */
@@ -45,13 +47,31 @@ function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?
 
 export default function Watch() {
   const { id, kind } = useLocalSearchParams<{ id: string; kind?: string }>();
-  const { store } = useVela();
   const phase = useVelaState(state => state.auth.phase);
   const hydrated = useVelaState(state => state.downloads.hydrated);
-  if (phase !== 'signed-in' && !(phase === 'offline' && hydrated && !kind && store.downloads.isPlayable(id))) {
+  // The active viewer's download (or, signed out after a refused session, the one kept for them).
+  const record = useVelaState(state => state.downloads.items.find(item => item.titleId === id));
+  if (!watchAllowed(phase, hydrated, kind, record)) {
     return <View style={styles.stage} />;
   }
+  if (kind === 'extra' && id) return <ExtraWatch id={id} />;
   return <WatchPlayer />;
+}
+
+/** An extra: in YouTube's privacy-enhanced embed when its title offers one on this device (never on a TV),
+ * else, or once the embed fails, the server-played extra as before. */
+function ExtraWatch({ id }: { id: string }) {
+  const extra = useVelaState(state => embeddedExtra(state.titles, id));
+  const [served, setServed] = useState('');
+  const close = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }, []);
+  const fallback = useCallback(() => setServed(id), [id]);
+  if (!extra?.embed || served === id) return <WatchPlayer />;
+  const surface = <TrailerEmbedWatch extra={{ ...extra, embed: extra.embed }} close={close} onFallback={fallback} />;
+  // A full-screen modal owns its own UIKit/Android view and system bars.
+  return Platform.OS === 'web' ? surface : <SafeAreaProvider>{surface}</SafeAreaProvider>;
 }
 
 function WatchPlayer() {

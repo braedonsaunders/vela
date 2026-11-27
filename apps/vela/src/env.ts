@@ -61,6 +61,7 @@ export function environment({ state, view, live, route, entry, library, width, h
     canPlaylists: home.value?.playlistsAvailable ?? false,
     canSwitchProfile: state.auth.phase === 'signed-in' && state.auth.plexHomeAvailable,
     canManageLibraries: canManageLibraries(state.auth),
+    canDownloads: state.downloads.supported,
     width,
     home: home.value,
     heroIndex: home.value ? view.heroIndex % Math.max(1, home.value.hero.length) : 0,
@@ -106,7 +107,7 @@ export function createEnvironmentReader() {
       route === 'home' || route === 'search' ? state.search : undefined, title, state.titles[season],
       view.season, view.flags, view.heroIndex, view.still,
       input.live, input.width, input.height, input.skinCount, input.skinName, input.app, state.auth.serverName, state.auth.serverVersion, state.servers.list.find(item => item.selected)?.kindLabel, library, state.previews.cardId, route === 'home' ? state.previews.heroId : '', input.canVisualize,
-      state.auth.serverId, state.auth.viewerId, viewerLibraryOrder(state)];
+      state.auth.serverId, state.auth.viewerId, viewerLibraryOrder(state), state.downloads.supported];
     const key = `${route}:${entry}:${library ?? ''}`, previous = routes.get(key);
     if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.env;
     const env = environment({ ...input, view: { ...view, season: selection || season } });

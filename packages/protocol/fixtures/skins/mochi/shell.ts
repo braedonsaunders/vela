@@ -1,6 +1,6 @@
 // The shell: the pill-shaped bar (wordmark, destinations, search, profile), the profile menu, and the
 // dotted paper (or the night ground on Live TV) behind every page.
-import type { Condition, Node, Style } from '../../../skin';
+import type { Condition, Node, ProfileMenuLook, Style } from '../../../skin';
 import {
   Bubble,
   COMPACT,
@@ -494,117 +494,93 @@ export const swatch = (colour: string): Node => ({
     'box-sizing': 'border-box',
   },
 });
-const menuContent: Node[] = [
-  {
-    type: 'box',
-    style: { ...row, gap: '12px', 'align-items': 'center' },
-    children: [
-      mascot('happy', 44),
-      {
-        type: 'box',
-        style: { ...col, gap: '2px', flex: '1', 'min-width': '0px' },
-        children: [
-          { type: 'text', text: '{s:hello}', style: { ...Label, 'font-size': '10px', color: '$ink-soft' } },
-          {
-            type: 'text',
-            text: '{env.viewer}',
-            style: {
-              'font-size': '18px',
-              'font-weight': '650',
-              'white-space': 'nowrap',
-              'overflow-x': 'hidden',
-              'text-overflow': 'ellipsis',
-            },
-          },
-        ],
+// The profile menu's look (the profile menu primitive): Mochi's greeting, the Appearance card with
+// its swatches, soft rows, and Sign out as a puffy button.
+const softRow: Style = {
+  ...row, position: 'relative', gap: '10px', 'align-items': 'center', 'min-height': '44px', 'box-sizing': 'border-box',
+  padding: '8px 10px', 'border-radius': '14px', 'font-size': '15px', color: '$ink', cursor: 'pointer',
+};
+export const mochiMenu: ProfileMenuLook = {
+  parts: {
+    header: {
+      type: 'box',
+      style: { ...row, gap: '12px', 'align-items': 'center' },
+      children: [
+        mascot('happy', 44),
+        {
+          type: 'box',
+          style: { ...col, gap: '2px', flex: '1', 'min-width': '0px' },
+          children: [
+            { type: 'text', text: '{s:hello}', style: { ...Label, 'font-size': '10px', color: '$ink-soft' } },
+            { type: 'text', text: '{entry.label}', style: { 'font-size': '18px', 'font-weight': '650', 'white-space': 'nowrap', 'overflow-x': 'hidden', 'text-overflow': 'ellipsis' } },
+          ],
+        },
+      ],
+    },
+    divider: { type: 'box', style: { height: '0px', 'flex-shrink': '0', 'border-style': 'dashed', 'border-width': '0px', 'border-top-width': '2.5px', 'border-top-color': '$line-strong' } },
+    group: { type: 'box', style: { ...col, gap: '2px' } },
+    section: { type: 'text', text: '{section.title}', role: 'heading', level: 2, style: { ...Label, 'font-size': '10px', color: '$ink-soft', padding: '4px 10px' } },
+    row: {
+      type: 'box',
+      style: softRow,
+      hover: { 'background-color': '$lavender-soft' },
+      focus: { outline: 'auto', 'box-shadow': ring },
+      active: { scale: '0.97' },
+      children: [
+        { type: 'icon', symbol: '{entry.icon}', style: { width: '16px', height: '16px', 'flex-shrink': '0' } },
+        { type: 'text', text: '{entry.label}', style: { flex: '1', 'line-clamp': '1' } },
+      ],
+    },
+    picker: {
+      type: 'box',
+      style: {
+        ...row, position: 'relative', gap: '12px', 'align-items': 'center', 'box-sizing': 'border-box', width: '100%', padding: '10px 12px',
+        border: '2.5px solid $ink', 'border-radius': '16px', 'background-color': '$page', color: '$ink', cursor: 'pointer',
       },
-    ],
-  },
-  {
-    type: 'box',
-    style: {
-      height: '0px',
-      'border-style': 'dashed',
-      'border-width': '0px',
-      'border-top-width': '2.5px',
-      'border-top-color': '$line-strong',
+      hover: { 'background-color': '$lavender-soft' },
+      focus: { outline: 'auto', 'box-shadow': ring },
+      active: { scale: '0.97' },
+      children: [
+        {
+          type: 'box',
+          style: { ...col, gap: '2px', flex: '1', 'min-width': '0px', 'text-align': 'left' },
+          children: [
+            { type: 'text', text: '{entry.label}', style: { ...Label, 'font-size': '10px', color: '$ink-soft' } },
+            { type: 'text', text: '{entry.detail}', style: { 'font-size': '16px', 'font-weight': '600', color: '$ink' } },
+          ],
+        },
+        { type: 'box', style: { ...row, gap: '4px' }, children: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff'].map(swatch) },
+      ],
+    },
+    // The server rows reach 10px past their column, so it is inset to the rows' text.
+    servers: { type: 'box', style: { ...col, padding: '0px 10px', 'font-size': '15px' } },
+    puffy: {
+      type: 'box',
+      style: { ...Puffy, height: '48px', padding: '0px 16px', 'box-shadow': '0px 3px 0px $ink', gap: '10px' },
+      ...puffy,
+      children: [icon('out', 14), { type: 'text', text: '{entry.label}', style: { 'font-size': '15px' } }],
+    },
+    // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
+    about: {
+      type: 'box',
+      testId: '{entry.testId}',
+      style: { padding: '2px 4px 0px', 'border-radius': '10px' },
+      children: [{ type: 'text', text: '{entry.label}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ink-soft', 'text-align': 'center' } }],
     },
   },
-  {
-    type: 'box',
-    press: { action: 'openPicker' },
-    label: '{s:appearance}',
-    testId: 'skin-picker',
-    when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
-    style: {
-      ...row,
-      position: 'relative',
-      gap: '12px',
-      'align-items': 'center',
-      'box-sizing': 'border-box',
-      width: '100%',
-      padding: '10px 12px',
-      border: '2.5px solid $ink',
-      'border-radius': '16px',
-      'background-color': '$page',
-      color: '$ink',
-      cursor: 'pointer',
-    },
-    hover: { 'background-color': '$lavender-soft' },
-    focus: { outline: 'auto', 'box-shadow': ring },
-    active: { scale: '0.97' },
-    children: [
-      {
-        type: 'box',
-        style: { ...col, gap: '2px', flex: '1', 'min-width': '0px', 'text-align': 'left' },
-        children: [
-          {
-            type: 'text',
-            text: '{s:appearance}',
-            style: { ...Label, 'font-size': '10px', color: '$ink-soft' },
-          },
-          {
-            type: 'text',
-            text: '{s:name}',
-            style: { 'font-size': '16px', 'font-weight': '600', color: '$ink' },
-          },
-        ],
-      },
-      {
-        type: 'box',
-        style: { ...row, gap: '4px' },
-        children: ['#fff0f6', '#3b1f4a', '#ff7eb6', '#b9a0ff'].map(swatch),
-      },
-    ],
+  entries: {
+    appearance: { label: '{s:appearance}', detail: '{s:name}' },
+    playlists: { glyph: icon('layers', 14) },
+    signOut: { part: 'puffy' },
   },
-  { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
-  { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-  // Your servers: the current one checked; choosing another switches, and "Add a server" connects one.
-  // Its rows sit 10px outside their column, as in the base's menu, so the column is inset to match.
-  {
-    type: 'box',
-    style: { ...col, padding: '0px 10px' },
-    children: [{ type: 'widget', widget: 'serverSwitcher' }],
-  },
-  {
-    type: 'box',
-    press: { action: 'signOut' },
-    label: '{s:signOut}',
-    style: { ...Puffy, height: '48px', padding: '0px 16px', 'box-shadow': '0px 3px 0px $ink', gap: '10px' },
-    ...puffy,
-    children: [icon('out', 14), { type: 'text', text: '{s:signOut}', style: { 'font-size': '15px' } }],
-  },
-  // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
-  {
-    type: 'box',
-    when: [{ test: 'env.aboutLine' }],
-    readingStop: true,
-    label: '{env.aboutLabel}',
-    testId: 'about-line',
-    style: { padding: '2px 4px 0px', 'border-radius': '10px' },
-    children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ink-soft', 'text-align': 'center' } }],
-  },
-];
+  sections: [
+    { id: 'viewer', entries: ['viewer'] },
+    { id: 'look', divider: true, entries: ['appearance'] },
+    { id: 'you', entries: ['switchProfile', 'playlists', 'downloads', 'manageLibraries'] },
+    { id: 'servers', title: '{t:connect.servers}', entries: ['servers', 'addServer'] },
+    { id: 'session', entries: ['signOut'] },
+  ],
+};
 
 export const menu: Node = {
   type: 'box',
@@ -637,8 +613,11 @@ export const menu: Node = {
       alt: '',
       style: { position: 'absolute', top: '-14px', right: '34px', ...sz(24, 14) },
     },
+    // The menu's entries (the profile menu primitive); on TV the remote stays inside, and Back returns to the button.
     {
-      type: 'box',
+      type: 'profileMenu',
+      escape: 'menu',
+      returnFocus: 'profile-menu-trigger',
       style: {
         ...col,
         padding: '20px',
@@ -647,7 +626,6 @@ export const menu: Node = {
         'overflow-y': 'auto',
       },
       below: { [COMPACT]: { 'max-height': 'calc(100vh - 92px - env(safe-area-inset-bottom))' } },
-      children: menuContent,
     },
   ],
 };

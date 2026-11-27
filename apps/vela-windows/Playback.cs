@@ -9,6 +9,7 @@ internal sealed class Playback : IDisposable
     readonly Action<string, object> emit;
     readonly IntPtr window;
     readonly PlaybackSettings settings;
+    readonly Downloads? downloads;
     readonly DisplayMatch display = new();
     AudioEndpointInfo endpoint;
     Uri? origin;
@@ -62,9 +63,9 @@ internal sealed class Playback : IDisposable
     static string Spdif(PlaybackSettings settings, AudioEndpointInfo endpoint) =>
         string.Join(',', settings.WantedPassthrough().Where(endpoint.Passthrough.Contains));
 
-    public Playback(IntPtr videoHandle, Action<string, object> emit, PlaybackSettings settings)
+    public Playback(IntPtr videoHandle, Action<string, object> emit, PlaybackSettings settings, Downloads? downloads = null)
     {
-        this.emit = emit; this.settings = settings; window = videoHandle;
+        this.emit = emit; this.settings = settings; this.downloads = downloads; window = videoHandle;
         endpoint = AudioEndpointInfo.Probe(settings.AudioDevice);
         mpv = new(videoHandle, Options(settings, endpoint));
     }
@@ -85,7 +86,16 @@ internal sealed class Playback : IDisposable
         Stop(); proxy.Dispose(); proxy = new(); origin = null;
         if (accessOrigin != null) { origin = new Uri(accessOrigin); proxy.SetAccess(accessOrigin,prefix ?? "/",headers); }
     }
-    string Url(string url, LiveTimeline.Startup? startup = null) => proxy.Register(new Uri(url, UriKind.RelativeOrAbsolute).IsAbsoluteUri ? url : new Uri(origin ?? throw new InvalidOperationException(),url).ToString(), startup).ToString();
+    /// <summary>What mpv opens: a downloaded file (the local plan's http://vela.localhost/vela-downloads/… original
+    /// or sidecar) as its validated path, with no proxy and no credentials; every server URL through the
+    /// origin-scoped proxy. A local URL that fails validation is refused, never proxied.</summary>
+    string Url(string url, LiveTimeline.Startup? startup = null)
+    {
+        if (url.StartsWith(DownloadPaths.Base, StringComparison.OrdinalIgnoreCase))
+            return downloads?.LocalFile(url) ?? throw new InvalidOperationException("The downloaded file is missing");
+        return ServerUrl(url, startup);
+    }
+    string ServerUrl(string url, LiveTimeline.Startup? startup) => proxy.Register(new Uri(url, UriKind.RelativeOrAbsolute).IsAbsoluteUri ? url : new Uri(origin ?? throw new InvalidOperationException(),url).ToString(), startup).ToString();
     public void Update(JsonElement props)
     {
         try

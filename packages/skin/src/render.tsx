@@ -5,7 +5,7 @@ import { sameRouteHost } from './route-host';
 import { GRID_DRAWN, GRID_OPEN, gridFocus, type GridFocus, type GridKey } from './grid-focus';
 import { LAZY_STILL_MS, gridDrawn, lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach, scrollAudience, type LazySample } from './lazy-items';
 import { WebLibraryGrid } from './web-library-grid';
-import { msg } from '@vela/core';
+import { drawnAs, msg } from '@vela/core';
 import { heroResumeLayout, restartAction, secondaryPlayAction } from './restart-action';
 import { CardContextMenu, type CardMenuAnchor, type CardMenuOpenMode } from './widgets/card-context-menu';
 import { visibleRowItems } from './row-visible';
@@ -41,7 +41,7 @@ import { useFocusStyles } from './focus';
 import { focusStyle } from './focus-style';
 import { isFocusVisible } from './focus-visible';
 import { RouteFocusContext, useRouteFocus, useRouteFocusContext, viewerPressedSince } from './route-focus';
-import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
+import { RevealContext, homeFocus, leaveHomeCard, noteTopBar, revealer, revealing, type HomeFocus } from './tv-reveal';
 import { useFocusedTVKeys } from './tv-keys';
 import { selectEnv } from './host-source';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
@@ -157,6 +157,7 @@ interface RouteLayoutValue {
 const RouteLayout = createContext<RouteLayoutValue | null>(null);
 /** What a host draws first in a route's own scroll, before the document's nodes (SkinRoute's `lead`). */
 const RouteLead = createContext<ReactNode>(null);
+const HomeScrollFocus = createContext<HomeFocus | null>(null);
 /** A horizontal row's scroll, which its lazily drawn items hear of (LazyRepeat). */
 const RowScroll = createContext<ScrollListeners | null>(null);
 const LoadingLibraryNav = createContext(false);
@@ -956,6 +957,14 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   };
   useEffect(() => () => { if (route && scrolled.current) host.setFlag('keep-page-scrolled', false); }, []);
   const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY, viewport.height) : null), [route, viewport.height]);
+  const parentHomeFocus = useContext(HomeScrollFocus);
+  const homePage = androidTV && !!route && env.route === 'home';
+  const homeRows = homePage ? env.home?.rows : undefined;
+  const routeHomeFocus = useMemo(() => homePage ? homeFocus(scrollRef, offsetY) : null, [homePage]);
+  useLayoutEffect(() => {
+    if (!routeHomeFocus || !homeRows) return;
+    return routeHomeFocus.restore(homeRows.map(row => ({ key: drawnAs(row), cards: row.items.map(card => card.id) })));
+  }, [routeHomeFocus, homeRows]);
   const inHero = !!heroParent || !!hero;
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
@@ -985,13 +994,16 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     const y = e.clientY ?? e.nativeEvent?.clientY ?? e.nativeEvent?.pageY ?? 0;
     setCardMenu({ mode: 'pointer', anchor: { kind: 'point', point: { x, y } } });
   }, [cardPrimary?.action, cardPrimary?.arg]);
-  useFocusedTVKeys(ui.focus && !!cardPrimary, event => {
+  const tvMenuOpen = Platform.isTV && cardMenu !== null && !!cardPrimary;
+  // The TV modal can take focus in a separate window without blurring the opener.
+  const cardUi = tvMenuOpen ? { hover: false, focus: false, active: false } : ui;
+  useFocusedTVKeys(cardUi.focus && !!cardPrimary, event => {
     if (!cardPrimary) return;
     // Android TV's Menu key opens the card's menu; tvOS's Menu is Back (it reaches here while anything
     // holds Back, a section's root included), so there only a long select does.
     if (event.eventType === 'longSelect' || (event.eventType === 'menu' && Platform.OS !== 'ios')) openAnchoredMenu('tv');
   });
-  const rows = rowsFor(node, ctx, env, ui, parentGroup, disabled);
+  const rows = rowsFor(node, ctx, env, cardUi, parentGroup, disabled);
   const { own, inherited } = split(rows);
   const text = inheritFrom(parentText, inherited, viewport);
   const parentDirection = useContext(Direction);
@@ -1012,7 +1024,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const report = useCallback((kind: 'hover' | 'focus', on: boolean) => {
     setGroupUi(g => (g[kind] === on ? g : { ...g, [kind]: on }));
   }, []);
-  const groupValue = useMemo<GroupState | null>(() => (node.group ? { ...groupUi, report } : parentGroup), [node.group, groupUi, report, parentGroup]);
+  const groupValue = useMemo<GroupState | null>(() => (node.group ? { ...(tvMenuOpen ? { hover: false, focus: false } : groupUi), report } : parentGroup), [node.group, groupUi, report, parentGroup, tvMenuOpen]);
   const set = (kind: keyof Interaction, on: boolean) => {
     setUi(u => (u[kind] === on ? u : { ...u, [kind]: on }));
     if (kind !== 'active') groupValue?.report(kind, on);
@@ -1067,7 +1079,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   // A focused control always shows it, but in its document's own focus look where it has one (a
   // card's lift, a button's fill): the shared ring is only for controls the document left without.
   // A stop the document marks (an About line) is a line of text: its ring goes around it.
-  const focusRing = ui.focus && (!!node.press || stop) && !focusLook(node) ? focusStyle(style.transform, env.still, !node.press && marked) : undefined;
+  const focusRing = cardUi.focus && (!!node.press || stop) && !focusLook(node) ? focusStyle(style.transform, env.still, !node.press && marked) : undefined;
   const vertical = !!route || (!!fx.scrollY && !fx.scrollX);
   const stops = Platform.isTV && vertical ? readingStops(node) : undefined;
   const children = node.children.map((child, i) => stops?.has(i)
@@ -1367,6 +1379,11 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onFocus={event => {
           const visible = isFocusVisible(event.currentTarget);
           set('focus', visible);
+          if (androidTV) {
+            if (parentHomeFocus && ctx.card && ctx.row && buttonRef.current) {
+              parentHomeFocus.focus(drawnAs(ctx.row), ctx.card.id, buttonRef.current);
+            } else leaveHomeCard();
+          }
           if (heroButton && buttonRef.current) buttonCarry?.focused(buttonRef.current, true);
           if ((Platform.isTV || web) && (inHero || (heroControl && visible))) holdHero(host.setFlag, true, Platform.isTV);
           routeFocus?.focused();
@@ -1470,6 +1487,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   // passes its parent's group, and a band or reading stop below an ancestor's resets it only where
   // one is set. Each is fixed by the node and where it sits, so the tree's shape never changes.
   const ownBand = Platform.isTV && (vertical || node.id === 'vela-library-alternative');
+  if (routeHomeFocus) element = <HomeScrollFocus.Provider value={routeHomeFocus}>{element}</HomeScrollFocus.Provider>;
   let provided: ReactNode = routeReveal ? <RevealContext.Provider value={routeReveal}>{element}</RevealContext.Provider> : element;
   if (readingStop) provided = <ReadingStop.Provider value={false}>{provided}</ReadingStop.Provider>;
   if (ownBand !== band) provided = <Band.Provider value={ownBand}>{provided}</Band.Provider>;

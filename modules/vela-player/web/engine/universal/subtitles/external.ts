@@ -1,3 +1,5 @@
+import { localMediaURL } from '../../local-media';
+
 export class SubtitleHTTPError extends Error {
   constructor(readonly status: number) {
     super(`Subtitle document HTTP ${status}`);
@@ -15,8 +17,9 @@ export async function readSubtitleDocumentResponse(
   policy?: import('../../media-auth').MediaRequestPolicy,
 ): Promise<SubtitleDocumentResponse> {
   const parsed = new URL(url, location.href);
+  const local = !!localMediaURL(url) && policy?.allows(parsed);
   if (
-    !['https:', 'http:'].includes(parsed.protocol) ||
+    (!local && !['https:', 'http:'].includes(parsed.protocol)) ||
     (policy ? !policy.allows(parsed) : parsed.origin !== location.origin) ||
     parsed.username ||
     parsed.password

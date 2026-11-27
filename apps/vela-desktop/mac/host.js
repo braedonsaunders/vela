@@ -1,6 +1,10 @@
 'use strict';
 const path = require('node:path');
 const { existsSync } = require('node:fs');
+const { downloadsRoot, localizePlayback } = require('../downloads-paths');
+// A downloaded title plays from disk: its vela-app://app/vela-downloads/ URLs become file:// URLs of the
+// validated local files, which AetherEngine opens directly (no media access headers apply to file URLs).
+const downloads = () => downloadsRoot(require('electron').app.getPath('userData'));
 let addon;
 function load() {
   if (!existsSync(path.join(process.resourcesPath, 'AetherEngine_AetherEngine.bundle')))
@@ -46,9 +50,28 @@ exports.create = async ({ window, emit }) => {
       emit(event, value);
     }
   }, 50);
+  // The Swift session stops on every grant change. A local file needs no grant, so while one plays a
+  // grant change waits, and is applied before the next plan that is not local (server URLs always load
+  // under the latest grant, exactly as before).
+  let local = false;
+  let pending = null;
   return {
-    update: props => call('update', props),
-    setAccess: access => call('access', access),
+    update: props => {
+      const next = localizePlayback(props, downloads());
+      if (next && typeof next === 'object' && 'plan' in next) {
+        const plan = next.plan;
+        const selected = plan?.paths?.find?.(item => item?.id === plan.selectedPathId);
+        const isLocal = typeof selected?.url === 'string' && selected.url.startsWith('file:');
+        if (!isLocal && pending) { const { access } = pending; pending = null; call('access', access); }
+        local = isLocal;
+      }
+      return call('update', next);
+    },
+    setAccess: access => {
+      if (local) { pending = { access }; return; }
+      pending = null;
+      return call('access', access);
+    },
     setCaptionInsets: insets => call('caption-insets', insets),
     setBounds: bounds => call('bounds', bounds),
     diagnostics: () => call('diagnostics'),

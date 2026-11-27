@@ -19,7 +19,8 @@ export const createWebPlayerHost: CreateWebPlayerHost = (element, initialProps, 
   let planRevision = -1;
   let lastServerError: VelaPlayerProps['serverError'];
   const ambient = props.ambient === true;
-  const media = new ControllerMediaAccess(options.access);
+  const localPlan = (value: VelaPlayerProps) => value.plan?.sessionId.startsWith('local-') === true;
+  const media = new ControllerMediaAccess(() => localPlan(props) ? null : options.access());
   const runtimes = bundledRuntimeServices(options.assetBaseURL);
   const surface = createBrowserSurface(element, initialProps.videoFill);
   const events = createViewEvents(
@@ -80,7 +81,7 @@ export const createWebPlayerHost: CreateWebPlayerHost = (element, initialProps, 
           plan.sourceGeneration < engine.controller.source ||
           plan.seekGeneration < engine.controller.seek);
       if (!stale) {
-        const session = plan ? sessionFromPlan(plan, options.access()?.origin ?? location.href) : next.session!;
+        const session = plan ? sessionFromPlan(plan, localPlan(next) ? location.href : options.access()?.origin ?? location.href) : next.session!;
         if (!session.id || !Array.isArray(session.sources)) throw new Error('Invalid playback session');
         if (plan) {
           planSession = plan.sessionId;

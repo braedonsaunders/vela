@@ -22,6 +22,7 @@ import { scaleGuide } from './guide-fixture';
 import { archivePlan, archiveRange, catchUpFeature, checkTimeshiftCommand, eventProgramme, flagProgramme, goLive, withArchives } from './catch-up';
 import { admitTile, createGroup, endGroup, initSports, liveEventOnChannel, placeTile, capTileHeight, replanTile, setWatchProgramme, sportsAdmin, sportsEnabled, sportsLogo } from './sports';
 import { screensAdmin, screensApi, screensBootstrap } from './screens';
+import { embedStub, servedExtras, trailerEmbed, trailerEmbedAdmin, trailerEmbedFeature } from './trailer-embed';
 const scaleCount = Number(process.env.VELA_MOCK_GUIDE_SCALE);
 const scaleFixture = scaleCount === 1000 || scaleCount === 10000 ? scaleGuide(scaleCount) : undefined;
 const channels = scaleFixture?.channels ?? defaultChannels;
@@ -77,7 +78,7 @@ const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevisio
   avatar: { id: 'viewer-demo', kind: 'person', tag: '1', sizes: [{ width: 240, height: 240, url: '/vela/v0/images/plexavatar-viewer-demo' }] } };
 let viewerRevision = 1;
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
-const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Demo Server', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', plexHomeProfiles: process.env.VELA_MOCK_PLEX_HOME === '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, ...(process.env.VELA_MOCK_UNIFIED_SEARCH === '1' ? { unifiedSearch: yes } : {}), aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes, playlists: { available: true, maxEntries: 5000 } } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes, adaptiveHLS: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Demo Server', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', plexHomeProfiles: process.env.VELA_MOCK_PLEX_HOME === '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, ...(process.env.VELA_MOCK_UNIFIED_SEARCH === '1' ? { unifiedSearch: yes } : {}), aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes, notInterested: { available: process.env.VELA_MOCK_NOT_INTERESTED !== '0', thumbsUp: process.env.VELA_MOCK_THUMBS_UP !== '0' }, playlists: { available: true, maxEntries: 5000 } } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes, adaptiveHLS: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
 // Music, books and audiobooks (docs/media-kinds.md). VELA_MOCK_OLD=1 is a server from before them,
 // and the VELA_MOCK_LAB=1 preset mirrors a lab server's video-only libraries.
 const mediaEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_LAB !== '1';
@@ -109,6 +110,13 @@ if (mediaEnabled && process.env.VELA_MOCK_LYRICS === '1') capabilities.features.
 const experiencesEnabled = mediaEnabled && process.env.VELA_MOCK_NO_EXPERIENCES !== '1';
 // Loudness levelling and AutoMix markers on music tracks; VELA_MOCK_NO_LOUDNESS=1 is an Ether without them.
 if (mediaEnabled && process.env.VELA_MOCK_NO_LOUDNESS !== '1') capabilities.features.loudness = { available: true, album: true, fades: true };
+// YouTube trailers in the client embed (trailer-embed.ts): VELA_MOCK_TRAILER_EMBED, POST /__admin/trailer-embed.
+function advertiseTrailerEmbed() {
+  const feature = trailerEmbedFeature();
+  if (feature) capabilities.features.trailerEmbed = feature;
+  else delete capabilities.features.trailerEmbed;
+}
+advertiseTrailerEmbed();
 if (experiencesEnabled) capabilities.features.libraryExperiences = { available: true, experiences: ['watch', 'listen', 'read', 'gallery', 'live'] };
 // Plugin levels (concerts under music artists, rows per recommended tab). VELA_MOCK_NO_LEVELS=1 is
 // a server from before them: no capability, no Concerts tab, no childCounts and no video children.
@@ -230,7 +238,10 @@ function signedArtwork(g: Grant, id: string, kind: V.ArtworkRef['kind']): V.Artw
 const personArtwork = (g: Grant) => signedArtwork(g, 'mara-vale', 'person');
 function receipt(g: Grant, value: string) { const p = Buffer.from(`${g.id}|${value}`).toString('base64url'); return `${p}.${mac(p)}`; }
 function validReceipt(g: Grant, value: string) { if (typeof value !== 'string') return false; const [p, s] = value.split('.'); try { return s === mac(p) && Buffer.from(p, 'base64url').toString().startsWith(`${g.id}|`); } catch { return false; } }
-function boundRow(g: Grant, row: V.Row): V.Row { return { ...row, receiptToken: receipt(g, row.id), items: row.items.map(i => ({ ...i, receiptToken: receipt(g, i.id) })) }; }
+function boundRow(g: Grant, row: V.Row): V.Row {
+  const items = row.items.filter(item => item.kind !== 'title' || !notInterested(g, item.title.id));
+  return { ...row, receiptToken: receipt(g, row.id), items: items.map(item => ({ ...presentEntry(g, item), receiptToken: receipt(g, item.id) })) };
+}
 function page<T>(items: T[], url: URL, g: Grant, scope: string, defaultLimit = 50): V.Page<T> {
   const n = Number(url.searchParams.get('limit') ?? defaultLimit); if (!Number.isInteger(n) || n < 1 || n > 100) fail('request', 'invalid_limit', 'Limit must be 1–100');
   let offset = 0, expires = Date.now() + 3600000; const cursor = url.searchParams.get('cursor');
@@ -270,7 +281,29 @@ function signedMediaPortrait(g: Grant, personId: string): V.ArtworkRef {
 }
 /** A title as this viewer sees it (books carry the viewer's reading progress). A server without
  * plugin levels counts an artist's albums alone and sends no per-level counts. */
-const present = (g: Grant, title: V.Title): V.Title => title.media ? withReading(g.viewer.id, levelsEnabled || !title.media.childCounts ? title : withoutLevels(title)) : title;
+const feedback = new Map<string, Map<string, { notInterested: boolean; thumbsUp: boolean }>>();
+const titleFeedback = (g: Grant, id: string) => feedback.get(g.viewer.id)?.get(id) ?? { notInterested: false, thumbsUp: false };
+const notInterested = (g: Grant, id: string) => titleFeedback(g, id).notInterested;
+function updateFeedback(g: Grant, id: string, body: Partial<V.WatchRequest>) {
+  if (body.notInterested === undefined && body.thumbsUp === undefined) return;
+  if (body.notInterested === true && body.thumbsUp === true) fail('request', 'invalid_request', 'Choose one title reaction');
+  const feature = capabilities.features.notInterested;
+  if (!feature?.available || body.thumbsUp !== undefined && !feature.thumbsUp) fail('request', 'feedback_unavailable', 'Title feedback is unavailable');
+  const previous = titleFeedback(g, id);
+  const hidden = body.notInterested === true || (body.notInterested !== false && body.thumbsUp !== true && previous.notInterested);
+  const up = body.notInterested !== true && (body.thumbsUp ?? previous.thumbsUp);
+  const titles = feedback.get(g.viewer.id) ?? new Map();
+  if (hidden || up) titles.set(id, { notInterested: hidden, thumbsUp: up });
+  else titles.delete(id);
+  feedback.set(g.viewer.id, titles);
+  feedChanged();
+}
+const present = (g: Grant, title: V.Title): V.Title => {
+  const value = title.media ? withReading(g.viewer.id, levelsEnabled || !title.media.childCounts ? title : withoutLevels(title)) : title;
+  return capabilities.features.notInterested?.available ? { ...value, watch: {
+    positionSeconds: 0, played: false, favorite: false, watchlisted: false, ...value.watch, ...titleFeedback(g, value.id),
+  } } : value;
+};
 function withoutLevels(title: V.Title): V.Title {
   const { childCounts, ...media } = title.media!;
   return { ...title, media: { ...media, childCount: childCounts?.album ?? 0 } };
@@ -281,7 +314,7 @@ function childrenFor(id: string, url: URL): V.Title[] {
   if (!levelsEnabled) return mediaChildren(id).filter(child => !isVideoChild(child));
   return mediaChildren(id, role || undefined);
 }
-const presentEntry = (g: Grant, entry: V.RowEntry): V.RowEntry => entry.kind === 'title' && entry.title.media ? { ...entry, title: present(g, entry.title) } : entry;
+const presentEntry = (g: Grant, entry: V.RowEntry): V.RowEntry => entry.kind === 'title' ? { ...entry, title: present(g, entry.title) } : entry;
 /** A row's items' media role, as Ether reads it: the declared role, else the title's kind. */
 const roleOf = (title: V.Title) => title.media?.role && title.media.role !== 'item' ? title.media.role : title.kind;
 /** A row of titles with Ether's Recommendations presentation (card, role, and any layout, personal, library, experience). */
@@ -363,7 +396,27 @@ function recordPlayback(session: Session, ended: boolean): void {
   viewer.policyRevision = `mock-${++viewerRevision}`;
   feedChanged();
 }
-function homeScope(g: Grant) { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows, mediaHomeRows(g)]))}`; }
+const squareCollections: V.Row = {
+  id: 'square-collections', name: 'Square collections', purpose: 'collection', role: 'collection',
+  card: 'square', receiptToken: '', continuation: 'exhausted',
+  items: rows.filter(row => row.purpose === 'collection').slice(0, 3).map(row => {
+    const art = artwork(`square-collection-${row.id}`);
+    return {
+      id: `square-collections:${row.id}`, kind: 'collection', targetId: row.id, name: row.name,
+      itemCount: row.items.length, receiptToken: '',
+      artwork: [{ ...art, sizes: art.sizes.map(size => ({ ...size, height: size.width })) }],
+    };
+  }),
+};
+function watchlistRows(): V.Row[] {
+  const items = allTitles.filter(title => title.watch?.watchlisted)
+    .sort((a, b) => (watchlistedAt.get(b.id) ?? 0) - (watchlistedAt.get(a.id) ?? 0))
+    .map(title => ({ id: title.id, kind: 'title' as const, title, receiptToken: '' }));
+  return items.length ? [{ id: 'watchlist', name: 'Watchlist', purpose: 'watchlist', items, receiptToken: '', continuation: 'exhausted' }] : [];
+}
+const watchlistedAt = new Map<string, number>();
+let watchlistOrder = 0;
+function homeScope(g: Grant) { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows, mediaHomeRows(g), squareCollections]))}`; }
 function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
   const source = row.purpose === 'continue' ? { ...row, items: row.items.filter(item => item.kind !== 'title' || !removedContinue.has(item.title.id)) } : row;
   const bound = boundRow(g, source);
@@ -404,7 +457,7 @@ const labHomeRows: V.Row[] = [
 /** Home's page in order: progress rows, media rows, the catalogue's rows, and a plugin's surface
  * row where the page places it (after Top 10), as Ether lists them. */
 function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = [], snapshot = rowSnapshot): V.Page<V.Row | V.SurfaceRow> {
-  const ordered: (V.Row | V.SurfaceRow)[] = [...progressRows(), ...mediaHomeRows(g), ...rows];
+  const ordered: (V.Row | V.SurfaceRow)[] = [...watchlistRows(), ...progressRows(), ...mediaHomeRows(g), ...rows, squareCollections];
   const top = ordered.findIndex(row => row.id === 'row-top10');
   ordered.splice(top + 1, 0, ...surfaces);
   const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}:${surfaces.map(row => row.id).join(',')}`, labPreset ? 5 : 2);
@@ -852,7 +905,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     let items = libraryEntries(library.id, tab?.level).map(e => presentEntry(g, e)).filter(e => {
       if (e.kind !== 'title') return true;
       const t = e.title;
-      if (isHiddenDuplicateTitle(g.viewer.id, t.id)) return false;
+      if (notInterested(g, t.id) || isHiddenDuplicateTitle(g.viewer.id, t.id)) return false;
       if (q.get('query') && !t.name.toLowerCase().includes(q.get('query')!.toLowerCase())) return false;
       for (const facet of options.filters.facets ?? []) { const wanted = q.getAll(`facet.${facet.id}`); if (wanted.length && !facetValues(e, facet.id).some(value => wanted.includes(value))) return false; }
       return (!collectionId || t.id === titles[0]!.id) && (!kind || kind === t.kind) && (!genre || t.genres.some(g => g.toLowerCase() === genre.trim().toLowerCase()))
@@ -895,7 +948,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   if (method === 'POST' && path === '/auth/revoke') { if (body.refreshToken !== g.refresh) fail('auth', 'invalid_refresh', 'Refresh does not belong to this grant'); revoke(g); return json({ accepted: true }); }
   if (method === 'GET' && path === '/bootstrap') {
     if (bootstrapDelayMs) await Bun.sleep(bootstrapDelayMs);
-    const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, ...(longHeroes ? { title: { ...hero.title, name: `${hero.title.name}: The Long Way Round to the Edge of Everything` } } : {}), receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
+    const heroes = featuredSources.map(({ rowId, ...hero }): V.Hero => ({ ...hero, title: present(g, hero.title), ...(longHeroes ? { title: { ...hero.title, name: `${hero.title.name}: The Long Way Round to the Edge of Everything` } } : {}), receiptToken: receipt(g, `hero:${hero.title.id}`), previewOnFocus: rows.find(row => row.id === rowId)?.previewOnFocus === true }));
     const firstPage = new URL(url); firstPage.search = '';
     // Plugin screens and surfaces, only for a client that says its renderer (screens.ts).
     const { navigation, surfaces, homeRows: surfaceRows } = screensBootstrap(req, g.viewer.id);
@@ -942,7 +995,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
   if (method === 'GET' && rowMatch) {
-    const r = mintedRow(decodeURIComponent(rowMatch[1]!), [...progressRows(), ...rows, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])]);
+    const r = mintedRow(decodeURIComponent(rowMatch[1]!), [...watchlistRows(), ...progressRows(), ...rows, squareCollections, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])]);
     return cached(req, minted(homeRow(g, r, url)), `${g.id}:${rowSnapshot}`);
   }
   const versionsMatch = /^\/titles\/([^/]+)\/versions(?:\/(choice))?$/.exec(path);
@@ -981,6 +1034,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     if (method === 'GET' && action === 'children') return cached(req, page(childrenFor(mediaItem.id, url).map(t => present(g, t)), url, g, `children:${mediaItem.id}:${url.searchParams.get('role') ?? url.searchParams.get('level') ?? ''}`), g.id);
     if (method === 'GET' && action === 'extras') return cached(req, { items: [] } satisfies V.ExtrasResponse, g.id);
     if (method === 'POST' && action === 'watch') {
+      updateFeedback(g, mediaItem.id, body);
       mediaItem.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false };
       for (const key of ['played', 'favorite', 'watchlisted'] as const) if (typeof body[key] === 'boolean') mediaItem.watch[key] = body[key];
       // Played/unplayed on a book is the viewer's own reading state; unplayed clears the progress.
@@ -988,7 +1042,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       if (body.continueWatching === false) removedContinue.add(mediaItem.id);
       if (typeof body.played === 'boolean' || body.continueWatching === false) feedChanged();
       viewer.policyRevision = `mock-${++viewerRevision}`;
-      return json({ accepted: true } satisfies V.Ack);
+      return json({ accepted: true, watch: present(g, mediaItem).watch } satisfies V.WatchResponse);
     }
     if (method === 'POST' && (action === 'read' || action === 'reading-progress') && !mediaItem.media?.reading) fail('request', 'not_readable', 'Only books open in the reader');
     if (method === 'POST' && action === 'read') {
@@ -1046,12 +1100,13 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const mockTitle = process.env.VELA_MOCK_RAW_RATING === '1' && raw.title.id === 'title-1-1'
       ? { ...raw.title, rating: 'gb/U' }
       : raw.title;
-    const d = { ...raw, title: mockTitle, seasons: scaledSeasons, cast: raw.cast.map(person => person.artwork ? { ...person, artwork: personArtwork(g) } : person) };
+    const d = { ...raw, title: present(g, mockTitle), seasons: scaledSeasons?.map(title => present(g, title)), episodes: raw.episodes?.map(title => present(g, title)), cast: raw.cast.map(person => person.artwork ? { ...person, artwork: personArtwork(g) } : person) };
     if (method === 'POST' && titleMatch[2] === 'download') {
       return json(await issueDownload(g.id, g.viewer.id, d, body));
     }
     if (method === 'POST' && titleMatch[2] === 'watch') {
       const t = allTitles.find(t => t.id === titleMatch[1])!;
+      updateFeedback(g, t.id, body);
       t.watch ??= { positionSeconds: 0, played: false, favorite: false, watchlisted: false };
       if (body.offline === true) {
         if (applyOfflineWatch(t.watch, body)) feedChanged();
@@ -1059,12 +1114,14 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       }
       for (const key of ['played','favorite','watchlisted'] as const) if (typeof body[key] === 'boolean') t.watch[key] = body[key];
       if (body.continueWatching === false) removedContinue.add(t.id);
-      if (typeof body.played === 'boolean' || body.continueWatching === false) feedChanged();
+      if (body.watchlisted === true) watchlistedAt.set(t.id, ++watchlistOrder);
+      if (body.watchlisted === false) watchlistedAt.delete(t.id);
+      if (typeof body.played === 'boolean' || typeof body.watchlisted === 'boolean' || body.continueWatching === false) feedChanged();
       viewer.policyRevision = `mock-${++viewerRevision}`;
-      return json({ accepted: true });
+      return json({ accepted: true, watch: present(g, t).watch } satisfies V.WatchResponse);
     }
     if (method === 'GET' && !titleMatch[2] && coldTitle(d.title.id)) return partial({ ...d, extras: [], pending: ['extras'], refreshAfterMs: 2000 });
-    if (method === 'GET' && titleMatch[2] !== 'download') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: d.extras } : d, g.id);
+    if (method === 'GET' && titleMatch[2] !== 'download') return cached(req, titleMatch[2] === 'children' ? page(d.seasons ?? d.episodes ?? [], url, g, d.title.id) : titleMatch[2] === 'extras' ? { items: servedExtras(d).extras } : servedExtras(d), g.id);
   }
   if (method === 'POST' && path === '/search') {
     if (typeof body.query !== 'string' || !Number.isInteger(body.generation) || !['fast', 'descriptive', ...(capabilities.features.unifiedSearch ? ['auto'] : [])].includes(body.mode)) fail('request', 'invalid_search', 'Query, generation and mode required');
@@ -1079,7 +1136,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const within = (id: string): void => { if (!libraryIds || libraryIds.has(id)) return; libraryIds.add(id); if (mediaScope) for (const child of mediaChildren(id)) within(child.id); };
     if (body.library) for (const entry of libraryEntries(body.library)) if (entry.kind === 'title') within(entry.title.id);
     const terms = body.query.toLowerCase().split(/\s+/).filter(Boolean);
-    const searchable = [...titles, ...(mediaEnabled ? [...mediaGroups.artists, ...mediaGroups.albums, ...(levelsEnabled ? mediaGroups.concerts : []), ...mediaGroups.series, ...mediaGroups.books, ...mediaGroups.audiobooks, ...mediaGroups.shows, ...(mediaScope ? [...mediaGroups.tracks, ...mediaGroups.parts, ...mediaGroups.episodes] : [])].filter(t => !isHiddenDuplicateTitle(g.viewer.id, t.id)).map(t => present(g, t)) : [])];
+    const searchable = [...titles.map(title => present(g, title)), ...(mediaEnabled ? [...mediaGroups.artists, ...mediaGroups.albums, ...(levelsEnabled ? mediaGroups.concerts : []), ...mediaGroups.series, ...mediaGroups.books, ...mediaGroups.audiobooks, ...mediaGroups.shows, ...(mediaScope ? [...mediaGroups.tracks, ...mediaGroups.parts, ...mediaGroups.episodes] : [])].filter(t => !isHiddenDuplicateTitle(g.viewer.id, t.id)).map(t => present(g, t)) : [])];
     // Within a media library a title is found by the people it credits too (an artist's songs, an author's books).
     const named = (t: V.Title) => mediaScope ? `${t.name} ${(t.media?.credits ?? []).map(credit => credit.name).join(' ')} ${(t.media?.parents ?? []).filter(parent => parent.role === 'artist').map(parent => parent.name).join(' ')}` : t.name;
     const found = (byName: boolean) => searchable.filter(t => (!libraryIds || libraryIds.has(t.id)) && (!body.kind || t.kind === body.kind) && terms.every((term: string) => (byName ? named(t) : `${t.name} ${t.summary} ${t.genres.join(' ')}`).toLowerCase().includes(term)));
@@ -1288,7 +1345,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
 async function dispatch(req: Request): Promise<Response> {
   const url = new URL(req.url);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204 });
+  if (req.method === 'GET' && url.pathname.startsWith('/embed/')) return embedStub(url);
   if (url.pathname.startsWith('/__admin/')) {
+    if (req.method === 'GET' && url.pathname === '/__admin/trailer-embed') return json(trailerEmbed);
+    if (req.method === 'POST' && url.pathname === '/__admin/trailer-embed') { const state = trailerEmbedAdmin(await req.json()); advertiseTrailerEmbed(); return json(state); }
     if (req.method === 'GET' && url.pathname === '/__admin/live-faults') return json(liveFaults);
     if (req.method === 'POST' && url.pathname === '/__admin/live-faults') { const data = await req.json(); for (const key of Object.keys(liveFaults) as (keyof typeof liveFaults)[]) if (Number.isFinite(data[key]) && data[key] >= 0) liveFaults[key] = Math.min(60000, Math.floor(data[key])); return json(liveFaults); }
     if (url.pathname === '/__admin/original') {
@@ -1344,7 +1404,24 @@ async function dispatch(req: Request): Promise<Response> {
       for (const disconnect of listeners) disconnect();
       return json({ dropped: listeners.length, expired });
     }
+    const downloadWatch = /^\/__admin\/download-watch\/([a-z0-9-]+)$/.exec(url.pathname);
+    if (downloadWatch && process.env.VELA_MOCK_DOWNLOADS === '1') {
+      const title = allTitles.find(item => item.id === downloadWatch[1]);
+      if (!title) return new Response(null, { status: 404 });
+      if (req.method === 'GET') return json(title.watch ?? null);
+      if (req.method === 'PUT') {
+        title.watch = await req.json() ?? undefined;
+        feedChanged();
+        return json(title.watch ?? null);
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/__admin/catch-up-fixture') return json(archiveFixture);
+    if (req.method === 'POST' && url.pathname === '/__admin/remint-home') {
+      const { bootstrapStaleReads } = await req.json();
+      if (bootstrapStaleReads === 1) faults.bootstrapStaleReads = 1;
+      feedChanged();
+      return json({ accepted: true });
+    }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; if ('refreshAbandonMs' in data) { abandonedRefreshKeys.clear(); refreshAbandonArmed = faults.refreshAbandonMs > 0; } return json(faults); }
     if (req.method === 'POST' && url.pathname === '/__admin/sports') return json(sportsAdmin(await req.json()));
@@ -1393,12 +1470,12 @@ async function dispatch(req: Request): Promise<Response> {
     if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
     return response;
   }
-  const download = /^\/vela\/v0\/download\/([a-f0-9-]+)$/.exec(url.pathname);
+  const download = /^\/vela\/v0\/download\/([a-f0-9-]+)(\/subtitles\.vtt)?$/.exec(url.pathname);
   if (download && (req.method === 'GET' || req.method === 'HEAD')) {
     return serveDownload(req, download[1]!, owner => {
       const grant = grants.get(owner);
       return !!grant && !grant.revoked && grant.expires > Date.now();
-    });
+    }, !!download[2]);
   }
   // Reading grants: opaque short-lived document URLs, fetched without the bearer.
   const reading = /^\/reading\/media\/([a-f0-9]+)\/([^/]+)$/.exec(url.pathname);

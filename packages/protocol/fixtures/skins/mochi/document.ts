@@ -12,7 +12,7 @@ import { collection } from './collection';
 import { home } from './home';
 import { gridCard, library } from './library';
 import { asset, boing, id, version } from './look';
-import { shell } from './shell';
+import { mochiMenu, shell } from './shell';
 import { title } from './title';
 
 const fade = (duration: number) => ({ keyframes: 'dissolve', duration });
@@ -77,7 +77,7 @@ const each = <T extends Record<string, Node>>(o: T): T =>
 
 export default {
   schema: 1,
-  renderer: 21,
+  renderer: 22,
   id,
   name: 'Mochi',
   version,
@@ -417,6 +417,7 @@ export default {
   // Home draws its own loading and failure states.
   status: true,
   templates: each({ card, gridCard, shelf: shelf(true), relatedShelf: shelf(false) }),
+  profileMenus: { default: mochiMenu },
   slots: each({ shell, home }),
   routes: each({ title: episodePage(title), library, collection, auth }),
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { scrim: '$scrim' } },

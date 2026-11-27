@@ -28,7 +28,7 @@ import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { PlexProfileDialog, ServersProvider } from '@vela/skin/src/widgets/auth';
 import { LiveProvider, useLiveView } from '@vela/skin/src/widgets/guide';
 import { GuideRowDrawing, GuideSurface } from '@vela/guide-native';
-import { holdBack } from '@vela/skin/src/menu-key';
+import { holdBack, useBackHeld } from '@vela/skin/src/menu-key';
 import { useDispatcher } from './actions';
 import { config } from './data/config';
 import { parityAudioSpec, startParityAudio } from './parity';
@@ -49,6 +49,9 @@ setQuietPlayback(__DEV__ || !!config.startRoutes || (Platform.OS !== 'web' && !!
 import { aboutApp, listenWebHandoff, platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
 import { preferences } from './data/preferences';
+
+/** Device-wide download preferences (Wi-Fi only, storage cap). */
+export const DOWNLOAD_SETTINGS = 'downloads.settings';
 import { usePlayerSettings } from './player-settings';
 import { useSeriesTracks } from './series-tracks';
 import { useLibraryOrders } from './library-orders';
@@ -60,6 +63,8 @@ import { useLast } from '@vela/skin/src/presence';
 const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
+import { appRenderTier } from './render-tier';
+import { WatchFeedbackProvider } from '@vela/skin/src/widgets/watch-feedback';
 import { wireLocalSources } from './local-sources';
 import { useCanVisualize } from './visualizer/availability';
 import { useMediaAccess } from './media-access';
@@ -270,15 +275,17 @@ function useStartRoutes(homeReady: boolean): void {
 function offlineAccess(state: VelaState, pathname: string): boolean {
   if (SIGNED_OUT_ROUTES.includes(pathname)) return true;
   const { downloads, auth } = state;
-  return downloads.supported && downloads.hydrated && !!auth.viewerId &&
-    allowsOfflineRoute(auth.phase, pathname, id => downloads.items.some(item => item.titleId === id && isPlayableDownload(item)));
+  // Signed out after the server refused the session, the viewer's kept downloads still play.
+  const waitingForSignIn = auth.phase === 'signed-out' && downloads.items.some(item => item.awaitingSignIn && isPlayableDownload(item));
+  return downloads.supported && downloads.hydrated && (!!auth.viewerId || waitingForSignIn) &&
+    allowsOfflineRoute(auth.phase, pathname, id => downloads.items.some(item => item.titleId === id && isPlayableDownload(item)), waitingForSignIn);
 }
 
 function useSignedOutGate(state: VelaState): void {
   const { phase } = state.auth;
   const pathname = usePathname();
   const allowed = offlineAccess(state, pathname);
-  const waiting = phase === 'offline' && state.downloads.supported && !state.downloads.hydrated;
+  const waiting = (phase === 'offline' || phase === 'signed-out') && state.downloads.supported && !state.downloads.hydrated;
   useEffect(() => {
     if (!waiting && (phase === 'signed-out' || phase === 'offline') && !allowed) {
       const search = Platform.OS === 'web' ? window.location.search : '';
@@ -329,10 +336,15 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   useEffect(() => { setChoice(preferences.get(preferenceKey) || preferences.get(SKIN_PREFERENCE) || ''); }, [preferenceKey]);
   useEffect(() => {
     void store.appearance.load();
+    try { store.downloads.loadSettings(JSON.parse(preferences.get(DOWNLOAD_SETTINGS) || 'null')); } catch { /* defaults */ }
     const active = () => {
       void store.appearance.load();
       if (store.getState().auth.phase === 'offline') void store.auth.retry();
-      else void store.downloads.replayProgress();
+      else {
+        void store.downloads.replayProgress();
+        // Transfers the network or a closed app interrupted pick up again with fresh credentials.
+        void store.downloads.resumeInterrupted();
+      }
     };
     const subscription = AppState.addEventListener('change', next => {
       if (next === 'active') active();
@@ -444,6 +456,34 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const closeAddToPlaylist = useCallback(() => setPlaylistTarget(null), []);
   // The sheet stays drawn while it leaves (presence.tsx).
   const shownPlaylistTarget = useLast(playlistTarget);
+  const backHeld = useBackHeld();
+  const homeVisible = pathname === '/' && !pickerOpen && !playlistTarget && !state.auth.plexSwitching && !backHeld;
+  useEffect(() => {
+    if (!homeVisible || state.auth.phase !== 'signed-in') return;
+    const web = Platform.OS === 'web';
+    const refresh = () => {
+      if (web ? document.hidden || !document.hasFocus() || document.querySelector('[aria-modal="true"], [role="menu"]')
+        : AppState.currentState !== 'active') return;
+      void store.home.refresh('ambient');
+    };
+    const foreground = AppState.addEventListener('change', next => { if (next === 'active') refresh(); });
+    const focus = Platform.OS === 'android' ? AppState.addEventListener('focus', refresh) : undefined;
+    // Lite devices only read in response to foregrounding; a TV left on Home costs no polling.
+    const idle = appRenderTier() === 'lite' ? undefined : setInterval(refresh, 10 * 60_000);
+    if (web) {
+      window.addEventListener('focus', refresh);
+      document.addEventListener('visibilitychange', refresh);
+    }
+    return () => {
+      foreground.remove();
+      focus?.remove();
+      clearInterval(idle);
+      if (web) {
+        window.removeEventListener('focus', refresh);
+        document.removeEventListener('visibilitychange', refresh);
+      }
+    };
+  }, [store, homeVisible, state.auth.phase]);
   const pickDocument = useCallback((index: number) => {
     if (appearance?.force) return;
     setChoice(documents[index]!.id);
@@ -583,7 +623,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       <LaunchGate ready={launchReady(state.auth.phase, state.home.load, fontsReady, offlineAccess(state, pathname), !!resolved.error, state.home.slow)}
         brandingReady={state.appearance.load === 'ready' || state.appearance.load === 'failed'} branding={appearance?.branding}>
         <Previews store={store} state={state} onHome={pathname === '/' && !pickerOpen} heroIndex={view.heroIndex} still={view.still} searchFocused={view.flags.includes('search-focused')}>
-          {children}
+          <WatchFeedbackProvider inTitle={pathname.startsWith('/title/')}>{children}</WatchFeedbackProvider>
         </Previews>
         {pickerOpen ? <AppearancePicker documents={documents} current={selectedIndex} locked={appearance?.force} image={image} branding={appearance?.branding} onPick={pickDocument} onClose={closePicker} /> : null}
         {shownPlaylistTarget ? <AddToPlaylist key={shownPlaylistTarget.titleId} {...shownPlaylistTarget} open={!!playlistTarget} close={closeAddToPlaylist} /> : null}

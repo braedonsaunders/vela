@@ -32,3 +32,8 @@ test('a fullscreen photo defers the stack until leaving fullscreen', () => {
   expect(surfaceToastPlacement({ ...title, photoFullscreen: true })).toEqual({ top: 166, deferred: true });
   expect(surfaceToastPlacement(title)).toEqual({ top: 166, deferred: false });
 });
+
+test('the Downloads library holds alerts so they never cover its rows', () => {
+  expect(surfaceToastPlacement({ ...base, pathname: '/downloads' })).toEqual({ top: 100, deferred: true });
+  expect(surfaceToastPlacement({ ...base, pathname: '/downloads-other' }).deferred).toBe(false);
+});

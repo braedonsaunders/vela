@@ -1,6 +1,8 @@
-// Offline original-file downloads (iPhone and iPad): the native storage port, the persisted
-// index and progress outbox, space admission (any optional cap plus a 2 GB free-space reserve),
-// viewer and server isolation, and the locally built PlaybackPlan for offline playback.
+// Offline original-file downloads on every client that can hold files (docs/downloads.md): the
+// platform storage port, the persisted index and progress outbox, space admission (any optional
+// cap plus the platform's free-space reserve), viewer and server isolation, resuming interrupted
+// transfers, what a title offers (Download, Save file or nothing), and the locally built
+// PlaybackPlan for offline playback.
 import type * as V from '../wire';
 import { hasMediaDownloads, hasOfflineProgress, type DownloadResolution, type DownloadSidecar, type OfflineProgressEntry } from '../adapter/capabilities';
 import { detailModel } from '../discovery/models';
@@ -35,7 +37,156 @@ export function storedDownloadSettings(value: unknown): DownloadsSettings {
 }
 
 export type DownloadStatus = 'queued' | 'downloading' | 'paused' | 'completed' | 'failed';
-export type DownloadErrorCode = 'forbidden' | 'rate_limited' | 'no_space' | 'network' | 'corrupt' | 'unknown';
+/** `interrupted`: the transfer died with the app, the tab or the network (not the viewer's pause);
+ * the core resumes it, with fresh credentials, as soon as it is online again. */
+export type DownloadErrorCode = 'forbidden' | 'rate_limited' | 'no_space' | 'network' | 'corrupt' | 'interrupted' | 'unknown';
+
+/** What a platform's downloads engine can do. Ports without traits are iOS's background session. */
+export interface DownloadsTraits {
+  /** `background`: iOS URLSession; `service`: Android foreground service; `shell`: a desktop app's
+   * own process; `page`: the browser page (OPFS). */
+  engine: 'background' | 'service' | 'shell' | 'page';
+  /** Whether the Wi-Fi-only setting applies (a metered/cellular network exists). */
+  metered: boolean;
+  /** Free space to keep after every queued transfer; null derives it (see `reserveFor`). */
+  reserveBytes: number | null;
+  /** The desktop can show a stored file in its folder. */
+  reveal: boolean;
+  /** The desktop can save a copy of a stored file elsewhere. */
+  export: boolean;
+  /** Offer Download only while at least this much is free (Android TV); null always offers. */
+  minimumFreeToOffer: number | null;
+  /** Save file without storing (web): which servers' originals it can save. */
+  saveFile: { capability: boolean; headers: boolean } | null;
+}
+
+export const DEFAULT_DOWNLOAD_TRAITS: DownloadsTraits = {
+  engine: 'background', metered: true, reserveBytes: FREE_SPACE_RESERVE_BYTES, reveal: false, export: false,
+  minimumFreeToOffer: null, saveFile: null,
+};
+
+/** Read a port's declared traits defensively over the iOS defaults. */
+export function downloadTraits(value: Partial<DownloadsTraits> | undefined): DownloadsTraits {
+  const traits = { ...DEFAULT_DOWNLOAD_TRAITS, ...(value ?? {}) };
+  const bytes = (n: unknown, fallback: number | null) =>
+    n === null ? null : typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+  return {
+    engine: ['background', 'service', 'shell', 'page'].includes(traits.engine) ? traits.engine : 'background',
+    metered: traits.metered === true,
+    reserveBytes: bytes(traits.reserveBytes, FREE_SPACE_RESERVE_BYTES),
+    reveal: traits.reveal === true,
+    export: traits.export === true,
+    minimumFreeToOffer: bytes(traits.minimumFreeToOffer, null),
+    saveFile: traits.saveFile && typeof traits.saveFile === 'object'
+      ? { capability: traits.saveFile.capability === true, headers: traits.saveFile.headers === true }
+      : null,
+  };
+}
+
+/** The web's reserve when a port leaves it to quota: the larger of 10% of quota and 256 MB. */
+export const WEB_RESERVE_MIN_BYTES = 256_000_000;
+
+/** Free space to keep: the port's fixed reserve, or for a quota-bound origin 10% of quota (at least 256 MB). */
+export function reserveFor(traits: DownloadsTraits, quotaBytes?: number | null): number {
+  if (traits.reserveBytes !== null) return traits.reserveBytes;
+  const quota = typeof quotaBytes === 'number' && Number.isFinite(quotaBytes) && quotaBytes > 0 ? quotaBytes : 0;
+  return Math.max(WEB_RESERVE_MIN_BYTES, Math.floor(quota * 0.1));
+}
+
+/** A browser origin's storage: whether it is persistent (not evicted under pressure) and its quota. */
+export interface DownloadsStorage {
+  persisted: boolean;
+  quotaBytes: number | null;
+  usageBytes: number | null;
+}
+
+/** A Save file request (web): the original fetched straight to a file the viewer keeps. */
+export interface DownloadSaveRequest {
+  url: string;
+  headers: Record<string, string>;
+  fileName: string;
+  mimeType: string;
+  byteLength?: number;
+}
+
+/** What a title's download action offers here. */
+export type DownloadOffer =
+  | { kind: 'download' }
+  | { kind: 'save-file' }
+  | { kind: 'none'; reason: 'unsupported' | 'not-allowed' | 'kind' | 'space' | 'browser' };
+
+/**
+ * One decision for every client: whether a title shows Download, Save file, or nothing.
+ * - no port (tvOS) or not a movie/episode: nothing;
+ * - the server refuses this account (Plex `allowSync`, Ether `features.downloads`, Jellyfin policy): nothing;
+ * - a browser whose storage is not persistent: Save file where the browser can save this server's
+ *   originals (an Ether grant link anywhere; header-authenticated servers need a save picker);
+ * - Android TV below its free-space threshold: nothing (existing downloads stay in the library).
+ */
+export function downloadOffer(params: {
+  supported: boolean;
+  traits: DownloadsTraits;
+  titleKind: string | undefined;
+  serverAllows: boolean;
+  /** Whether this server's originals need credential headers (Plex, Jellyfin, Emby) or are capability links (Ether). */
+  credentials: 'none' | 'headers';
+  persisted: boolean | null;
+  freeBytes: number | null;
+}): DownloadOffer {
+  const { supported, traits, titleKind, serverAllows, credentials, persisted, freeBytes } = params;
+  if (!supported) return { kind: 'none', reason: 'unsupported' };
+  if (titleKind !== 'movie' && titleKind !== 'episode') return { kind: 'none', reason: 'kind' };
+  if (!serverAllows) return { kind: 'none', reason: 'not-allowed' };
+  if (traits.engine === 'page' && persisted === false) {
+    const save = traits.saveFile;
+    if (save && (credentials === 'none' ? save.capability : save.headers)) return { kind: 'save-file' };
+    return { kind: 'none', reason: 'browser' };
+  }
+  if (traits.minimumFreeToOffer !== null && freeBytes !== null && freeBytes < traits.minimumFreeToOffer) {
+    return { kind: 'none', reason: 'space' };
+  }
+  return { kind: 'download' };
+}
+
+/** Explains a `none` offer where the viewer can act on it. */
+export function downloadOfferReason(offer: DownloadOffer): string {
+  if (offer.kind !== 'none') return '';
+  if (offer.reason === 'browser') {
+    return 'This browser can\'t save videos from this server. Use the Vela app on your phone or computer to download it.';
+  }
+  if (offer.reason === 'space') return 'This device doesn\'t have enough free storage for downloads.';
+  return '';
+}
+
+/** A file name for a saved or exported original: the title (and episode), never server IDs or tokens. */
+export function downloadFileName(title: Pick<V.Title, 'name' | 'kind' | 'showName' | 'seasonNumber' | 'episodeNumber' | 'year'>, container: string): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const episode = title.kind === 'episode' && title.seasonNumber != null && title.episodeNumber != null
+    ? `S${pad(title.seasonNumber)}E${pad(title.episodeNumber)}` : '';
+  const parts = title.kind === 'episode'
+    ? [title.showName, episode, title.name]
+    : [title.name, title.year ? `(${title.year})` : ''];
+  const base = parts.filter(Boolean).join(' - ').replace(/ - \(/, ' (')
+    .replace(/[\u0000-\u001f\u007f<>:"/\\|?*]+/g, ' ').replace(/\s+/g, ' ').replace(/^[.\s]+|[.\s]+$/g, '').slice(0, 150).trim() || 'Video';
+  const extension = /^[a-z0-9]{1,8}$/i.test(container) ? container.toLowerCase() : 'mkv';
+  return `${base}.${extension}`;
+}
+
+const REFUSED = Symbol('refused download');
+function refusedDownload(): Error {
+  return Object.assign(new Error('Downloads are not allowed for this account on this server'), { [REFUSED]: true });
+}
+/** The server refused this account (401/403, or its permission says no): not worth retrying. */
+function refusal(error: unknown): boolean {
+  if (error && typeof error === 'object' && REFUSED in error) return true;
+  const status = (error as { status?: unknown } | undefined)?.status;
+  return status === 401 || status === 403;
+}
+
+/** A transfer the core resumes on its own: interrupted (not paused by the viewer), and not refused. */
+export function autoResumable(item: DownloadRecord): boolean {
+  return item.status === 'paused' && item.errorCode === 'interrupted';
+}
 
 /** A previously verified download kept playable while a replacement copy is downloading. */
 export interface VerifiedDownloadCopy {
@@ -79,7 +230,7 @@ export interface DownloadRecord {
   neededBytes?: number;
   createdAt: V.Timestamp;
   completedAt?: V.Timestamp;
-  /** Relative path under `vela-downloads/` (never an absolute container path). */
+  /** Relative path under the port's `vela-downloads/` root (never an absolute path). */
   mediaPath?: string;
   posterPath?: string;
   /** Relative paths under `vela-downloads/` keyed by subtitle track ID. */
@@ -97,6 +248,9 @@ export interface DownloadRecord {
   baselineWatch?: { positionSeconds: number; played: boolean; lastViewedAt?: V.Timestamp };
   /** Kept when replacing an already-completed download until the new file verifies. */
   previousCompleted?: VerifiedDownloadCopy;
+  /** The server refused this viewer's session (a 401): the files and pending progress are kept,
+   * still playable offline, until the same viewer signs in again (docs/downloads.md). */
+  awaitingSignIn?: boolean;
 }
 
 export interface DownloadTransferRequest {
@@ -160,10 +314,30 @@ export interface DownloadsPort {
   removeServer(serverId: string): Promise<void>;
   /** Subscribe to background transfer progress, completion and failure events. */
   subscribe?(listener: (event: DownloadTransferProgress) => void): () => void;
+  /** What this engine can do; absent means iOS's background session. */
+  traits?: Partial<DownloadsTraits>;
+  /** The URL a player or image view uses for a stored file (a desktop shell's own download URL, or
+   * a `blob:` URL on the web). Absent: the relative path resolves against `baseDirectoryUrl()`. */
+  fileUrl?(relativePath: string): Promise<string> | string;
+  /** Desktop: show the title's stored original in the system file manager. */
+  reveal?(serverId: string, viewerId: string, titleId: string): Promise<void>;
+  /** Desktop: save a copy of the stored original where the viewer picks; false when cancelled. */
+  exportCopy?(serverId: string, viewerId: string, titleId: string, fileName: string): Promise<boolean>;
+  /** Web: the origin's storage persistence and quota. */
+  storage?(): Promise<DownloadsStorage>;
+  /** Web: ask the browser to keep this origin's storage; resolves whether it now is persistent. */
+  persist?(): Promise<boolean>;
+  /** Web: fetch the original straight to a file the viewer keeps (no index, no storage). */
+  saveFile?(request: DownloadSaveRequest): Promise<void>;
 }
 
 export interface DownloadsState {
   supported: boolean;
+  traits: DownloadsTraits;
+  /** Web: whether the browser keeps this origin's storage; null where not applicable or unknown. */
+  persisted: boolean | null;
+  /** Web: the origin's storage quota in bytes, when known. */
+  quotaBytes: number | null;
   hydrated: boolean;
   /** Downloads for the currently selected server and viewer. */
   items: DownloadRecord[];
@@ -175,10 +349,15 @@ export interface DownloadsState {
   freeBytes: number | null;
   usedBytes: number;
   error: string;
+  /** Downloads on this server from another viewer whose session was refused, hidden from this viewer. */
+  awaitingElsewhere: number;
 }
 
 export const initialDownloads: DownloadsState = {
   supported: false,
+  traits: DEFAULT_DOWNLOAD_TRAITS,
+  persisted: null,
+  quotaBytes: null,
   hydrated: false,
   items: [],
   allItems: [],
@@ -187,6 +366,7 @@ export const initialDownloads: DownloadsState = {
   freeBytes: null,
   usedBytes: 0,
   error: '',
+  awaitingElsewhere: 0,
 };
 
 /** Whole percent for a transfer whose total size is known. */
@@ -211,7 +391,8 @@ export type SpaceCheckResult =
 /**
  * Space admission before starting or resuming a download:
  * `requestedBytes` (Part.size) plus bytes still owed by queued/active transfers must fit any
- * configured cap and leave at least 2 GB (`FREE_SPACE_RESERVE_BYTES`) free on the volume.
+ * configured cap and leave the platform's reserve free (2 GB, `FREE_SPACE_RESERVE_BYTES`, on
+ * devices and desktops; a share of quota in a browser, where `freeBytes` is quota minus usage).
  */
 export function checkDownloadSpace(params: {
   requestedBytes?: number;
@@ -221,8 +402,11 @@ export function checkDownloadSpace(params: {
   titleId: string;
   freeBytes: number | null;
   capBytes: number | null;
+  reserveBytes?: number;
 }): SpaceCheckResult {
   const { requestedBytes, existingItems, serverId, viewerId, titleId, freeBytes, capBytes } = params;
+  const reserve = params.reserveBytes !== undefined && Number.isFinite(params.reserveBytes) && params.reserveBytes >= 0
+    ? params.reserveBytes : FREE_SPACE_RESERVE_BYTES;
   const target = existingItems.find(item =>
     item.serverId === serverId && item.viewerId === viewerId && item.titleId === titleId);
   const alreadyWritten = target && target.status !== 'completed' ? Math.max(0, target.bytesWritten) : 0;
@@ -260,14 +444,14 @@ export function checkDownloadSpace(params: {
   }
 
   if (freeBytes !== null && Number.isFinite(freeBytes)) {
-    const requiredFree = owedByOthers + remainingForTarget + FREE_SPACE_RESERVE_BYTES;
+    const requiredFree = owedByOthers + remainingForTarget + reserve;
     if (freeBytes < requiredFree) {
       const neededBytes = requiredFree - Math.max(0, freeBytes);
       return {
         allowed: false,
         reason: 'free_space',
         neededBytes,
-        message: `Not enough free storage (${formatDownloadBytes(neededBytes)} more needed to keep 2.0 GB free).`,
+        message: `Not enough free storage (${formatDownloadBytes(neededBytes)} more needed to keep ${formatDownloadBytes(reserve)} free).`,
       };
     }
   }
@@ -288,28 +472,66 @@ export function totalDownloadedBytes(items: readonly DownloadRecord[]): number {
   return total;
 }
 
-/** Downloads visible to the active viewer on the selected server (other Plex Home members' files stay hidden). */
+/**
+ * Downloads visible on the selected server: the active viewer's own (other Plex Home members' files
+ * stay hidden), or, with no viewer signed in, the ones waiting for their viewer to sign in again.
+ */
 export function visibleDownloads(items: readonly DownloadRecord[], serverId: string, viewerId: string): DownloadRecord[] {
-  if (!serverId || !viewerId) return [];
+  if (!serverId) return [];
+  if (!viewerId) return items.filter(item => item.serverId === serverId && item.awaitingSignIn === true);
   return items.filter(item => item.serverId === serverId && item.viewerId === viewerId);
 }
 
-/**
- * Resolve a relative path from `index.json` against the current container's base `vela-downloads/`
- * `file://` URL. Storing relative paths keeps files valid when iOS rotates the app container UUID.
- */
-export function resolveDownloadFileUrl(baseDirectoryUrl: string, relativePath: string): string {
+/** Other viewers' downloads on this server that wait for their own sign-in (hidden from `viewerId`). */
+export function awaitingElsewhere(items: readonly DownloadRecord[], serverId: string, viewerId: string): number {
+  if (!serverId || !viewerId) return 0;
+  return items.filter(item => item.serverId === serverId && item.viewerId !== viewerId && item.awaitingSignIn === true).length;
+}
+
+/** The segments of an index path, refusing anything that could leave its title's directory. */
+export function downloadPathSegments(relativePath: string): string[] {
   const segments = relativePath.trim().replace(/^\/+/, '').split('/');
-  if (segments.some(segment => !segment || segment === '.' || segment === '..' || segment.includes('\\'))) {
+  if (!relativePath.trim() || segments.some(segment => !segment || segment === '.' || segment === '..' ||
+      segment.includes('\\') || /[\u0000-\u001f\u007f]/.test(segment) || /^[a-z]:$/i.test(segment))) {
     throw new Error('Invalid relative download path');
   }
+  return segments;
+}
+
+/**
+ * Whether `baseDirectoryUrl` is a downloads root the core may resolve against: a native `file:///`
+ * directory, or a desktop shell's own download route (`vela-app://app/vela-downloads/`,
+ * `http://vela.localhost/vela-downloads/`): no credentials, query, fragment or encoded separators.
+ */
+export function validDownloadsBase(baseDirectoryUrl: string): boolean {
   // Swift supplies an escaped absolute base URL and raw path components. React Native's URL
   // parser does not implement pathname semantics for file: URLs.
-  if (!/^file:\/\/\/[^?#]+$/.test(baseDirectoryUrl)) {
-    throw new Error('Downloads base directory must be a file: URL');
+  if (/^file:\/\/\/[^?#]+$/.test(baseDirectoryUrl)) return !/(^|\/)\.\.?(\/|$)/.test(baseDirectoryUrl.slice(7));
+  return /^(vela-app:\/\/app|http:\/\/vela\.localhost)\/vela-downloads\/?$/.test(baseDirectoryUrl);
+}
+
+/**
+ * Resolve a relative path from `index.json` against the current base `vela-downloads/` URL.
+ * Storing relative paths keeps files valid when iOS rotates the app container UUID.
+ */
+export function resolveDownloadFileUrl(baseDirectoryUrl: string, relativePath: string): string {
+  const segments = downloadPathSegments(relativePath);
+  if (!validDownloadsBase(baseDirectoryUrl)) {
+    throw new Error('Downloads base directory must be a file: URL or the app\'s download route');
   }
   const base = baseDirectoryUrl.endsWith('/') ? baseDirectoryUrl : `${baseDirectoryUrl}/`;
   return base + segments.map(encodeURIComponent).join('/');
+}
+
+/** Resolves stored relative paths to the URLs players and images use. */
+export type DownloadFileResolver = (relativePath: string) => string;
+
+/** Every stored file a record's verified copy plays or shows: media, sidecars and poster. */
+export function downloadFilePaths(item: DownloadRecord): string[] {
+  const verified: VerifiedDownloadCopy | DownloadRecord =
+    item.status === 'completed' && item.mediaPath ? item : item.previousCompleted ?? item;
+  return [verified.mediaPath, verified.posterPath ?? item.posterPath, ...Object.values(verified.sidecarPaths ?? {})]
+    .filter((path): path is string => typeof path === 'string' && !!path);
 }
 
 /** Whether a record has a verified local copy ready for offline playback (including while a replacement downloads). */
@@ -338,20 +560,21 @@ export function downloadNeedsReplacement(
  */
 export function localPlaybackPlan(
   item: DownloadRecord,
-  baseDirectoryUrl: string,
+  base: string | DownloadFileResolver,
   options?: { positionSeconds?: number; sessionId?: string },
 ): V.PlaybackPlan {
   const verified: VerifiedDownloadCopy | DownloadRecord =
     item.status === 'completed' && item.mediaPath ? item : item.previousCompleted ?? item;
   if (!verified.mediaPath) throw new Error('Download has no verified local media file');
-  const mediaUrl = resolveDownloadFileUrl(baseDirectoryUrl, verified.mediaPath);
+  const resolve: DownloadFileResolver = typeof base === 'string' ? path => resolveDownloadFileUrl(base, path) : base;
+  const mediaUrl = resolve(verified.mediaPath);
   const sidecarPaths = verified.sidecarPaths ?? {};
   const subtitleTracks: V.Track[] = [];
   for (const track of verified.subtitleTracks) {
     if (track.delivery?.kind === 'external') {
       const rel = sidecarPaths[track.id];
       if (!rel) continue;
-      const localUrl = resolveDownloadFileUrl(baseDirectoryUrl, rel);
+      const localUrl = resolve(rel);
       subtitleTracks.push({
         ...track,
         ...(track.url ? { url: localUrl } : {}),
@@ -411,7 +634,7 @@ export function localPlaybackPlan(
 }
 
 /** Build a `DetailModel` from a downloaded record so `/watch/[id]` and title views have metadata offline. */
-export function downloadedDetailModel(item: DownloadRecord, baseDirectoryUrl?: string, artWidth = 2560): DetailModel {
+export function downloadedDetailModel(item: DownloadRecord, base?: string | DownloadFileResolver, artWidth = 2560): DetailModel {
   const model = detailModel({
     title: item.title,
     canPlay: true,
@@ -421,9 +644,9 @@ export function downloadedDetailModel(item: DownloadRecord, baseDirectoryUrl?: s
     crew: [],
   }, undefined, artWidth);
   const posterPath = (item.status === 'completed' ? item.posterPath : item.previousCompleted?.posterPath) ?? item.posterPath;
-  if (posterPath && baseDirectoryUrl && model.title[0]) {
+  if (posterPath && base && model.title[0]) {
     try {
-      const localPoster = resolveDownloadFileUrl(baseDirectoryUrl, posterPath);
+      const localPoster = typeof base === 'string' ? resolveDownloadFileUrl(base, posterPath) : base(posterPath);
       model.title[0] = { ...model.title[0], poster: localPoster, backdrop: model.title[0].backdrop || localPoster };
     } catch {
       // Keep original artwork reference if local poster path cannot be resolved.
@@ -440,9 +663,11 @@ export function allowsOfflineRoute(
   phase: AuthPhase,
   pathname: string,
   hasPlayableDownload: (titleId: string) => boolean,
+  /** Signed out after the server refused the session, with that viewer's downloads kept. */
+  waitingForSignIn = false,
 ): boolean {
   if (pathname === '/sign-in' || pathname === '/connect') return true;
-  if (phase !== 'offline') return false;
+  if (phase !== 'offline' && !(phase === 'signed-out' && waitingForSignIn)) return false;
   if (pathname === '/downloads') return true;
   const watchMatch = /^\/watch\/([^/?#]+)$/.exec(pathname);
   if (watchMatch) {
@@ -469,6 +694,9 @@ export class Downloads {
   private replaying: Promise<void> | undefined;
   private lastAuthPhase: AuthPhase | undefined;
   private hydrating: Promise<void> | undefined;
+  private resuming: Promise<void> | undefined;
+  /** Whether this session asked the browser to keep its storage (see refreshStorage). */
+  private askedPersist = false;
   private unsubscribePort: (() => void) | undefined;
   /** The last non-empty `(serverId, viewerId)` seen in `auth`, so a refused token can clean up its viewer. */
   private activeViewer: { serverId: string; viewerId: string } | undefined;
@@ -480,7 +708,8 @@ export class Downloads {
   ) {
     this.port = platform.downloads;
     if (this.port) {
-      this.box.update('downloads', state => ({ ...state, supported: true }));
+      const traits = downloadTraits(this.port.traits);
+      this.box.update('downloads', state => ({ ...state, supported: true, traits }));
       this.unsubscribePort = this.port.subscribe?.(event => {
         if (!this.state.hydrated) this.pendingTransferEvents.push(event);
         else void this.applyTransferEvent(event).catch(() => {});
@@ -489,9 +718,11 @@ export class Downloads {
     this.box.subscribe(() => this.syncActiveViewer());
     session.onReset((_kind, refused) => {
       if (refused && this.activeViewer) {
+        // A refused session (a restart with fresh keys, sign out everywhere, a token that expired
+        // offline) is not a sign-out: keep the files and the outbox until this viewer is back.
         const { serverId, viewerId } = this.activeViewer;
         this.activeViewer = undefined;
-        void this.removeViewer(serverId, viewerId).catch(() => {});
+        void this.awaitSignIn(serverId, viewerId).catch(() => {});
       } else {
         this.syncVisible();
       }
@@ -506,14 +737,19 @@ export class Downloads {
     const { serverId, viewerId, phase } = this.box.get().auth;
     const enteredOnline = phase === 'signed-in' && this.lastAuthPhase !== phase;
     this.lastAuthPhase = phase;
-    if (enteredOnline && this.state.outbox.length) void this.replayProgress();
     if (serverId && viewerId && (phase === 'signed-in' || phase === 'offline')) {
       const changed = this.activeViewer?.serverId !== serverId || this.activeViewer?.viewerId !== viewerId;
       this.activeViewer = { serverId, viewerId };
       if (changed) this.syncVisible();
+      // The same viewer is back: their kept downloads rejoin the library and their progress replays.
+      if (phase === 'signed-in' && (enteredOnline || changed) && this.state.allItems.some(item =>
+        item.serverId === serverId && item.viewerId === viewerId && item.awaitingSignIn)) void this.reattach(serverId, viewerId);
     } else if (phase === 'signed-out') {
       this.syncVisible();
     }
+    // After the visible list follows the viewer: hydration may have finished before sign-in did.
+    if (enteredOnline && this.state.outbox.length) void this.replayProgress();
+    if (enteredOnline && this.state.hydrated) void this.resumeInterrupted();
   }
 
   private syncVisible(): void {
@@ -521,9 +757,10 @@ export class Downloads {
     const allItems = this.state.allItems;
     const items = visibleDownloads(allItems, serverId, viewerId);
     const usedBytes = totalDownloadedBytes(allItems);
-    if (items.length !== this.state.items.length || usedBytes !== this.state.usedBytes ||
+    const elsewhere = awaitingElsewhere(allItems, serverId, viewerId);
+    if (items.length !== this.state.items.length || usedBytes !== this.state.usedBytes || elsewhere !== this.state.awaitingElsewhere ||
         items.some((item, i) => item !== this.state.items[i])) {
-      this.box.update('downloads', state => ({ ...state, items, usedBytes }));
+      this.box.update('downloads', state => ({ ...state, items, usedBytes, awaitingElsewhere: elsewhere }));
     }
   }
 
@@ -543,6 +780,75 @@ export class Downloads {
     return hasMediaDownloads(adapter) && (await adapter.downloadsAvailable?.() ?? true);
   }
 
+  /** What a title of `titleKind` offers here: Download, Save file (a browser without persistent
+   * storage), or nothing, from the platform, the server's permission and the device's space. */
+  async offer(titleKind: string | undefined): Promise<DownloadOffer> {
+    if (!this.port) return { kind: 'none', reason: 'unsupported' };
+    let serverAllows = false;
+    let credentials: 'none' | 'headers' = 'headers';
+    try {
+      serverAllows = await this.canDownload();
+      const { adapter } = this.session.selected();
+      if (hasMediaDownloads(adapter)) credentials = adapter.downloadCredentials ?? 'headers';
+    } catch {
+      serverAllows = false;
+    }
+    if (serverAllows) await this.refreshStorage();
+    const { traits, persisted, freeBytes } = this.state;
+    return downloadOffer({ supported: true, traits, titleKind, serverAllows, credentials, persisted, freeBytes });
+  }
+
+  /** Re-read free space and, in a browser, storage persistence and quota. */
+  async refreshStorage(): Promise<void> {
+    if (!this.port) return;
+    const [freeBytes, storage] = await Promise.all([
+      this.port.freeBytes().catch(() => null),
+      this.port.storage?.().catch(() => undefined),
+    ]);
+    // A browser reports storage as not persistent until the page asks; only an answer to that ask
+    // (made on the viewer's first Download press) turns Download into Save file.
+    const persisted = storage ? (storage.persisted ? true : this.askedPersist ? false : null) : undefined;
+    this.box.update('downloads', state => ({
+      ...state,
+      freeBytes,
+      ...(storage ? { persisted, quotaBytes: storage.quotaBytes } : {}),
+    }));
+  }
+
+  /** The reserve this platform keeps free (2 GB, or a share of a browser's quota). */
+  private reserve(): number {
+    return reserveFor(this.state.traits, this.state.quotaBytes);
+  }
+
+  /** A browser stores downloads only once its storage is persistent; ask on the viewer's press. */
+  private async ensurePersistent(): Promise<boolean> {
+    if (this.state.traits.engine !== 'page' || !this.port?.persist) return true;
+    if (this.state.persisted === true) return true;
+    this.askedPersist = true;
+    const persisted = await this.port.persist().catch(() => false);
+    this.box.update('downloads', state => ({ ...state, persisted }));
+    return persisted;
+  }
+
+  /** Resolve every stored file a record uses to the URL its player or image view opens. */
+  private async resolver(item: DownloadRecord): Promise<DownloadFileResolver> {
+    const port = this.port!;
+    if (!port.fileUrl) {
+      const base = await port.baseDirectoryUrl();
+      return path => resolveDownloadFileUrl(base, path);
+    }
+    const urls = new Map<string, string>();
+    for (const path of downloadFilePaths(item)) {
+      downloadPathSegments(path);
+      urls.set(path, await port.fileUrl(path));
+    }
+    return path => {
+      const url = urls.get(path);
+      if (!url) throw new Error('Download file is not stored');
+      return url;
+    };
+  }
+
   /** Hydrate the index, outbox and free space from the native downloads host once at startup. */
   hydrate(): Promise<void> {
     if (!this.port) return Promise.resolve();
@@ -552,6 +858,7 @@ export class Downloads {
         await this.applyTransferEvent(event).catch(() => {});
       }
       void this.replayProgress();
+      void this.resumeInterrupted();
     }).finally(() => {
       this.hydrating = undefined;
     });
@@ -573,6 +880,7 @@ export class Downloads {
         hydrated: true,
         allItems,
         items: visibleDownloads(allItems, serverId, viewerId),
+        awaitingElsewhere: awaitingElsewhere(allItems, serverId, viewerId),
         outbox,
         freeBytes,
         usedBytes: totalDownloadedBytes(allItems),
@@ -606,8 +914,7 @@ export class Downloads {
   /** Find a download record for the currently active server and viewer. */
   item(titleId: string): DownloadRecord | undefined {
     const { serverId, viewerId } = this.box.get().auth;
-    return this.state.allItems.find(item =>
-      item.serverId === serverId && item.viewerId === viewerId && item.titleId === titleId);
+    return visibleDownloads(this.state.allItems, serverId, viewerId).find(item => item.titleId === titleId);
   }
 
   /** Whether `titleId` has a verified local download for the currently active server and viewer. */
@@ -621,31 +928,32 @@ export class Downloads {
     await this.hydrate();
     const phase = this.box.get().auth.phase;
     const record = this.item(titleId);
-    if ((phase !== 'offline' && phase !== 'signed-in') || !isPlayableDownload(record)) return null;
+    if (!isPlayableDownload(record) || !(phase === 'offline' || phase === 'signed-in' ||
+        (phase === 'signed-out' && record.awaitingSignIn))) return null;
     const verified = record.status === 'completed' ? record : record.previousCompleted;
     if (phase === 'signed-in' && ((options?.versionId && verified?.versionId !== options.versionId) ||
         (options?.sourceId && verified?.sourceId !== options.sourceId))) return null;
-    const base = await this.port.baseDirectoryUrl();
+    const resolve = await this.resolver(record);
     const current = this.item(titleId);
     if (!isPlayableDownload(current) || record.serverId !== current.serverId || record.viewerId !== current.viewerId) return null;
-    return localPlaybackPlan(current, base, options);
+    return localPlaybackPlan(current, current === record ? resolve : await this.resolver(current), options);
   }
 
   async posterFor(titleId: string): Promise<string | undefined> {
     const item = this.item(titleId);
     const path = item?.status === 'completed' ? item.posterPath : item?.previousCompleted?.posterPath;
     if (!this.port || !path || !item) return undefined;
-    const base = await this.port.baseDirectoryUrl();
+    const resolve = await this.resolver(item);
     const current = this.item(titleId);
     if (current?.serverId !== item.serverId || current.viewerId !== item.viewerId) return undefined;
-    return resolveDownloadFileUrl(base, path);
+    return resolve(path);
   }
 
   /** Build a `DetailModel` for `titleId` from the local index, seeding `state.titles[titleId]` when offline. */
   async detailFor(titleId: string, artWidth = 2560): Promise<DetailModel | null> {
     const record = this.item(titleId);
     if (!record) return null;
-    const base = this.port ? await Promise.resolve(this.port.baseDirectoryUrl()).catch(() => undefined) : undefined;
+    const base = this.port ? await this.resolver(record).catch(() => undefined) : undefined;
     const detail = downloadedDetailModel(record, base, artWidth);
     if (this.item(titleId) === record && !this.box.get().titles[titleId]?.value) {
       this.box.update('titles', titles => ({ ...titles, [titleId]: ready(detail) }));
@@ -668,6 +976,10 @@ export class Downloads {
       const serverId = connection.record.id;
       const viewerId = tokens?.viewer.id || this.box.get().auth.viewerId;
       if (!serverId || !viewerId) throw new Error('Sign in required');
+      if (!await this.ensurePersistent()) {
+        throw new Error('This browser may clear stored videos, so Vela saves the file to your downloads instead.');
+      }
+      if (this.port.storage) await this.refreshStorage();
       const currentViewer = () => {
         const { auth } = this.box.get();
         return auth.phase === 'signed-in' && auth.serverId === serverId && auth.viewerId === viewerId;
@@ -677,6 +989,7 @@ export class Downloads {
       const resolved = await adapter.resolveDownload(titleId, {
         versionId: options?.versionId,
         subtitleFormats: client?.subtitleFormats,
+        ...(client ? { client } : {}),
         idempotencyKey: grantKey,
       });
       const freeBytes = await this.port.freeBytes().catch(() => null);
@@ -689,6 +1002,7 @@ export class Downloads {
         titleId,
         freeBytes,
         capBytes: this.state.settings.capBytes,
+        reserveBytes: this.reserve(),
       });
       if (!space.allowed) {
         this.box.update('downloads', state => ({ ...state, freeBytes, error: space.message }));
@@ -799,12 +1113,14 @@ export class Downloads {
       const connection = await this.session.ready();
       const adapter = connection.adapter;
       if (!hasMediaDownloads(adapter)) throw new Error('Downloads are not supported on this server');
+      if (adapter.downloadsAvailable && !(await adapter.downloadsAvailable())) throw refusedDownload();
       const client = await this.session.declared().catch(() => undefined);
       const expires = Date.parse(record.grantExpiresAt ?? '');
       const grantKey = record.grantKey && expires > Date.now() + 30_000 ? record.grantKey : this.session.key();
       const resolved = await adapter.resolveDownload(titleId, {
         versionId: record.versionId,
         subtitleFormats: client?.subtitleFormats,
+        ...(client ? { client } : {}),
         idempotencyKey: grantKey,
       });
       if (this.item(titleId) !== record) return false;
@@ -821,6 +1137,7 @@ export class Downloads {
         titleId,
         freeBytes,
         capBytes: this.state.settings.capBytes,
+        reserveBytes: this.reserve(),
       });
       if (!space.allowed) {
         await this.upsertRecord({
@@ -873,19 +1190,122 @@ export class Downloads {
       return true;
     } catch (error) {
       const text = message(error, 'Download could not be resumed');
-      this.box.update('downloads', state => ({ ...state, error: text }));
+      // A refusal (permission withdrawn, grant revoked) ends the transfer instead of retrying it.
+      const current = this.item(titleId);
+      if (refusal(error) && current === record) {
+        await this.upsertRecord({ ...record, status: 'failed', errorCode: 'forbidden', error: text }, undefined, text).catch(() => {});
+      } else this.box.update('downloads', state => ({ ...state, error: text }));
       return false;
     }
   }
 
+  /**
+   * Resume, one at a time, the active viewer's transfers that died with the app, the tab or the
+   * network (`paused` + `interrupted`). Each resume re-resolves the download, so fresh headers or a
+   * fresh grant are minted and no port keeps credentials. A refusal leaves the record failed.
+   */
+  resumeInterrupted(): Promise<void> {
+    if (!this.port || this.box.get().auth.phase !== 'signed-in') return Promise.resolve();
+    return this.resuming ??= (async () => {
+      const tried = new Set<string>();
+      for (;;) {
+        const { phase, serverId, viewerId } = this.box.get().auth;
+        if (phase !== 'signed-in') return;
+        const next = visibleDownloads(this.state.allItems, serverId, viewerId)
+          .find(item => autoResumable(item) && !tried.has(item.titleId));
+        if (!next) return;
+        tried.add(next.titleId);
+        await this.resume(next.titleId).catch(() => false);
+      }
+    })().finally(() => { this.resuming = undefined; });
+  }
+
+  /**
+   * Save file (a browser without persistent storage): resolve the original with the server's
+   * permission checks and hand it to the port, which saves it straight to a file the viewer keeps.
+   */
+  async saveFile(titleId: string, options?: { versionId?: string }): Promise<boolean> {
+    if (!this.port?.saveFile) return false;
+    try {
+      const connection = await this.session.ready();
+      const adapter = connection.adapter;
+      if (!hasMediaDownloads(adapter)) throw new Error('Downloads are not supported on this server');
+      if (adapter.downloadsAvailable && !(await adapter.downloadsAvailable())) {
+        throw new Error('Downloads are not allowed for this account on this server');
+      }
+      const client = await this.session.declared().catch(() => undefined);
+      const resolved = await adapter.resolveDownload(titleId, { versionId: options?.versionId, idempotencyKey: this.session.key(), ...(client ? { client } : {}) });
+      await this.port.saveFile({
+        url: resolved.url,
+        headers: resolved.headers,
+        fileName: downloadFileName(resolved.title, resolved.container),
+        mimeType: resolved.mimeType,
+        ...(resolved.byteLength ? { byteLength: resolved.byteLength } : {}),
+      });
+      return true;
+    } catch (error) {
+      if ((error as { name?: unknown } | undefined)?.name === 'AbortError') return false;
+      this.box.update('downloads', state => ({ ...state, error: message(error, 'The file could not be saved') }));
+      return false;
+    }
+  }
+
+  /** Desktop: show a stored title's original in the system file manager. */
+  async reveal(titleId: string): Promise<void> {
+    const item = this.item(titleId);
+    if (!this.port?.reveal || !isPlayableDownload(item)) return;
+    await this.port.reveal(item.serverId, item.viewerId, titleId);
+  }
+
+  /** Desktop: save a copy of a stored title's original where the viewer picks. */
+  async exportCopy(titleId: string): Promise<boolean> {
+    const item = this.item(titleId);
+    if (!this.port?.exportCopy || !isPlayableDownload(item)) return false;
+    return this.port.exportCopy(item.serverId, item.viewerId, titleId, downloadFileName(item.title, item.container));
+  }
+
   /** Remove one downloaded title (or cancel its active transfer) for the active viewer. */
   async remove(titleId: string): Promise<void> {
-    const { serverId, viewerId } = this.box.get().auth;
-    if (!serverId || !viewerId) return;
+    const record = this.item(titleId);
+    if (!record) return;
+    const { serverId, viewerId } = record;
     await this.port?.removeTitle(serverId, viewerId, titleId);
     const allItems = this.state.allItems.filter(item =>
       !(item.serverId === serverId && item.viewerId === viewerId && item.titleId === titleId));
     await this.commitSnapshot(allItems, this.state.outbox);
+  }
+
+  /**
+   * The server refused this viewer's session: keep their files and pending progress, marked as
+   * waiting for the same viewer to sign in again. Still playable offline; hidden from other viewers.
+   */
+  async awaitSignIn(serverId: string, viewerId: string): Promise<void> {
+    if (!serverId || !viewerId) return;
+    if (!this.state.allItems.some(item => item.serverId === serverId && item.viewerId === viewerId && !item.awaitingSignIn)) return;
+    const allItems = this.state.allItems.map(item =>
+      item.serverId === serverId && item.viewerId === viewerId ? { ...item, awaitingSignIn: true } : item);
+    await this.commitSnapshot(allItems, this.state.outbox);
+  }
+
+  /** The same viewer signed in again: their kept downloads rejoin the library. */
+  private async reattach(serverId: string, viewerId: string): Promise<void> {
+    const allItems = this.state.allItems.map(item => {
+      if (item.serverId !== serverId || item.viewerId !== viewerId || !item.awaitingSignIn) return item;
+      const { awaitingSignIn: _waiting, ...rest } = item;
+      return rest;
+    });
+    await this.commitSnapshot(allItems, this.state.outbox);
+    void this.replayProgress();
+  }
+
+  /** Delete the downloads (and pending progress) other viewers left waiting on this server; asked first in the UI. */
+  async removeAwaitingElsewhere(): Promise<void> {
+    const { serverId, viewerId } = this.box.get().auth;
+    if (!serverId || !viewerId) return;
+    const viewers = new Set(this.state.allItems
+      .filter(item => item.serverId === serverId && item.viewerId !== viewerId && item.awaitingSignIn)
+      .map(item => item.viewerId));
+    for (const other of viewers) await this.removeViewer(serverId, other);
   }
 
   /** Remove all downloads for the currently active viewer on the selected server. */
@@ -935,7 +1355,10 @@ export class Downloads {
       ...(completed ? { completedAt: new Date().toISOString(), previousCompleted: undefined, error: undefined, errorCode: undefined, neededBytes: undefined } : {}),
       ...(event.status === 'failed' || event.status === 'paused'
         ? { error: event.error, errorCode: event.errorCode, neededBytes: event.neededBytes }
-        : {}),
+        // Moving again (an engine that resumed by itself) clears the reason it had stopped.
+        : event.status === 'downloading' || event.status === 'queued'
+          ? { error: undefined, errorCode: undefined, neededBytes: undefined }
+          : {}),
     };
     const allItems = [...this.state.allItems];
     allItems[index] = next;
@@ -960,10 +1383,9 @@ export class Downloads {
     completed?: boolean;
     observedAt?: V.Timestamp;
   }): Promise<void> {
-    const { serverId, viewerId } = this.box.get().auth;
-    if (!serverId || !viewerId) return;
     const record = this.item(params.titleId);
     if (!record || !Number.isFinite(params.positionSeconds)) return;
+    const { serverId, viewerId } = record;
     const duration = params.durationSeconds ?? record?.title.durationSeconds ?? 0;
     const position = Math.max(0, params.positionSeconds);
     const observedAt = params.observedAt ?? new Date().toISOString();
@@ -1080,6 +1502,7 @@ export class Downloads {
       ...state,
       allItems,
       items: visibleDownloads(allItems, serverId, viewerId),
+      awaitingElsewhere: awaitingElsewhere(allItems, serverId, viewerId),
       outbox,
       usedBytes: totalDownloadedBytes(allItems),
       ...(freeBytes !== undefined ? { freeBytes } : {}),

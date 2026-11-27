@@ -73,3 +73,47 @@ test('an unlike takes the title out of the liked lists at once; a like waits for
   expect(optimisticWatchState(state, 'target', { favorite: true }).music.liked).toBe(state.music.liked);
   expect(optimisticWatchState(state, 'other', { favorite: false }).music.liked).toBe(state.music.liked);
 });
+
+test.each([
+  { watchlisted: true }, { watchlisted: false }, { favorite: true }, { favorite: false },
+  { played: true }, { played: false }, { continueWatching: false as const },
+])('a confirmed %j mutation triggers a fresh Home read', async change => {
+  const box = new StateBox(stateWithCards());
+  let accept!: () => void;
+  let reads = 0;
+  const pending = new Promise<void>(resolve => { accept = resolve; });
+  const adapter = { titleActions: async () => null, setTitleWatch: () => pending };
+  const session = { onReset() {}, key: () => 'mutation-key', async ready() { return { adapter }; } };
+  const catalogue = new Catalogue(box, session as unknown as Session, () => 640, {}, () => { reads++; });
+  const mutation = catalogue.setTitleWatch('target', change);
+  await Promise.resolve();
+  expect(reads).toBe(0);
+  accept();
+  await mutation;
+  expect(reads).toBe(1);
+});
+
+test('not interested removes the title from rows and clears its thumbs-up', () => {
+  const state = stateWithCards();
+  const liked = optimisticWatchState(state, 'target', { thumbsUp: true });
+  const hidden = optimisticWatchState(liked, 'target', { notInterested: true });
+  expect(hidden.home.value!.rows[0]!.items.map(card => card.id)).toEqual(['keep']);
+  expect(hidden.titles.target!.value!.title[0]).toMatchObject({ notInterested: true, thumbsUp: false });
+  const likedAgain = optimisticWatchState(hidden, 'target', { thumbsUp: true });
+  expect(likedAgain.titles.target!.value!.title[0]).toMatchObject({ notInterested: false, thumbsUp: true });
+});
+
+test.each([
+  [{ notInterested: false, thumbsUp: false }, { notInterested: true }],
+  [{ notInterested: true, thumbsUp: false }, { thumbsUp: true }],
+])('title feedback is rejected when the server does not advertise the action', async (features, change) => {
+  const state = stateWithCards();
+  const box = new StateBox(state);
+  let writes = 0;
+  const adapter = { titleActions: async () => features, setTitleWatch: async () => { writes++; } };
+  const session = { onReset() {}, key: () => 'mutation-key', async ready() { return { adapter }; } };
+  const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
+  await expect(catalogue.setTitleWatch('target', change)).rejects.toThrow("That action couldn't be completed.");
+  expect(writes).toBe(0);
+  expect(box.get()).toBe(state);
+});

@@ -15,6 +15,7 @@ export { catchUpErrorMessage, catchUpOffer, catchUpPictureTime, catchUpRefusal, 
 export { consoleURL, pageServerOrigin, parseWebHandoff } from './session/web-handoff';
 export { randomId } from './protocol/id';
 export * from './models';
+export { acceptClientPlayback, acceptEmbedOriginOverride, EMBED_ENDED, EMBED_LISTENING, EMBED_START_TIMEOUT_MS, embedFrameUrl, embedOutcome, embedPlayerUrl, extraPlayback, hiddenExtra, isYoutubeVideoId, nativeEmbedHostOrigin, nativeEmbedPage, nextEmbedPhase, parseEmbedMessage, platformEmbedsTrailers, serverAllowsTrailerEmbed, serverPlaysExtra, trailerEmbedAllowed, YOUTUBE_EMBED_ORIGIN, youtubeEmbedUrl, type EmbedOutcome, type EmbedPhase, type EmbedSignal, type ExtraPlayback, type TrailerEmbed } from './trailer-embed';
 export { createVela, type Vela, type VelaOptions, type VelaState } from './store';
 export type { MediaCapabilities, VelaPlatform } from './store/platform';
 export type { Load, Loadable } from './store/state';
@@ -28,7 +29,7 @@ export type { MediaAccessGrant, PlaybackPhase, PlaybackState, PlaybackTarget } f
 export { sendKeepalive, stopSessionsOnPageHide } from './store/unload';
 export { hasUnloadStop, type UnloadRequest, type UnloadStop } from './adapter/capabilities';
 export { hasMediaDownloads, hasOfflineProgress, type DownloadResolution, type DownloadSidecar, type MediaDownloads, type OfflineProgress, type OfflineProgressEntry, type ResolveDownloadOptions } from './adapter/capabilities';
-export { allowsOfflineRoute, checkDownloadSpace, DEFAULT_DOWNLOAD_SETTINGS, downloadedDetailModel, downloadNeedsReplacement, downloadPercent, formatDownloadBytes, FREE_SPACE_RESERVE_BYTES, initialDownloads, isPlayableDownload, localPlaybackPlan, resolveDownloadFileUrl, storedDownloadSettings, totalDownloadedBytes, visibleDownloads, type DownloadErrorCode, type DownloadRecord, type DownloadsPort, type DownloadsSettings, type DownloadsSnapshot, type DownloadsState, type DownloadStatus, type DownloadTransferProgress, type DownloadTransferRequest, type SpaceCheckResult, type VerifiedDownloadCopy } from './store/downloads';
+export { allowsOfflineRoute, autoResumable, awaitingElsewhere, checkDownloadSpace, DEFAULT_DOWNLOAD_SETTINGS, DEFAULT_DOWNLOAD_TRAITS, downloadFileName, downloadFilePaths, downloadOffer, downloadOfferReason, downloadPathSegments, downloadTraits, reserveFor, validDownloadsBase, WEB_RESERVE_MIN_BYTES, downloadedDetailModel, downloadNeedsReplacement, downloadPercent, formatDownloadBytes, FREE_SPACE_RESERVE_BYTES, initialDownloads, isPlayableDownload, localPlaybackPlan, resolveDownloadFileUrl, storedDownloadSettings, totalDownloadedBytes, visibleDownloads, type DownloadErrorCode, type DownloadFileResolver, type DownloadOffer, type DownloadRecord, type DownloadSaveRequest, type DownloadsStorage, type DownloadsTraits, type DownloadsPort, type DownloadsSettings, type DownloadsSnapshot, type DownloadsState, type DownloadStatus, type DownloadTransferProgress, type DownloadTransferRequest, type SpaceCheckResult, type VerifiedDownloadCopy } from './store/downloads';
 export { trickplayCell, type TrickplayCell, type TrickplayFrame } from './protocol/trickplay';
 export { skipAction, type SkipAction } from './protocol/markers';
 export type { EpisodeRef } from './adapter/series';
@@ -37,7 +38,7 @@ export { playingRelease, withPlaying } from './store/playing-release';
 export { commandOrigin, type CommandOrigin } from './store/command-failure';
 export { isUnreleased, releaseLabel, unreleasedMessage } from './release-date';
 export { startRefusal, startRetry, type StartRefusal } from './store/start-retry';
-export type { VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse, HistoryRecapPeriod, PlaylistImportFormat, ImportSource, PlaylistImportUnmatched } from './wire';
+export type { WatchRequest, VersionItem, TitleVersions, RememberedVersionChoice, ClearVersionChoiceResponse, HistoryRecapPeriod, PlaylistImportFormat, ImportSource, PlaylistImportUnmatched } from './wire';
 export type { LiveState, LiveTvAccess } from './store/live';
 export { backoffMs } from './live/events';
 export { liveEventRef } from './protocol/events';

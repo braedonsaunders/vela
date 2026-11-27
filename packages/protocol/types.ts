@@ -48,6 +48,10 @@ export interface ClientCapabilities {
 export interface Feature { available: boolean; reason?: string }
 export type LivePreviewMode = 'auto' | 'on-click' | 'off';
 export interface LivePreviewFeature extends Feature { mode: LivePreviewMode }
+/** How the owner lets trailers play: `server` (Ether plays every extra), or `clientWhenPossible` (a client
+ * that can embed plays an extra's `clientPlayback` itself, and falls back to the server-played extra). */
+export type TrailerEmbedMode = 'server' | 'clientWhenPossible';
+export interface TrailerEmbedFeature extends Feature { mode: TrailerEmbedMode }
 export type SearchSort = string;
 export type SearchDirection = 'asc' | 'desc';
 export type SearchKind = string;
@@ -72,6 +76,9 @@ export interface ServerCapabilities {
     descriptiveSearch: Feature; aiSearch: Feature;
     /** One ranked search list (`mode: 'auto'`): titles first, description matches as the server's fallback. */
     unifiedSearch?: Feature; proactiveFallback: Feature; liveTV: Feature; livePreview?: LivePreviewFeature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
+    notInterested?: Feature & { thumbsUp: boolean };
+    /** YouTube trailers in YouTube's privacy-enhanced embed on the client (Extra.clientPlayback). */
+    trailerEmbed?: TrailerEmbedFeature;
     playlists?: Feature & { maxEntries: number };
     /** A client that sets ClientCapabilities.features.adaptiveHLS gets a multi-variant master (the remux as the top
      * rung when it can, transcode rungs started on demand) on an HLS path marked `adaptive` (Ether 0.3.25). */
@@ -197,7 +204,7 @@ export interface TitleMedia {
 }
 /** Opaque locator (EPUB CFI, page index) plus the share of the whole document; shared Ether watch state. */
 export interface ReadingProgress { locator: string; fraction: number; label?: string; updatedAt: Timestamp }
-export interface WatchState { positionSeconds: number; played: boolean; favorite: boolean; watchlisted: boolean; /** Most recent viewing activity, RFC3339. */ lastViewedAt?: Timestamp;
+export interface WatchState { positionSeconds: number; played: boolean; favorite: boolean; watchlisted: boolean; notInterested?: boolean; thumbsUp?: boolean; /** Most recent viewing activity, RFC3339. */ lastViewedAt?: Timestamp;
   /** Readable titles: where the viewer is. fraction >= 0.98 marks the title played. */ reading?: ReadingProgress }
 /** Actual server-sourced rating; scale is the maximum possible value. */
 export interface TitleRating { source: string; kind: 'critic' | 'audience'; value: number; scale: number; state?: string; votes?: number; url?: string }
@@ -211,8 +218,18 @@ export interface Title {
   showId?: ID; showName?: string; seasonId?: ID; seasonNumber?: number; episodeNumber?: number;
   /** Media class, role and relations; omitted for video by servers that predate it. */ media?: TitleMedia;
 }
+/** Where an extra comes from, when the server knows: `youtube` (a TMDB trailer). Omitted otherwise. */
+export type ExtraSource = 'youtube';
+/** An extra the client may play itself, in YouTube's privacy-enhanced embed. `embedUrl` is exactly
+ * `https://www.youtube-nocookie.com/embed/<videoId>`, and `videoId` is YouTube's 11-character id. */
+export interface ExtraClientPlayback { provider: 'youtube'; videoId: string; embedUrl: string }
 export interface Extra { id: ID; parentId: ID; kind: 'trailer' | 'clip' | 'featurette' | 'other'; name: string;
-  durationSeconds?: number; artwork?: ArtworkRef; cachedPlayback?: { status: 'ready'; url: string; expiresAt: Timestamp }; availability: 'ready' | 'unresolved' | 'unavailable' }
+  durationSeconds?: number; artwork?: ArtworkRef; cachedPlayback?: { status: 'ready'; url: string; expiresAt: Timestamp };
+  /** The server-played option (POST /playback extraId), also the fallback when an embed fails. */
+  availability: 'ready' | 'unresolved' | 'unavailable';
+  source?: ExtraSource;
+  /** Only when features.trailerEmbed allows client embeds and this is a YouTube trailer or teaser with a valid id. */
+  clientPlayback?: ExtraClientPlayback }
 export interface Chapter { id: ID; name: string; startSeconds: number; endSeconds?: number }
 /** Verified source stream facts only; omitted when streams are estimated or unknown.
  * audio.default marks the preferred track; an absent subtitleCount means the count is unknown. */
@@ -481,7 +498,8 @@ export interface ChildrenPage extends Page<Title>, PartialAnswer {}
 /** One-use console Watch hand-off; redeem against the same Ether instance. */
 export interface WebCodeRedeemRequest extends Mutation { code: string; device: Device }
 
-export interface DownloadRequest extends Mutation { versionId?: ID }
+/** `client`: the device's playback capabilities, as on PlaybackRequest, so the server grants an original it can play. */
+export interface DownloadRequest extends Mutation { versionId?: ID; client?: ClientCapabilities }
 export interface DownloadGrant {
   url: string; mimeType: string; container: string; byteLength?: number;
   /** Stable file identity, shared by fresh tickets for the same original. */
@@ -491,7 +509,8 @@ export interface DownloadGrant {
 export interface OfflineWatchRequest extends Mutation {
   positionSeconds: number; observedAt: Timestamp; offline: true; played?: true;
 }
-export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false }
+export interface WatchResponse extends Ack { watch?: WatchState }
+export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false; notInterested?: boolean; thumbsUp?: boolean }
 
 export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[];
   /** Playlist-only fields. */ smart?: boolean; entryCount?: number; updatedAt?: Timestamp }

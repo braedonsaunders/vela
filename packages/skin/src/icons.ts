@@ -17,8 +17,12 @@ export const SYMBOLS: Record<string, { paths: string[]; stroke?: boolean }> = {
   /** Start a paused slideshow again: a turning arrow round a small play mark (not the play glyph). */
   autoplay: { paths: ['M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4', 'M10.5 9.2v5.6l4.4-2.8z'], stroke: true },
   close: { paths: ['M6 6l12 12M18 6L6 18'], stroke: true },
+  /** Add (a server, in the profile menu). */
+  plus: { paths: ['M12 5v14M5 12h14'], stroke: true },
   /** A programme that plays again from the channel's archive: a turning-back arrow. */
   replay: { paths: ['M4 10a8 8 0 1 1 1 8M4 4v6h6'], stroke: true },
+  'thumbs-up': { paths: ['M7 10v10H3V10zM7 10l5-7 1.5 1v5H20a1 1 0 0 1 1 1.2l-2 8a2 2 0 0 1-2 1.8H7'], stroke: true },
+  'thumbs-down': { paths: ['M7 14V4H3v10zM7 14l5 7 1.5-1v-5H20a1 1 0 0 0 1-1.2l-2-8A2 2 0 0 0 17 4H7'], stroke: true },
   checkmark: { paths: ['M4.5 12.5l5 5L19.5 7'], stroke: true },
   'check-circle': { paths: ['M21 11.1V12a9 9 0 1 1-5.3-8.2M21 5l-10 10-3-3'], stroke: true },
   circle: { paths: ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z'], stroke: true },

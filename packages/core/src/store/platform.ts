@@ -40,6 +40,9 @@ export interface VelaPlatform {
   /** Start an account-authorization window from the viewer's press, before network work loses
    * the browser's user gesture. Browser and desktop hosts provide this; TVs and native apps do not. */
   beginExternalAuth?(): { navigate(url: string): void; close(): void };
+  /** This device plays YouTube trailers in YouTube's privacy-enhanced embed when the server allows it
+   * (platformEmbedsTrailers: browsers, desktops, phones and tablets; never TVs). */
+  trailerEmbed?: boolean;
   /** Development against mock-server: the Ether server signs in as its demo viewer. */
   mock?: boolean;
   /** The width artwork is sized for, in pixels (the display's longer side times its scale). */

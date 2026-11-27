@@ -3,13 +3,13 @@
 // across the lineup, favourites beside the monitor, the full guide one step away, and movies
 // and shows below. The look is a broadcast graphics package: live bug, channel ident,
 // two-tier lower-thirds and a station clock, on a studio-black ground.
-import type { BoxNode, Node, SkinDocument, Style } from '../../../skin';
+import type { BoxNode, Node, ProfileMenuLook, SkinDocument, Style } from '../../../skin';
 
 type Press = NonNullable<BoxNode['press']>;
 
 // Asset URLs carry the document's own version: a release rebases them to /vela/skins/<id>/<version>/,
 // and only that version's files are published and bundled.
-const id = 'broadcast', version = '1.0.8';
+const id = 'broadcast', version = '1.0.9';
 const ASSETS = `/vela/v0/appearance/skins/${id}/${version}`;
 const display = '"Barlow Condensed", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", sans-serif';
 const sans = 'system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif';
@@ -67,7 +67,35 @@ const clock: Node = { type: 'box', when: [{ test: 'env.clock' }], role: 'timer',
 const iconButton = (action: 'search', label: string, symbol: string): Node => ({ type: 'box', press: { action }, label, style: { position: 'relative', width: '40px', height: '40px', 'box-sizing': 'border-box', padding: '11px', 'border-radius': '3px', 'background-color': '$panel', color: '$ink', 'flex-shrink': '0' },
   hover: { 'background-color': '$panel-hi' }, focus: ring, children: [{ type: 'icon', symbol, style: { width: '18px', height: '18px' } }] });
 
-const menuItem = (press: Press, label: string, kids: Node[]): Node => ({ type: 'box', press, label, style: { position: 'relative', ...row('12px'), padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', 'font-size': '14px', color: '$ink' }, hover: { 'background-color': '$panel-hi' }, focus: { 'background-color': '$panel-hi', ...ring }, children: kids });
+
+// The profile menu's look: rows as the menu items above, sections headed in the guide's capitals.
+const menuRowStyle: Style = { position: 'relative', ...row('12px'), padding: '10px 12px', margin: '0px -12px', 'border-radius': '3px', 'font-size': '14px', color: '$ink' };
+const controlRoom: ProfileMenuLook = {
+  parts: {
+    header: { type: 'box', style: { ...row('12px'), 'padding-bottom': '10px' }, children: [
+      { type: 'text', text: '{env.viewerInitial}', style: { width: '36px', height: '36px', 'border-radius': '3px', 'flex-shrink': '0', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-family': display, 'font-size': '18px', 'font-weight': '700', 'background-color': '$signal', color: '$ink' } },
+      { type: 'text', text: '{entry.label}', style: { 'font-size': '15px', 'font-weight': '600', flex: '1', 'line-clamp': '1' } },
+    ] },
+    divider: { type: 'box', style: { height: '1px', 'flex-shrink': '0', 'background-color': '$line', margin: '2px 0px' } },
+    section: { type: 'text', text: '{section.title}', role: 'heading', level: 2, style: { ...caps('11px', { 'letter-spacing': '0.18em' }), color: '$ink3', 'padding-top': '8px', 'padding-bottom': '2px' } },
+    row: { type: 'box', style: menuRowStyle, hover: { 'background-color': '$panel-hi' }, focus: { 'background-color': '$panel-hi', ...ring }, children: [
+      { type: 'icon', symbol: '{entry.icon}', style: { width: '16px', height: '16px', 'flex-shrink': '0' } },
+      { type: 'text', text: '{entry.label}', style: { flex: '1', 'line-clamp': '1' } },
+    ] },
+    picker: { type: 'box', style: menuRowStyle, hover: { 'background-color': '$panel-hi' }, focus: { 'background-color': '$panel-hi', ...ring }, children: [
+      { type: 'box', style: col('3px', { flex: '1' }), children: [
+        { type: 'text', text: '{entry.label}', style: { ...caps('11px', { 'letter-spacing': '0.18em' }), color: '$ink3' } },
+        { type: 'text', text: '{entry.detail}', style: { 'font-size': '14px' } },
+      ] },
+      { type: 'icon', symbol: 'forward-chevron', style: { width: '12px', height: '12px', color: '$ink3' } },
+    ] },
+    // Which Vela this is, where it runs and the server, as a caption: selectable, and on TV a stop the remote reaches.
+    about: { type: 'box', style: { 'padding-top': '10px', 'margin-top': '4px', 'border-style': 'solid', 'border-width': '0px', 'border-top-width': '1px', 'border-top-color': '$line' }, children: [
+      { type: 'box', testId: '{entry.testId}', style: { 'border-radius': '3px' }, children: [
+        { type: 'text', text: '{entry.label}', style: { 'font-size': '11px', 'line-height': '15px', 'letter-spacing': '0.04em', color: '$ink3' } }] },
+    ] },
+  },
+};
 
 const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': 'column', height: '100%', 'min-height': '0px', 'background-color': '$ground', color: '$ink', 'font-family': sans }, children: [
   { type: 'box', role: 'navigation', when: [{ test: 'env.viewer' }], style: { position: 'relative', 'z-index': '20', ...col('0px'), 'background-color': '$ground', 'box-shadow': '0px 1px 0px $line' }, children: [
@@ -86,7 +114,7 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
       { type: 'box', style: { display: 'none' }, small: { display: 'flex', flex: '1' } },
       clock,
       iconButton('search', '{s:search}', 'search'),
-      { type: 'box', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', style: { position: 'relative', width: '40px', height: '40px', 'border-radius': '3px', 'background-color': '$panel', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'flex-shrink': '0' },
+      { type: 'box', id: 'broadcast-profile', press: { action: 'toggle', arg: 'menu' }, label: '{s:profile}', testId: 'profile-menu', a11y: { expanded: [{ test: 'flag:menu' }], haspopup: 'dialog' }, style: { position: 'relative', width: '40px', height: '40px', 'border-radius': '3px', 'background-color': '$panel', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'flex-shrink': '0' },
         hover: { 'background-color': '$panel-hi' }, focus: ring, children: [
           // The viewer's badge fills the button, so their avatar (where there is one) is the button's face.
           { type: 'text', text: '{env.viewerInitial}', style: { width: '40px', height: '40px', 'border-radius': '3px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-family': display, 'font-size': '18px', 'font-weight': '700', color: '$ink' } },
@@ -96,34 +124,10 @@ const shell: Node = { type: 'box', style: { display: 'flex', 'flex-direction': '
     { type: 'box', style: { display: 'none' }, small: { ...row('0px'), 'overflow-x': 'auto', 'overflow-y': 'hidden', 'scrollbar-width': 'none', 'padding-left': '4px', 'padding-right': '4px', 'box-shadow': '0px -1px 0px $line' }, children: [homeTab, guideTab, destTab] },
   ] },
   { type: 'slot', slot: 'children', style: { display: 'flex', 'flex-direction': 'column', flex: '1', 'min-height': '0px' }, inner: { display: 'flex', 'flex-direction': 'column', 'flex-grow': '1', 'min-height': '0px', height: '100%', width: '100%' } as Style },
-  { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'drop', style: { position: 'absolute', top: '70px', right: 'clamp(20px, 2.4vw, 48px)', 'z-index': '30', width: '272px', 'box-sizing': 'border-box', padding: '18px 22px', ...col('6px'), 'border-radius': '4px', 'background-color': '$panel', 'box-shadow': '0px 24px 60px rgba(0, 0, 0, 0.6), inset 0px 3px 0px $signal' } as Style,
-    small: { top: '102px', right: '12px' }, children: [
-      { type: 'box', style: { ...row('12px'), 'padding-bottom': '10px' }, children: [
-        { type: 'text', text: '{env.viewerInitial}', style: { width: '36px', height: '36px', 'border-radius': '3px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'font-family': display, 'font-size': '18px', 'font-weight': '700', 'background-color': '$signal', color: '$ink' } },
-        { type: 'text', text: '{env.viewer}', style: { 'font-size': '15px', 'font-weight': '600', flex: '1', 'line-clamp': '1' } },
-      ] },
-      menuItem({ action: 'openPicker' }, '{s:appearance}', [
-        { type: 'box', style: col('3px', { flex: '1' }), children: [
-          { type: 'text', text: '{s:appearance}', style: { ...caps('11px', { 'letter-spacing': '0.18em' }), color: '$ink3' } },
-          { type: 'text', text: '{s:skinName}', style: { 'font-size': '14px' } },
-        ] },
-        { type: 'icon', symbol: 'forward-chevron', style: { width: '12px', height: '12px', color: '$ink3' } },
-      ]),
-      { ...menuItem({ action: 'manageLibraries' }, '{s:manageLibraries}', [
-        { type: 'icon', symbol: 'library', style: { width: '16px', height: '16px' } },
-        { type: 'text', text: '{s:manageLibraries}' },
-      ]), when: [{ test: 'env.canManageLibraries' }], testId: 'manage-libraries' } as Node,
-      { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
-      { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-      menuItem({ action: 'signOut' }, '{s:signOut}', [
-        { type: 'icon', symbol: 'sign-out', style: { width: '16px', height: '16px' } },
-        { type: 'text', text: '{s:signOut}' },
-      ]),
-      // Which Vela this is, where it runs and the server, as a caption: selectable, and on TV a stop the remote reaches.
-      { type: 'box', when: [{ test: 'env.aboutLine' }], readingStop: true, label: '{env.aboutLabel}', testId: 'about-line',
-        style: { 'padding-top': '10px', 'margin-top': '4px', 'border-style': 'solid', 'border-width': '0px', 'border-top-width': '1px', 'border-top-color': '$line' },
-        children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '11px', 'line-height': '15px', 'letter-spacing': '0.04em', color: '$ink3' } }] },
-    ] },
+  // The profile menu (the app's entries, the profile menu primitive): a dark panel cued in signal red.
+  { type: 'profileMenu', when: [{ test: 'env.viewer' }, { test: 'flag:menu' }], motion: 'drop', role: 'dialog', label: '{s:profile}', escape: 'menu', returnFocus: 'broadcast-profile',
+    style: { position: 'absolute', top: '70px', right: 'clamp(20px, 2.4vw, 48px)', 'z-index': '30', width: '272px', 'max-height': 'calc(100vh - 82px - env(safe-area-inset-bottom))', 'overflow-y': 'auto', 'box-sizing': 'border-box', padding: '18px 22px', ...col('6px'), 'border-radius': '4px', 'background-color': '$panel', 'box-shadow': '0px 24px 60px rgba(0, 0, 0, 0.6), inset 0px 3px 0px $signal' } as Style,
+    small: { top: '102px', right: '12px', 'max-height': 'calc(100vh - 114px - env(safe-area-inset-bottom))' } },
 ] };
 
 // ---------------------------------------------------------------- the monitor
@@ -404,7 +408,7 @@ const home: Node = { type: 'box', style: { position: 'relative', display: 'flex'
 ] };
 
 const broadcastDoc: SkinDocument = {
-  schema: 1, renderer: 21, id, name: 'Broadcast', version, tagline: 'Live TV first: on now, your channels and the guide, with films below.',
+  schema: 1, renderer: 22, id, name: 'Broadcast', version, tagline: 'Live TV first: on now, your channels and the guide, with films below.',
   preview: `${ASSETS}/preview.jpg`, swatches: ['#07090d', '#f2f4f7', '#ff3d2e', '#ffc23d', '#141b24'],
   live: { home: true },
   fonts: { display: { family: 'Barlow Condensed', files: [500, 600, 700].map(weight => ({ url: `${ASSETS}/barlow-condensed-${weight}.ttf`, weight, style: 'normal' as const })) } },
@@ -445,6 +449,7 @@ const broadcastDoc: SkinDocument = {
     card: { keyframes: 'rise', duration: 480, delay: 160, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', still: { keyframes: 'dissolve', duration: 160 } },
   },
   templates: { titleCard, shelf },
+  profileMenus: { default: controlRoom },
   slots: { shell, home },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
 };

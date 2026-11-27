@@ -33,6 +33,7 @@ import { idle, StateBox, type Loadable } from './state';
 
 export interface VelaState {
   auth: AuthState;
+  titleFeedback: { hidden: ReadonlySet<string>; revision: number };
   servers: ServersState;
   home: HomeState;
   libraries: Loadable<Destination[]>;
@@ -116,6 +117,7 @@ export interface Vela {
 
 const initialState: VelaState = {
   auth: initialAuth,
+  titleFeedback: { hidden: new Set(), revision: 0 },
   servers: initialServers,
   home: initialHome,
   libraries: idle(),
@@ -157,7 +159,7 @@ export function createVela(options: VelaOptions): Vela {
   const servers = new Servers(box, session, options, downloads);
   const previews = new Previews(box, session);
   const home = new Home(box, session, width);
-  const catalogue = new Catalogue(box, session, width);
+  const catalogue = new Catalogue(box, session, width, {}, () => void home.refresh('mutation'), options.trailerEmbed === true);
   const playlists = new Playlists(box, session, width);
   const music = new Music(box, session, width);
   const seriesTracks = new SeriesTracks(box, session);
