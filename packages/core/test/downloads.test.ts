@@ -450,7 +450,7 @@ describe('Downloads slice isolation, lifecycle & replacement', () => {
     expect(h.box.get().downloads.error).toContain('1.5 GB');
   });
 
-  test('removeViewer, removeServer and refused-session reset clean up only the affected scope', async () => {
+  test('a refused session keeps downloads; removeViewer and removeServer clean up only the affected scope', async () => {
     const h = createHarness();
     h.port.snapshot = {
       items: [
@@ -466,11 +466,16 @@ describe('Downloads slice isolation, lifecycle & replacement', () => {
     h.box.update('auth', auth => ({ ...auth, phase: 'offline' }));
     await h.downloads.hydrate();
 
-    // A 401 refused session on srv-plex for viewer-1 removes only viewer-1's downloads and outbox:
+    // A 401 refused session keeps viewer-1's files and outbox, waiting for viewer-1 to sign in again:
     h.triggerReset('server', true);
     await new Promise(resolve => setTimeout(resolve, 10));
+    expect(h.port.removedViewers).toEqual([]);
+    expect(h.box.get().downloads.allItems.map(i => `${i.serverId}:${i.viewerId}:${i.awaitingSignIn === true}`))
+      .toEqual(['srv-plex:viewer-1:true', 'srv-plex:viewer-2:false', 'srv-other:viewer-9:false']);
+    expect(h.box.get().downloads.outbox).toHaveLength(2);
+    // An explicit removal of viewer-1 (sign-out) does delete them:
+    await h.downloads.removeViewer('srv-plex', 'viewer-1');
     expect(h.port.removedViewers).toEqual([{ serverId: 'srv-plex', viewerId: 'viewer-1' }]);
-    expect(h.box.get().downloads.allItems.map(i => `${i.serverId}:${i.viewerId}`)).toEqual(['srv-plex:viewer-2', 'srv-other:viewer-9']);
     expect(h.box.get().downloads.outbox.map(e => `${e.serverId}:${e.viewerId}`)).toEqual(['srv-plex:viewer-2']);
 
     // Removing srv-plex removes all remaining viewers on srv-plex, leaving srv-other untouched:

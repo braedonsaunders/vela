@@ -7,6 +7,8 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, screen, sessio
 const { loadNativeHost, attachNativePlayer, attachFullscreen } = require('./native-player');
 const { attachLoadGuard } = require('./load-guard');
 const { bundleServer } = require('./bundle-server');
+const { Downloads, dispatch: downloadsCall } = require('./downloads');
+const { downloadsRoot, downloadsRoute } = require('./downloads-paths');
 const nativeAdapter = loadNativeHost();
 const fs = require('node:fs');
 const path = require('node:path');
@@ -178,6 +180,29 @@ function menu() {
   ]);
 }
 
+// ---- Offline downloads (downloads.js): one engine in main, events only to the windows that subscribed ----
+
+let downloads = null;
+const downloadSubscribers = new Set();
+function downloadsEngine() {
+  return downloads ??= new Downloads({
+    root: downloadsRoot(app.getPath('userData')),
+    emit: event => {
+      for (const contents of downloadSubscribers) {
+        if (contents.isDestroyed() || !contents.mainFrame?.url.startsWith(START)) { downloadSubscribers.delete(contents); continue; }
+        contents.send('vela:downloads-event', event);
+      }
+    },
+    revealFile: file => shell.showItemInFolder(file),
+    chooseSaveFile: async name => {
+      const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+      const options = { title: 'Save a copy', defaultPath: path.join(app.getPath('downloads'), name), properties: ['createDirectory', 'showOverwriteConfirmation'] };
+      const { canceled, filePath } = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options);
+      return canceled ? null : filePath;
+    },
+  });
+}
+
 // ---- Updates: from Vela's own GitHub releases, independent of any server ----
 
 function newer(latest, current) {
@@ -224,7 +249,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
   app.whenReady().then(() => {
-    protocol.handle(SCHEME, bundleServer(UI));
+    protocol.handle(SCHEME, bundleServer(UI, { downloads: downloadsRoute(downloadsRoot(app.getPath('userData'))) }));
     const trusted = event => event.senderFrame === event.sender.mainFrame
       && event.senderFrame?.url.startsWith(START);
     // Every document's preload checks in before the page's scripts run; the guard reloads a
@@ -238,7 +263,21 @@ if (!app.requestSingleInstanceLock()) {
         return;
       }
       BrowserWindow.fromWebContents(event.sender)?.__velaLoadGuard?.checkIn();
-      event.returnValue = { native: !!nativeAdapter };
+      event.returnValue = { native: !!nativeAdapter, downloads: true };
+    });
+    // The page's DownloadsPort (apps/vela/src/data/downloads-shell.ts): the trusted main frame only,
+    // allowlisted methods, validated arguments; errors carry messages, never URLs or headers.
+    ipcMain.handle('vela:downloads-call', async (event, method, args) => {
+      if (!trusted(event)) throw new Error('Downloads are not available here');
+      return downloadsCall(downloadsEngine(), method, args);
+    });
+    ipcMain.on('vela:downloads-subscribe', event => {
+      if (!trusted(event)) return;
+      const contents = event.sender;
+      if (downloadSubscribers.has(contents)) return;
+      downloadSubscribers.add(contents);
+      contents.once('destroyed', () => downloadSubscribers.delete(contents));
+      downloadsEngine();
     });
     ipcMain.on('vela:native-message', (event, message) => {
       if (!trusted(event) || !nativeAdapter) return;
@@ -270,6 +309,8 @@ if (!app.requestSingleInstanceLock()) {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
   });
+  // Closing the app stops transfers; their partial files stay, and the next launch resumes them (interrupted).
+  app.on('before-quit', () => { void downloads?.shutdown(); });
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
   });

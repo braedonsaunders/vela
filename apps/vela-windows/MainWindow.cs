@@ -19,6 +19,7 @@ internal sealed class MainWindow : Form
     private readonly string dataPath;
     private readonly string windowPath;
     private Playback? playback;
+    private Downloads? downloads;
     private PlaybackSettings playbackSettings = new();
     private string playerId = "";
     private string? mediaOrigin;
@@ -54,6 +55,7 @@ internal sealed class MainWindow : Form
             timer.Stop();
             timer.Dispose();
             playback?.Dispose();
+            downloads?.Dispose();
             browser.Dispose();
             mediaHeaders.Clear();
         };
@@ -96,7 +98,12 @@ internal sealed class MainWindow : Form
             };
             browser.CoreWebView2.WebMessageReceived += Receive;
             browser.CoreWebView2.AddWebResourceRequestedFilter(AppOrigin + "/*", CoreWebView2WebResourceContext.All);
-            browser.CoreWebView2.WebResourceRequested += (_, e) => BundledUi.Serve(environment, e);
+            // Offline downloads live beside the WebView profile (%LOCALAPPDATA%\Vela\vela-downloads, or VELA_DATA_DIR's).
+            downloads = new Downloads(Path.Combine(dataPath, "vela-downloads"), PostDownloadEvent, PickSaveTarget);
+            browser.CoreWebView2.WebResourceRequested += (_, e) =>
+            {
+                if (downloads?.TryServe(environment, e) != true) BundledUi.Serve(environment, e);
+            };
             browser.CoreWebView2.ContainsFullScreenElementChanged += (_, _) =>
                 SetFullscreen(browser.CoreWebView2.ContainsFullScreenElement);
             browser.CoreWebView2.ProcessFailed += (_, _) => ShowError("The app stopped. Close and reopen Vela.");
@@ -111,6 +118,7 @@ internal sealed class MainWindow : Form
                 "Object.defineProperty(window, '__VELA_WINDOWS__', { value: Object.freeze({version:1}) }); " +
                 "Object.defineProperty(window, '__VELA_DESKTOP__', { value: Object.freeze({version:1, platform:'windows'}) }); }");
             await browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(WindowKeys);
+            await browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(DownloadsBridge);
             browser.Source = AppStart;
             timer.Start();
             _ = Updates.CheckAsync(this);
@@ -194,6 +202,12 @@ internal sealed class MainWindow : Form
                 SetFullscreen(TextOf(message, "key") == "F11" && !fullscreen);
                 return;
             }
+            if (kind == "downloads-call")
+            {
+                CallDownloads(TextOf(message, "requestId"), TextOf(message, "method"),
+                    message.TryGetProperty("args", out var args) ? args.Clone() : default);
+                return;
+            }
             if (kind == "capabilities")
             {
                 Post(new { kind, requestId = TextOf(message, "requestId"), value = Capabilities.Value(playbackSettings) });
@@ -235,7 +249,7 @@ internal sealed class MainWindow : Form
                 browser.BringToFront();
                 // Re-read so an edited playback.json applies from the next title on.
                 playbackSettings = PlaybackSettings.Load(dataPath);
-                playback = new Playback(video.Handle, Emit, playbackSettings) { Fullscreen = fullscreen };
+                playback = new Playback(video.Handle, Emit, playbackSettings, downloads) { Fullscreen = fullscreen };
                 playback.SetAccess(mediaOrigin, mediaPrefix, mediaHeaders);
             }
             if (id != playerId || playback == null) return;
@@ -246,6 +260,58 @@ internal sealed class MainWindow : Form
             Emit("error", new { kind = "source", message = $"Native player could not start ({error.GetType().Name}).",
                 recoverable = false });
         }
+    }
+
+    /// <summary>A bridge call from the trusted page (Receive checked the source): a known method with a
+    /// well-formed request id; Downloads validates every argument. Replies carry a message, never a URL.</summary>
+    private async void CallDownloads(string? requestId, string? method, JsonElement args)
+    {
+        if (requestId is not { Length: > 0 and <= 64 } || !requestId.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_')) return;
+        if (downloads == null || method == null || !Downloads.Methods.Contains(method))
+        {
+            Post(new { kind = "downloads-reply", requestId, ok = false, error = "Unknown downloads method" });
+            return;
+        }
+        object reply;
+        try { reply = new { kind = "downloads-reply", requestId, ok = true, value = await downloads.Call(method, args) }; }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException)
+        {
+            reply = new { kind = "downloads-reply", requestId, ok = false, error = error.Message };
+        }
+        catch (Exception error)
+        {
+            reply = new { kind = "downloads-reply", requestId, ok = false, error = $"Downloads request failed ({error.GetType().Name})" };
+        }
+        if (!IsDisposed) Post(reply);
+    }
+
+    /// <summary>Transfer events arrive on worker threads; the WebView takes messages on the UI thread.</summary>
+    private void PostDownloadEvent(Dictionary<string, object?> value)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated) return;
+        try { BeginInvoke(() => { if (!IsDisposed) Post(new { kind = "downloads-event", @event = value }); }); }
+        catch (InvalidOperationException) { }
+    }
+
+    /// <summary>Save a copy…: the viewer picks where; null when they cancel.</summary>
+    private Task<string?> PickSaveTarget(string suggested, string extension)
+    {
+        var picked = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        BeginInvoke(() =>
+        {
+            try
+            {
+                using var dialog = new SaveFileDialog
+                {
+                    Title = "Save a copy", FileName = suggested, DefaultExt = extension, AddExtension = true, OverwritePrompt = true,
+                    Filter = $"Video (*.{extension})|*.{extension}|All files (*.*)|*.*",
+                    InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
+                };
+                picked.TrySetResult(dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null);
+            }
+            catch (Exception) { picked.TrySetResult(null); }
+        });
+        return picked.Task;
     }
 
     private void Emit(string kind, object value)
@@ -299,6 +365,50 @@ internal sealed class MainWindow : Form
               else style.removeProperty('visibility');
             }
           };
+        }
+        """;
+
+    // The page's DownloadsPort (apps/vela/src/data/downloads-shell.ts, "Desktop bridge (version 1)" in
+    // docs/downloads.md) over WebView2 messages: calls carry a request id the reply echoes, transfer
+    // events arrive as downloads-event. Installed only in the app's own top-level document.
+    private const string DownloadsBridge = """
+        if (window === window.top && location.origin === 'http://vela.localhost' && window.chrome && window.chrome.webview) {
+          const webview = window.chrome.webview;
+          const methods = ['readSnapshot', 'writeSnapshot', 'freeBytes', 'startTransfer', 'pauseTransfer', 'resumeTransfer',
+            'removeTitle', 'removeViewer', 'removeServer', 'reveal', 'exportCopy'];
+          const pending = new Map();
+          const listeners = new Set();
+          let sequence = 0;
+          webview.addEventListener('message', e => {
+            const message = e.data;
+            if (!message || typeof message !== 'object') return;
+            if (message.kind === 'downloads-reply') {
+              const waiting = pending.get(message.requestId);
+              if (!waiting) return;
+              pending.delete(message.requestId);
+              if (message.ok === true) waiting.resolve(message.value);
+              else waiting.reject(new Error(typeof message.error === 'string' ? message.error : 'Downloads request failed'));
+            } else if (message.kind === 'downloads-event' && message.event && typeof message.event === 'object') {
+              for (const listener of Array.from(listeners)) {
+                try { listener(message.event); } catch (error) { setTimeout(() => { throw error; }); }
+              }
+            }
+          });
+          const call = (method, ...args) => new Promise((resolve, reject) => {
+            if (!methods.includes(method)) { reject(new Error('Unknown downloads method')); return; }
+            const requestId = 'downloads-' + (++sequence);
+            pending.set(requestId, { resolve, reject });
+            try { webview.postMessage({ kind: 'downloads-call', requestId, method, args }); }
+            catch (error) { pending.delete(requestId); reject(new Error('Downloads are unavailable')); }
+          });
+          const subscribe = listener => {
+            if (typeof listener !== 'function') return () => {};
+            listeners.add(listener);
+            return () => { listeners.delete(listener); };
+          };
+          Object.defineProperty(window, '__VELA_DOWNLOADS__', {
+            value: Object.freeze({ version: 1, base: 'http://vela.localhost/vela-downloads/', call, subscribe }),
+          });
         }
         """;
 

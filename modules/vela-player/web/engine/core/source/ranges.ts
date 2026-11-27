@@ -1,6 +1,7 @@
 import { DeliveryMeter, mediaCapWait } from './delivery';
 import { BandwidthEstimator } from '../../abr';
 import { abortable, delay } from '../async';
+import { localMediaURL } from '../../local-media';
 import type { ByteReader } from '../types';
 import { isOriginalLostError, originalLostError, originalLostResponse } from '../../original-lost';
 
@@ -544,8 +545,9 @@ export class RangeReader implements ByteReader {
     allowed?: (url: URL) => boolean,
   ) {
     const parsed = new URL(url, document.baseURI);
+    const local = !!allowed && !!localMediaURL(url) && allowed(parsed);
     if (
-      !['http:', 'https:'].includes(parsed.protocol) ||
+      (!local && !['http:', 'https:'].includes(parsed.protocol)) ||
       parsed.username ||
       parsed.password ||
       (allowed ? !allowed(parsed) : parsed.origin !== location.origin)

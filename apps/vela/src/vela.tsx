@@ -49,6 +49,9 @@ setQuietPlayback(__DEV__ || !!config.startRoutes || (Platform.OS !== 'web' && !!
 import { aboutApp, listenWebHandoff, platform } from './data/platform';
 import { APP_FONTS, assetSource, DOCUMENTS, initialDocument } from './documents';
 import { preferences } from './data/preferences';
+
+/** Device-wide download preferences (Wi-Fi only, storage cap). */
+export const DOWNLOAD_SETTINGS = 'downloads.settings';
 import { usePlayerSettings } from './player-settings';
 import { useSeriesTracks } from './series-tracks';
 import { useLibraryOrders } from './library-orders';
@@ -270,15 +273,17 @@ function useStartRoutes(homeReady: boolean): void {
 function offlineAccess(state: VelaState, pathname: string): boolean {
   if (SIGNED_OUT_ROUTES.includes(pathname)) return true;
   const { downloads, auth } = state;
-  return downloads.supported && downloads.hydrated && !!auth.viewerId &&
-    allowsOfflineRoute(auth.phase, pathname, id => downloads.items.some(item => item.titleId === id && isPlayableDownload(item)));
+  // Signed out after the server refused the session, the viewer's kept downloads still play.
+  const waitingForSignIn = auth.phase === 'signed-out' && downloads.items.some(item => item.awaitingSignIn && isPlayableDownload(item));
+  return downloads.supported && downloads.hydrated && (!!auth.viewerId || waitingForSignIn) &&
+    allowsOfflineRoute(auth.phase, pathname, id => downloads.items.some(item => item.titleId === id && isPlayableDownload(item)), waitingForSignIn);
 }
 
 function useSignedOutGate(state: VelaState): void {
   const { phase } = state.auth;
   const pathname = usePathname();
   const allowed = offlineAccess(state, pathname);
-  const waiting = phase === 'offline' && state.downloads.supported && !state.downloads.hydrated;
+  const waiting = (phase === 'offline' || phase === 'signed-out') && state.downloads.supported && !state.downloads.hydrated;
   useEffect(() => {
     if (!waiting && (phase === 'signed-out' || phase === 'offline') && !allowed) {
       const search = Platform.OS === 'web' ? window.location.search : '';
@@ -329,10 +334,15 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   useEffect(() => { setChoice(preferences.get(preferenceKey) || preferences.get(SKIN_PREFERENCE) || ''); }, [preferenceKey]);
   useEffect(() => {
     void store.appearance.load();
+    try { store.downloads.loadSettings(JSON.parse(preferences.get(DOWNLOAD_SETTINGS) || 'null')); } catch { /* defaults */ }
     const active = () => {
       void store.appearance.load();
       if (store.getState().auth.phase === 'offline') void store.auth.retry();
-      else void store.downloads.replayProgress();
+      else {
+        void store.downloads.replayProgress();
+        // Transfers the network or a closed app interrupted pick up again with fresh credentials.
+        void store.downloads.resumeInterrupted();
+      }
     };
     const subscription = AppState.addEventListener('change', next => {
       if (next === 'active') active();

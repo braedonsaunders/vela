@@ -1,5 +1,5 @@
 // Capability-backed title mutations shown on every built-in title surface.
-import { downloadPercent, isPlayableDownload, msg, type TitleActions as Actions } from '@vela/core';
+import { downloadOfferReason, downloadPercent, isPlayableDownload, msg, type DownloadOffer, type TitleActions as Actions } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useCallback, useEffect, useState, type ReactNode, type ComponentRef } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
@@ -9,6 +9,7 @@ import { holdBack } from '../menu-key';
 import { useServerSwitch } from './auth/servers';
 import Svg, { Circle } from 'react-native-svg';
 import { Glyph } from './common/controls';
+import { confirmAction } from './common/confirm';
 import { SheetModal } from './common/sheet-modal';
 import { useLook } from './common/look';
 import type { TitleVersions, VersionItem } from '@vela/core';
@@ -99,6 +100,7 @@ export function TitleActions() {
   const [actions, setActions] = useState<Actions | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [note, setNote] = useState('');
   useEffect(() => {
     let live = true;
     setActions(null);
@@ -144,33 +146,45 @@ export function TitleActions() {
         {host.env.canPlaylists ? <ActionButton testID="detail-add-playlist" disabled={busy}
           icon="playlist-add" active={false} label={msg('cardMenu.addToPlaylist')}
           run={() => host.dispatch('addToPlaylist', `${id}|${title.kind}`)} /> : null}
-        {downloadTitle ? <TitleDownload key={id} id={id} name={title.name} onError={setError} /> : null}
+        {downloadTitle ? <TitleDownload key={id} id={id} kind={title.kind} name={title.name} onError={setError} onNote={setNote} /> : null}
       </View>
       {error ? <Text accessibilityRole="alert" style={look.text({ 'font-size': '13px', color: '$ui.accent' })}>{error}</Text> : null}
+      {note && !error ? <Text testID="detail-download-note" style={[look.text({ 'font-size': '13px', color: '$ui.inkSecondary' }), { maxWidth: '100%', flexShrink: 1 }]}>{note}</Text> : null}
     </View>
   );
 }
 
-function TitleDownload({ id, name, onError }: { id: string; name: string; onError(message: string): void }) {
+const SAVE_FILE_NOTE = 'This browser may clear stored videos, so Vela saves the file to your downloads instead.';
+
+function TitleDownload({ id, kind, name, onError, onNote }: { id: string; kind: string; name: string; onError(message: string): void; onNote(message: string): void }) {
   const vela = useVela();
   const host = useHost();
   const switcher = useServerSwitch();
   const look = useLook();
   const revision = useVelaState(state => state.auth.revision);
+  const persisted = useVelaState(state => state.downloads.persisted);
   const item = useVelaState(state => state.downloads.items.find(item => item.titleId === id));
-  const [allowed, setAllowed] = useState(false);
+  const [offer, setOffer] = useState<DownloadOffer>({ kind: 'none', reason: 'unsupported' });
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [saved, setSaved] = useState(false);
   useEffect(() => {
     let current = true;
-    setAllowed(false);
-    void vela.downloads.canDownload().then(value => {
-      if (current) setAllowed(value);
+    void vela.downloads.offer(kind).then(value => {
+      if (current) setOffer(value);
     }).catch(() => {});
     return () => { current = false; };
-  }, [vela, revision]);
-  if (!allowed && !item) return null;
+  }, [vela, revision, kind, persisted]);
+  const reason = downloadOfferReason(offer);
+  // Why this title saves a file or can't be downloaded here is information, not an error.
+  const note = item ? '' : offer.kind === 'save-file' ? SAVE_FILE_NOTE : offer.kind === 'none' && offer.reason === 'browser' ? reason : '';
+  useEffect(() => {
+    onNote(note);
+    return () => onNote('');
+  }, [note, onNote]);
+  if (offer.kind === 'none' && !item) return null;
 
+  const versionId = async () => (await vela.catalogue.titleVersions(id).catch(() => null))?.selectedVersionId ?? undefined;
   const download = async () => {
     if (busy) return;
     setBusy(true);
@@ -180,9 +194,14 @@ function TitleDownload({ id, name, onError }: { id: string; name: string; onErro
       if (item?.status === 'failed' || item?.status === 'paused') {
         started = await vela.downloads.resume(id);
       } else {
-        const versions = await vela.catalogue.titleVersions(id).catch(() => null);
+        const version = await versionId();
         if (vela.getState().auth.revision !== revision) return;
-        started = await vela.downloads.enqueue(id, { versionId: versions?.selectedVersionId ?? undefined });
+        started = await vela.downloads.enqueue(id, { versionId: version });
+      }
+      // A browser that won't keep its storage turns Download into Save file; the note says why.
+      if (!started && vela.getState().downloads.persisted === false && vela.getState().downloads.traits.engine === 'page') {
+        vela.downloads.clearError();
+        return;
       }
       setFailed(!started);
       if (!started) onError(vela.getState().downloads.error || 'Could not start the download');
@@ -190,35 +209,57 @@ function TitleDownload({ id, name, onError }: { id: string; name: string; onErro
       setBusy(false);
     }
   };
-  const remove = () => Alert.alert('Remove download?', name, [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Remove', style: 'destructive', onPress: () => {
+  const saveFile = async () => {
+    if (busy) return;
+    setBusy(true);
+    onError('');
+    try {
+      const version = await versionId();
       if (vela.getState().auth.revision !== revision) return;
-      void vela.downloads.remove(id).catch(() => onError('Could not remove the download'));
-    } },
-  ]);
+      const done = await vela.downloads.saveFile(id, { versionId: version });
+      setSaved(done);
+      if (!done && vela.getState().downloads.error) onError(vela.getState().downloads.error);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async () => {
+    if (!await confirmAction('Remove download?', name, 'Remove')) return;
+    if (vela.getState().auth.revision !== revision) return;
+    await vela.downloads.remove(id).catch(() => onError('Could not remove the download'));
+  };
   const downloaded = isPlayableDownload(item);
   const status = item?.status;
   const transferring = status === 'queued' || status === 'downloading';
   const retry = status === 'failed' || failed;
   const percent = downloadPercent(item);
-  const label = downloaded ? 'Downloaded' : busy ? 'Preparing download' : status === 'downloading' ? 'Downloading' :
+  const saving = !item && offer.kind === 'save-file';
+  const label = saving ? (busy ? 'Saving file' : saved ? 'Saved' : 'Save file')
+    : downloaded ? 'Downloaded' : busy ? 'Preparing download' : status === 'downloading' ? 'Downloading' :
     status === 'queued' ? 'Download queued' : retry ? 'Retry download' : status === 'paused' ? 'Resume download' : 'Download';
   const press = () => {
-    if (downloaded) {
+    if (saving) void saveFile();
+    else if (downloaded) {
+      // The page has no native action sheet: the Downloads library plays and deletes there.
+      if (Platform.OS === 'web') {
+        if (switcher?.openDownloads) switcher.openDownloads();
+        else host.dispatch('play', id);
+        return;
+      }
       Alert.alert(name, undefined, [
         { text: 'Play offline', onPress: () => host.dispatch('play', id) },
-        { text: 'Remove', style: 'destructive', onPress: remove },
+        { text: 'Remove', style: 'destructive', onPress: () => void remove() },
         { text: 'Cancel', style: 'cancel' },
       ]);
     } else if (transferring) switcher?.openDownloads?.();
     else void download();
   };
-  return <ActionButton label={label} icon={retry && !downloaded ? 'restart' : status === 'queued' && !downloaded ? 'clock' : 'download'}
+  return <ActionButton label={label} icon={saving ? (saved ? 'checkmark' : 'download') : retry && !downloaded ? 'restart' : status === 'queued' && !downloaded ? 'clock' : 'download'}
     testID="detail-download" disabled={busy || (transferring && !downloaded && !switcher?.openDownloads)} round
     active={downloaded} run={press} value={status === 'downloading' && percent !== undefined ? `${percent}%` : undefined}>
     {downloaded ? <View pointerEvents="none" style={{
-      position: 'absolute', right: -1, bottom: -1, width: 16, height: 16, borderRadius: 8,
+      // A TV's 3px focus border moves the button's content box inward: keep the badge on the rim.
+      position: 'absolute', right: Platform.isTV ? -4 : -1, bottom: Platform.isTV ? -4 : -1, width: 16, height: 16, borderRadius: 8,
       alignItems: 'center', justifyContent: 'center', backgroundColor: look.ui.ink,
     }}><Glyph symbol="checkmark" size={11} color={look.ui.inkInverse} /></View> : null}
     {status === 'downloading' && !downloaded ? (
@@ -256,7 +297,8 @@ function ActionButton({ label, icon, active, testID, run, disabled, round, value
     <FocusPressable
       ref={tooltip}
       accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled, selected: active }}
-      accessibilityValue={value ? { text: value } : undefined}
+      // Android keeps the last value when the prop goes undefined: clear it with an empty text.
+      accessibilityValue={{ text: value ?? '' }}
       testID={testID}
       disabled={disabled} onPress={run}
       onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)}
@@ -271,6 +313,9 @@ function ActionButton({ label, icon, active, testID, run, disabled, round, value
         }),
         Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as ViewStyle) : null,
         pressed ? { opacity: 0.7, transform: [{ scale: 0.985 }] } : null,
+        // Android draws no box shadows and a 1px tan edge reads like an active fill: a TV shows focus
+        // as a ring in ink and a lift, as the media pages' round buttons do.
+        Platform.isTV ? { borderWidth: 3, borderColor: focus ? look.ui.ink : 'transparent', transform: [{ scale: focus ? 1.1 : 1 }] } : null,
         disabled ? { opacity: 0.5 } : null,
       ]}
     >

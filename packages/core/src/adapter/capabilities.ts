@@ -506,13 +506,18 @@ export interface DownloadResolution {
 export interface ResolveDownloadOptions {
   versionId?: string;
   subtitleFormats?: readonly string[];
+  /** The device's declared playback capabilities (Ether grants an original this device can play). */
+  client?: V.ClientCapabilities;
   idempotencyKey?: string;
 }
 
-/** Original-file download resolution for offline playback on iPhone and iPad. */
+/** Original-file download resolution for offline playback (docs/downloads.md). */
 export interface MediaDownloads {
   /** Whether the server offers original-file downloads to the viewer (e.g. Plex root `allowSync`). */
   downloadsAvailable?(): Promise<boolean>;
+  /** `none`: the resolved URL is a capability link (an Ether grant); `headers` (default): the
+   * request needs the resolution's credential headers (Plex, Jellyfin, Emby). */
+  readonly downloadCredentials?: 'none' | 'headers';
   resolveDownload(id: string, options?: ResolveDownloadOptions): Promise<DownloadResolution>;
 }
 export function hasMediaDownloads(adapter: ServerAdapter): adapter is ServerAdapter & MediaDownloads {

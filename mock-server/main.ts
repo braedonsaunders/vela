@@ -1330,6 +1330,17 @@ async function dispatch(req: Request): Promise<Response> {
       for (const disconnect of listeners) disconnect();
       return json({ dropped: listeners.length, expired });
     }
+    const downloadWatch = /^\/__admin\/download-watch\/([a-z0-9-]+)$/.exec(url.pathname);
+    if (downloadWatch && process.env.VELA_MOCK_DOWNLOADS === '1') {
+      const title = allTitles.find(item => item.id === downloadWatch[1]);
+      if (!title) return new Response(null, { status: 404 });
+      if (req.method === 'GET') return json(title.watch ?? null);
+      if (req.method === 'PUT') {
+        title.watch = await req.json() ?? undefined;
+        feedChanged();
+        return json(title.watch ?? null);
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/__admin/catch-up-fixture') return json(archiveFixture);
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; if ('refreshAbandonMs' in data) { abandonedRefreshKeys.clear(); refreshAbandonArmed = faults.refreshAbandonMs > 0; } return json(faults); }
@@ -1379,12 +1390,12 @@ async function dispatch(req: Request): Promise<Response> {
     if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
     return response;
   }
-  const download = /^\/vela\/v0\/download\/([a-f0-9-]+)$/.exec(url.pathname);
+  const download = /^\/vela\/v0\/download\/([a-f0-9-]+)(\/subtitles\.vtt)?$/.exec(url.pathname);
   if (download && (req.method === 'GET' || req.method === 'HEAD')) {
     return serveDownload(req, download[1]!, owner => {
       const grant = grants.get(owner);
       return !!grant && !grant.revoked && grant.expires > Date.now();
-    });
+    }, !!download[2]);
   }
   // Reading grants: opaque short-lived document URLs, fetched without the bearer.
   const reading = /^\/reading\/media\/([a-f0-9]+)\/([^/]+)$/.exec(url.pathname);

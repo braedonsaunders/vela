@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { msg } from '@vela/core';
+import { useVelaState } from '@vela/core/react';
 import { eyebrow } from '../../resolve/vela-base/look';
 import { useHost, useInheritedText, type WidgetProps } from '../../host';
 import { serverDetail } from './connect/server-row';
@@ -118,6 +119,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
             {confirming ? (
               <View style={look.box({ gap: '4px', 'padding-top': '6px', 'padding-bottom': '6px' })}>
                 <Words rows={{ 'font-size': '13px' }}>{msg('connect.removeConfirm', { name: server.name })}</Words>
+                <RemovedDownloads serverId={server.id} />
                 <View style={look.box({ 'flex-direction': 'row', 'justify-content': 'flex-end', gap: '8px' })}>
                   <Row label={msg('ui.cancel')} onPress={() => { setReturnTo(server.id); setConfirmId(''); }} disabled={busy}
                     testID="server-remove-cancel" inline compact preferFocus />
@@ -213,4 +215,13 @@ function Row({
       {busy ? <ActivityIndicator size="small" color={look.ui.accent} /> : selected ? <Glyph symbol="checkmark" size={14} color={look.ui.accent} /> : null}
     </APressable>
   );
+}
+
+/** Removing a server deletes every viewer's downloads for it on this device: say so before it happens. */
+function RemovedDownloads({ serverId }: { serverId: string }) {
+  const count = useVelaState(state => state.downloads.allItems.filter(item => item.serverId === serverId).length);
+  if (!count) return null;
+  return <Words rows={{ 'font-size': '13px', color: '$ui.inkSecondary' }} testID="server-remove-downloads">
+    {count === 1 ? 'Its download on this device will be deleted.' : `Its ${count} downloads on this device will be deleted.`}
+  </Words>;
 }

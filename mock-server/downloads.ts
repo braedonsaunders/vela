@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { DownloadGrant, DownloadRequest, OfflineWatchRequest, TitleDetail, WatchState } from '../packages/protocol/types';
-import { formatsRoot, mediaRoot, originalFixture, serveMedia } from './media';
+import { faults, formatsRoot, mediaRoot, originalFixture, serveMedia } from './media';
+import { sidecarFixture } from './sessions';
 
 const enabled = process.env.VELA_MOCK_DOWNLOADS === '1';
 const maxPerDay = 3;
@@ -60,19 +61,26 @@ export async function issueDownload(owner: string, viewerId: string, detail: Tit
     mimeType, container, byteLength: file.size, sourceId: resource,
     originalVideo: originalFixture.video ?? { codec: 'h264' },
     audioTracks: originalFixture.audio ?? [],
-    subtitleTracks: originalFixture.subtitles ?? [],
+    // With the sidecar fixture on (POST /__admin/sidecar {"enabled":true}), the generated original carries an
+    // external WebVTT sidecar that the download fetches through the same ticket.
+    subtitleTracks: sidecarFixture.enabled && !originalFixture.name ? [{ id: 'sub-en', kind: 'subtitle', language: 'en',
+      name: 'English · sidecar', codec: 'webvtt', delivery: { kind: 'external', format: 'webvtt', url: `/vela/v0/download/${ticket}/subtitles.vtt` } }]
+      : originalFixture.subtitles ?? [],
     chapters: detail.chapters ?? [],
   };
 }
 
-export async function serveDownload(req: Request, ticket: string, active: (owner: string) => boolean): Promise<Response> {
+export async function serveDownload(req: Request, ticket: string, active: (owner: string) => boolean, sidecar = false): Promise<Response> {
   const grant = tickets.get(ticket);
   if (!grant || grant.expires <= Date.now() || !active(grant.owner)) return new Response(null, { status: 404 });
+  if (sidecar) return serveMedia(req, 'subtitles.vtt', false);
   const path = grant.resource.startsWith('original/')
     ? join(formatsRoot, grant.resource.slice(9))
     : join(mediaRoot, grant.resource);
   if (await fileIdentity(path).catch(() => undefined) !== grant.etag) return new Response(null, { status: 409 });
-  return serveMedia(req, grant.resource, false, grant.etag);
+  const truncate = req.method === 'GET' && faults.downloadTruncate > 0;
+  if (truncate) faults.downloadTruncate--;
+  return serveMedia(req, grant.resource, truncate, grant.etag);
 }
 
 export function applyOfflineWatch(watch: WatchState, body: OfflineWatchRequest): boolean {

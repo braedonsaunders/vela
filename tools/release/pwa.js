@@ -2,6 +2,12 @@
 let deferred, registration;
 const listeners = new Set();
 const state = { installable: false, installed: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true, updateAvailable: false, offline: !navigator.onLine };
+function offlineMessage(type) {
+  const worker = navigator.serviceWorker?.controller || registration?.active;
+  if (!worker) return false;
+  worker.postMessage({ type });
+  return true;
+}
 function notify() { const snapshot = Object.freeze({ ...state }); for (const listener of listeners) listener(snapshot); window.dispatchEvent(new CustomEvent('vela:pwa-state', { detail: snapshot })); }
 window.velaPwa = {
   get state() { return Object.freeze({ ...state }); },
@@ -12,6 +18,9 @@ window.velaPwa = {
     await prompt.prompt(); return (await prompt.userChoice).outcome === 'accepted';
   },
   applyUpdate() { if (!registration?.waiting) return false; registration.waiting.postMessage({ type: 'ACTIVATE_UPDATE' }); return true; },
+  // Offline downloads: keep (or release) the verified app so Downloads and Watch open offline.
+  prepareOffline() { return offlineMessage('PRECACHE_OFFLINE'); },
+  releaseOffline() { return offlineMessage('RELEASE_OFFLINE'); },
 };
 window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); deferred = event; state.installable = !state.installed; notify(); });
 window.addEventListener('appinstalled', () => { deferred = undefined; state.installed = true; state.installable = false; notify(); });

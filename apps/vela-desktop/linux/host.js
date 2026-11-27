@@ -6,8 +6,12 @@ const { spawn, spawnSync } = require('node:child_process');
 const { once } = require('node:events');
 const { connect } = require('./mpv-ipc');
 const { createProxy } = require('./media-proxy');
+const { downloadsRoot, localizePlayback, localFileOf } = require('../downloads-paths');
 const { acceptPlan, physicalBounds, playbackRate, parseEld, playbackSettings, audioOptions, subtitleProperties,
   isLive, isStartOver, demuxerOptions, liveWindow, liveSnapshot, catchUpTarget, clampLiveSeek, resumeTarget } = require('./logic');
+// A downloaded title plays from disk: its vela-app://app/vela-downloads/ URLs become the validated local
+// paths, which mpv opens itself; the media proxy and its grant are never involved.
+const downloads = () => downloadsRoot(require('electron').app.getPath('userData'));
 const root = () => process.env.VELA_LINUX_NATIVE_DIR || path.join(process.resourcesPath || path.dirname(__dirname), 'native-linux');
 function available() {
   return process.platform === 'linux' && !!process.env.DISPLAY && fs.existsSync(path.join(root(), 'vela-mpv'))
@@ -60,7 +64,7 @@ async function create({ window, emit }) {
   const xid = handle.length >= 8 ? handle.readBigUInt64LE() : BigInt(handle.readUInt32LE());
   const child = spawn(path.join(root(), 'vela-mpv'), [String(xid), socket], {
     env: { ...process.env, LD_LIBRARY_PATH: path.join(root(), 'lib') }, stdio: ['pipe','pipe','ignore'] });
-  let ipc, proxy, plan, source = '', seek = '', disposed = false, timer, sequence = 0, lastCommand = -1, pendingSeek, externalSubtitle, accessGeneration = 0, loadedAt = 0, appliedTracks = {}, activeEntry = null;
+  let ipc, proxy, plan, source = '', seek = '', disposed = false, timer, sequence = 0, lastCommand = -1, pendingSeek, externalSubtitle, accessGeneration = 0, loadedAt = 0, appliedTracks = {}, activeEntry = null, localSource = false;
   let rect = { x:0, y:0, width:0, height:0, scaleFactor:1 }, chain = Promise.resolve();
   let renderer = '', facts = null, described = 0, subtitleAppearance = '';
   let subtitlePosition = 100, captionLift = 0;
@@ -96,7 +100,7 @@ async function create({ window, emit }) {
       new Promise((_, reject) => { const t = setTimeout(() => reject(new Error('Native startup timeout')), 5000); t.unref(); })]);
     ipc = await connect(socket, event => {
       if (event.event === 'start-file') activeEntry=event.playlist_entry_id;
-      if (event.event === 'end-file' && event.reason === 'error' && proxy && source
+      if (event.event === 'end-file' && event.reason === 'error' && (proxy || localSource) && source
           && activeEntry != null && event.playlist_entry_id === activeEntry) {
         send('fallback',{message:'Native decoder failed',reason:'Native decoder error'}); void destroy();
       }
@@ -133,7 +137,7 @@ async function create({ window, emit }) {
     if (!plan || !source || disposed || ticking) return;
     ticking = true;
     void enqueue(async () => {
-      if (!plan || !source || !proxy) return;
+      if (!plan || !source || (!proxy && !localSource)) return;
       const names = ['time-pos','duration','pause','paused-for-cache','eof-reached','demuxer-cache-duration','volume','mute','frame-drop-count','track-list','video-out-params','hwdec-current','estimated-vf-fps','speed','seeking','demuxer-cache-state'];
       const values = await Promise.all(names.map(get));
       const p = Object.fromEntries(names.map((n,i) => [n,values[i]]));
@@ -171,7 +175,7 @@ async function create({ window, emit }) {
         const track = plan[kind === 'audio' ? 'audioTracks' : 'subtitleTracks']?.find(t => t.id === id);
         const native = p['track-list']?.find(t => t.type === (kind === 'audio' ? 'audio' : 'sub') && t['ff-index'] === track?.streamIndex);
         if (native && appliedTracks[kind] !== native.id) { await cmd('set_property', kind === 'audio' ? 'aid' : 'sid', native.id); appliedTracks[kind]=native.id; }
-        else if (kind === 'subtitle' && track?.delivery?.kind === 'external' && externalSubtitle !== id) { await cmd('sub-add',proxy.register(track.delivery.url || track.url),'select'); externalSubtitle=id; }
+        else if (kind === 'subtitle' && track?.delivery?.kind === 'external' && externalSubtitle !== id) { await cmd('sub-add',mediaSource(track.delivery.url || track.url),'select'); externalSubtitle=id; }
         else if (kind === 'subtitle' && !id) await cmd('set_property','sid','no');
       }
       send('snapshot', {sessionId:plan.sessionId,sourceGeneration:plan.sourceGeneration,seekGeneration:plan.seekGeneration,state,position,duration:live ? null : (p.duration || 0)+offset,live,seekTarget:liveSeek?.target ?? null,bufferAheadSeconds:p['demuxer-cache-duration'] || 0,volume:(p.volume || 0)/100,muted:!!p.mute,speed:playbackRate(plan,p.speed),speeds:plan.channelId || plan.live ? [1] : [.5,.75,1,1.25,1.5,2],droppedFrames:p['frame-drop-count'] || 0,nativeVideo:p['video-out-params'],nativeHwdec:p['hwdec-current'],nativeFps:p['estimated-vf-fps'],mpv:facts,output:output()});
@@ -217,6 +221,16 @@ async function create({ window, emit }) {
     if (target === null) return window?.edge == null ? 'The live window is not known yet' : 'This live stream keeps no history to rewind';
     return await liveSeekTo(target, origin) ? null : 'The live seek failed';
   }
+  /** What mpv opens for a plan URL: a downloaded file's validated path, else the grant's proxy route. */
+  function mediaSource(address, startup) {
+    if (typeof address === 'string' && /^file:/i.test(address)) {
+      const file = localFileOf(downloads(), address);
+      if (!file) throw new Error('Invalid URL');
+      return file;
+    }
+    if (!proxy) throw new Error('Media outside access grant');
+    return proxy.register(address, startup);
+  }
   let latestProps;
   const apply = async props => {
       if (props.preview || props.session) throw new Error('Browser fallback required');
@@ -232,7 +246,8 @@ async function create({ window, emit }) {
       }
       if (!acceptPlan(plan, props.plan)) return;
       const next = props.plan, selected = next.paths.find(p => p.id === next.selectedPathId);
-      if (!proxy) return;
+      const local = typeof selected?.url === 'string' && /^file:/i.test(selected.url);
+      if (!proxy && !local) return;
       if (!selected || !(selected.transport === 'hls' || selected.transport === 'file' && selected.original)) throw new Error('Unsupported path');
       if (plan?.sessionId !== next.sessionId) { sequence=0; lastCommand=-1; liveBehind=false; liveSeek=null; }
       if (plan?.sessionId !== next.sessionId || plan.revision !== next.revision) planReceivedAt = Date.now();
@@ -244,7 +259,7 @@ async function create({ window, emit }) {
         liveStartup = selected.transport === 'hls' && plan.live?.timeshift && !isStartOver(plan)
           ? { key: ++liveStartupId, live: plan.live, requested: plan.seekGeneration > 0 ? plan.positionSeconds : null } : undefined;
         for (const [name, value] of demuxerOptions(plan, !!liveStartup)) await cmd('set_property', name, value).catch(() => {});
-        await cmd('loadfile', proxy.register(selected.url, liveStartup), 'replace'); source=key; externalSubtitle=null; appliedTracks={}; loadedAt=Date.now(); facts=null;
+        await cmd('loadfile', mediaSource(selected.url, liveStartup), 'replace'); source=key; localSource=local; externalSubtitle=null; appliedTracks={}; loadedAt=Date.now(); facts=null;
         liveBehind=false; liveSeek=null;
         await cmd('set_property','speed',1);
       }
@@ -295,13 +310,19 @@ async function create({ window, emit }) {
     },
     setBounds(value) { rect = value; bounds(); },
     setAccess(grant) {
-      const generation = ++accessGeneration; activeEntry=null; source=''; proxy?.close(); proxy=null;
+      const generation = ++accessGeneration;
       const immutable = grant ? {origin:grant.origin,pathPrefix:grant.pathPrefix,headers:{...grant.headers}} : null;
+      if (localSource && source) {
+        // A downloaded file plays without a grant: replace the grant for the next server plan, keep the file playing.
+        proxy?.close(); proxy=null;
+        return enqueue(async () => { if (generation === accessGeneration && immutable) proxy=await createProxy(immutable); });
+      }
+      activeEntry=null; source=''; localSource=false; proxy?.close(); proxy=null;
       return enqueue(async () => { await cmd('stop'); source=''; seek=''; plan=null; pendingSeek=null; liveStartup=undefined;
         if (generation === accessGeneration && immutable) { proxy=await createProxy(immutable); if(latestProps) await apply(latestProps); }
       });
     },
-    update(props) { latestProps=props; return enqueue(() => apply(props)); },
+    update(props) { return enqueue(() => { latestProps=localizePlayback(props, downloads()); return apply(latestProps); }); },
     diagnostics: async () => ({renderer,active:!!source,hasAccess:!!proxy,sessionId:plan?.sessionId,position:await get('time-pos'),video:await get('video-out-params'),hwdec:await get('hwdec-current'),speed:await get('speed')}),
     destroy,
   };

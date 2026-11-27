@@ -91,12 +91,20 @@ try {
     files: staticFiles.filter(file => file.path === 'offline.html').map(file => ({
       url: `/vela/${file.path}`, sha256: file.sha256,
     })),
+    // The verified app for offline Downloads and Watch, cached only on the page's PRECACHE_OFFLINE.
+    offline: {
+      entry: staticFiles.filter(file => file.path === 'index.html').map(file => ({ url: `/vela/${file.path}`, sha256: file.sha256 }))[0],
+      routes: ['/vela/downloads', '/vela/watch/:id'],
+    },
     staticFiles: staticFiles.filter(file => file.path.startsWith('_expo/static/')
       || file.path.startsWith('assets/') || file.path.startsWith(`player/${playerAssets.digest}/`)
       || file.path.startsWith('skins/') && file.path !== 'skins/catalog.json').map(file => ({
       url: `/vela/${file.path}`, sha256: file.sha256,
     })),
   };
+  if (!shell.offline.entry || shell.offline.routes.some(path => !routes.routes.includes(path))) {
+    throw new Error('Offline launch needs index.html and the app\'s Downloads and Watch routes');
+  }
   const worker = (await readFile(join(source, 'tools/release/sw.js'), 'utf8'))
     .replace('const shell = __VELA_SHELL__;', `const shell = ${JSON.stringify(shell)};`);
   await writeFile(join(dist, 'sw.js'), worker);

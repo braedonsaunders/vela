@@ -52,3 +52,37 @@ test('Ether rejects a grant with a missing file identity or a foreign ticket URL
     await expect(adapter().resolveDownload('movie')).rejects.toThrow();
   }
 });
+
+test('Ether download refusals read as sentences, and an incomplete grant fails clearly', async () => {
+  const refuse = (code: string, message = code, status = 409) => new Response(JSON.stringify({
+    error: { class: 'source', code, message, retry: { allowed: false } },
+  }), { status, headers: { 'Content-Type': 'application/json' } });
+  for (const [answer, words] of [
+    [refuse('version_unavailable'), 'This version can\'t be downloaded from the server right now.'],
+    [refuse('download_limit', 'download_limit', 429), 'You\'ve reached today\'s download limit on this server.'],
+    [refuse('download_limit', 'Daily download limit reached', 429), 'Daily download limit reached'],
+  ] as const) {
+    routeFetch({ 'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] }, 'POST /vela/v0/titles/movie/download': answer });
+    await expect(adapter().resolveDownload('movie')).rejects.toThrow(words);
+  }
+  routeFetch({ 'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] }, 'POST /vela/v0/titles/movie/download': { ...grant, url: undefined } });
+  await expect(adapter().resolveDownload('movie')).rejects.toThrow('incomplete grant');
+});
+
+test('a minimal Ether grant (no track lists or container) still resolves from its file name', async () => {
+  const { audioTracks: _a, subtitleTracks: _s, chapters: _c, container: _k, ...minimal } = grant;
+  routeFetch({
+    'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] },
+    'POST /vela/v0/titles/movie/download': { ...minimal, mimeType: 'video/mp4', filename: 'Andre and Wally B.MP4' },
+  });
+  const resolution = await adapter().resolveDownload('movie');
+  expect(resolution).toMatchObject({ container: 'mp4', audioTracks: [], subtitleTracks: [], chapters: [], sidecars: [] });
+  expect(resolution).not.toHaveProperty('filename');
+});
+
+test('Ether receives the device playback capabilities with the grant request', async () => {
+  const requests = routeFetch({ 'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] }, 'POST /vela/v0/titles/movie/download': grant });
+  const client = { subtitleFormats: ['webvtt'], containers: ['mp4'] } as unknown as V.ClientCapabilities;
+  await adapter().resolveDownload('movie', { idempotencyKey: 'grant-2', client });
+  expect(requests.find(request => request.method === 'POST')?.body).toEqual({ idempotencyKey: 'grant-2', client });
+});

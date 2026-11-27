@@ -127,6 +127,8 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
       onSignIn={(username, password) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, password) : actions.jellyfinSignIn(target, username, password))}
       onQuick={() => void run(async () => { if (kind === 'ether' && authActions) await authActions.startQuick(); else await actions.jellyfinQuickStart(target); send({type: 'code'}); })} />}
 
+    {/* Signed out after the server refused the session: the viewer's kept downloads still play. */}
+    {onDownloads && !offline && step.page === 'signin' ? <Pill label="Open Downloads" testID="signin-downloads" height={44} onPress={onDownloads} /> : null}
     {auth?.secureOrigin && step.page === 'signin' ? <Pill label="Use secure connection" height={44} onPress={() => void run(async () => { const result = await authActions?.secureSwitch(); if (result?.error) return result; if (result?.url) { if (Platform.OS === 'web') window.location.assign(result.url); else await Linking.openURL(result.url); } })} /> : null}
     {note && step.page === 'signin' ? <Words rows={{ 'font-size': '13px', color: '$ui.inkSecondary' }}>{note}</Words> : null}
     {error || (step.page === 'signin' && auth?.phase !== 'offline' && auth?.error) ? <ScrollView style={{maxHeight: layout?.tight ? 56 : 120, flexShrink: 1}}><Alert>{error || auth?.error || ''}</Alert></ScrollView> : null}

@@ -271,7 +271,8 @@ export class Auth {
       // rather than shown the server's own wording ("Refresh invalid").
       const rejected = !stillSignedIn && refusesSession(error);
       if (rejected && knownViewerId) {
-        await this.downloads?.removeViewer(connection.record.id, knownViewerId);
+        // Not a sign-out: the viewer's downloads and pending progress wait for them to sign in again.
+        await this.downloads?.awaitSignIn(connection.record.id, knownViewerId);
       }
       if (stillSignedIn) this.serverWait = serverWait(error);
       await this.refresh(rejected ? msg('server.sessionEnded') : restoreFailure(error), stillSignedIn ? 'offline' : undefined);
@@ -744,7 +745,8 @@ export class Auth {
     clearTimeout(timer);
     if (epoch !== this.session.epoch) return;
     await connection.credentials.set(null);
-    if (viewerId) await this.downloads?.removeViewer(connection.record.id, viewerId);
+    // Signing in again keeps the downloads: the same viewer gets them back, another viewer is asked.
+    if (viewerId) await this.downloads?.awaitSignIn(connection.record.id, viewerId);
     this.cancelQuick();
     this.session.resetSession();
   }
