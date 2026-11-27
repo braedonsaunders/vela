@@ -28,6 +28,8 @@ export interface Card {
   played: boolean;
   favorite?: boolean;
   watchlisted?: boolean;
+  notInterested?: boolean;
+  thumbsUp?: boolean;
   lastViewedAt?: string;
   showId: string;
   showName: string;

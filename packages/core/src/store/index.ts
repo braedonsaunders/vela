@@ -33,6 +33,7 @@ import { idle, StateBox, type Loadable } from './state';
 
 export interface VelaState {
   auth: AuthState;
+  titleFeedback: { hidden: ReadonlySet<string>; revision: number };
   servers: ServersState;
   home: HomeState;
   libraries: Loadable<Destination[]>;
@@ -116,6 +117,7 @@ export interface Vela {
 
 const initialState: VelaState = {
   auth: initialAuth,
+  titleFeedback: { hidden: new Set(), revision: 0 },
   servers: initialServers,
   home: initialHome,
   libraries: idle(),

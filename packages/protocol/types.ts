@@ -69,6 +69,7 @@ export interface ServerCapabilities {
     descriptiveSearch: Feature; aiSearch: Feature;
     /** One ranked search list (`mode: 'auto'`): titles first, description matches as the server's fallback. */
     unifiedSearch?: Feature; proactiveFallback: Feature; liveTV: Feature; livePreview?: LivePreviewFeature; libraryLive?: Feature; removeFromContinue?: Feature; extras: Feature; trailerPreview?: Feature; themeMusic?: Feature; audioFallback?: Feature; initialTrackSelection?: Feature; sessionTrackChanges?: Feature; extraPlayback?: Feature; versions?: Feature;
+    notInterested?: Feature & { thumbsUp: boolean };
     playlists?: Feature & { maxEntries: number };
     /** GET /favorites/titles?role=: a viewer's likes of one role (Liked Songs, saved albums, followed artists). */
     favoritesList?: Feature;
@@ -191,7 +192,7 @@ export interface TitleMedia {
 }
 /** Opaque locator (EPUB CFI, page index) plus the share of the whole document; shared Ether watch state. */
 export interface ReadingProgress { locator: string; fraction: number; label?: string; updatedAt: Timestamp }
-export interface WatchState { positionSeconds: number; played: boolean; favorite: boolean; watchlisted: boolean; /** Most recent viewing activity, RFC3339. */ lastViewedAt?: Timestamp;
+export interface WatchState { positionSeconds: number; played: boolean; favorite: boolean; watchlisted: boolean; notInterested?: boolean; thumbsUp?: boolean; /** Most recent viewing activity, RFC3339. */ lastViewedAt?: Timestamp;
   /** Readable titles: where the viewer is. fraction >= 0.98 marks the title played. */ reading?: ReadingProgress }
 /** Actual server-sourced rating; scale is the maximum possible value. */
 export interface TitleRating { source: string; kind: 'critic' | 'audience'; value: number; scale: number; state?: string; votes?: number; url?: string }
@@ -474,7 +475,8 @@ export interface DownloadGrant {
 export interface OfflineWatchRequest extends Mutation {
   positionSeconds: number; observedAt: Timestamp; offline: true; played?: true;
 }
-export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false }
+export interface WatchResponse extends Ack { watch?: WatchState }
+export interface WatchRequest extends Mutation { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false; notInterested?: boolean; thumbsUp?: boolean }
 
 export interface Collection { id: ID; kind: 'collection' | 'playlist' | 'directory'; name: string; summary?: string; artwork: ArtworkRef[];
   /** Playlist-only fields. */ smart?: boolean; entryCount?: number; updatedAt?: Timestamp }

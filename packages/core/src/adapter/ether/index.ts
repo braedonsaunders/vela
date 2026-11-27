@@ -284,11 +284,19 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
 
   async titleActions(id: string): Promise<TitleActions> {
     const [detail, capabilities] = await Promise.all([this.detail(id, true), this.describe()]);
-    return { watched: true, favorite: true, watchlist: true, removeFromContinue: capabilities.features.removeFromContinue?.available === true, watch: detail.title.watch ?? { positionSeconds: 0, played: false, favorite: false, watchlisted: false }, versions: [] };
+    const feedback = capabilities.features.notInterested;
+    return {
+      watched: true, favorite: true, watchlist: true,
+      removeFromContinue: capabilities.features.removeFromContinue?.available === true,
+      notInterested: feedback?.available === true,
+      thumbsUp: feedback?.available === true && feedback.thumbsUp === true,
+      watch: detail.title.watch ?? { positionSeconds: 0, played: false, favorite: false, watchlisted: false },
+      versions: [],
+    };
   }
 
-  setTitleWatch(id: string, request: V.WatchRequest): Promise<V.Ack> {
-    return this.http.request<V.Ack>('POST', `/titles/${segment(id)}/watch`, request);
+  setTitleWatch(id: string, request: V.WatchRequest): Promise<V.WatchResponse> {
+    return this.http.request<V.WatchResponse>('POST', `/titles/${segment(id)}/watch`, request);
   }
 
   /** Ether's download grant URL is a capability link: no credential headers. */

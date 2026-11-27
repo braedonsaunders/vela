@@ -73,6 +73,8 @@ export function card(title: Title, receipt = '', images?: Images, artWidth = 256
     played: title.watch?.played ?? false,
     favorite: title.watch?.favorite ?? false,
     watchlisted: title.watch?.watchlisted ?? false,
+    ...(title.watch?.notInterested !== undefined ? { notInterested: title.watch.notInterested } : {}),
+    ...(title.watch?.thumbsUp !== undefined ? { thumbsUp: title.watch.thumbsUp } : {}),
     lastViewedAt: title.watch?.lastViewedAt ?? '',
     showId: title.showId ?? '',
     showName: title.showName ?? '',

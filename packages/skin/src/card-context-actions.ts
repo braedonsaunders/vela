@@ -1,4 +1,4 @@
-import { isUnreleased, msg, type Card, type TitleActions } from '@vela/core';
+import { isUnreleased, msg, type Card, type TitleActions, type WatchRequest } from '@vela/core';
 import type { Action } from '../../protocol/skin';
 
 export interface CardPress {
@@ -10,7 +10,7 @@ export type CardContextCommand =
   | { kind: 'dispatch'; action: Action; arg: string }
   | { kind: 'openLink'; href: string }
   | { kind: 'copyLink'; href: string }
-  | { kind: 'watch'; change: { played?: boolean; favorite?: boolean; watchlisted?: boolean; continueWatching?: false } }
+  | { kind: 'watch'; change: Omit<WatchRequest, 'idempotencyKey'> }
   /** Music: play now, play next or add to the queue (a track, or an album's/playlist's tracks). */
   | { kind: 'audio'; op: 'play' | 'next' | 'queue' }
   /** Music: take this entry out of the playlist it is listed in. */
@@ -19,7 +19,7 @@ export type CardContextCommand =
 export interface CardContextAction {
   id: string;
   label: string;
-  icon: 'multiview' | 'play' | 'restart' | 'info' | 'external' | 'copy' | 'checked' | 'unchecked' | 'heart' | 'heart-filled' | 'bookmark' | 'bookmark-filled' | 'remove' | 'show' | 'season' | 'playlist-add' | 'play-next' | 'queue' | 'artist' | 'album';
+  icon: 'thumbs-down' | 'thumbs-up' | 'multiview' | 'play' | 'restart' | 'info' | 'external' | 'copy' | 'checked' | 'unchecked' | 'heart' | 'heart-filled' | 'bookmark' | 'bookmark-filled' | 'remove' | 'show' | 'season' | 'playlist-add' | 'play-next' | 'queue' | 'artist' | 'album';
   group: 'play' | 'details' | 'link' | 'watch' | 'remove';
   tone?: 'warning';
   command: CardContextCommand;
@@ -175,6 +175,20 @@ export function cardContextActions(card: Card, primary: CardPress, management?: 
     icon: management.watch.watchlisted ? 'bookmark-filled' : 'bookmark',
     group: 'watch',
     command: { kind: 'watch', change: { watchlisted: !management.watch.watchlisted } },
+  });
+  if (management?.notInterested) actions.push({
+    id: 'not-interested',
+    label: msg(management.watch.notInterested ? 'cardMenu.clearNotInterested' : 'cardMenu.notInterested'),
+    icon: 'thumbs-down',
+    group: 'watch',
+    command: { kind: 'watch', change: { notInterested: !management.watch.notInterested } },
+  });
+  if (management?.notInterested && management.thumbsUp) actions.push({
+    id: 'thumbs-up',
+    label: msg(management.watch.thumbsUp ? 'cardMenu.clearThumbsUp' : 'cardMenu.thumbsUp'),
+    icon: 'thumbs-up',
+    group: 'watch',
+    command: { kind: 'watch', change: { thumbsUp: !management.watch.thumbsUp } },
   });
   if (context.playlists && TITLE_KINDS.has(card.kind)) {
     actions.push(dispatch('playlist', msg('cardMenu.addToPlaylist'), 'addToPlaylist', `${card.id}|${card.kind}`, 'playlist-add', 'watch'));

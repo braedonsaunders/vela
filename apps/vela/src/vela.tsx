@@ -64,6 +64,7 @@ const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
 import { appRenderTier } from './render-tier';
+import { WatchFeedbackProvider } from '@vela/skin/src/widgets/watch-feedback';
 import { wireLocalSources } from './local-sources';
 import { useCanVisualize } from './visualizer/availability';
 import { useMediaAccess } from './media-access';
@@ -621,7 +622,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       <LaunchGate ready={launchReady(state.auth.phase, state.home.load, fontsReady, offlineAccess(state, pathname), !!resolved.error, state.home.slow)}
         brandingReady={state.appearance.load === 'ready' || state.appearance.load === 'failed'} branding={appearance?.branding}>
         <Previews store={store} state={state} onHome={pathname === '/' && !pickerOpen} heroIndex={view.heroIndex} still={view.still} searchFocused={view.flags.includes('search-focused')}>
-          {children}
+          <WatchFeedbackProvider inTitle={pathname.startsWith('/title/')}>{children}</WatchFeedbackProvider>
         </Previews>
         {pickerOpen ? <AppearancePicker documents={documents} current={selectedIndex} locked={appearance?.force} image={image} branding={appearance?.branding} onPick={pickDocument} onClose={closePicker} /> : null}
         {shownPlaylistTarget ? <AddToPlaylist key={shownPlaylistTarget.titleId} {...shownPlaylistTarget} open={!!playlistTarget} close={closeAddToPlaylist} /> : null}

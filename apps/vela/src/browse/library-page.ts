@@ -32,6 +32,7 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const liveAvailable = useVelaState(state => state.home.value?.libraryLiveAvailable ?? false);
   const progressRevision = useVelaState(state => state.home.progressRevision);
   const revision = useVelaState(state => state.auth.revision);
+  const feedback = useVelaState(state => state.titleFeedback);
   const focused = useSectionFocus() ?? true;
   const initialKey = libraryKey(id, query);
   const initial = useVelaState(state => state.library[initialKey]);
@@ -226,7 +227,15 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
   const libraryCard = (current?.value ?? earlier)?.presentation?.card;
   const card = selectedTab?.kind === 'live' ? undefined : tabCard(selectedTab, libraryCard, levels?.tabCards ?? false);
   const landscape = (card ?? libraryCard) === 'landscape';
-  const extras = useMemo(() => rawExtras && landscape ? { ...rawExtras, rows: rawExtras.rows.map(row => ({ ...row, items: row.items.map(card => libraryCardArtwork(card, 'landscape')) })) } : rawExtras, [rawExtras, landscape]);
+  const extras = useMemo(() => {
+    if (!rawExtras || !landscape && !feedback.hidden.size) return rawExtras;
+    const rows = rawExtras.rows.map(row => {
+      const items = row.items.filter(card => !feedback.hidden.has(card.id));
+      return landscape ? { ...row, items: items.map(card => libraryCardArtwork(card, 'landscape')) }
+        : items.length === row.items.length ? row : { ...row, items };
+    });
+    return { ...rawExtras, rows: rows.filter(row => row.items.length > 0 || row.surface) };
+  }, [rawExtras, landscape, feedback.hidden]);
   const usableView = facetTitle ? 'library' : tabs ? view : view === 'recommended' && !canRecommend || view === 'collections' && !canRecommend || view === 'genres' && !extras?.genres.length ? 'library' : view;
   const layout = viewTab?.layout ?? 'grid';
   const jumpEligible = canJump && jumpIndexEligible(current?.value ?? earlier, browseQuery, { view: usableView, layout, facetTitle });
@@ -256,6 +265,17 @@ export function useLibraryPage(id: string, query: LibraryQuery, requestedView?: 
     if (focused && !current?.value && current?.load !== 'loading' && current?.load !== 'failed') void store.catalogue.library(id, browseQuery, current?.value?.pages ?? 1, !!current?.value);
     // The key names the query; a session change empties the store, which reads it again.
   }, [store, id, key, missing, focused, browseQuery]);
+
+  const feedbackRead = useRef('');
+  useEffect(() => {
+    const read = `${revision}|${key}|${feedback.revision}`;
+    if (!focused || !feedback.revision || feedbackRead.current === read) return;
+    if (usableView !== 'library' && usableView !== 'view') return;
+    const held = store.getState().library[key]?.value;
+    if (!held) return;
+    feedbackRead.current = read;
+    void store.catalogue.library(id, browseQuery, held.pages, true);
+  }, [store, id, browseQuery, key, revision, focused, feedback.revision, usableView]);
 
   const page = useMemo<LibraryPage>(() => {
     const held = current?.value;

@@ -11,6 +11,8 @@ export interface TitleActions {
   watched: boolean;
   favorite: boolean;
   watchlist: boolean;
+  notInterested?: boolean;
+  thumbsUp?: boolean;
   removeFromContinue: boolean;
   watch: V.WatchState;
   versions: MediaVersion[];
@@ -18,7 +20,7 @@ export interface TitleActions {
 /** Viewer-specific title mutations. Each independently advertised boolean hides unsupported UI. */
 export interface TitleManagement {
   titleActions(id: string): Promise<TitleActions>;
-  setTitleWatch(id: string, request: V.WatchRequest): Promise<V.Ack | void>;
+  setTitleWatch(id: string, request: V.WatchRequest): Promise<V.WatchResponse | void>;
 }
 export function hasTitleManagement(api: ServerAdapter): api is ServerAdapter & TitleManagement {
   return 'titleActions' in api && typeof api.titleActions === 'function'
