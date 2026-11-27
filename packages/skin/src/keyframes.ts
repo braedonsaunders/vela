@@ -27,7 +27,8 @@ function frame(text: string): Frame {
     else if (prop === 'rotate') transform.push({ rotate: `${Number(v)}deg` });
     else if (prop === 'translate') {
       const [x, y = '0px'] = v.split(/\s+/);
-      const len = (s: string) => (s.endsWith('%') ? s : parseFloat(s) || 0);
+      // A percentage stays a percentage; anything else is a number of px (0 when it is not one).
+      const len = (s: string) => (/^-?\d*\.?\d+%$/.test(s) ? s : parseFloat(s) || 0);
       transform.push({ translateX: len(x) }, { translateY: len(y) });
     }
   }

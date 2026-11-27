@@ -6,6 +6,7 @@ import { Asset } from 'expo-asset';
 import * as Font from 'expo-font';
 import { Platform, type TextStyle } from 'react-native';
 import { splitTop, withTokens } from './css';
+import { faceStyle, faceWeight, fontFaceRule } from './font-face';
 
 interface Face { name: string; weight: number | [number, number]; italic: boolean }
 
@@ -36,6 +37,8 @@ export async function loadFonts(fonts: Record<string, DocumentFont> | undefined,
     const key = font.family.toLowerCase();
     const list = faces.get(key) ?? [];
     for (const file of font.files) {
+      // A face whose weight or style is not CSS's own value is not loaded (font-face.ts).
+      if (faceWeight(file.weight) === undefined || faceStyle(file.style) === undefined) continue;
       const found = source(file.url);
       if (found === undefined) continue;
       const href = typeof found === 'number' ? Asset.fromModule(found).uri : found;
@@ -43,7 +46,8 @@ export async function loadFonts(fonts: Record<string, DocumentFont> | undefined,
       const weight: Face['weight'] = range.length === 2 ? [range[0], range[1]] : range[0] || 400;
       const italic = file.style === 'italic';
       if (web) {
-        css.push(`@font-face{font-family:${JSON.stringify(font.family)};src:url(${JSON.stringify(href)});font-weight:${String(file.weight)};font-style:${file.style};font-display:swap}`);
+        const rule = fontFaceRule(font.family, href, file.weight, file.style);
+        if (rule) css.push(rule);
         continue;
       }
       if (/\.woff2?(\?|$)/i.test(file.url)) continue;
