@@ -357,6 +357,18 @@ describe('mock server: catalogue and live', () => {
     expect((await refused.json() as V.ErrorResponse).error).toMatchObject({ class: 'source', code: 'version_unavailable' });
   });
 
+  test.skipIf(!mediaGenerated)('a client that adapts gets the multi-rendition transcode as an adaptive path beside direct play', async () => {
+    const start = (features?: V.ClientCapabilities['features']) => post('/playback', {
+      titleId: 'title-1-2', idempotencyKey: key(),
+      client: { device, protocolVersions: [0], containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hls: true, mse: false, ...(features ? { features } : {}) },
+    }, authed(tokens));
+    const adaptive = await (await start({ adaptiveHLS: true })).json() as V.PlaybackPlan;
+    expect(adaptive.selectedPathId).toBe('direct');
+    expect(adaptive.paths.find(path => path.id === 'transcode')?.adaptive).toBe(true);
+    const plain = await (await start()).json() as V.PlaybackPlan;
+    expect(plain.paths.some(path => path.adaptive)).toBe(false);
+  });
+
   test.skipIf(!mediaGenerated)('a switch by bitrate takes the best rung under the cap, at the session position; none fits is 422', async () => {
     const started = await post('/playback', {
       titleId: 'title-1-2', idempotencyKey: key(), positionSeconds: 30,

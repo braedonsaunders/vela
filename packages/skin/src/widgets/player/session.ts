@@ -384,9 +384,10 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       setQualityNotice(msg('player.quality.steppedDown', { quality: `≤ ${mbps(step.maxBitrate)} Mb/s` }));
       return;
     }
-    console.info(`Vela playback: stepping down to ${step.pathId} (${mbps(step.rateBps)} Mbit/s) at ${mbps(step.throughputBps)} Mbit/s measured`);
+    console.info(`Vela playback: stepping down to ${step.pathId} (${step.adaptive ? 'adaptive' : `${mbps(step.rateBps)} Mbit/s`}) at ${mbps(step.throughputBps)} Mbit/s measured`);
     nextId.current += 1;
     setSent({ command: { id: nextId.current, type: 'quality', renditionId: `path:${step.pathId}` }, on: plan.sessionId });
+    if (step.adaptive) { setQualityNotice(msg('player.quality.steppedDownAdaptive')); return; }
     const quality = plan.paths.find(path => path.id === step.pathId)?.quality;
     setQualityNotice(msg('player.quality.steppedDown', { quality: quality ? `${quality.height}p · ${mbps(step.rateBps)} Mb/s` : '' }));
   };

@@ -412,7 +412,7 @@ export class Playback {
       const api = connection.adapter;
       await this.session.negotiate(api);
       // A start before Home (a deep link) reads the server's features first: the declaration depends on them.
-      await this.session.knowFeatures?.(api);
+      if (!this.session.features && this.session.knowFeatures) await this.session.knowFeatures(api);
       if (this.run !== run) return;
       viewerId = (await this.session.tokens?.(connection))?.viewer.id ?? '';
       if (this.run !== run) return;

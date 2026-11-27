@@ -118,3 +118,12 @@ test('a plan whose playing HLS path is an adaptive master is the player\'s to st
   expect(playerAdapts(plan({ selectedPathId: 'quality-1080p8000k' }))).toBe(false);
   expect(playerAdapts(null)).toBe(false);
 });
+
+test('an adaptive path offered beside what plays is preferred over any fixed rung', () => {
+  const watch = feed(deliveryWatch(), 0, 45, starved, 18_000_000);
+  const master = { ...plan().paths[1]!, id: 'adaptive', kind: 'transcode', readiness: 'ready', url: 'u', adaptive: true, quality: undefined } as PlaybackPath;
+  const offered = plan({ paths: [...plan().paths, master] });
+  expect(stepDown(watch, offered, 45_000)).toEqual({ pathId: 'adaptive', adaptive: true, throughputBps: 18_000_000 });
+  // Playing it already: the player adapts, nothing to step to.
+  expect(stepDown(watch, plan({ paths: offered.paths, selectedPathId: 'adaptive' }), 45_000, { adaptive: playerAdapts(plan({ paths: offered.paths, selectedPathId: 'adaptive' })) })).toBeNull();
+});

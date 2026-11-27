@@ -567,6 +567,7 @@
   "player.quality.plexStream": "Plex server stream",
   "player.quality.title": "Playback quality",
   "player.quality.adaptiveUnavailable": "Automatic quality isn't available for this title",
+  "player.quality.steppedDownAdaptive": "The network can't keep up: switching to automatic quality",
   "player.quality.steppedDown": "The network can't keep up: playing {quality} instead",
   "player.streaming": "Streaming quality",
   "player.streaming.wifi": "On Wi-Fi",
