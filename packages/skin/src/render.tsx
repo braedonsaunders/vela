@@ -1400,15 +1400,14 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
       || (env.detail?.title[0]?.id === id && env.detail.resumeSeconds > 0);
     if (resumable && arg.split('|')[3] === undefined) {
       const [titleId, source = '', audio = ''] = arg.split('|');
-      // On a phone a title page stacks Resume and Restart full width. The hero (whose height is
-      // fixed, under any skin's pill sizes) and an episode row have no room for the word: Resume
-      // fills the row beside Restart's labelled mark.
-      const stack = env.small && !ctx.heroAct && id === env.detail?.title[0]?.id;
-      const restart = restartAction(node, secondaryPlayAction(host.doc.routes.title), `${titleId}|${source}|${audio}|0`, msg('ui.restart'), env.small && !stack);
-      const resumeLayout = env.small && ctx.heroAct ? heroResumeLayout(parentDirection) : undefined;
+      // On a phone Resume fills its row beside Restart's labelled mark (the compact scale: one
+      // 44pt line, not two full-width pills), on the hero, a title page and an episode row alike.
+      const page = env.small && !ctx.heroAct && id === env.detail?.title[0]?.id;
+      const restart = restartAction(node, secondaryPlayAction(host.doc.routes.title), `${titleId}|${source}|${audio}|0`, msg('ui.restart'), env.small);
+      const resumeLayout = env.small && (ctx.heroAct || page) ? heroResumeLayout(page ? 'column' : parentDirection) : undefined;
       element = resumeLayout
         ? <View style={resumeLayout.pair}><View style={resumeLayout.resume}>{element}</View><SkinNode node={restart} ctx={ctx} /></View>
-        : <View style={stack ? stackedActions : { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>{element}<SkinNode node={restart} ctx={ctx} /></View>;
+        : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>{element}<SkinNode node={restart} ctx={ctx} /></View>;
     }
     if (env.route === 'title' && id === env.detail?.title[0]?.id && arg.split('|')[3] === undefined) {
       element = <View style={env.small ? stackedActions : { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{element}<VersionsControl /></View>;
@@ -1443,7 +1442,8 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   return node.fit === 'nav' && reportNav ? <>{drawnBox}<NavFitMeasure node={node} ctx={ctx} report={reportNav} /></> : drawnBox;
 }
 
-const stackedActions: ViewStyle = { flexDirection: 'column', alignItems: 'stretch', alignSelf: 'stretch', gap: 10 };
+// Full width in a column of actions and in a wrapping row of them (a phone's title page) alike.
+const stackedActions: ViewStyle = { flexDirection: 'column', alignItems: 'stretch', alignSelf: 'stretch', width: '100%', gap: 10 };
 
 /** On TV, the boxes the focus engine must treat as one region. A navigation bar or rail is one
  * destination: focus moving onto it from anywhere in line with the bar (a centred search field

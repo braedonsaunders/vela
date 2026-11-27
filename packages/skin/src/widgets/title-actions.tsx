@@ -78,11 +78,14 @@ function VersionRow({ version, selected, disabled, run }: { version: VersionItem
 
 function VersionButton({ label, text, detail, badge, run, disabled }: { label: string; text?: string; detail?: string; badge?: string; run(): void; disabled?: boolean }) {
   const look = useLook();
+  // A phone draws it at the compact scale: a 44pt-plus row, not a 70pt card.
+  const compact = !!useHost().env.small && !Platform.isTV;
   const [focus, setFocus] = useState(false);
   return <FocusPressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled }} disabled={disabled}
     onPress={run} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-    style={{ padding: 16, borderRadius: 12, backgroundColor: focus ? look.ui.ink : look.ui.control, opacity: disabled ? 0.5 : 1 }}>
-    <View style={{ gap: 2 }}><Text style={look.text({ 'font-size': '18px', 'font-weight': '600', color: focus ? '$ui.inkInverse' : '$ui.ink' })}>{text ?? label}</Text>
+    style={{ padding: compact ? 0 : 16, paddingVertical: compact ? 8 : 16, paddingHorizontal: compact ? 14 : 16, minHeight: compact ? 44 : undefined, justifyContent: 'center',
+      borderRadius: 12, backgroundColor: focus ? look.ui.ink : look.ui.control, opacity: disabled ? 0.5 : 1 }}>
+    <View style={{ gap: compact ? 1 : 2 }}><Text style={look.text({ 'font-size': compact ? '14px' : '18px', 'font-weight': '600', color: focus ? '$ui.inkInverse' : '$ui.ink' })}>{text ?? label}</Text>
     {detail ? <Text numberOfLines={1} style={look.text({ 'font-size': '12px', color: focus ? '$ui.inkInverse' : '$ui.inkSecondary' })}>{detail}{badge ? ` · ${badge}` : ''}</Text> : null}</View>
   </FocusPressable>;
 }
