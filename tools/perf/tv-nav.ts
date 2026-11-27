@@ -167,7 +167,15 @@ export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: 
   },
 };
 
-interface Options { device: Device; tp: string; quietMs: number; keep?: string; settle?: number; bufferMb?: number; light?: boolean }
+/** `player` reaches playback through a title's watch link instead (--watch <id>): a library's first title
+ * may have no media, and only a stereo or decoded title is safe to play on a device with its sound on. */
+function withWatch(scenario: (typeof SCENARIOS)[string] | undefined, name: string, watch?: string) {
+  if (!scenario || name !== 'player' || !watch) return scenario;
+  return { ...scenario, setup: [{ link: `vela://watch/${watch}`, wait: 25000 }],
+    steps: scenario.steps.filter(step => !('label' in step) || step.label !== 'close title') };
+}
+
+interface Options { device: Device; tp: string; quietMs: number; keep?: string; settle?: number; bufferMb?: number; light?: boolean; watch?: string }
 
 /** How the runner reaches the device: adb, or the device lab's guarded shell (`lab shell`) on the
  * lab host, which has no push or pull: files go in as base64 and traces come back over the lab
@@ -346,7 +354,7 @@ export function lightScript(steps: Step[], hold = true): string {
 }
 
 async function measureLight(o: Options, name: string, label: string): Promise<RunReport> {
-  const scenario = SCENARIOS[name];
+  const scenario = withWatch(SCENARIOS[name], name, o.watch);
   if (!scenario) throw new Error(`unknown scenario ${name}; have ${Object.keys(SCENARIOS).join(', ')}`);
   const work = mkdtempSync(join(tmpdir(), 'tv-nav-'));
   const d = o.device;
@@ -480,7 +488,7 @@ export interface RunReport {
 }
 
 async function measure(o: Options, name: string, label: string): Promise<RunReport> {
-  const scenario = SCENARIOS[name];
+  const scenario = withWatch(SCENARIOS[name], name, o.watch);
   if (!scenario) throw new Error(`unknown scenario ${name}; have ${Object.keys(SCENARIOS).join(', ')}`);
   const work = mkdtempSync(join(tmpdir(), 'tv-nav-'));
   const d = o.device;
@@ -610,6 +618,7 @@ if (import.meta.main) {
       settle: { type: 'string' },
       'buffer-mb': { type: 'string', default: '96' },
       light: { type: 'boolean', default: false },
+      watch: { type: 'string' },
     },
     allowPositionals: true,
   });
@@ -625,7 +634,7 @@ if (import.meta.main) {
     const device = values.lab ? labDevice(values.lab, values.owner!, values['device-ip']) : adbDevice(values.adb!, values.serial!);
     const options: Options = {
       device, tp: values.tp!, quietMs: Number(values.quiet), keep: values.keep,
-      settle: values.settle ? Number(values.settle) : undefined, bufferMb: Number(values['buffer-mb']), light: values.light,
+      settle: values.settle ? Number(values.settle) : undefined, bufferMb: Number(values['buffer-mb']), light: values.light, watch: values.watch,
     };
     const reports: RunReport[] = [];
     for (const name of values.scenario!.split(',')) {
