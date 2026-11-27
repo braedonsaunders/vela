@@ -4,6 +4,35 @@ import { waitForVideoReady } from './player-ready';
 import { signInMockViewer } from './sign-in';
 
 describe('Sports deterministic release gate', () => {
+  test('the phone Sports landing link uses the section menu and can return Home', async ({ app, browser, screen }) => {
+    await signInMockViewer(app, screen);
+    await browser.setViewport({ width: 402, height: 874 });
+
+    // The fully qualified landing address must enter the same shell as /screen/sports.
+    await app.open('/vela/screen/sports/index?teamsLeague=nhl');
+    await expect(screen.getByTestId('sports-screen-sports')).toBeVisible({ timeout: 30_000 });
+    expect(await browser.evaluate(() => location.pathname)).toBe('/vela/screen/sports');
+    expect(await browser.evaluate(() => new URLSearchParams(location.search).get('teamsLeague'))).toBe('nhl');
+    const menu = screen.getByTestId('mobile-navigation');
+    await expect(menu).toBeVisible();
+    await expect(screen.getByTestId('profile-menu')).toBeVisible();
+
+    await screen.getByTestId('sports-hero-details').tap();
+    await expect(screen.getByTestId('sports-game')).toBeVisible({ timeout: 30_000 });
+    const back = screen.getByTestId('screen-page-back');
+    await expect(back).toBeVisible();
+    await back.tap();
+    await expect(back).toBeHidden();
+    await expect(menu).toBeVisible();
+
+    await menu.tap();
+    const home = screen.getByRole('link', 'Home');
+    await expect(home).toBeVisible();
+    await home.tap();
+    await expect(screen.getByTestId('section-home:home')).toBeVisible();
+    expect(await browser.evaluate(() => location.pathname)).toBe('/vela/');
+  });
+
   test('Tonight opens a game and its stream starts only once', async ({ app, browser, screen }) => {
     await signInMockViewer(app, screen);
     const tonight = screen.getByTestId('sports-tonight');

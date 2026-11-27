@@ -12,7 +12,7 @@ export function sectionRoute(name: string | undefined, id: unknown): SectionRout
 /** Retained native navigators may still report focus under a fullscreen modal.
  * Section activity also follows the visible URL, on touch devices as on TV. */
 export function sectionPathVisible(path: string): boolean {
-  return path === '/' || path === '/live' || path.startsWith('/library/') || path.startsWith('/screen/');
+  return path === '/' || path === '/live' || path.startsWith('/library/') || /^\/screen\/[^/]+\/?$/.test(path);
 }
 
 /** Touch sections are rendered directly rather than as navigator descriptors; their

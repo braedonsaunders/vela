@@ -77,7 +77,9 @@ function SectionsContent() {
   // tvOS each section but Home holds it too, as a fallback for whatever else is open (a menu, Now
   // Playing, a music page going back a page): Menu on a page inside the section goes back, on the
   // section's root to Home, and on Home it leaves Vela.
-  const menuBack = Platform.isTV && Platform.OS === 'ios' && focused ? sectionBack(state.routes, state.index) : null;
+  // A plugin section opened by a deep link may have no Home in its Android history.
+  const menuBack = focused && (Platform.isTV && Platform.OS === 'ios' || Platform.OS === 'android' && section.current.route === 'screen')
+    ? sectionBack(state.routes, state.index) : null;
   useEffect(() => {
     if (!menuBack) return;
     return holdBack(() => {
