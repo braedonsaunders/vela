@@ -115,10 +115,13 @@ test('persists a movie, resumes a partial, plays offline, replays progress and d
       await page.goto(origin + titleRoute);
       const release = await page.evaluate(() =>
         typeof (window as Window & { velaPwa?: { prepareOffline?: () => boolean } }).velaPwa?.prepareOffline === 'function');
+      if (release) await expect.poll(() => page.evaluate(() =>
+        navigator.serviceWorker.controller?.scriptURL.endsWith('/vela/sw.js') === true)).toBe(true);
       const action = page.getByTestId('detail-download');
       const row = page.getByTestId(`download-${titleId}`);
       await expect.poll(() => action.getAttribute('aria-label'), { timeout: 30_000 }).toBe('Download');
       await admin(page, '/__admin/faults', 'POST', { downloadTruncate: 1, bandwidthBps: 24_000_000 });
+      await page.evaluate(stubPersistence, true);
       await action.press('Enter');
       await expect.poll(() => action.getAttribute('aria-label'), { timeout: 30_000 }).toBe('Downloading');
       await action.press('Enter');
