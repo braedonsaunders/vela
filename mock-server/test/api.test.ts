@@ -357,6 +357,25 @@ describe('mock server: catalogue and live', () => {
     expect((await refused.json() as V.ErrorResponse).error).toMatchObject({ class: 'source', code: 'version_unavailable' });
   });
 
+  test.skipIf(!mediaGenerated)('a switch by bitrate takes the best rung under the cap, at the session position; none fits is 422', async () => {
+    const started = await post('/playback', {
+      titleId: 'title-1-2', idempotencyKey: key(), positionSeconds: 30,
+      client: { device, protocolVersions: [0], containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hls: true, mse: false },
+    }, authed(tokens));
+    expect(started.status).toBe(200);
+    const plan = await started.json() as V.PlaybackPlan;
+    const at = { sourceGeneration: plan.sourceGeneration, seekGeneration: plan.seekGeneration };
+    const tooLow = await post(`/sessions/${plan.sessionId}/commands`, { kind: 'switch', maxBitrate: 100_000, ...at, idempotencyKey: key() }, authed(tokens));
+    expect(tooLow.status).toBe(422);
+    expect(await errorCode(tooLow)).toBe('quality_unavailable');
+    const switched = await post(`/sessions/${plan.sessionId}/commands`, { kind: 'switch', maxBitrate: 1_500_000, ...at, idempotencyKey: key() }, authed(tokens));
+    expect(switched.status).toBe(200);
+    const next = await switched.json() as V.PlaybackPlan;
+    expect(next.selectedPathId).toBe('transcode');
+    expect(next.sourceGeneration).toBe(plan.sourceGeneration + 1);
+    expect(next.positionSeconds).toBe(30);
+  });
+
   test.skipIf(!mediaGenerated)('the playing release rides on plans, snapshots and events, and a failover publishes a newer revision', async () => {
     const versions = await get<V.TitleVersions>('/titles/title-1-3/versions');
     const [auto, top, web] = versions.versions;

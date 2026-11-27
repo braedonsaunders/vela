@@ -1592,7 +1592,7 @@ export class Playback {
       // planned against and is not: the engine plans again from the newer plan.
       const generations = staleGeneration(error) ? error.detail.currentGenerations : undefined;
       const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks', 'goLive'].includes(command.kind);
-      const wanted = command.kind === 'switch' && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
+      const wanted = command.kind === 'switch' && 'pathId' in command && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
       if ((!absolute && !wanted) || !generations) throw error;
       if (canRetry && !(await canRetry())) throw error;
       // What to send again, and at which generations, is decided as it is sent: a command may have been superseded meanwhile.

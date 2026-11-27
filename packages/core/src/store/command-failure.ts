@@ -44,5 +44,5 @@ export function commandFailure(command: Pick<V.SessionCommand, 'kind'>, error: u
  * quality, recovery). Every other command follows something the viewer did.
  */
 export function commandOrigin(command: V.SessionCommand, pendingQuality: string | undefined): CommandOrigin {
-  return command.kind === 'switch' && pendingQuality !== `path:${command.pathId}` ? 'engine' : 'viewer';
+  return command.kind === 'switch' && (!('pathId' in command) || pendingQuality !== `path:${command.pathId}`) ? 'engine' : 'viewer';
 }

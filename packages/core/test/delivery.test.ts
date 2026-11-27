@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { deliveryEvidence, deliveryWatch, heardDelivery, pathRate, stepDown, type DeliverySample, type DeliveryWatch } from '../src/delivery';
+import { deliveryEvidence, deliveryWatch, heardDelivery, measuredThroughput, pathRate, stepDown, type DeliverySample, type DeliveryWatch } from '../src/delivery';
 import type { PlaybackPath, PlaybackPlan } from '../src/wire';
 
 const transcode = (id: string, average: number, peak = average * 1.2): PlaybackPath => ({
@@ -66,7 +66,7 @@ test('the wait of a start, a seek or a switch is never evidence', () => {
 
 test('a slow network below every transcode takes the lowest; nothing lower than playing, no step', () => {
   const watch = feed(deliveryWatch(), 0, 45, starved, 3_000_000);
-  expect(stepDown(watch, plan(), 45_000)?.pathId).toBe('quality-720p4000k');
+  expect(stepDown(watch, plan(), 45_000)).toMatchObject({ pathId: 'quality-720p4000k' });
   // Already on the lowest transcode: nothing below it.
   const lowest = plan({ selectedPathId: 'quality-720p4000k' });
   expect(stepDown(watch, lowest, 45_000)).toBeNull();
@@ -85,4 +85,28 @@ test('a path\'s rate: its quality, its top rung, or its size over the duration',
   expect(pathRate(plan().paths[0]!)).toBe(25_000_000);
   expect(pathRate({ id: 'f', kind: 'direct', qualities: [], byteLength: 19_100_000_000 } as unknown as PlaybackPath, 6106)).toBeCloseTo(25_024_566, -3);
   expect(pathRate({ id: 'f', kind: 'direct', qualities: [] } as unknown as PlaybackPath)).toBeNull();
+});
+
+test('a plan without a ladder asks the server for its best rung under the cap, when the server takes it', () => {
+  const watch = feed(deliveryWatch(), 0, 45, starved, 18_000_000);
+  const direct = plan({ paths: [plan().paths[0]!] });
+  expect(stepDown(watch, direct, 45_000)).toBeNull();
+  expect(stepDown(watch, direct, 45_000, { bitrateSwitch: true })).toEqual({ maxBitrate: 11_700_000, throughputBps: 18_000_000 });
+  // A plan with a ladder keeps naming the path.
+  expect(stepDown(watch, plan(), 45_000, { bitrateSwitch: true })).toMatchObject({ pathId: 'quality-1080p8000k' });
+  // A plan whose playlist adapts is the player's to step down.
+  expect(stepDown(watch, plan(), 45_000, { adaptive: true, bitrateSwitch: true })).toBeNull();
+});
+
+test('the server is told the active download rate: bytes while loading over the last 20 s, start included', () => {
+  // Loading before the first play counts here (not for the step-down's evidence).
+  const loading = feed(deliveryWatch(), 0, 8, () => 'loading', 12_000_000);
+  expect(Math.round(measuredThroughput(loading, 8000)! / 1e6)).toBe(12);
+  // Under 5 s of loading in the stretch: no measurement yet.
+  expect(measuredThroughput(feed(deliveryWatch(), 0, 3, () => 'loading', 12_000_000), 3000)).toBeNull();
+  // A full buffer is the player idling, not the network.
+  expect(measuredThroughput(feed(deliveryWatch(), 0, 30, () => 'playing', 12_000_000, 45), 30_000)).toBeNull();
+  // Only the last 20 s.
+  const old = feed(deliveryWatch(), 0, 30, () => 'playing', 12_000_000);
+  expect(measuredThroughput(old, 80_000)).toBeNull();
 });

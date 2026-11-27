@@ -1263,7 +1263,21 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
       const duration = s.plan.durationSeconds ?? fixtureDurationSeconds;
       if (body.kind === 'seek' && !s.plan.live && (!Number.isFinite(body.positionSeconds) || body.positionSeconds < 0 || body.positionSeconds > duration)) fail('request', 'invalid_position', `Position must be 0–${duration}`);
       if (body.kind === 'tracks' && !sidecarFixture.enabled) fail('policy', 'feature_unavailable', 'Changing active tracks needs a new source');
-      if (body.kind === 'switch') { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!sidecarFixture.enabled && !p.boundaries.some(b => b.atSeconds === body.atSeconds && (!s.plan.selectedAudioTrackId || b.audioTrackIds.includes(s.plan.selectedAudioTrackId)) && (!s.plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(s.plan.selectedSubtitleTrackId)))) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
+      // A switch by bitrate (Ether 0.3.25): the highest offered rung whose peak is under the cap, at the session's position
+      // unless the command names one; 422 quality_unavailable when none fits.
+      let byBitrate = false;
+      if (body.kind === 'switch' && !('pathId' in body)) {
+        if (!Number.isInteger(body.maxBitrate) || body.maxBitrate <= 0) fail('request', 'invalid_command', 'maxBitrate must be a positive integer');
+        // A path of one quality is a rung at its peak; the mock's adaptive transcode is one at its lowest rendition.
+        const peak = (p: V.PlaybackPath) => p.quality?.bitrate ?? (p.kind === 'transcode' && p.qualities.length ? Math.min(...p.qualities.map(q => q.bitrate)) : Infinity);
+        const rung = s.plan.paths.filter(p => peak(p) <= body.maxBitrate && (p.readiness === 'ready' || p.readiness === 'on-demand'))
+          .sort((a, b) => peak(b) - peak(a))[0];
+        if (!rung) fail('playback', 'quality_unavailable', 'No offered quality fits the bitrate', {}, 422);
+        body = { kind: 'switch', pathId: rung.id, atSeconds: body.atSeconds ?? s.plan.positionSeconds, idempotencyKey: body.idempotencyKey,
+          sourceGeneration: body.sourceGeneration, seekGeneration: body.seekGeneration };
+        byBitrate = true;
+      }
+      if (body.kind === 'switch' && 'pathId' in body) { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!byBitrate && !sidecarFixture.enabled && !p.boundaries.some(b => b.atSeconds === body.atSeconds && (!s.plan.selectedAudioTrackId || b.audioTrackIds.includes(s.plan.selectedAudioTrackId)) && (!s.plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(s.plan.selectedSubtitleTrackId)))) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
       if (body.kind === 'stop') { recordPlayback(s, false); lastStopped.set(s.owner, s.plan.sessionId); }
       applyCommand(s, body); return json(s.plan);
     }

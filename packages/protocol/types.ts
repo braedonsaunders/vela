@@ -320,7 +320,10 @@ export interface VersionItem {
   availability: 'instant' | 'cached' | 'fetch' | 'unavailable'; note?: string;
 }
 export interface RememberedVersionChoice { scope: 'title' | 'show'; active: boolean; label: string }
-export interface TitleVersions { titleId: ID; selectedVersionId: ID | null; rememberedChoice?: RememberedVersionChoice; versions: VersionItem[] }
+/** Why Auto picked what it picked (Ether 0.3.25): `connection_estimate` (recent client throughput favoured a lower
+ * bitrate), `source_delivery`, `resume_source`; the message is localized. Separate from rememberedChoice. */
+export interface AutoSelectionReason { code: string; message: string }
+export interface TitleVersions { titleId: ID; selectedVersionId: ID | null; rememberedChoice?: RememberedVersionChoice; versions: VersionItem[]; autoSelectionReason?: AutoSelectionReason }
 export interface ClearVersionChoiceRequest extends Mutation { scope?: 'all' | 'title' | 'show' }
 export interface ClearVersionChoiceResponse extends TitleVersions { cleared: boolean }
 export interface Generations { sourceGeneration: number; seekGeneration: number }
@@ -375,6 +378,7 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   markers?: SkipMarker[];
   qualityLimitations?: { height: number; reason: string }[];
   selectedVersionId?: ID; versions?: VersionItem[]; rememberedChoice?: RememberedVersionChoice;
+  /** An Auto plan: why Auto admitted this pick (Ether 0.3.25). */ autoSelectionReason?: AutoSelectionReason;
   /** The release actually playing: its versions-row id, or null when it has no row (Auto
    * resolving to a release the menu does not list); with its label ("1080p WEB-DL · DD+ 5.1 ·
    * 4.2 GB"). selectedVersionId stays the viewer's choice (the Auto row's id when Auto was
@@ -412,7 +416,11 @@ export type SessionCommand = Mutation & Generations & (
   /** A live session jumps to the live edge; a start-over session switches to the channel's live session. */
   { kind: 'goLive' } |
   { kind: 'tracks'; audioTrackId?: ID; subtitleTrackId?: ID | null } |
-  { kind: 'switch'; pathId: ID; atSeconds: number } | { kind: 'version'; versionId: ID; positionSeconds?: number } | { kind: 'prepare-fallback'; maxBitrate: number } |
+  { kind: 'switch'; pathId: ID; atSeconds: number } |
+  /** Ether 0.3.25: the highest offered rung whose peak bitrate is at most maxBitrate (422 quality_unavailable when
+   * none fits); atSeconds defaults to the session's position. */
+  { kind: 'switch'; maxBitrate: number; atSeconds?: number } |
+  { kind: 'version'; versionId: ID; positionSeconds?: number } | { kind: 'prepare-fallback'; maxBitrate: number } |
   /** A multiview tile's new height (spec B): the same session is replanned; its old output plays until the
    * new plan is ready, and the answer is the unchanged plan when the source cannot go higher. */
   { kind: 'replan'; maxHeight: number });

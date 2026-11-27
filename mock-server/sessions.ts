@@ -219,6 +219,10 @@ export function requestedInit(s: Session, resource: string, authorized: () => bo
     pending.timers.set(key, timer);
   }
 }
+function switchPath(s: Session, cmd: Extract<SessionCommand, { kind: 'switch' }>) {
+  if (!('pathId' in cmd)) return;
+  s.plan.selectedPathId = cmd.pathId; s.plan.sourceGeneration++; s.plan.positionSeconds = cmd.atSeconds;
+}
 export function applyCommand(s: Session, cmd: SessionCommand) {
   switch (cmd.kind) {
     case 'seek': s.plan.seekGeneration++; s.plan.positionSeconds = cmd.positionSeconds; break;
@@ -226,7 +230,7 @@ export function applyCommand(s: Session, cmd: SessionCommand) {
     case 'resume': s.plan.state = 'playing'; break;
     case 'stop': s.plan.state = 'ended'; break;
     case 'tracks': answerTracks(s.plan, cmd); break;
-    case 'switch': s.plan.selectedPathId = cmd.pathId; s.plan.sourceGeneration++; s.plan.positionSeconds = cmd.atSeconds; break;
+    case 'switch': switchPath(s, cmd); break;
     case 'version':
       s.plan.selectedVersionId = cmd.versionId;
       setPlaying(s.plan);

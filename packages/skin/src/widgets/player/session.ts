@@ -5,7 +5,7 @@
 import { forcedMute, quietPlayback } from '../../quiet-playback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { AWAKE, commandOrigin, deliveryWatch, heardDelivery, msg, stepDown, sleepDue, sleepFrom, VelaError, withSessionVersions, type PlaybackTarget, type Sleep, type SleepMode, type StartRefusal, type StreamingSettings } from '@vela/core';
+import { AWAKE, commandOrigin, deliveryWatch, heardDelivery, measuredThroughput, msg, playerAdapts, stepDown, sleepDue, sleepFrom, VelaError, withSessionVersions, type PlaybackTarget, type Sleep, type SleepMode, type StartRefusal, type StreamingSettings } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
@@ -44,6 +44,10 @@ const STEPS_DOWN = Platform.OS === 'android';
 const STEP_CHECK_MS = 1000;
 /** How long the step-down notice stands. */
 const QUALITY_NOTICE_MS = 6000;
+
+function withThroughput<T extends { throughputBps?: number }>(observation: T, bps: number | null): T {
+  return bps === null ? observation : { ...observation, throughputBps: bps };
+}
 
 /** Native phones and tablets offer both picture modes. The watch route opts in on compact web. */
 const PICTURE_CHOICE = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
@@ -92,6 +96,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const delivery = useRef(deliveryWatch());
   const deliveryChecked = useRef(0);
   const viewerQuality = useRef('');
+  /** The session whose server refused a switch by bitrate. */
+  const bitrateRefused = useRef('');
   const [qualityNotice, setQualityNotice] = useState('');
   const presented = useRef(false);
   const reported = useRef<Snapshot | null>(null);
@@ -358,17 +364,31 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const stepDownIfStarved = (next: Snapshot) => {
     const now = Date.now();
     delivery.current = heardDelivery(delivery.current, next, now);
-    if (now - deliveryChecked.current < STEP_CHECK_MS) return;
+    // The evidence is kept either way (it measures the throughput the observations report); a quality the viewer
+    // picked is never overridden.
+    if (viewerQuality.current === sessionId || now - deliveryChecked.current < STEP_CHECK_MS) return;
     deliveryChecked.current = now;
-    const step = stepDown(delivery.current, plan, now);
+    const step = stepDown(delivery.current, plan, now, { adaptive: playerAdapts(plan), bitrateSwitch: bitrateRefused.current !== sessionId });
     if (!step || !plan) return;
     // Once per source: the switch brings new generations, and with them fresh evidence.
     delivery.current = deliveryWatch();
-    console.info(`Vela playback: stepping down to ${step.pathId} (${Math.round(step.rateBps / 1e5) / 10} Mbit/s) at ${Math.round(step.throughputBps / 1e5) / 10} Mbit/s measured`);
+    const mbps = (bps: number) => Math.round(bps / 1e5) / 10;
+    if ('maxBitrate' in step) {
+      // No ladder on the plan: the server picks its best rung under the cap (Ether 0.3.25). A server that refuses
+      // the form is not asked again in this session.
+      console.info(`Vela playback: stepping down to at most ${mbps(step.maxBitrate)} Mbit/s at ${mbps(step.throughputBps)} Mbit/s measured`);
+      const target = plan.sessionId;
+      void vela.playback.command(target, { kind: 'switch', maxBitrate: step.maxBitrate, sourceGeneration: plan.sourceGeneration,
+        seekGeneration: plan.seekGeneration, idempotencyKey: `${target}:step:${plan.sourceGeneration}:${plan.seekGeneration}` }, 'engine')
+        .then(accepted => { if (!accepted) bitrateRefused.current = target; }, () => { bitrateRefused.current = target; });
+      setQualityNotice(msg('player.quality.steppedDown', { quality: `≤ ${mbps(step.maxBitrate)} Mb/s` }));
+      return;
+    }
+    console.info(`Vela playback: stepping down to ${step.pathId} (${mbps(step.rateBps)} Mbit/s) at ${mbps(step.throughputBps)} Mbit/s measured`);
     nextId.current += 1;
     setSent({ command: { id: nextId.current, type: 'quality', renditionId: `path:${step.pathId}` }, on: plan.sessionId });
     const quality = plan.paths.find(path => path.id === step.pathId)?.quality;
-    setQualityNotice(msg('player.quality.steppedDown', { quality: quality ? `${quality.height}p · ${Math.round(step.rateBps / 1e5) / 10} Mb/s` : '' }));
+    setQualityNotice(msg('player.quality.steppedDown', { quality: quality ? `${quality.height}p · ${mbps(step.rateBps)} Mb/s` : '' }));
   };
   useEffect(() => {
     if (!qualityNotice) return;
@@ -413,7 +433,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
           if (settled !== 'wait') pending.current = null;
           if (chosen && settled === 'confirm') vela.playback.rememberTrack(chosen.sessionId, track, chosen.trackId);
         }
-        if (STEPS_DOWN && !external && viewerQuality.current !== sessionId) stepDownIfStarved(next);
+        if (STEPS_DOWN && !external) stepDownIfStarved(next);
         const asleep = sleepRef.current;
         // The end came first: an end-of-item sleep has done its work (nothing follows), a timer has none left.
         if (asleep.mode !== 'off' && next.state === 'ended') setSleepState(AWAKE);
@@ -439,7 +459,12 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     },
     onObservation: event => {
       if (event.sessionId !== sessionId) return;
-      vela.playback.observe(event.sessionId, event.observation).catch(error => {
+      // The active download rate the server weighs for Auto and its own down-failover (Ether 0.3.25), when the
+      // engine reports none and there is a fresh measurement: omitted otherwise.
+      const observation = STEPS_DOWN && event.observation.throughputBps === undefined
+        && (event.observation.state === 'playing' || event.observation.state === 'buffering')
+        ? withThroughput(event.observation, measuredThroughput(delivery.current, Date.now())) : event.observation;
+      vela.playback.observe(event.sessionId, observation).catch(error => {
         const gone = error instanceof VelaError && (error.status === 404 || error.status === 410);
         if (gone) startOver(event.sessionId);
         else console.warn(`Playback observation not delivered: ${String(error)}`);

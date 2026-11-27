@@ -112,17 +112,51 @@ export function pathRate(path: PlaybackPath, durationSeconds?: number): number |
   return null;
 }
 
-export interface StepDown { pathId: string; rateBps: number; throughputBps: number }
+/** Where a measurement for the server stops looking back (Ether wants a fresh active download rate). */
+const MEASURE_MS = 20_000;
 
 /**
- * The server transcode to switch to, or null to stay. A step needs EVIDENCE_MS of playing at these
+ * The player's active download rate for the server's observations (Ether 0.3.25 `throughputBps`): bits received
+ * per second while the player was loading (its buffer short of full) over the last MEASURE_MS, the start and a
+ * seek included. Null without 5 s of loading in that stretch: the field is omitted until there is a fresh one.
+ */
+export function measuredThroughput(watch: DeliveryWatch, now: number): number | null {
+  let bits = 0, loading = 0;
+  for (let i = 1; i < watch.marks.length; i++) {
+    const before = watch.marks[i - 1]!, mark = watch.marks[i]!;
+    if (now - before.at > MEASURE_MS) continue;
+    if (before.bytes === null || mark.bytes === null || mark.bytes < before.bytes || before.ahead >= FULL_BUFFER_SECONDS) continue;
+    bits += (mark.bytes - before.bytes) * 8;
+    loading += mark.at - before.at;
+  }
+  if (loading < 5000 || bits <= 0) return null;
+  const bps = bits / (loading / 1000);
+  return bps > 0 && bps <= 10_000_000_000 ? Math.round(bps) : null;
+}
+
+/** A step to one of the plan's transcode paths (the quality menu's), or, on a plan with no such ladder and a
+ * server that takes it (Ether 0.3.25), a switch by bitrate: the server's best rung at or under `maxBitrate`. */
+export type StepDown =
+  | { pathId: string; rateBps: number; throughputBps: number }
+  | { maxBitrate: number; throughputBps: number };
+
+/** What decides how a step is sent. */
+export interface StepOptions {
+  /** The server takes `switch {maxBitrate}` (a refused one stops further tries on the session). */
+  bitrateSwitch?: boolean;
+  /** The plan's own playlist adapts (Ether's multi-variant HLS): the player steps down on its own. */
+  adaptive?: boolean;
+}
+
+/**
+ * The server transcode to switch to (or the bitrate to ask the server for, StepOptions), or null to stay. A step needs EVIDENCE_MS of playing at these
  * generations, STALLS waits for media taking STALLED_SHARE of the wanted time in the window, and a
  * throughput measurement. It takes the best transcode within HEADROOM of that throughput, else the
  * lowest one, and never one that is not clearly below what plays now. Live plans are left to the
  * live machinery.
  */
-export function stepDown(watch: DeliveryWatch, plan: PlaybackPlan | null, now: number): StepDown | null {
-  if (!plan || plan.live || watch.playedAt === null || now - watch.playedAt < EVIDENCE_MS) return null;
+export function stepDown(watch: DeliveryWatch, plan: PlaybackPlan | null, now: number, options: StepOptions = {}): StepDown | null {
+  if (!plan || plan.live || options.adaptive || watch.playedAt === null || now - watch.playedAt < EVIDENCE_MS) return null;
   if (watch.key !== `${plan.sessionId}:${plan.sourceGeneration}:${plan.seekGeneration}`) return null;
   const evidence = deliveryEvidence(watch);
   if (evidence.stalls < STALLS || evidence.stalledShare < STALLED_SHARE || evidence.throughputBps === null) return null;
@@ -135,7 +169,22 @@ export function stepDown(watch: DeliveryWatch, plan: PlaybackPlan | null, now: n
     .map(path => ({ path, rate: pathRate(path)! }))
     .filter(offer => offer.rate > 0 && offer.rate < ceiling)
     .sort((a, b) => b.rate - a.rate);
-  if (!offers.length) return null;
+  if (!offers.length) {
+    // No ladder on the plan to pick from: the server picks the rung under the cap, when it can.
+    const ladder = plan.paths.some(path => path.kind === 'transcode' && path.quality);
+    const maxBitrate = Math.floor(evidence.throughputBps * HEADROOM);
+    return options.bitrateSwitch && !ladder && maxBitrate > 0 && maxBitrate < ceiling
+      ? { maxBitrate, throughputBps: Math.round(evidence.throughputBps) } : null;
+  }
   const fits = offers.find(offer => offer.rate <= evidence.throughputBps! * HEADROOM) ?? offers[offers.length - 1]!;
   return { pathId: fits.path.id, rateBps: fits.rate, throughputBps: Math.round(evidence.throughputBps) };
+}
+
+/**
+ * Whether the plan's playlist adapts on its own (Ether 0.3.25 multi-variant HLS, behind `features.adaptiveHLS` and a
+ * plan flag): then the player picks its rung and Vela does not step down. Ether names the plan's flag when that
+ * work lands; until then no plan is adaptive.
+ */
+export function playerAdapts(_plan: PlaybackPlan | null): boolean {
+  return false;
 }

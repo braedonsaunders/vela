@@ -6,7 +6,7 @@ import type { CatalogueSearch, Credentials, Home, ServerAdapter, ServerDescripti
 import type { DownloadResolution, DownloadSidecar, LibraryJumpIndex, LibraryRecommendations, LiveTv, MediaDownloads, OfflineProgressEntry, PathSwitching, ResolveDownloadOptions, SwitchCommand, TitleChildren, TrackChanges, TrackCommand, TrickplaySheet, TrickplaySheets, UnloadRequest, UnloadStop, Versions } from '../capabilities';
 import type { LibraryJumpBucket } from '../../models';
 import { parsePlexJumpIndex } from './jump-index';
-import { VelaError } from '../errors';
+import { notOffered, VelaError } from '../errors';
 import { plexHeaders, plexMediaHeaders, type PlexDevice } from './auth';
 import { fetchTextBounded } from '../../protocol/timeout';
 import { markPlexUnreachable, PLEX_VALIDATE_TIMEOUT_MS } from './relocate';
@@ -1236,7 +1236,10 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return !s.request || !media || playsOriginal(s.request.client, media, playingAudio(s.part.Stream ?? [], media.audioCodec, audio).codec);
   }
   /** A plan offers the original file and the universal transcode; the session moves between them. */
-  switchPath(id: string, r: SwitchCommand): Promise<V.PlaybackPlan> {
+  switchPath(id: string, command: SwitchCommand): Promise<V.PlaybackPlan> {
+    // A switch by bitrate (Ether's ladder) is not Plex's: its plans name both of their paths.
+    if (!('pathId' in command)) return Promise.reject(notOffered('Switching by bitrate'));
+    const r = command;
     return this.mutate(id, r, async (s, signal) => {
       const path = s.plan.paths.find(p => p.id === r.pathId);
       if (!path) fail('Unknown Plex path');
