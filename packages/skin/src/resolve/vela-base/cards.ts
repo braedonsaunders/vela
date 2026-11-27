@@ -324,8 +324,11 @@ export const card: Node = {
 };
 
 // A Top 10 row's numeral: large, outlined, fading toward its foot, the poster overlapping
-// its right edge. "10" sits tighter so both digits fit beside the card.
-export const numeral = (ten: boolean): Node => ({
+// its right edge. "10" sits tighter so both digits fit beside the card. On a phone, where a
+// caption can run to four lines, it hangs from the top of the row against the artwork instead
+// of standing on the card's foot: its 0.74 line puts the foot about 0.765 of its size down, so
+// the size follows the art's height (`art`, 168 px for the 112 px poster).
+export const numeral = (ten: boolean, art = 168): Node => ({
   type: 'text',
   text: '{index.label}',
   when: [
@@ -348,12 +351,15 @@ export const numeral = (ten: boolean): Node => ({
     'flex-shrink': '0',
   },
   small: {
-    'font-size': '220px',
+    'font-size': `${Math.round(220 * art / 168)}px`,
     'text-shadow': '0px 0px 3px color-mix(in srgb, $ui.ink 88%, $ui.page)',
-    'margin-right': '-30px',
-    'padding-bottom': '44px',
+    'margin-right': `${Math.round(-30 * art / 168)}px`,
+    'align-self': 'flex-start',
+    'padding-bottom': '0px',
   },
 });
+// The small art's height for each row card: a 112 px poster or tile, a 220 px landscape card.
+const smallArt: Record<string, number> = { velaCard: 168, velaCardTile: 112, velaCardWide: 124 };
 const rowItemStyle = (layer: string): Style => ({
   position: 'relative',
   display: 'flex',
@@ -368,7 +374,7 @@ const rowItemOf = (template: string): Node => ({
   style: rowItemStyle('0'),
   // The previewing card's overlay opens over its neighbours.
   states: [{ when: [previewing], style: rowItemStyle('5') }],
-  children: [...(template === 'velaCardHero' ? [] : [numeral(false), numeral(true)]), { type: 'use', template }],
+  children: [...(template === 'velaCardHero' ? [] : [numeral(false, smallArt[template]), numeral(true, smallArt[template])]), { type: 'use', template }],
 });
 export const rowItem: Node = rowItemOf('velaCard');
 /** Every expandable row's final card. Skins may override the `velaSeeAll` template. */
