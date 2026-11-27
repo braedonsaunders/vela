@@ -13,13 +13,13 @@ test('empty focused search folds hero copy above a native keyboard and restores 
       home: { hero: [{}, {}] } } as unknown as Env;
     const ctx = { index: 0 };
     const style = node.states.find(state => holds(state.when, ctx, env))?.layer.style;
-    expect(style?.height).toBe(width < 640 ? '80px' : '82px');
+    expect(style?.height).toBe(width < 640 ? '72px' : '82px');
     expect(holds(node.children[0]!.when, ctx, env)).toBe(false);
     expect(holds(pager.when, ctx, env)).toBe(false);
     env.flags = [];
     expect(holds(node.children[0]!.when, ctx, env)).toBe(true);
     expect(holds(pager.when, ctx, env)).toBe(true);
     env.query = 'Fall';
-    expect(node.states.find(state => holds(state.when, ctx, env))?.layer.style.height).toBe(width < 640 ? '80px' : '82px');
+    expect(node.states.find(state => holds(state.when, ctx, env))?.layer.style.height).toBe(width < 640 ? '72px' : '82px');
   }
 });
