@@ -11,7 +11,7 @@ import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
 import { belongs, planSource, presentedAfter, qualityReached, restartAt, settlePick, viewCommand, type PendingPick } from './present';
-import { clockRedrawMs, paceSnapshot, withClock, type Paced } from './snapshot-pace';
+import { clockMoved, clockRedrawMs, paceSnapshot, withClock, type Paced } from './snapshot-pace';
 import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
@@ -393,8 +393,11 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       const redraw = clockRedrawMs({ quiet: quiet.current, live: !!plan?.live || !!plan?.catchUp, position: next.position,
         duration: next.duration, markers: plan?.markers });
       const drawn = paceSnapshot(paced.current, next, Date.now(), redraw);
-      if (drawn) {
-        const shown = withClock(shownSnapshot.current, next, drawn.facts === paced.current?.facts);
+      const same = !!drawn && drawn.facts === paced.current?.facts;
+      // A report due only for the clock, with the clock where it was (a paused title), draws nothing new.
+      if (drawn && same && !clockMoved(shownSnapshot.current, next)) paced.current = drawn;
+      else if (drawn) {
+        const shown = withClock(shownSnapshot.current, next, same);
         paced.current = drawn;
         shownSnapshot.current = shown;
         setSnapshot(shown);

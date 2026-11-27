@@ -73,3 +73,12 @@ export function withClock(drawn: Snapshot | null, next: Snapshot, same: boolean)
   }
   return shown as unknown as Snapshot;
 }
+
+/** Whether a clock-only report would draw anything new: a paused title still reports four times a second
+ * with the same clock, and a redraw of the standing chrome for it changes nothing. The position, the
+ * duration and the buffered ranges are what the clock draws (the info card's figures move with them). */
+export function clockMoved(drawn: Snapshot | null, next: Snapshot): boolean {
+  if (!drawn || drawn.position !== next.position || drawn.duration !== next.duration || drawn.live || next.live) return true;
+  const a = drawn.playable ?? [], b = next.playable ?? [];
+  return a.length !== b.length || a.some((range, i) => range.start !== b[i]!.start || range.end !== b[i]!.end);
+}

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Snapshot } from '@vela/player-api';
-import { CLOCK_REDRAW_MS, QUIET_CLOCK_REDRAW_MS, clockRedrawMs, paceSnapshot, snapshotFacts, withClock } from '../src/widgets/player/snapshot-pace';
+import { CLOCK_REDRAW_MS, QUIET_CLOCK_REDRAW_MS, clockMoved, clockRedrawMs, paceSnapshot, snapshotFacts, withClock } from '../src/widgets/player/snapshot-pace';
 import { present } from '../src/widgets/player/present';
 
 const drawSnapshot = (last: Parameters<typeof paceSnapshot>[0], next: Snapshot, now: number) => paceSnapshot(last, next, now) !== null;
@@ -83,4 +83,12 @@ describe('the clock out of sight', () => {
     expect(at(30, { quiet: false })).toBe(CLOCK_REDRAW_MS);
     expect(at(30, { live: true })).toBe(CLOCK_REDRAW_MS);
   });
+});
+
+test('a paused title\'s reports with the clock where it was draw nothing new', () => {
+  const drawn = snapshot({ state: 'paused', position: 40, playable: [{ start: 40, end: 70 }] });
+  expect(clockMoved(drawn, snapshot({ state: 'paused', position: 40, playable: [{ start: 40, end: 70 }] }))).toBe(false);
+  expect(clockMoved(drawn, snapshot({ state: 'paused', position: 40, playable: [{ start: 40, end: 72 }] }))).toBe(true);
+  expect(clockMoved(drawn, snapshot({ position: 41, playable: [{ start: 41, end: 70 }] }))).toBe(true);
+  expect(clockMoved(null, drawn)).toBe(true);
 });
