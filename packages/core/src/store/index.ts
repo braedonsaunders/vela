@@ -157,7 +157,7 @@ export function createVela(options: VelaOptions): Vela {
   const servers = new Servers(box, session, options, downloads);
   const previews = new Previews(box, session);
   const home = new Home(box, session, width);
-  const catalogue = new Catalogue(box, session, width);
+  const catalogue = new Catalogue(box, session, width, {}, options.trailerEmbed === true);
   const playlists = new Playlists(box, session, width);
   const music = new Music(box, session, width);
   const seriesTracks = new SeriesTracks(box, session);

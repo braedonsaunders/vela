@@ -15,6 +15,7 @@ export { catchUpErrorMessage, catchUpOffer, catchUpPictureTime, catchUpRefusal, 
 export { consoleURL, pageServerOrigin, parseWebHandoff } from './session/web-handoff';
 export { randomId } from './protocol/id';
 export * from './models';
+export { acceptClientPlayback, acceptEmbedOriginOverride, EMBED_ENDED, EMBED_LISTENING, EMBED_START_TIMEOUT_MS, embedFrameUrl, embedPlayerUrl, extraPlayback, isYoutubeVideoId, nativeEmbedHostOrigin, nativeEmbedPage, nextEmbedPhase, parseEmbedMessage, platformEmbedsTrailers, serverAllowsTrailerEmbed, serverPlaysExtra, trailerEmbedAllowed, YOUTUBE_EMBED_ORIGIN, youtubeEmbedUrl, type EmbedPhase, type EmbedSignal, type ExtraPlayback, type TrailerEmbed } from './trailer-embed';
 export { createVela, type Vela, type VelaOptions, type VelaState } from './store';
 export type { MediaCapabilities, VelaPlatform } from './store/platform';
 export type { Load, Loadable } from './store/state';

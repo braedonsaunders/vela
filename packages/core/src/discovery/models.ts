@@ -7,6 +7,7 @@ import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Ra
 import { artworkURL, type Images } from './artwork';
 import { clock, duration as timeLeft, minute, msg, number, percent, plural, localeContext } from '../i18n';
 import { pluginLevelsOf } from '../plugin-levels';
+import { extraPlayback } from '../trailer-embed';
 import { cardMedia, mediaCardKind, mediaFacts as mediaCardFacts, videoParents, videoRole } from '../media';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number, images?: Images): string {
@@ -497,9 +498,11 @@ export function detailModel(
   data: TitleDetail,
   images?: Images,
   artWidth = 2560,
-  extraPlayback = false,
+  extraPlaybackFeature = false,
   themeAvailable = false,
   personFilmography = false,
+  /** This device embeds trailers and the server allows it (trailerEmbedAllowed). */
+  trailerEmbed = false,
 ): DetailModel {
   const person = (value: { id?: string; name: string; role?: string; artwork?: ArtworkRef }): Person => {
     let portrait = '';
@@ -514,8 +517,10 @@ export function detailModel(
   };
   const credit = (c: { name: string; role?: string }) => (c.role ? `${c.name} (${c.role})` : c.name);
   const theme = themeMusic(data, images, themeAvailable);
-  const trailers = data.extras.filter(extra => extra.kind === 'trailer');
-  const trailer = trailers.find(extra => extra.availability !== 'unavailable') ?? trailers[0];
+  const extras = data.extras.map(e => ({ extra: e, playback: extraPlayback(e, { embeds: trailerEmbed, extraPlayback: extraPlaybackFeature }) }));
+  // Watch trailer: a trailer that plays here (embedded or on the server), else the server's first one.
+  const trailers = extras.filter(({ extra }) => extra.kind === 'trailer');
+  const trailer = trailers.find(({ playback }) => playback.kind !== 'none') ?? trailers.find(({ extra }) => extra.availability !== 'unavailable') ?? trailers[0];
   const position = data.title.watch?.positionSeconds ?? 0;
   // Ether supplies seasonNumber without seasonId. Resolve the relationship while the wire's
   // optional number is still distinguishable from the display model's default zero.
@@ -534,8 +539,8 @@ export function detailModel(
   return {
     title: [{ ...titleCard, backdrop }],
     ratings: ratings(data.title),
-    trailerId: trailer?.id ?? '',
-    trailerReady: !!trailer && extraPlayback && trailer.availability !== 'unavailable',
+    trailerId: trailer?.extra.id ?? '',
+    trailerReady: !!trailer && (trailer.playback.kind === 'embed' || (extraPlaybackFeature && trailer.extra.availability !== 'unavailable')),
     themeMusicUrl: theme.url,
     themeMusicExpiresAt: theme.expiresAt,
     related: [],
@@ -548,11 +553,12 @@ export function detailModel(
     seasons: (data.seasons ?? []).map(t => card(t, '', images, artWidth, rowBackdropWidth)),
     nextUp: data.nextUp === undefined ? undefined : data.nextUp ? [episodeCard(data.nextUp)] : [],
     episodes: (data.episodes ?? []).map(episodeCard),
-    extras: data.extras.map(e => ({
-      id: e.id,
-      name: e.name,
-      kind: e.kind,
-      ready: extraPlayback && e.kind === 'trailer' && e.availability !== 'unavailable',
+    extras: extras.map(({ extra, playback }) => ({
+      id: extra.id,
+      name: extra.name,
+      kind: extra.kind,
+      ready: playback.kind !== 'none',
+      ...(playback.kind === 'embed' ? { embed: { ...playback.embed, fallback: playback.fallback } } : {}),
     })),
     cast: data.cast.map(credit),
     castPeople: data.cast.map(person),
