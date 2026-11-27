@@ -5,14 +5,15 @@
 // these in place of the document's title page; each takes the document's `ui` look.
 import { joinMeta } from '../../meta-line';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import { childrenKey, childSectionLabel, childSections, childSectionsWait, settledPluginLevels, clock, durationLabel, msg, number, plural, podcastOrder, type Card, type ChildrenModel, type DetailModel, type Loadable, type MediaCredit } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { dayLabel } from '../../blocks/media/day';
 import { heroCover, MediaTitlePending } from '../../blocks/media/title-pending';
 import { useMediaActions } from './context';
 import { Cover, CoverTile, ListRow, PillButton, Progress, SectionHeading, Segmented, TextLink, TileGrid, useMediaLook, VideoTile, type MediaLook } from './parts';
-import { Buttons, Eyebrow, FactList, Facts, Hero, MediaFrame as Frame, openByline, Summary, tilesPerRow, Title } from '../../blocks/media/title';
+import { Buttons, Eyebrow, FactList, Facts, Hero, MediaFrame as Frame, openByline, Summary, Title } from '../../blocks/media/title';
+import { tilesPerRow } from '../../blocks/media/tile-layout';
 
 /** `framed`: drawn inside the document's title frame (the `mediaPage` widget), which brings the
  * scrim, the opening motion and the close control; otherwise a page of its own. */
@@ -126,12 +127,16 @@ function ListSkeleton({ rows }: { rows: number }) {
 function MoreBy({ artistId, name, exclude }: { artistId: string; name: string; exclude: string }) {
   const m = useMediaLook();
   const actions = useMediaActions();
+  const [width, setWidth] = useState<number>();
   // Albums only: an artist's video children (concerts) carry no media facts and are not "more by".
   const albums = (useChildren(artistId)?.value?.items ?? []).filter(album => album.id !== exclude && !!album.media);
   if (!albums.length) return null;
-  const { size, gap } = tilesPerRow(m, m.small ? 140 : 190);
+  const { size, gap } = tilesPerRow(m, m.small ? 140 : 190, m.small ? width : undefined);
   return (
-    <View style={{ marginBottom: 32 }}>
+    <View style={{ marginBottom: 32 }} onLayout={m.small ? ({ nativeEvent: { layout } }) => {
+      // React Native Web rounds the layout width to the nearest pixel.
+      if (layout.width > 0) setWidth(layout.width - (Platform.OS === 'web' ? 0.5 : 0));
+    } : undefined}>
       <SectionHeading title={msg('media.ui.moreBy', { name })} />
       <TileGrid gap={gap}>
         {albums.map(album => <CoverTile key={album.id} card={album} size={size} subtitle={album.yearLabel} onPress={() => actions.openTitle(album)} testID={`media-album-${album.id}`} />)}
