@@ -197,6 +197,8 @@ export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: 
     settle: 15000,
     setup: [...toMovies, press('DPAD_CENTER', 'open title', 6000), press('DPAD_CENTER', 'Play', 12000)],
     steps: [
+      // What playback costs untouched, chrome hidden (a key nothing handles): the rate a press's own JS stands on.
+      press('UNKNOWN', 'playing untouched 10 s', 10000),
       press('DPAD_CENTER', 'show controls', 2000),
       ...repeat('DPAD_RIGHT', 'controls →', 3),
       ...repeat('DPAD_LEFT', 'controls ←', 3),
@@ -577,7 +579,8 @@ async function measureLight(o: Options, name: string, label: string): Promise<Ru
       // A launch is interactive once its JS thread goes quiet (contentMs here).
       if ('launch' in step) press.contentMs = jsQuietMs(parseJsSamples(logcat), from, to);
       const commits = probe.filter(commit => commit.ts >= from && commit.ts < to);
-      metrics.push({ ...press, commits: commits.length, comps: commits.reduce((sum, c) => sum + c.comps, 0) });
+      const windowMs = Math.round(((before[i + 1] ?? to) - (before[i] ?? from)) / 1e5) / 10;
+      metrics.push({ ...press, commits: commits.length, comps: commits.reduce((sum, c) => sum + c.comps, 0), windowMs });
     });
     const first = cpu.find(sample => sample.tag === 'p');
     const last = [...cpu].reverse().find(sample => sample.tag === 'e');
