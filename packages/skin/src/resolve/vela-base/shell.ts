@@ -86,7 +86,7 @@ const moreNavButton: Node = {
 const moreDestination = (on: Condition[], press: BoxNode['press'], label: string, testId: string): Node => ({
   type: 'box', press, label, testId, a11y: { current: on },
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '10px',
-    'min-height': '44px', padding: '0px 12px', 'border-radius': '$ui.radiusControl', color: '$ui.ink', 'font-size': '14px' },
+    'min-height': '44px', 'flex-shrink': '0', padding: '0px 12px', 'border-radius': '$ui.radiusControl', color: '$ui.ink', 'font-size': '14px' },
   states: [{ when: on, style: { 'background-color': '$ui.control', 'font-weight': '700' } }],
   hover: { 'background-color': '$ui.control' }, focus: navFocus,
   children: [
@@ -95,7 +95,7 @@ const moreDestination = (on: Condition[], press: BoxNode['press'], label: string
   ],
 });
 
-// The destinations the bar had no room for, hanging from the More control.
+// The shell hosts More outside the header so native hit testing reaches the entire menu.
 const moreMenu: Node = {
   type: 'box',
   when: [{ test: 'flag:more' }],
@@ -106,11 +106,11 @@ const moreMenu: Node = {
   returnFocus: 'vela-more-trigger',
   motion: 'velaPop',
   style: {
-    position: 'absolute', top: '100%', right: '0px', 'margin-top': '6px', 'z-index': '30',
-    width: '240px', 'max-height': '70vh', 'overflow-y': 'auto', 'box-sizing': 'border-box', padding: '8px',
+    position: 'absolute', top: 'calc(62px + env(safe-area-inset-top))', right: 'max(28px, 18vw)', 'z-index': '30',
+    width: '240px', 'max-height': 'calc(100dvh - 74px - env(safe-area-inset-top) - env(safe-area-inset-bottom))', 'overflow-y': 'auto', 'box-sizing': 'border-box', padding: '8px',
     display: 'flex', 'flex-direction': 'column', gap: '2px',
     border: '1px solid $ui.glassEdge', 'border-radius': '16px', 'background-color': '$ui.popover',
-    'backdrop-filter': 'blur(24px)', 'box-shadow': '0px 24px 70px $ui.shadow',
+    'box-shadow': '0px 24px 70px $ui.shadow',
   },
   children: [
     { type: 'repeat', over: 'nav.destinations', when: [{ test: 'dest.more' }],
@@ -124,7 +124,7 @@ const moreNavItem: Node = {
   type: 'box',
   when: [{ test: 'nav.more' }],
   style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'flex-shrink': '0' },
-  children: [moreNavButton, moreMenu],
+  children: [moreNavButton],
 };
 
 // On phones one labelled control opens every destination in a modal menu. Keeping library view
@@ -408,8 +408,7 @@ export const shell: Node = {
       } as Style,
     },
     compactMenu,
-    // Under the bar (whose More menu stays above it), a transparent layer owns the first press
-    // outside More's menu and closes it.
+    // Below the header and More menu, a transparent layer closes the menu on an outside press.
     {
       type: 'box',
       when: [{ test: 'env.viewer' }, { test: 'flag:more' }],
@@ -418,6 +417,7 @@ export const shell: Node = {
       testId: 'nav-more-dismiss',
       style: { position: 'absolute', top: '0px', right: '0px', bottom: '0px', left: '0px', 'z-index': '19', 'background-color': 'transparent' },
     },
+    moreMenu,
     // A transparent modal layer owns the first press outside the profile menu. Besides closing
     // the menu, this keeps that press from selecting a card or navigation control underneath it.
     {
