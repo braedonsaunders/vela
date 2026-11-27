@@ -6,7 +6,7 @@ import { useHost } from '../../host';
 import { MiniPlayerInset } from '../../widgets/media/mini-player-inset';
 import { saturateBlurhash } from './blurhash-color';
 import { useMediaActions, type MediaActions } from './context';
-import { alpha, RoundButton, useMediaLook, type MediaLook } from './parts';
+import { alpha, RoundButton, useMediaLook } from './parts';
 import { MediaContentHeight, MediaFrameViewport } from './viewport';
 
 /** The page: its colour wash from the cover, a blurred cover behind the hero, the back control.
@@ -127,13 +127,6 @@ export function openByline(card: Card, actions: MediaActions): (() => void) | un
   if (target.startsWith('title:')) return () => actions.openTitle({ id: target.slice(6), kind: 'artist' });
   if (target.startsWith('person:')) return () => actions.openPerson(target.slice(7), card.media?.byline ?? '');
   return undefined;
-}
-
-export function tilesPerRow(m: MediaLook, min: number): { size: number; gap: number } {
-  const gap = m.small ? 16 : 24;
-  const inner = Math.min(1360, m.width) - m.gutter * 2;
-  const count = Math.max(2, Math.floor((inner + gap) / (min + gap)));
-  return { size: Math.floor((inner - gap * (count - 1)) / count), gap };
 }
 
 export function FactList({ card, style }: { card: Card; style?: ViewStyle }) {
