@@ -25,6 +25,7 @@ import { useHost } from '../host';
 import { useMultiview } from './multiview/context';
 import { MINI_PLAYER_HEIGHT } from './media/player';
 import { Glyph } from './common/controls';
+import { useWatchFeedback } from './watch-feedback';
 import { useLook } from './common/look';
 
 export type CardMenuAnchor = { kind: 'point'; point: Point } | { kind: 'card'; rect: Rect };
@@ -94,6 +95,7 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
   const host = useHost();
   const vela = useVela();
   const look = useLook();
+  const showFeedback = useWatchFeedback();
   const [management, setManagement] = useState<TitleActions | null | undefined>(undefined);
   const [menuSize, setMenuSize] = useState<Size>({ width: PANEL_WIDTH, height: 1 });
   const [error, setError] = useState('');
@@ -236,6 +238,7 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
         return;
       }
       await vela.catalogue.setTitleWatch(card.id, change);
+      if (change.notInterested === true) showFeedback(card.id, card.name, management?.watch.thumbsUp === true);
       // A like from here shows in Liked Songs and Your Library as one from the heart does: their
       // lists are read again (they were read once and kept, so the new like never appeared).
       if ('favorite' in item.command.change) {
@@ -247,7 +250,7 @@ export function CardContextMenu({ card, primary, href, anchor, mode, opener, con
       setError(cause instanceof Error ? cause.message : msg('cardMenu.actionFailed'));
       setBusy(false);
     }
-  }, [busy, card.id, card.media?.role, dismiss, favorite, host, vela]);
+  }, [busy, card.id, card.name, card.media?.role, dismiss, favorite, host, management, showFeedback, vela]);
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -358,7 +361,7 @@ const MenuItem = forwardRef<ComponentRef<typeof FocusPressable>, {
   const colour = warning ? look.ui.live : look.ui.ink;
   const symbols: Record<CardContextAction['icon'], string> = {
     play: 'play-fill', restart: 'restart', info: 'info', checked: 'check-circle', unchecked: 'circle',
-    external: 'external', copy: 'copy',
+    external: 'external', copy: 'copy', 'thumbs-up': 'thumbs-up', 'thumbs-down': 'thumbs-down',
     heart: 'heart', 'heart-filled': 'heart-fill', bookmark: 'bookmark', 'bookmark-filled': 'bookmark-fill',
     remove: 'remove', show: 'layers', season: 'list', 'playlist-add': 'playlist-add', multiview: 'multiview',
     'play-next': 'play-next', queue: 'queue', artist: 'artist', album: 'album',

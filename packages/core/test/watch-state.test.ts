@@ -92,3 +92,28 @@ test.each([
   await mutation;
   expect(reads).toBe(1);
 });
+
+test('not interested removes the title from rows and clears its thumbs-up', () => {
+  const state = stateWithCards();
+  const liked = optimisticWatchState(state, 'target', { thumbsUp: true });
+  const hidden = optimisticWatchState(liked, 'target', { notInterested: true });
+  expect(hidden.home.value!.rows[0]!.items.map(card => card.id)).toEqual(['keep']);
+  expect(hidden.titles.target!.value!.title[0]).toMatchObject({ notInterested: true, thumbsUp: false });
+  const likedAgain = optimisticWatchState(hidden, 'target', { thumbsUp: true });
+  expect(likedAgain.titles.target!.value!.title[0]).toMatchObject({ notInterested: false, thumbsUp: true });
+});
+
+test.each([
+  [{ notInterested: false, thumbsUp: false }, { notInterested: true }],
+  [{ notInterested: true, thumbsUp: false }, { thumbsUp: true }],
+])('title feedback is rejected when the server does not advertise the action', async (features, change) => {
+  const state = stateWithCards();
+  const box = new StateBox(state);
+  let writes = 0;
+  const adapter = { titleActions: async () => features, setTitleWatch: async () => { writes++; } };
+  const session = { onReset() {}, key: () => 'mutation-key', async ready() { return { adapter }; } };
+  const catalogue = new Catalogue(box, session as unknown as Session, () => 640);
+  await expect(catalogue.setTitleWatch('target', change)).rejects.toThrow("That action couldn't be completed.");
+  expect(writes).toBe(0);
+  expect(box.get()).toBe(state);
+});

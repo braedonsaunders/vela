@@ -1,5 +1,5 @@
 // Capability-backed title mutations shown on every built-in title surface.
-import { downloadOfferReason, downloadPercent, isPlayableDownload, msg, type DownloadOffer, type TitleActions as Actions } from '@vela/core';
+import { downloadOfferReason, downloadPercent, isPlayableDownload, msg, type DownloadOffer, type TitleActions as Actions, type WatchRequest } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import { useCallback, useEffect, useState, type ReactNode, type ComponentRef } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
@@ -13,6 +13,7 @@ import { confirmAction } from './common/confirm';
 import { SheetModal } from './common/sheet-modal';
 import { useLook } from './common/look';
 import type { TitleVersions, VersionItem } from '@vela/core';
+import { WatchFeedbackToast, useWatchFeedback } from './watch-feedback';
 import { versionAvailability, versionBadge, versionChips, versionPlayArg } from './versions';
 
 export function VersionsControl() {
@@ -97,6 +98,7 @@ export function TitleActions() {
   const look = useLook();
   const title = host.env.detail?.title[0];
   const id = title?.id ?? '';
+  const showFeedback = useWatchFeedback();
   const [actions, setActions] = useState<Actions | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -107,17 +109,18 @@ export function TitleActions() {
     if (id) void vela.catalogue.titleActions(id).then(value => { if (live) setActions(value); }).catch(() => {});
     return () => { live = false; };
   }, [vela, id]);
-  const hasWatchActions = !!actions && (actions.watched || actions.favorite || actions.watchlist);
+  const hasWatchActions = !!actions && (actions.watched || actions.favorite || actions.watchlist || actions.notInterested);
   const supportsDownloads = useVelaState(state => state.downloads.supported);
   const downloadTitle = supportsDownloads && (title?.kind === 'movie' || title?.kind === 'episode');
   if (!title || (!hasWatchActions && !host.env.canPlaylists && !downloadTitle)) return null;
 
-  const change = async (value: { played?: boolean; favorite?: boolean; watchlisted?: boolean }) => {
+  const change = async (value: Omit<WatchRequest, 'idempotencyKey'>) => {
     if (busy) return;
     setBusy(true);
     setError('');
     try {
       await vela.catalogue.setTitleWatch(id, value);
+      if (value.notInterested === true) showFeedback(id, title.name, actions?.watch.thumbsUp === true);
       setActions(await vela.catalogue.titleActions(id));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : msg('cardMenu.actionFailed'));
@@ -143,11 +146,20 @@ export function TitleActions() {
           icon={actions.watch.watchlisted ? 'bookmark-fill' : 'bookmark'} active={actions.watch.watchlisted}
           label={msg(actions.watch.watchlisted ? 'cardMenu.removeWatchlist' : 'cardMenu.addWatchlist')}
           run={() => void change({ watchlisted: !actions.watch.watchlisted })} /> : null}
+        {actions?.notInterested ? <ActionButton testID="detail-not-interested" disabled={busy}
+          icon="thumbs-down" active={!!title.notInterested}
+          label={msg(title.notInterested ? 'cardMenu.clearNotInterested' : 'cardMenu.notInterested')}
+          run={() => void change({ notInterested: !title.notInterested })} /> : null}
+        {actions?.notInterested && actions.thumbsUp ? <ActionButton testID="detail-thumbs-up" disabled={busy}
+          icon="thumbs-up" active={!!title.thumbsUp}
+          label={msg(title.thumbsUp ? 'cardMenu.clearThumbsUp' : 'cardMenu.thumbsUp')}
+          run={() => void change({ thumbsUp: !title.thumbsUp })} /> : null}
         {host.env.canPlaylists ? <ActionButton testID="detail-add-playlist" disabled={busy}
           icon="playlist-add" active={false} label={msg('cardMenu.addToPlaylist')}
           run={() => host.dispatch('addToPlaylist', `${id}|${title.kind}`)} /> : null}
         {downloadTitle ? <TitleDownload key={id} id={id} kind={title.kind} name={title.name} onError={setError} onNote={setNote} /> : null}
       </View>
+      <WatchFeedbackToast title={id} />
       {error ? <Text accessibilityRole="alert" style={look.text({ 'font-size': '13px', color: '$ui.accent' })}>{error}</Text> : null}
       {note && !error ? <Text testID="detail-download-note" style={[look.text({ 'font-size': '13px', color: '$ui.inkSecondary' }), { maxWidth: '100%', flexShrink: 1 }]}>{note}</Text> : null}
     </View>

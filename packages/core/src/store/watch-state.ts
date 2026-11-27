@@ -13,6 +13,8 @@ export function cardWatch(card: Card): CardWatchSnapshot {
     played: card.played,
     favorite: card.favorite ?? false,
     watchlisted: card.watchlisted ?? false,
+    ...(card.notInterested !== undefined ? { notInterested: card.notInterested } : {}),
+    ...(card.thumbsUp !== undefined ? { thumbsUp: card.thumbsUp } : {}),
     progressLabel: card.progressLabel,
   };
 }
@@ -27,6 +29,10 @@ export function changeCardWatch(card: Card, id: string, change: Change): Card {
     progressSeconds: position,
     progressLabel: change.played === true ? '' : change.progressLabel ?? card.progressLabel,
     ...(change.favorite !== undefined ? { favorite: change.favorite } : {}),
+    ...(change.notInterested !== undefined || change.thumbsUp === true
+      ? { notInterested: change.notInterested === true } : {}),
+    ...(change.thumbsUp !== undefined || change.notInterested === true
+      ? { thumbsUp: change.notInterested === true ? false : change.thumbsUp === true } : {}),
     ...(change.watchlisted !== undefined ? { watchlisted: change.watchlisted } : {}),
   };
 }
@@ -36,7 +42,7 @@ const cards = (values: Card[], id: string, change: Change) => values.map(card =>
 export const watchRow = (value: Row, id: string, change: Change): Row => row(value, id, change);
 const row = (value: Row, id: string, change: Change): Row => !value.items.some(card => card.id === id) ? value : ({
   ...value,
-  items: (value.purpose === 'continue' && change.played === true)
+  items: change.notInterested === true || (value.purpose === 'continue' && change.played === true)
     || (value.purpose === 'continue' && change.continueWatching === false)
     ? value.items.filter(card => card.id !== id)
     : cards(value.items, id, change),
@@ -82,11 +88,12 @@ export function optimisticWatchState(state: VelaState, id: string, change: Chang
     rows: mapRecord(state.rows, value => row(value, id, change)),
     library: mapRecord(state.library, value => {
       let items = cards(value.items, id, change);
+      if (change.notInterested === true) items = items.filter(card => card.id !== id);
       if (change.played !== undefined && value.playedFilter) items = items.filter(card => card.id !== id || String(card.played) === value.playedFilter);
       if (change.favorite !== undefined && value.favoriteFilter) items = items.filter(card => card.id !== id || card.favorite === true);
       return { ...value, items } as LibraryModel;
     }),
-    collections: mapRecord(state.collections, value => ({ ...value, items: cards(value.items, id, change) } as CollectionModel)),
+    collections: mapRecord(state.collections, value => ({ ...value, items: change.notInterested === true ? value.items.filter(card => card.id !== id) : cards(value.items, id, change) } as CollectionModel)),
     ...(state.music ? { music: { ...state.music, liked: likedAfter(state.music.liked, id, change) } } : {}),
     search: {
       ...state.search,

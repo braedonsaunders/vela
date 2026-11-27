@@ -32,6 +32,28 @@ describe('EtherAdapter against the mock server', () => {
     expect(home.rows.length).toBeGreaterThan(0);
   });
 
+  test('Ether title feedback round-trips and the two reactions clear each other', async () => {
+    const id = 'title-1-2';
+    const action = await adapter.titleActions(id);
+    expect(action).toMatchObject({ notInterested: true, thumbsUp: true, watch: { notInterested: false, thumbsUp: false } });
+    try {
+      const contradictory = await adapter.setTitleWatch(id, { notInterested: true, thumbsUp: true, idempotencyKey: 'feedback-invalid' })
+        .catch(error => error);
+      expect(contradictory).toMatchObject({ status: 400, detail: { code: 'invalid_request' } });
+      expect(await adapter.setTitleWatch(id, { thumbsUp: true, idempotencyKey: 'feedback-like' }))
+        .toMatchObject({ accepted: true, watch: { notInterested: false, thumbsUp: true } });
+      expect(await adapter.setTitleWatch(id, { notInterested: true, idempotencyKey: 'feedback-hide' }))
+        .toMatchObject({ accepted: true, watch: { notInterested: true, thumbsUp: false } });
+      expect((await adapter.titleActions(id)).watch).toMatchObject({ notInterested: true, thumbsUp: false });
+      expect((await adapter.home(true)).rows.flatMap(row => 'items' in row ? row.items : [])
+        .some(item => item.kind === 'title' && item.title.id === id)).toBe(false);
+      expect(await adapter.setTitleWatch(id, { thumbsUp: true, idempotencyKey: 'feedback-like-again' }))
+        .toMatchObject({ accepted: true, watch: { notInterested: false, thumbsUp: true } });
+    } finally {
+      await adapter.setTitleWatch(id, { notInterested: false, thumbsUp: false, idempotencyKey: 'feedback-reset' });
+    }
+  });
+
   test('validating a session rotates it', async () => {
     const before = credentials.current!;
     const after = await adapter.validateSession();
