@@ -397,6 +397,13 @@ export function adaptiveUnavailableText(reason: string | undefined, message?: st
   return /^[a-z0-9_.-]+$/.test(text) ? msg('player.quality.adaptiveUnavailable') : text;
 }
 
+/** Why the plan's playing path cannot adapt (Ether 0.3.25 sends `adaptiveUnavailable` and its localized
+ * `adaptiveUnavailableMessage` on the selected path), in the viewer's words; '' when it adapts or the server says nothing. */
+export function adaptiveUnavailableNote(plan: PlaybackPlan | null | undefined): string {
+  const path = plan?.paths.find(candidate => candidate.id === plan.selectedPathId);
+  return adaptiveUnavailableText(path?.adaptiveUnavailable, path?.adaptiveUnavailableMessage);
+}
+
 /** The resolution a release label leads with ("1080p WEB-DL · …" → "1080p"), or ''. */
 export function labelResolution(label: string): string {
   const lead = /^\s*(4K|UHD|2160p|1440p|1080p|1080i|720p|576p|480p|SD)\b/i.exec(label)?.[1] ?? '';

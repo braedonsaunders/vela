@@ -8,7 +8,7 @@ import { useState, type ReactNode } from 'react';
 import type { CommandInput, PlayerChromeState } from './context';
 import type { PlayerLook } from './look';
 import { ChoiceRow, MenuHeading, MenuRule, MenuSection, SegmentRow, VersionChoiceRow } from './menu';
-import { adaptiveUnavailableText, nextSubtitleOffset, type PlayerView, type QualityOption } from './present';
+import { adaptiveUnavailableNote, nextSubtitleOffset, type PlayerView, type QualityOption } from './present';
 import type { PlaybackPlan } from '@vela/player-api';
 import { convertedFrom, playingElsewhere, versionMenuChips, versionMenuGroups, versionRowStatus } from '../versions';
 
@@ -267,7 +267,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
   const source = convertedFrom(groups.versions, selectedVersionId, view.playingLabel);
   const elsewhere = playingElsewhere(groups.versions, view.playingVersionId, view.playingLabel);
   const autoReason = selectedVersionId && selectedVersionId === groups.versions[0]?.id ? plan?.autoSelectionReason?.message?.trim() ?? '' : '';
-  const adaptiveReason = adaptiveUnavailableText(plan?.adaptiveUnavailable?.reason, plan?.adaptiveUnavailable?.message);
+  const adaptiveReason = adaptiveUnavailableNote(plan);
   const convertedTitle = source ? msg('player.quality.convertedFrom', { version: source }) : msg('player.quality.convertedFromCurrent');
   const hasConversions = view.qualityAuto || converted.length > 0 || !!serverStream;
   const showQuality = hasVersions && (hasConversions || originals.length > 0);
@@ -287,7 +287,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
       {versionMessage ? <MenuHeading look={look} text={versionMessage} /> : null}
     </MenuSection> : null,
     showQuality ? <MenuRule key="quality-divider" look={look} /> : null,
-    // Why the player cannot adapt by itself here (Ether 0.3.25 adaptiveUnavailable), above the qualities to pick from.
+    // Why the playing path cannot adapt by itself (Ether 0.3.25 path.adaptiveUnavailable), above the qualities to pick from.
     adaptiveReason ? <MenuHeading key="adaptive-unavailable" look={look} text={adaptiveReason} /> : null,
     ...(showQuality ? [
       <MenuSection key="quality" look={look} title={hasConversions ? convertedTitle : msg('player.quality.title')}>{qualityRows}</MenuSection>,

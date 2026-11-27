@@ -105,3 +105,14 @@ test('the localized message comes before the reason code', async () => {
   const { adaptiveUnavailableText } = await import('../src/widgets/player/present');
   expect(adaptiveUnavailableText('keyframe_grid', 'Las calidades automáticas no están disponibles')).toBe('Las calidades automáticas no están disponibles');
 });
+
+test('the playing path\'s adaptiveUnavailable (Ether\'s contract: a code and a message on the selected path) reaches the menu', async () => {
+  const { adaptiveUnavailableNote } = await import('../src/widgets/player/present');
+  const plan = (path: Record<string, unknown>) => ({ selectedPathId: 'primary', paths: [{ id: 'other', adaptiveUnavailable: 'no_compatible_rungs', adaptiveUnavailableMessage: 'Not this one' },
+    { id: 'primary', kind: 'remux', transport: 'hls', ...path }] }) as never;
+  expect(adaptiveUnavailableNote(plan({ adaptiveUnavailable: 'shared_audio_unavailable', adaptiveUnavailableMessage: 'This title has no audio every quality can share.' })))
+    .toBe('This title has no audio every quality can share.');
+  expect(adaptiveUnavailableNote(plan({ adaptiveUnavailable: 'transcoding_disabled' }))).toBe("Automatic quality isn't available for this title");
+  expect(adaptiveUnavailableNote(plan({ adaptive: true }))).toBe('');
+  expect(adaptiveUnavailableNote(null)).toBe('');
+});

@@ -364,6 +364,10 @@ export interface PlaybackPathBase { originalVideo?: OriginalVideo; original?: bo
   /** An HLS master of several variants the player adapts across itself (features.adaptiveHLS): no initial rendition is
    * pinned and no switch is sent for bandwidth; explicit quality choices still switch paths. */
   adaptive?: boolean;
+  /** The selected HLS path of a client that asked for adaptive HLS stays single-variant: why, as a code
+   * (`transcoding_disabled`, `shared_audio_unavailable`, `no_compatible_rungs`, a limit's reason), and in the viewer's
+   * language (Ether 0.3.25). */
+  adaptiveUnavailable?: string; adaptiveUnavailableMessage?: string;
   mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
   timelineOriginSeconds?: number; initialRenditionId?: ID; audioRenditions?: AudioRendition[];
   /** Output target metadata; readiness remains independent. */
@@ -405,8 +409,6 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   qualityLimitations?: { height: number; reason: string }[];
   selectedVersionId?: ID; versions?: VersionItem[]; rememberedChoice?: RememberedVersionChoice;
   /** An Auto plan: why Auto admitted this pick (Ether 0.3.25). */ autoSelectionReason?: AutoSelectionReason;
-  /** A client asked for adaptive HLS and this plan has no adaptive path: why, as a code and a localized message (Ether 0.3.25). */
-  adaptiveUnavailable?: { reason: string; message?: string };
   /** The release actually playing: its versions-row id, or null when it has no row (Auto
    * resolving to a release the menu does not list); with its label ("1080p WEB-DL · DD+ 5.1 ·
    * 4.2 GB"). selectedVersionId stays the viewer's choice (the Auto row's id when Auto was
