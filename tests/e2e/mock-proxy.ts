@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createReadStream, existsSync } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { extname, resolve, sep } from 'node:path';
@@ -207,6 +207,16 @@ async function mockOfflineShell(response: http.ServerResponse) {
   }
 }
 
+/**
+ * The mock's stand-in for YouTube's embed (mock-server/trailer-embed.ts) is at the mock's own origin, a
+ * different one from the app's. The page names it, so a trailer embed in this run never loads YouTube
+ * (apps/vela/src/trailer-embed-origin.web.ts accepts a loopback origin only).
+ */
+function withMockEmbedOrigin(html: string): string {
+  const meta = `<meta name="vela-mock-trailer-embed-origin" content="http://127.0.0.1:${mockPort}">`;
+  return html.includes('<head>') ? html.replace('<head>', `<head>${meta}`) : meta + html;
+}
+
 async function localStatic(pathname: string, method: string, response: http.ServerResponse) {
   const relative = decodeURIComponent(pathname).replace(/^\/vela\/?/, '').replace(/^\/+/, '');
   let file = resolve(staticRoot, relative || 'index.html');
@@ -219,6 +229,12 @@ async function localStatic(pathname: string, method: string, response: http.Serv
   const fallback = await stat(file).catch(() => null);
   if (!fallback?.isFile()) {
     response.writeHead(404).end();
+    return;
+  }
+  if (!lab && extname(file) === '.html') {
+    const html = withMockEmbedOrigin(await readFile(file, 'utf8'));
+    response.writeHead(200, { 'Content-Type': contentTypes['.html'], 'Content-Length': Buffer.byteLength(html), 'Cache-Control': 'no-store' });
+    response.end(method === 'HEAD' ? undefined : html);
     return;
   }
   response.writeHead(200, {
