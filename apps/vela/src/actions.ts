@@ -193,6 +193,12 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'manageLibraries':
         actions.resetFlags();
         return router.push('/libraries');
+      case 'downloads':
+        actions.resetFlags();
+        return router.push('/downloads');
+      case 'addServer':
+        actions.resetFlags();
+        return router.push('/connect');
       case 'addToPlaylist': {
         const [titleId, titleKind] = arg.split('|');
         if (titleId) openAddToPlaylist(titleId, titleKind || undefined);

@@ -44,7 +44,7 @@ const SCREEN_VIEWPORTS: (ScreenViewport & { name: string })[] = [
 const UI_KEYS = new Set(Object.keys(uiDefaults));
 const VALID_ACTIONS = new Set([
   'select', 'person', 'play', 'pickHero', 'home', 'search', 'live', 'library',
-  'toggle', 'open', 'close', 'reset', 'openPicker', 'switchProfile', 'playlists', 'manageLibraries', 'addToPlaylist', 'signOut', 'moreRow', 'playExtra', 'back',
+  'toggle', 'open', 'close', 'reset', 'openPicker', 'switchProfile', 'playlists', 'manageLibraries', 'downloads', 'addServer', 'addToPlaylist', 'signOut', 'moreRow', 'playExtra', 'back',
   'retry', 'only', 'clearSearch', 'focusSearch', 'pageNext', 'pagePrev',
   'librarySort', 'librarySortFlip', 'libraryFilter', 'libraryMore', 'libraryView',
   'signIn', 'startQuick', 'cancelQuick', 'goSecure', 'collectionMore', 'personMore',

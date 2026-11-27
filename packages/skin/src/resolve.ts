@@ -29,6 +29,8 @@ import { fold, halfPoints, lineHeightPoints, pointsToPx, screenStyleRow } from '
 import { takesDirectionalFocus } from './focus-stop-policy';
 
 import { RENDERER_VERSION } from './resolve/version';
+import { expandProfileMenu } from './profile-menu/expand';
+import { velaProfileMenu } from './resolve/vela-base/profile-menu';
 export { RENDERER_VERSION };
 
 /** The renderer 19 blocks (docs/plugin-screens.md: Building blocks), drawn by ./blocks. */
@@ -299,6 +301,11 @@ function screenRead(key: string, scope: HoleScope): Accessor {
   return (c, e) => valueText(value(c, e), c.screen?.record);
 }
 
+/** Whether every condition holds, compiled now: data that carries conditions (the profile menu's entries) asks this. */
+export function conditionsHold(list: Condition[] | undefined, c: Ctx, e: Env): boolean {
+  return holds(tests(list), c, e);
+}
+
 export function holds(list: Test[] | undefined, c: Ctx, e: Env): boolean {
   for (const k of list ?? []) {
     const v = k.read(c, e);
@@ -399,6 +406,8 @@ function statesOf(node: Node): NonNullable<Node['states']> {
 function convert(node: Node, depth: number, r: Context): RNode {
   if (++r.count > MAX_NODES) throw new Error(`A skin document draws at most ${MAX_NODES} nodes`);
   if (depth > MAX_DEPTH) throw new Error(`A skin document nests at most ${MAX_DEPTH} deep`);
+  // Renderer 22: the profile menu primitive, expanded into the document's own nodes.
+  if (node.type === 'profileMenu') return convert(expandProfileMenu(node, r.doc, velaProfileMenu), depth, r);
   if (node.type === 'use' && r.screen) return useScreen(node, depth, r);
   if (node.type === 'use') {
     const template = r.doc.templates?.[node.template];

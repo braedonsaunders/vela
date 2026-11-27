@@ -2,6 +2,7 @@
   "$defs": {
     "Action": {
       "enum": [
+        "addServer",
         "addToPlaylist",
         "back",
         "cancelQuick",
@@ -9,6 +10,7 @@
         "close",
         "collectionMore",
         "dismiss",
+        "downloads",
         "focusSearch",
         "goSecure",
         "guide",
@@ -502,6 +504,9 @@
               },
               {
                 "$ref": "#/$defs/WidgetNode"
+              },
+              {
+                "$ref": "#/$defs/ProfileMenuNode"
               },
               {
                 "$ref": "#/$defs/PageOverride"
@@ -2194,6 +2199,9 @@
         },
         {
           "$ref": "#/$defs/WidgetNode"
+        },
+        {
+          "$ref": "#/$defs/ProfileMenuNode"
         }
       ]
     },
@@ -2974,8 +2982,485 @@
       ],
       "type": "object"
     },
+    "ProfileMenuEntryLook": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "glyph": {
+          "$ref": "#/$defs/Node"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ProfileMenuExtra": {
+      "additionalProperties": false,
+      "properties": {
+        "a11y": {
+          "additionalProperties": false,
+          "properties": {
+            "checked": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "current": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "expanded": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "haspopup": {
+              "type": "string"
+            },
+            "hidden": {
+              "type": "boolean"
+            },
+            "pressed": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "role": {
+              "type": "string"
+            },
+            "selected": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "glyph": {
+          "$ref": "#/$defs/Node"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string"
+        },
+        "press": {
+          "$ref": "#/$defs/Press"
+        },
+        "testId": {
+          "type": "string"
+        },
+        "when": {
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "press"
+      ],
+      "type": "object"
+    },
+    "ProfileMenuLook": {
+      "additionalProperties": false,
+      "description": "Renderer 22: how a document draws the profile menu (docs/skin-schema.md: Profile menu). Whatever is left\nout is the Vela base's; an entry no section names (one the app adds later) joins its default section.",
+      "properties": {
+        "entries": {
+          "additionalProperties": false,
+          "description": "Per entry: its label, icon (a symbol), glyph (the document's own icon node), detail or part.",
+          "properties": {
+            "about": {
+              "$ref": "#/$defs/ProfileMenuEntryLook"
+            },
+            "addServer": {
+              "$ref": "#/$defs/ProfileMenuEntryLook"
+            },
+            "appearance": {
+              "$ref": "#/$defs/ProfileMenuEntryLook"
+            },
+            "downloads": {
+              "$ref": "#/$defs/ProfileMenuEntryLook"
+            },
+            "manageLibraries": {
+              "$ref": "#/$defs/ProfileMenuEntryLook"
+            },
+            "playlists": {
+              "$ref": "#/$defs/ProfileMenuEntryLook"
+            },
+            "servers": {
+              "$ref": "#/$defs/ProfileMenuEntryLook"
+            },
+            "signOut": {
+              "$ref": "#/$defs/ProfileMenuEntryLook"
+            },
+            "switchProfile": {
+              "$ref": "#/$defs/ProfileMenuEntryLook"
+            },
+            "viewer": {
+              "$ref": "#/$defs/ProfileMenuEntryLook"
+            }
+          },
+          "type": "object"
+        },
+        "extras": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ProfileMenuExtra"
+          },
+          "description": "The document's own rows by id, drawn with the `row` part (or their `part`); placed by naming the id in a section.",
+          "type": "object"
+        },
+        "hide": {
+          "description": "The documented opt-out: only `viewer`, for a menu whose surroundings already show the viewer. Every other entry is always offered.",
+          "items": {
+            "const": "viewer"
+          },
+          "type": "array"
+        },
+        "parts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Node"
+          },
+          "description": "Part templates by name. Built-in parts: `row` (an action entry), `header` (the viewer), `picker`\n(Appearance; else `row`, its detail the skin's name), `title` (the look's `title`), `section` (a\nsection's title), `divider`, `about` (the About line's stop) and `servers` (a box around the server\nlist). A part reads its entry as {entry.label}, {entry.detail}, {entry.id}, {entry.testId}; an icon\nwhose symbol is `{entry.icon}` draws the entry's icon (or its `glyph`). A condition on `entry.*` is\ndecided as the menu is drawn. The entry's press, label, testId, a11y and visibility go to the node\nwhose testId is `{entry.testId}`, else to the part's root box. Other names are parts an entry or an\nextra chooses with `part`.",
+          "type": "object"
+        },
+        "sections": {
+          "description": "The arrangement: sections in order, each naming entries and extras. Default: viewer | you | servers | session | about.",
+          "items": {
+            "$ref": "#/$defs/ProfileMenuSection"
+          },
+          "type": "array"
+        },
+        "title": {
+          "description": "The menu's own title, drawn first by the `title` part (Late Night's \"Setup menu\").",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ProfileMenuNode": {
+      "additionalProperties": false,
+      "description": "Renderer 22: the profile menu. The node is the menu's box (its style, variants, motion, role, `escape` and\n`returnFocus` make it a panel, or it sits in the document's own drawer or dialog); it holds every entry the\napp offers, arranged and drawn by the document's look `look` in `profileMenus` (else the Vela base's).",
+      "properties": {
+        "a11y": {
+          "additionalProperties": false,
+          "description": "The press button's accessibility state and role.",
+          "properties": {
+            "checked": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "current": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "expanded": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "haspopup": {
+              "type": "string"
+            },
+            "hidden": {
+              "type": "boolean"
+            },
+            "pressed": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "role": {
+              "type": "string"
+            },
+            "selected": {
+              "items": {
+                "$ref": "#/$defs/Condition"
+              },
+              "type": "array"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "above": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Style"
+          },
+          "type": "object"
+        },
+        "active": {
+          "$ref": "#/$defs/Style",
+          "description": "While pressed (pointer down), over the hover style: e.g. { scale: '0.97' } as a compiled control's press scale."
+        },
+        "below": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Style"
+          },
+          "type": "object"
+        },
+        "disabled": {
+          "description": "A pressable box: disabled while these hold, drawn with `disabledStyle`.",
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "type": "array"
+        },
+        "disabledStyle": {
+          "$ref": "#/$defs/Style"
+        },
+        "escape": {
+          "description": "Escape clears this flag and moves focus to `returnFocus` (an element id).",
+          "type": "string"
+        },
+        "exit": {
+          "description": "A motion preset played as the node leaves.",
+          "type": "string"
+        },
+        "focus": {
+          "$ref": "#/$defs/Style"
+        },
+        "fold": {
+          "$ref": "#/$defs/Style",
+          "description": "Renderer 20: on a foldable held partly open (env.fold), after `tv`."
+        },
+        "group": {
+          "description": "A group's hover or focus (`group: true` on an ancestor) applies `groupHover` here; its keyboard focus `groupFocus`.",
+          "type": "boolean"
+        },
+        "groupFocus": {
+          "$ref": "#/$defs/Style"
+        },
+        "groupHover": {
+          "$ref": "#/$defs/Style"
+        },
+        "hover": {
+          "$ref": "#/$defs/Style",
+          "description": "Pointer hover and keyboard focus overlays (the renderer tracks both)."
+        },
+        "id": {
+          "description": "A box's element id (`detail-scroll-{env.entry}`: the route's scroll the navigation restores).",
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "layoutTransition": {
+          "type": "string"
+        },
+        "level": {
+          "type": "number"
+        },
+        "look": {
+          "type": "string"
+        },
+        "motion": {
+          "description": "A motion preset by name (`motion` table), its delay staggered by the item index.",
+          "type": "string"
+        },
+        "needs": {
+          "description": "Renderer 19, screens: lazy sources read when this node is about to draw.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "onChange": {
+          "additionalProperties": false,
+          "description": "Renderer 19: play a motion preset when the filled value changes (a score pops).",
+          "properties": {
+            "motion": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "motion",
+            "value"
+          ],
+          "type": "object"
+        },
+        "platforms": {
+          "additionalProperties": false,
+          "description": "Renderer 20: a style overlay per platform, applied last (after small, wide, breakpoints, tv and fold).",
+          "properties": {
+            "android": {
+              "$ref": "#/$defs/Style"
+            },
+            "desktop": {
+              "$ref": "#/$defs/Style"
+            },
+            "ios": {
+              "$ref": "#/$defs/Style"
+            },
+            "tv": {
+              "$ref": "#/$defs/Style"
+            },
+            "web": {
+              "$ref": "#/$defs/Style"
+            }
+          },
+          "type": "object"
+        },
+        "returnFocus": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "sharedElement": {
+          "type": "string"
+        },
+        "small": {
+          "$ref": "#/$defs/Style"
+        },
+        "stagger": {
+          "additionalProperties": false,
+          "properties": {
+            "cap": {
+              "type": "number"
+            },
+            "step": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "cap",
+            "step"
+          ],
+          "type": "object"
+        },
+        "states": {
+          "description": "The first state whose conditions hold replaces `style` on the same element (transitions run).",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "focus": {
+                "$ref": "#/$defs/Style"
+              },
+              "groupFocus": {
+                "$ref": "#/$defs/Style"
+              },
+              "groupHover": {
+                "$ref": "#/$defs/Style"
+              },
+              "hover": {
+                "$ref": "#/$defs/Style"
+              },
+              "label": {
+                "type": "string"
+              },
+              "style": {
+                "$ref": "#/$defs/Style"
+              },
+              "when": {
+                "items": {
+                  "$ref": "#/$defs/Condition"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "style",
+              "when"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "style": {
+          "$ref": "#/$defs/Style",
+          "description": "Overrides by viewport: `small` under 640 px, `wide` from 1200 px, `tv` on a TV (renderer 19)."
+        },
+        "testId": {
+          "type": "string"
+        },
+        "tv": {
+          "$ref": "#/$defs/Style"
+        },
+        "type": {
+          "const": "profileMenu"
+        },
+        "when": {
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "type": "array"
+        },
+        "wide": {
+          "$ref": "#/$defs/Style"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "ProfileMenuSection": {
+      "additionalProperties": false,
+      "properties": {
+        "divider": {
+          "description": "Draw the `divider` part before this section.",
+          "type": "boolean"
+        },
+        "entries": {
+          "description": "Entry ids (ProfileMenuEntryId) and extra ids, in order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "description": "A heading drawn by the `section` part.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "type": "object"
+    },
     "Renderer": {
-      "const": 21,
+      "const": 22,
       "description": "The RENDERER_VERSION this schema describes."
     },
     "RepeatNode": {
@@ -5902,6 +6387,13 @@
         "preview": {
           "description": "Same-origin `/vela/v0/appearance/` URLs.",
           "type": "string"
+        },
+        "profileMenus": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ProfileMenuLook"
+          },
+          "description": "Renderer 22: the profile menu's looks by name (a `profileMenu` node's `look`; `default` when it names none).",
+          "type": "object"
         },
         "renderer": {
           "description": "The renderer version the document needs (the client's RENDERER_VERSION must be at least this).",

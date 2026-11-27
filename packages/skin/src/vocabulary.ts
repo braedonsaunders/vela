@@ -53,6 +53,8 @@ export interface Env {
   canSwitchProfile: boolean;
   /** The profile menu offers Manage libraries (action manageLibraries): a viewer is signed in. */
   canManageLibraries: boolean;
+  /** Renderer 22: this device keeps downloads (action downloads opens them). */
+  canDownloads?: boolean;
   width: number;
   /** Screen documents (env.canMultiview, env.canPlay): multiview is available here; playback is (default true). */
   canMultiview?: boolean;
@@ -381,6 +383,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.canPlaylists': (_, e) => yes(e.canPlaylists),
   'env.canSwitchProfile': (_, e) => yes(e.canSwitchProfile),
   'env.canManageLibraries': (_, e) => yes(e.canManageLibraries),
+  'env.canDownloads': (_, e) => yes(e.canDownloads === true),
   /** Live TV in the navigation: the server has it, and the viewer has not hidden its Live TV library
    * (env.navigation leaves hidden libraries out). env.canLive stays for content (a live home's monitor,
    * in-page guide buttons). */
