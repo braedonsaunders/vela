@@ -15,7 +15,7 @@ import { home } from './home';
 import { library } from './library';
 import { ease } from './look';
 import { relatedRow, row } from './rows';
-import { shell } from './shell';
+import { sheetLook, shell } from './shell';
 import { title } from './title';
 
 const rise = (delay: number) => ({
@@ -28,11 +28,11 @@ const rise = (delay: number) => ({
 });
 
 // Asset URLs carry the document's own version: a release rebases them to /vela/skins/<id>/<version>/.
-const version = '1.0.21';
+const version = '1.0.22';
 
 const lounge: SkinDocument = {
   schema: 1,
-  renderer: 21,
+  renderer: 22,
   id: 'lounge',
   name: 'Lounge',
   version,
@@ -185,6 +185,7 @@ const lounge: SkinDocument = {
     },
   },
   templates: { poster, gridPoster, wide, ranked, row, relatedRow },
+  profileMenus: { default: sheetLook },
   slots: { shell, home },
   routes: { title: episodePage(title), library, collection, auth },
   // Lounge's ground and ink behind every screen, the launch splash included.

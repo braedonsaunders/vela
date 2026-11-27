@@ -6,7 +6,7 @@ import { episodePage } from '../../../episode-page';
 import type { SkinDocument } from '../../../skin';
 import { id, asset, version } from './look';
 import { wideW, card } from './cards';
-import { shell } from './shell';
+import { drawerLook, dropdownLook, shell } from './shell';
 import { home } from './home';
 import { library } from './library';
 import { collection } from './collection';
@@ -16,7 +16,7 @@ import { strings } from './strings';
 
 export default {
   schema: 1,
-  renderer: 21,
+  renderer: 22,
   id,
   name: 'Jelly Twin',
   version,
@@ -133,6 +133,7 @@ export default {
   },
   status: true,
   traits: { barMask: false, panSections: true, page: '#101010', ink: '#ffffffde' },
+  profileMenus: { dropdown: dropdownLook, drawer: drawerLook },
   slots: { shell, home },
   routes: { title: episodePage(title), library, auth, collection },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },

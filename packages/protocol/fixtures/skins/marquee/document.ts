@@ -3,7 +3,7 @@ import { episodePage } from '../../../episode-page';
 // file, with the palette, copy and motion they share.
 import type { SkinDocument } from '../../../skin';
 import { id, version, asset, ease } from './look';
-import { shell } from './shell';
+import { accountMenuLook, shell } from './shell';
 import { card, wideCard, rankedCard, row, homeRow } from './cards';
 import { home } from './home';
 import { title } from './title';
@@ -21,7 +21,7 @@ const rise = {
 
 export default {
   schema: 1,
-  renderer: 21,
+  renderer: 22,
   id,
   name: 'Marquee',
   version,
@@ -223,6 +223,7 @@ export default {
     slide: { '0%': { translate: '-100% 0px' } },
   },
   templates: { card, gridCard, wideCard, rankedCard, row, homeRow },
+  profileMenus: { default: accountMenuLook },
   slots: { shell, home },
   routes: { title: episodePage(title), library: libraryRoute, auth: authRoute, collection: collectionRoute },
   detail: { wide: 'fullscreen', small: 'fullscreen', frame: { flat: true } },

@@ -1,5 +1,5 @@
 // The shell: the header with section tabs, the user menu and the slide-in drawer.
-import type { Condition, Node, Style } from '../../../skin';
+import type { Condition, Node, ProfileMenuLook, Style } from '../../../skin';
 import {
   type Press,
   isLive,
@@ -22,17 +22,6 @@ import {
   wordmark,
   tabNode,
 } from './look';
-
-// Which Vela this is, where it runs and the server, under the menu's and the drawer's last row:
-// quiet, selectable, and on TV a stop the remote reaches.
-const aboutLine: Node = {
-  type: 'box',
-  when: [{ test: 'env.aboutLine' }],
-  readingStop: true,
-  label: '{env.aboutLabel}',
-  testId: 'about-line',
-  children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$secondary' } }],
-};
 
 const onLive: Condition = { test: 'env.section', is: 'eq', value: 'live' };
 const onHome: Condition = { test: 'env.section', is: 'eq', value: 'home' };
@@ -237,8 +226,10 @@ const userMenu: Node[] = [
     label: '{s:close}',
     style: { ...fill, 'z-index': '29', 'background-color': 'transparent' },
   },
+  // The user menu (the profile menu primitive, its dropdown look).
   {
-    type: 'box',
+    type: 'profileMenu',
+    look: 'dropdown',
     when: [{ test: 'env.viewer' }, { test: 'flag:menu' }],
     id: 'jt-user-menu',
     role: 'dialog',
@@ -255,68 +246,14 @@ const userMenu: Node[] = [
         right: '14px',
         'z-index': '30',
         width: '260px',
+        'max-height': 'calc(100vh - 68px - env(safe-area-inset-bottom))',
+        'overflow-y': 'auto',
         padding: '8px',
         gap: '4px',
         'transform-origin': 'top right',
       }),
     },
-    below: { [COMPACT]: { top: '50px', right: '8px' } },
-    children: [
-      {
-        type: 'box',
-        style: row({ gap: '12px', 'align-items': 'center', padding: '10px 12px 12px' }),
-        children: [
-          initial(40, 17),
-          {
-            type: 'text',
-            text: '{env.viewer}',
-            style: {
-              'font-size': '16px',
-              'font-weight': '600',
-              flex: '1',
-              'min-width': '0px',
-              'line-clamp': '1',
-            },
-          },
-        ],
-      },
-      { type: 'box', style: { height: '1px', 'background-color': '$line', margin: '0px 8px 6px' } },
-      {
-        type: 'box',
-        when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
-        press: { action: 'openPicker' },
-        label: '{s:appearance}',
-        testId: 'skin-picker',
-        a11y: { haspopup: 'dialog' },
-        style: menuRow,
-        hover: { 'background-color': '$hover' },
-        focus: { outline: 'auto', 'background-color': '$hover' },
-        children: [glyph('sparkles', 20), { type: 'text', text: '{s:appearance}' }],
-      },
-      {
-        type: 'box',
-        when: [{ test: 'env.canManageLibraries' }],
-        press: { action: 'manageLibraries' },
-        label: '{s:manageLibraries}',
-        testId: 'manage-libraries',
-        style: menuRow,
-        hover: { 'background-color': '$hover' },
-        focus: { outline: 'auto', 'background-color': '$hover' },
-        children: [glyph('library', 20), { type: 'text', text: '{s:manageLibraries}' }],
-      },
-      { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
-      { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-      {
-        type: 'box',
-        press: { action: 'signOut' },
-        label: '{s:signOut}',
-        style: menuRow,
-        hover: { 'background-color': '$hover' },
-        focus: { outline: 'auto', 'background-color': '$hover' },
-        children: [glyph('sign-out', 20), { type: 'text', text: '{s:signOut}' }],
-      },
-      { ...aboutLine, style: { padding: '8px 12px 6px', 'border-radius': '6px' } },
-    ],
+    below: { [COMPACT]: { top: '50px', right: '8px', 'max-height': 'calc(100vh - 62px - env(safe-area-inset-bottom))' } },
   },
 ];
 
@@ -365,6 +302,74 @@ const drawerHeading = (text: string): Node => ({
   text,
   style: { 'font-size': '13px', 'font-weight': '600', color: '$secondary', padding: '16px 20px 6px' },
 });
+
+// The user menu's two looks (the profile menu primitive): the header's dropdown and the phone drawer.
+const dropdownRow: Node = {
+  type: 'box',
+  style: menuRow,
+  hover: { 'background-color': '$hover' },
+  focus: { outline: 'auto', 'background-color': '$hover' },
+  children: [
+    { type: 'icon', symbol: '{entry.icon}', style: { width: '20px', height: '20px', 'flex-shrink': '0' } },
+    { type: 'text', text: '{entry.label}', style: { flex: '1', 'line-clamp': '1' } },
+  ],
+};
+const sectionHeading = (padding: string): Node => ({
+  type: 'text', text: '{section.title}', role: 'heading', level: 2,
+  style: { 'font-size': '13px', 'font-weight': '600', color: '$secondary', padding },
+});
+export const dropdownLook: ProfileMenuLook = {
+  parts: {
+    header: {
+      type: 'box',
+      style: row({ gap: '12px', 'align-items': 'center', padding: '10px 12px 12px' }),
+      children: [
+        initial(40, 17),
+        { type: 'text', text: '{entry.label}', style: { 'font-size': '16px', 'font-weight': '600', flex: '1', 'min-width': '0px', 'line-clamp': '1' } },
+      ],
+    },
+    divider: { type: 'box', style: { height: '1px', 'flex-shrink': '0', 'background-color': '$line', margin: '0px 8px 6px' } },
+    section: sectionHeading('10px 16px 4px'),
+    row: dropdownRow,
+    // The server rows reach 10px past their column, so it is inset to the rows' text.
+    servers: { type: 'box', style: col({ padding: '0px 16px' }) },
+    about: { type: 'box', testId: '{entry.testId}', style: { padding: '8px 12px 6px', 'border-radius': '6px' }, children: [
+      { type: 'text', text: '{entry.label}', style: { 'font-size': '12px', 'line-height': '16px', color: '$secondary' } }] },
+  },
+  entries: { appearance: { label: '{s:appearance}' } },
+  sections: [
+    { id: 'viewer', entries: ['viewer'] },
+    { id: 'you', divider: true, entries: [] },
+    { id: 'servers', title: '{t:connect.servers}', divider: true, entries: [] },
+  ],
+};
+export const drawerLook: ProfileMenuLook = {
+  parts: {
+    // The user, under the drawer's User heading.
+    header: { type: 'box', style: row({ gap: '12px', 'align-items': 'center', padding: '6px 20px 10px' }), children: [
+      glyph('person', 22),
+      { type: 'text', text: '{entry.label}', style: { 'font-size': '15px', 'line-clamp': '1' } },
+    ] },
+    section: sectionHeading('16px 20px 6px'),
+    row: {
+      type: 'box',
+      style: drawerRow,
+      hover: { 'background-color': '$hover' },
+      focus: { outline: 'auto', 'background-color': '$hover' },
+      children: [
+        { type: 'icon', symbol: '{entry.icon}', style: { width: '22px', height: '22px', 'flex-shrink': '0' } },
+        { type: 'text', text: '{entry.label}', style: { 'font-size': '15px', 'line-clamp': '1' } },
+      ],
+    },
+    servers: { type: 'box', style: col({ padding: '0px 20px' }) },
+    about: { type: 'box', testId: '{entry.testId}', style: { padding: '14px 20px 20px' }, children: [
+      { type: 'text', text: '{entry.label}', style: { 'font-size': '12px', 'line-height': '16px', color: '$secondary' } }] },
+  },
+  entries: { appearance: { label: '{s:appearance}' } },
+  sections: [
+    { id: 'viewer', title: '{s:user}', entries: ['viewer'] },
+  ],
+};
 
 const drawer: Node[] = [
   {
@@ -456,30 +461,8 @@ const drawer: Node[] = [
             { test: 'nav.showLive' },
             { test: 'env.hasLiveLibrary', not: true },
           ]),
-          drawerHeading('{s:user}'),
-          {
-            type: 'box',
-            style: row({ gap: '12px', 'align-items': 'center', padding: '6px 20px 10px' }),
-            children: [
-              glyph('person', 22),
-              { type: 'text', text: '{env.viewer}', style: { 'font-size': '15px', 'line-clamp': '1' } },
-            ],
-          },
-          drawerItem(
-            'jt-drawer-appearance',
-            '{s:appearance}',
-            [glyph('sparkles', 22)],
-            undefined,
-            { action: 'openPicker' },
-            [{ test: 'env.skinCount', is: 'gt', value: '1' }],
-          ),
-          drawerItem('jt-drawer-manage-libraries', '{s:manageLibraries}', [glyph('library', 22)], undefined, { action: 'manageLibraries' }, [
-            { test: 'env.canManageLibraries' },
-          ]),
-          drawerItem('jt-drawer-signout', '{s:signOut}', [glyph('sign-out', 22)], undefined, {
-            action: 'signOut',
-          }),
-          { ...aboutLine, style: { padding: '14px 20px 20px' } },
+          // The user's entries (the profile menu primitive, its drawer look).
+          { type: 'profileMenu', look: 'drawer', style: col() },
         ],
       },
     ],

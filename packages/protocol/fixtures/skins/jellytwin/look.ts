@@ -4,7 +4,7 @@ import type { Action, Condition, Node, Style } from '../../../skin';
 export type Press = { action: Action; arg?: string; focus?: string };
 
 export const id = 'jellytwin';
-export const version = '1.0.15';
+export const version = '1.0.16';
 export const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 
 export const sans = '"Noto Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';

@@ -5,9 +5,9 @@ import { episodePage } from '../../../episode-page';
 // reduced motion, and a grown-ups corner behind a two-question gate so settings and
 // sign-out stay out of small hands. Assets are this document's own, served beside it
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
-import type { BoxNode, Condition, Node, SkinDocument, Style } from '../../../skin';
+import type { BoxNode, Condition, Node, ProfileMenuLook, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.23';
+const version = '1.2.24';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -112,7 +112,7 @@ const bar: Node = { type: 'box', role: 'navigation', label: '{s:mainNav}', when:
     { type: 'icon', symbol: 'search', style: { width: '26px', height: '26px', color: '$ink' }, small: { width: '22px', height: '22px' } },
   ] },
   // The grown-ups corner: small and quiet, behind a gate.
-  { type: 'box', press: { action: 'open', arg: 'gate' }, label: '{s:grownUps}', a11y: { haspopup: 'dialog' }, testId: 'kids-grown-ups', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '44px', height: '44px', 'border-radius': '999px', 'flex-shrink': '0', opacity: '0.5', 'background-color': 'rgba(255, 255, 255, 0.5)', transition: 'opacity 160ms linear' },
+  { type: 'box', id: 'kids-grown-ups', press: { action: 'open', arg: 'gate' }, label: '{s:grownUps}', a11y: { haspopup: 'dialog' }, testId: 'kids-grown-ups', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '44px', height: '44px', 'border-radius': '999px', 'flex-shrink': '0', opacity: '0.5', 'background-color': 'rgba(255, 255, 255, 0.5)', transition: 'opacity 160ms linear' },
     hover: { opacity: '1' }, focus: { opacity: '1', 'box-shadow': ring }, children: [
     // The viewer's badge (their avatar where the server gives one), with a little lock: it is still the gate.
     viewerBadge(44, '18px'),
@@ -132,15 +132,41 @@ const question = (step: 1 | 2, prompt: string, options: number[], right: number)
   { type: 'text', text: prompt, style: { 'font-size': '20px', 'font-weight': '700', 'text-align': 'center', color: '$ink-soft' } },
   { type: 'box', role: 'group', label: prompt, style: { display: 'grid', 'grid-template-columns': '1fr 1fr 1fr', gap: '12px' }, children: options.map(n => answer(n, n === right, step)) },
 ] });
-const menuRow = (press: BoxNode['press'], label: string, symbol: string, testId: string): Node => ({ type: 'box', press, label, testId,
-  style: { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '14px', height: '60px', 'margin-bottom': '10px', padding: '0px 18px', 'border-radius': '20px', 'background-color': '$cream', 'font-size': '18px', 'font-weight': '700' },
-  hover: { 'background-color': '$sun-soft' }, focus: { 'background-color': '$sun-soft', 'box-shadow': ring }, children: [
-    { type: 'icon', symbol, style: { width: '22px', height: '22px' } },
-    { type: 'text', text: label, style: { flex: '1' } },
-  ] });
+const kidsRow: Style = { position: 'relative', display: 'flex', 'flex-direction': 'row', 'align-items': 'center', gap: '14px', 'min-height': '60px', 'box-sizing': 'border-box', 'margin-bottom': '10px', padding: '8px 18px', 'border-radius': '20px', 'background-color': '$cream', 'font-size': '18px', 'font-weight': '700' };
+// The grown-ups corner's look: big cream rows, the servers as a quieter list, and its own way back.
+const grownUps: ProfileMenuLook = {
+  parts: {
+    header: { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', gap: '10px', 'padding-bottom': '16px' }, children: [
+      viewerBadge(36, '16px'),
+      { type: 'text', text: '{s:signedInAs} {entry.label}', style: { 'font-size': '16px', 'font-weight': '600', 'text-align': 'center', color: '$ink-soft', 'min-width': '0px', 'line-clamp': '1' } },
+    ] },
+    section: { type: 'text', text: '{section.title}', role: 'heading', level: 2, style: { 'font-size': '15px', 'font-weight': '800', color: '$ink-soft', padding: '6px 4px 6px' } },
+    row: { type: 'box', style: kidsRow, hover: { 'background-color': '$sun-soft' }, focus: { 'background-color': '$sun-soft', 'box-shadow': ring }, children: [
+      { type: 'icon', symbol: '{entry.icon}', style: { width: '22px', height: '22px', 'flex-shrink': '0' } },
+      { type: 'text', text: '{entry.label}', style: { flex: '1' } },
+    ] },
+    // Your servers sit on a cream card, their rows inside it.
+    servers: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', 'margin-bottom': '10px', padding: '6px 18px', 'border-radius': '20px', 'background-color': '$cream', 'font-size': '16px' } },
+    back: { type: 'box', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', height: '60px', 'margin-top': '6px', 'border-radius': '999px', 'background-color': '$sun', 'box-shadow': '0px 5px 0px #E8A419', 'font-size': '19px', 'font-weight': '800' },
+      hover: lift, focus: ringed('0px 5px 0px #E8A419'), children: [{ type: 'text', text: '{entry.label}' }] },
+    // For the grown-up: which Vela this is, where it runs and the server. Selectable, and on TV a stop the remote reaches.
+    about: { type: 'box', testId: '{entry.testId}', style: { 'padding-top': '16px', 'border-radius': '12px' }, children: [
+      { type: 'text', text: '{entry.label}', style: { 'font-size': '13px', 'line-height': '18px', 'font-weight': '600', 'text-align': 'center', color: '$ink-soft' } }] },
+  },
+  entries: { appearance: { label: '{s:changeLook}' } },
+  extras: { backToWatching: { label: '{s:backToWatching}', press: { action: 'reset' }, testId: 'kids-back-to-watching', part: 'back' } },
+  sections: [
+    { id: 'viewer', entries: ['viewer'] },
+    { id: 'you', entries: ['switchProfile', 'playlists', 'downloads', 'manageLibraries', 'appearance'] },
+    { id: 'servers', title: '{t:connect.servers}', entries: ['servers', 'addServer'] },
+    { id: 'session', entries: ['signOut', 'backToWatching'] },
+    { id: 'about', entries: ['about'] },
+  ],
+};
 const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:gate' }], style: { color: '$ink', position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'z-index': '40', display: 'flex', 'align-items': 'center', 'justify-content': 'center', padding: '16px' }, children: [
   { type: 'box', press: { action: 'reset' }, label: '{s:close}', motion: 'fade', style: { position: 'absolute', top: '0px', left: '0px', right: '0px', bottom: '0px', 'background-color': 'rgba(27, 37, 80, 0.42)', 'backdrop-filter': 'blur(8px)' } },
-  { type: 'box', role: 'dialog', label: '{s:grownUps}', motion: 'popIn', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '18px', width: '100%', 'max-width': '440px',
+  // On TV the remote stays inside the gate; Back closes it and returns to the grown-ups button.
+  { type: 'box', role: 'dialog', label: '{s:grownUps}', motion: 'popIn', escape: 'gate g2 parent', returnFocus: 'kids-grown-ups', style: { position: 'relative', display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '18px', width: '100%', 'max-width': '440px',
     'max-height': 'calc(100vh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom))', 'overflow-y': 'auto', 'box-sizing': 'border-box', padding: '34px 30px 30px 30px',
     'border-radius': '36px', 'background-color': '$card', 'box-shadow': '0px 10px 0px rgba(27, 37, 80, 0.12), 0px 40px 90px -20px rgba(27, 37, 80, 0.55)' }, small: { padding: '28px 20px 22px 20px' }, children: [
     { type: 'box', press: { action: 'close', arg: 'gate' }, label: '{s:close}', testId: 'kids-gate-close', when: [{ test: 'flag:g2', not: true }], style: { position: 'absolute', top: '14px', right: '14px', width: '44px', height: '44px', 'border-radius': '999px', display: 'flex', 'align-items': 'center', 'justify-content': 'center', 'background-color': '$cream' }, children: [
@@ -152,24 +178,8 @@ const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:g
     { type: 'text', text: '{s:grownUps}', role: 'heading', level: 2, style: { 'font-size': '28px', 'font-weight': '800', 'text-align': 'center' } },
     { ...question(1, '{s:gateOne}', [12, 15, 18, 16, 9, 21], 18), when: [{ test: 'flag:g2', not: true }] },
     { ...question(2, '{s:gateTwo}', [4, 7, 5, 9, 6, 8], 6), when: [{ test: 'flag:g2' }, { test: 'flag:parent', not: true }] },
-    { type: 'box', when: [{ test: 'flag:parent' }], style: { display: 'flex', 'flex-direction': 'column', width: '100%' }, children: [
-      { type: 'box', style: { display: 'flex', 'flex-direction': 'row', 'align-items': 'center', 'justify-content': 'center', gap: '10px', 'padding-bottom': '16px' }, children: [
-        viewerBadge(36, '16px'),
-        { type: 'text', text: '{s:signedInAs} {env.viewer}', style: { 'font-size': '16px', 'font-weight': '600', 'text-align': 'center', color: '$ink-soft', 'min-width': '0px', 'line-clamp': '1' } },
-      ] },
-      { ...menuRow({ action: 'switchProfile' }, '{s:switchProfile}', 'person', 'switch-profile'), when: [{ test: 'env.canSwitchProfile' }] },
-      { ...menuRow({ action: 'playlists' }, 'Playlists', 'layers', 'kids-playlists'), when: [{ test: 'env.canPlaylists' }] },
-      { ...menuRow({ action: 'manageLibraries' }, '{s:manageLibraries}', 'library', 'kids-manage-libraries'), when: [{ test: 'env.canManageLibraries' }] },
-      menuRow({ action: 'openPicker' }, '{s:changeLook}', 'sparkles', 'skin-picker'),
-      { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
-      { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-      menuRow({ action: 'signOut' }, '{s:signOut}', 'sign-out', 'kids-sign-out'),
-      { type: 'box', press: { action: 'reset' }, label: '{s:backToWatching}', style: { position: 'relative', display: 'flex', 'align-items': 'center', 'justify-content': 'center', height: '60px', 'margin-top': '6px', 'border-radius': '999px', 'background-color': '$sun', 'box-shadow': '0px 5px 0px #E8A419', 'font-size': '19px', 'font-weight': '800' },
-        hover: lift, focus: ringed('0px 5px 0px #E8A419'), children: [{ type: 'text', text: '{s:backToWatching}' }] },
-      // For the grown-up: which Vela this is, where it runs and the server. Selectable, and on TV a stop the remote reaches.
-      { type: 'box', when: [{ test: 'env.aboutLine' }], readingStop: true, label: '{env.aboutLabel}', testId: 'about-line', style: { 'padding-top': '16px', 'border-radius': '12px' },
-        children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '13px', 'line-height': '18px', 'font-weight': '600', 'text-align': 'center', color: '$ink-soft' } }] },
-    ] },
+    // The grown-ups corner: the app's profile menu (the primitive), in big friendly rows.
+    { type: 'profileMenu', look: 'grownUps', when: [{ test: 'flag:parent' }], style: { display: 'flex', 'flex-direction': 'column', width: '100%' } },
   ] },
 ] };
 
@@ -480,7 +490,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
 
 const calm = { keyframes: 'dissolve', duration: 220 };
 const kids: SkinDocument = {
-  schema: 1, renderer: 21, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
+  schema: 1, renderer: 22, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
   preview: art('preview.jpg'), swatches: ['#FFF8EE', '#1B2550', '#FFC93C', '#3FA9F5', '#FF6B57'],
   // Kids' cream, navy ink and a deep sky accent (readable as text on cream; the sun stays a fill),
   // for the routes it inherits (search, library, collection, sign-in).
@@ -525,6 +535,7 @@ const kids: SkinDocument = {
     wobble: { keyframes: 'wiggle', duration: 5200, delay: 1200, easing: 'ease-in-out', iterations: 'infinite', fill: 'none', still: { keyframes: 'none', duration: 0 } },
   },
   templates: { card, row },
+  profileMenus: { grownUps },
   slots: { shell, home },
   routes: { title: episodePage(title) },
   detail: { wide: 'fullscreen', small: 'fullscreen' },
