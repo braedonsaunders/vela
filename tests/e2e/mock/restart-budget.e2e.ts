@@ -27,7 +27,8 @@ test('sustained playback replenishes an exhausted restart budget', async ({ app,
     // The standalone trailer uses the full-length direct fixture and carries no watch state.
     await app.open('/vela/watch/extra-observatory-preview?kind=extra');
     await waitForVideoPlayback(browser, screen);
-    await expect.poll(countPlaying).toBe(1);
+    // The first playing observation follows the report cadence, which a slow WebKit runner stretches.
+    await expect.poll(countPlaying, { timeout: 25_000 }).toBe(1);
     await expire();
     await expect.poll(countPlaying, { timeout: 25_000 }).toBe(2);
     await expire();
