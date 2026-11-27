@@ -103,10 +103,12 @@ export function codeOnlyMessage(message: string, code: string): boolean {
   return !spelt(message) || (!!code && spelt(message) === spelt(code));
 }
 
-/** Whether a refused start means this title has no copy to play on the server (it is not in the
- * library, and nothing was found for it): another item of a queue may still play. */
-export function noCopy(code: string | undefined): boolean {
-  return code === 'not_available' || code === 'not_playable';
+/** Whether a refused start means the server has no copy of this title it can play: none in the
+ * library and none found (`not_available`), not a playable item, or no source it could reach
+ * (Ether's 502 `source_unavailable`, its answer once preparing found nothing). Another item of a
+ * queue may still play. */
+export function noPlayableCopy(code: string | undefined): boolean {
+  return code === 'not_available' || code === 'not_playable' || code === 'source_unavailable';
 }
 
 export function startRefusal(error: unknown, fallback = '', airDate?: string): StartRefusal {

@@ -397,3 +397,12 @@ test('Next onto a track the server lacks moves on to the one after', async () =>
   expect(h.box.get().audio.phase).toBe('playing');
   expect(h.box.get().audio.queue?.at).toBe(2);
 });
+
+test('a track whose sources the server could not reach (502 source_unavailable) is passed over like a missing one', async () => {
+  const unreachable = () => new VelaError({ class: 'source', code: 'source_unavailable', message: 'source unavailable', retry: { allowed: false } }, 502);
+  const h = harness({ answer: (_, id) => id === 't1' ? unreachable() : undefined });
+  h.audio.play({ items: [track('t1'), track('t2')], index: 0 });
+  await settle();
+  expect(h.starts).toEqual(['t1', 't2']);
+  expect(h.box.get().audio.phase).toBe('playing');
+});

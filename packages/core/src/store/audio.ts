@@ -13,7 +13,7 @@ import type { Session } from './session';
 import type { StateBox } from './state';
 import type { VelaState } from './index';
 import { AWAKE, holdsNext, sleepDue, sleepFrom, type Sleep, type SleepMode } from '../sleep';
-import { noCopy, refusalWords } from './start-retry';
+import { noPlayableCopy, refusalWords } from './start-retry';
 
 export type AudioEngineEvent = 'time' | 'playing' | 'paused' | 'waiting' | 'ended' | 'error' | 'duration' | 'advanced';
 
@@ -465,13 +465,13 @@ export class Audio {
       return;
     }
     const code = mine ? playback.errorCode : '';
-    if (noCopy(code) && this.passOver()) return;
+    if (noPlayableCopy(code) && this.passOver()) return;
     this.patch({ phase: 'failed', error: playback.error || 'This item could not be played', reason: refusalWords(code),
       unreleased: mine && code === 'title_unreleased' });
   }
 
   /**
-   * The server has no copy of the item (`noCopy`): go on to the next one in the queue, as the end of
+   * The server has no copy of the item (`noPlayableCopy`): go on to the next one in the queue, as the end of
    * the item would have, unless the viewer picked this item themselves (`pinned`: it says why and
    * stays), that comes back round to where the passing over began, or `MAX_SKIPPED` items in a row
    * have been passed over already. False when nothing was passed over.

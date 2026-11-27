@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { VelaError } from '../src/adapter/errors';
 import { Playback, initialPlayback } from '../src/store/playback';
-import { codeOnlyMessage, finalRefusal, noCopy, refusalWords, startRefusal, startRetry } from '../src/store/start-retry';
+import { codeOnlyMessage, finalRefusal, noPlayableCopy, refusalWords, startRefusal, startRetry } from '../src/store/start-retry';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
@@ -161,8 +161,10 @@ test('a refusal worded as nothing but its code never reaches the viewer as such'
   expect(codeOnlyMessage('not-available', 'not_available')).toBe(true);
   expect(codeOnlyMessage('This title is not available here.', 'not_available')).toBe(false);
   expect(refusalWords('title_unreleased')).toBe('');
-  expect(noCopy('not_available')).toBe(true);
-  expect(noCopy('forbidden')).toBe(false);
+  expect(noPlayableCopy('not_available')).toBe(true);
+  expect(noPlayableCopy('source_unavailable')).toBe(true);
+  expect(noPlayableCopy('forbidden')).toBe(false);
+  expect(noPlayableCopy('playback_capacity')).toBe(false);
 });
 
 // Ether's answer for a title with no source at all (frontends/vela: ErrNotAvailable), verbatim.
