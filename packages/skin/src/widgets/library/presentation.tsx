@@ -240,12 +240,15 @@ export function LibraryToolbar(props: WidgetProps) {
   if (!lead && !hasFilters) return null;
   const frame = { paddingVertical: 8, gap: 6, minWidth: 0 } as const;
   // A collections, people or live tab carries only its search (and live's filters): it shares the
-  // tabs' row, the tabs scrolling inside their own strip when space runs short.
+  // tabs' row, the tabs scrolling inside their own strip when space runs short. On a phone the
+  // tabs take their own row and the search fills the one under it, live's filters wrapping after
+  // it; only the direction changes, so resizing keeps the search mounted (its focus and text).
   if (!browse) {
+    const stack = !!lead && layout === 'phone';
     return <View testID="library-toolbar" accessibilityRole="toolbar" accessibilityLabel={msg('library.toolbar')} style={frame}>
-      <View style={{ flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', gap: 12, minWidth: 0 }}>
+      <View style={stack ? { flexDirection: 'column', gap: 6, minWidth: 0 } : { flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', gap: 12, minWidth: 0 }}>
         {lead && <View style={{ flexShrink: 1, minWidth: 0 }}>{lead}</View>}
-        {hasFilters && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}><TabSearch key={`${page?.model?.id}:${page?.tabId}`} />{page?.view === 'live' && <LiveFilters />}</View>}
+        {hasFilters && <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 8 }, stack ? { flexWrap: 'wrap', minWidth: 0 } : { flexShrink: 0 }]}><TabSearch key={`${page?.model?.id}:${page?.tabId}`} grow={stack} />{page?.view === 'live' && <LiveFilters wrap={stack} />}</View>}
       </View>
     </View>;
   }
@@ -266,16 +269,16 @@ export function LibraryToolbar(props: WidgetProps) {
   </View>;
 }
 
-function LiveFilters() {
+function LiveFilters({ wrap = false }: { wrap?: boolean }) {
   const host = useHost();
   const page = host.env.library;
-  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+  return <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 8 }, wrap ? { flexWrap: 'wrap', flexShrink: 1, minWidth: 0 } : { flexShrink: 0 }]}>
     {page?.liveFilters?.map(filter => <Button key={filter.key} label={filter.label} role="checkbox" selected={page.liveFilter === filter.key}
       onPress={() => host.dispatch('libraryFilter', `liveFilter|${page.liveFilter === filter.key ? '' : filter.key}`)} />)}
   </View>;
 }
 
-function TabSearch() {
+function TabSearch({ grow = false }: { grow?: boolean }) {
   const host = useHost();
   const look = useLook();
   const page = host.env.library;
@@ -290,7 +293,7 @@ function TabSearch() {
   if (!allowed) return null;
   const placeholder = tab?.searchPlaceholder || `Search ${tab?.label}`;
   return <TextField accessibilityLabel={placeholder} placeholder={placeholder} value={text} maxLength={100} onChangeText={setText} placeholderTextColor={look.ui.inkSecondary}
-    style={[look.text(controlText), look.box({ ...control, width: '220px' }), Platform.OS === 'web' && { fontSize: 16 }]} />;
+    style={[look.text(controlText), look.box({ ...control, width: grow ? 'auto' : '220px' }), grow && { flexGrow: 1, flexShrink: 1, flexBasis: 220, minWidth: 0 }, Platform.OS === 'web' && { fontSize: 16 }]} />;
 }
 
 /** Widget `libraryFacets`, for documents placing browse controls themselves: search, Filters
