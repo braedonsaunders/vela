@@ -1,4 +1,5 @@
 // The chrome's icons: 24x24 strokes and fills in one colour, the compiled Cinematic geometry.
+import { memo } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Path, Rect, Text as SvgText } from 'react-native-svg';
 
@@ -208,8 +209,10 @@ function Shape({ name, color }: { name: PlayerIconName; color: string }) {
   }
 }
 
-/** In a view of its own, so it stacks in order over a panel's absolutely placed glass (on the web too). */
-export function PlayerIcon({ name, size, color }: Props) {
+/** In a view of its own, so it stacks in order over a panel's absolutely placed glass (on the web too).
+ * Drawn again only when its name, size or colour change: the chrome redraws its controls every second for
+ * the clock, and an SVG's props cost a slow TV box more than the rest of its button. */
+export const PlayerIcon = memo(function PlayerIcon({ name, size, color }: Props) {
   return (
     <View pointerEvents="none" style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -217,4 +220,4 @@ export function PlayerIcon({ name, size, color }: Props) {
       </Svg>
     </View>
   );
-}
+});

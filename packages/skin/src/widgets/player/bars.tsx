@@ -3,7 +3,7 @@
 // the clock, then icon transport and the screening controls with their menus). Both slide
 // and fade with the chrome's visibility.
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRef, type ComponentRef, type ReactNode } from 'react';
+import { useMemo, useRef, type ComponentRef, type ReactNode } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { msg, time } from '@vela/core';
@@ -70,8 +70,10 @@ interface TopProps {
 
 export function TopBar({ look, title, visible, bleed, onClose }: TopProps) {
   const fade = look.small ? (look.short ? 44 : 72) : look.size(140);
+  // The same style object while nothing changes: Reanimated compares and re-applies a new one each redraw.
+  const shown = useMemo(() => shownStyle(look, visible, -14), [look, visible]);
   return (
-    <Animated.View pointerEvents={visible ? 'box-none' : 'none'} style={shownStyle(look, visible, -14)}>
+    <Animated.View pointerEvents={visible ? 'box-none' : 'none'} style={shown}>
       <LinearGradient
         colors={[look.scrim, look.scrim, clear(look.scrim)]}
         locations={[0, 0.55, 1]}
@@ -157,8 +159,9 @@ export const bottomFade = (look: PlayerLook) => look.small ? (look.short ? 48 : 
 export function BottomBar(props: BottomProps) {
   const { look, state, view, visible, blocked, opened, bleed } = props;
   const fade = bottomFade(look);
+  const shown = useMemo(() => shownStyle(look, visible, 18), [look, visible]);
   return (
-    <Animated.View pointerEvents={visible ? 'box-none' : 'none'} style={shownStyle(look, visible, 18)}>
+    <Animated.View pointerEvents={visible ? 'box-none' : 'none'} style={shown}>
       <LinearGradient
         colors={[clear(look.scrim), look.scrim, look.scrim]}
         locations={[0, 0.45, 1]}

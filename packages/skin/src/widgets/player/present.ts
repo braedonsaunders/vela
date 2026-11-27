@@ -497,6 +497,25 @@ export function qualityReached(id: string, snapshot: Snapshot | null, plan: Play
   return id.startsWith('path:') ? snapshot.sourceId === id.slice(5) : snapshot.renditionId === id;
 }
 
+/** The last answer for the same arguments (by identity). The chrome redraws its view every second for the
+ * clock; the session keeps a report's facts (tracks, renditions, format) the same objects while they do not
+ * change (snapshot-pace.ts withClock), so the menus' rows are not worked out again each time. */
+function lastFor<A extends unknown[], R>(make: (...args: A) => R): (...args: A) => R {
+  let last: { args: A; value: R } | null = null;
+  return (...args: A) => {
+    if (last && last.args.length === args.length && last.args.every((arg, i) => Object.is(arg, args[i]))) return last.value;
+    const value = make(...args);
+    last = { args, value };
+    return value;
+  };
+}
+const audioOptions = lastFor((planned: AnyTrack[], observed: AnyTrack[]) => trackOptions(planned, observed));
+const subtitleOptions = lastFor((planned: AnyTrack[], observed: AnyTrack[]) => trackOptions(planned, observed, true));
+const qualityOptions = lastFor((plan: PlaybackPlan | null, path: Path | undefined, renditions: Snapshot['renditions'] | undefined,
+  unplayable: Snapshot['unplayablePaths']) => qualities(plan, path, { renditions, unplayablePaths: unplayable } as Snapshot));
+const formatOf = lastFor((format: Snapshot['format']) => formatLines(format));
+const NO_TRACKS: AnyTrack[] = [];
+
 export function present(plan: PlaybackPlan | null, own: Snapshot | null): PlayerView {
   const snapshot = belongs(own, plan) ? own : null;
   const position = snapshot?.seekTarget ?? snapshot?.position ?? plan?.positionSeconds ?? 0;
@@ -534,10 +553,10 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     muted: snapshot?.muted ?? false,
     speed: snapshot?.speed ?? 1,
     speeds: snapshot?.speeds ?? [],
-    audio: trackOptions(plan?.audioTracks ?? [], snapshot?.audioTracks ?? []),
+    audio: audioOptions(plan?.audioTracks ?? NO_TRACKS, snapshot?.audioTracks ?? NO_TRACKS),
     audioId: snapshot?.audioTrackId ?? plan?.selectedAudioTrackId ?? plan?.audioTracks.find(track => track.default)?.id ?? '',
     pendingAudioId: snapshot?.pendingAudioTrackId ?? '',
-    subtitles: trackOptions(plan?.subtitleTracks ?? [], snapshot?.subtitleTracks ?? [], true),
+    subtitles: subtitleOptions(plan?.subtitleTracks ?? NO_TRACKS, snapshot?.subtitleTracks ?? NO_TRACKS),
     subtitleId: snapshot ? (snapshot.subtitleTrackId ?? '') : (plan?.selectedSubtitleTrackId ?? ''),
     pendingSubtitleId: snapshot?.pendingSubtitleTrackId ?? '',
     subtitleError: snapshot?.subtitleError ?? '',
@@ -551,7 +570,8 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
           }
         : null,
     subtitleOffset: style && Number.isFinite(style.offsetSeconds) ? style.offsetSeconds : null,
-    qualities: qualities(plan, path, snapshot),
+    // Of the report, only its renditions and unplayable paths make the rows.
+    qualities: qualityOptions(plan, path, snapshot?.renditions, snapshot?.unplayablePaths),
     serverStream: unnamed ? { choice: `path:${unnamed.id}`, selected: path?.id === unnamed.id } : undefined,
     qualityAuto: rendition && Math.max(path?.qualities.length ?? 0, snapshot?.renditions?.length ?? 0) > 1,
     lockedQuality: lockedQuality(snapshot, path),
@@ -571,7 +591,7 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
       at: duration > 0 ? Math.min(1, c.startSeconds / duration) : 0,
     })),
     stats: facts,
-    format: formatLines(snapshot?.format),
+    format: formatOf(snapshot?.format),
     output: (snapshot?.outputPreferencesAvailable ?? []).flatMap(name => {
       const value = snapshot?.outputPreferences?.[name];
       return value ? [{ name, value }] : [];

@@ -18,6 +18,7 @@ import { LiveDial, LiveNotice, useLiveWatchChrome } from './live';
 import { useShortcuts } from './keys';
 import { usePlayerLook } from './look';
 import { belongs, present, type PlayerView } from './present';
+import { withClock } from './snapshot-pace';
 import { NO_CLICK, pictureClick, UNDO_AFTER_MS, type ClickMemory, type PlayCommand } from './picture-click';
 import { PICTURE_TEST_ID } from './remote-actions';
 import { watchFrames, watchPictureBounds, watchWidth } from './fold-layout';
@@ -70,7 +71,12 @@ function waitingLabel(view: PlayerView): string {
 function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptionInsets?: (value: CaptionInsets) => void }) {
   const look = usePlayerLook();
   const { viewport } = useHost();
-  const view = useMemo(() => present(state.plan, state.snapshot), [state.plan, state.snapshot]);
+  // A chrome that rested had its clock drawn only every few seconds (session.ts): back up, it shows the
+  // engine's latest clock at once (the facts, unchanged, are the drawn report's).
+  const latest = state.latestSnapshot?.();
+  const snapshot = latest && state.snapshot && latest !== state.snapshot && belongs(latest, state.plan)
+    && Math.abs(latest.position - state.snapshot.position) > 1.5 ? withClock(state.snapshot, latest, true) : state.snapshot;
+  const view = useMemo(() => present(state.plan, snapshot), [state.plan, snapshot]);
   const [opened, setOpened] = useState<Opened>(null);
   const [info, setInfo] = useState(false);
   const [infoBounds, setInfoBounds] = useState<CaptionRect>();
@@ -147,6 +153,11 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
     idle.wake();
   }, [state.offerVersions]);
   const chromeUp = idle.visible || !!failed;
+  // Out of sight, the chrome draws nothing from the clock but a skip button or the end (session.ts).
+  const quiet = !chromeUp && !info && opened === null;
+  const { chromeQuiet } = state;
+  useEffect(() => { chromeQuiet?.(quiet); }, [chromeQuiet, quiet]);
+  useEffect(() => () => chromeQuiet?.(false), [chromeQuiet]);
   const surfaces = usePlayerSurfaces({
     channelId: live.live ? live.channelId : '', eventId: live.live ? liveEvent?.id ?? '' : '', feed: live.live ? liveEvent?.feed : undefined,
     kind: live.live ? 'channel' : live.archive ? 'programme' : 'title', titleId: !live.live && !live.archive ? state.target?.id : undefined,

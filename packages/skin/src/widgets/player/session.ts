@@ -11,7 +11,7 @@ import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
 import { belongs, planSource, presentedAfter, qualityReached, restartAt, settlePick, viewCommand, type PendingPick } from './present';
-import { paceSnapshot, type Paced } from './snapshot-pace';
+import { clockRedrawMs, paceSnapshot, withClock, type Paced } from './snapshot-pace';
 import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
@@ -51,6 +51,12 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   // The chrome redraws for a report that only moves the clock once a second (snapshot-pace.ts).
   const paced = useRef<Paced | null>(null);
+  const shownSnapshot = useRef<Snapshot | null>(null);
+  /** The chrome rests out of sight (chromeQuiet): the clock is drawn less often (clockRedrawMs). */
+  const quiet = useRef(false);
+  const chromeQuiet = useCallback((value: boolean) => { quiet.current = value; }, []);
+  const latest = useRef<Snapshot | null>(null);
+  const latestSnapshot = useCallback(() => latest.current, []);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [refused, setRefused] = useState('');
   // A quiet (lab or development) build starts muted: the view takes this as its first command.
@@ -103,6 +109,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const begin = useCallback(
     (positionSeconds?: number) => {
       paced.current = null;
+      shownSnapshot.current = null;
+      latest.current = null;
       setSnapshot(null);
       setFailure(null);
       setRefused('');
@@ -343,10 +351,15 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     command: viewCommand(sent.command, sent.on, sessionId),
     videoFill: pictureChoice && settings.picture === 'fill',
     onSnapshot: next => {
-      const drawn = paceSnapshot(paced.current, next, Date.now());
+      latest.current = next;
+      const redraw = clockRedrawMs({ quiet: quiet.current, live: !!plan?.live || !!plan?.catchUp, position: next.position,
+        duration: next.duration, markers: plan?.markers });
+      const drawn = paceSnapshot(paced.current, next, Date.now(), redraw);
       if (drawn) {
+        const shown = withClock(shownSnapshot.current, next, drawn.facts === paced.current?.facts);
         paced.current = drawn;
-        setSnapshot(next);
+        shownSnapshot.current = shown;
+        setSnapshot(shown);
       }
       if (belongs(next, plan)) {
         presented.current = presentedAfter(presented.current, reported.current, next);
@@ -449,6 +462,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       pendingVersionId,
       versionMessage,
       offerVersions,
+      chromeQuiet,
+      latestSnapshot,
       send,
       switchVersion,
       refreshVersions,

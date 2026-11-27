@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Snapshot } from '@vela/player-api';
-import { CLOCK_REDRAW_MS, paceSnapshot, snapshotFacts } from '../src/widgets/player/snapshot-pace';
+import { CLOCK_REDRAW_MS, QUIET_CLOCK_REDRAW_MS, clockRedrawMs, paceSnapshot, snapshotFacts, withClock } from '../src/widgets/player/snapshot-pace';
+import { present } from '../src/widgets/player/present';
 
 const drawSnapshot = (last: Parameters<typeof paceSnapshot>[0], next: Snapshot, now: number) => paceSnapshot(last, next, now) !== null;
 
@@ -38,5 +39,48 @@ describe('player chrome snapshot pacing', () => {
     const stamped = (stamp: number) => ({ ...snapshot({ totalFrames: stamp }), timeStamp: stamp }) as unknown as Snapshot;
     expect(snapshotFacts(stamped(1))).toBe(snapshotFacts(stamped(2)));
     expect(snapshotFacts(snapshot({ volume: 1 }))).not.toBe(snapshotFacts(snapshot({ volume: 0.5 })));
+  });
+
+  test('a redraw for the clock keeps the drawn facts (same objects) under the new clock', () => {
+    const tracks = [{ id: 'a1', label: 'English', language: 'en' }];
+    const drawn = snapshot({ audioTracks: tracks, format: { video: { codec: 'hevc' } } } as unknown as Partial<Snapshot>);
+    const next = snapshot({ position: 11, playable: [{ start: 0, end: 32 }], audioTracks: [{ id: 'a1', label: 'English', language: 'en' }],
+      format: { video: { codec: 'hevc' } } } as unknown as Partial<Snapshot>);
+    const shown = withClock(drawn, next, snapshotFacts(drawn) === snapshotFacts(next));
+    expect(shown.position).toBe(11);
+    expect(shown.playable).toEqual([{ start: 0, end: 32 }]);
+    expect(shown.audioTracks).toBe(drawn.audioTracks);
+    expect(snapshotFacts(shown)).toBe(snapshotFacts(next));
+    // A change of facts draws the new report as it is.
+    expect(withClock(drawn, snapshot({ state: 'paused' }), false).state).toBe('paused');
+    expect(withClock(null, next, true)).toBe(next);
+  });
+
+  test('the chrome\'s menus keep their rows while only the clock moves', () => {
+    const plan = { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, selectedPathId: 'p', paths: [], audioTracks: [{ id: 'a1', name: 'English' }],
+      subtitleTracks: [], chapters: [], positionSeconds: 0 } as never;
+    const first = snapshot({ audioTracks: [], subtitleTracks: [], renditions: [], capabilities: { pip: false, fullscreen: false, audioSwitch: true } } as unknown as Partial<Snapshot>);
+    const a = present(plan, first);
+    const b = present(plan, withClock(first, snapshot({ position: 12, audioTracks: [], subtitleTracks: [], renditions: [], capabilities: { pip: false, fullscreen: false, audioSwitch: true } } as unknown as Partial<Snapshot>), true));
+    expect(b.position).toBe(12);
+    expect(b.audio).toBe(a.audio);
+    expect(b.qualities).toBe(a.qualities);
+  });
+});
+
+describe('the clock out of sight', () => {
+  const at = (position: number, extra: Partial<Parameters<typeof clockRedrawMs>[0]> = {}) =>
+    clockRedrawMs({ quiet: true, live: false, position, duration: 6000, markers: [{ startSeconds: 100, endSeconds: 160 }], ...extra });
+  test('a resting chrome over a title draws the clock rarely, except near a skip range or the end', () => {
+    expect(at(30)).toBe(QUIET_CLOCK_REDRAW_MS);
+    expect(at(92)).toBe(CLOCK_REDRAW_MS);
+    expect(at(130)).toBe(CLOCK_REDRAW_MS);
+    expect(at(161)).toBe(CLOCK_REDRAW_MS);
+    expect(at(175)).toBe(QUIET_CLOCK_REDRAW_MS);
+    expect(at(5992)).toBe(CLOCK_REDRAW_MS);
+  });
+  test('a standing chrome, a menu or a live picture draws every second', () => {
+    expect(at(30, { quiet: false })).toBe(CLOCK_REDRAW_MS);
+    expect(at(30, { live: true })).toBe(CLOCK_REDRAW_MS);
   });
 });
