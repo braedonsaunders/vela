@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  analyzePress, anchorPresses, cpuIn, jsSources, parseMarks, parseProbe, parseProbeJs, pressStarts, settlingMount, sumCounts, summarize,
+  analyzeLightPress, jsQuietMs, parseCpuSamples, parseFramestats, parseJsSamples, analyzePress, anchorPresses, cpuIn, jsSources, parseMarks, parseProbe, parseProbeJs, pressStarts, settlingMount, sumCounts, summarize,
   type TraceEvents,
 } from './tv-nav-analysis';
-import { deviceScript, formatComparison, parseEvents, parseLabShell, runTotals, type RunReport } from './tv-nav';
+import { deviceScript, formatComparison, lightScript, parseEvents, parseLabShell, runTotals, type RunReport } from './tv-nav';
 
 const ms = (value: number) => value * 1e6;
 const span = (at: number, dur: number) => ({ ts: ms(at), dur: ms(dur) });
@@ -126,5 +126,39 @@ describe('tv-nav scenarios', () => {
         .map(m => [m, { n: 1, median: m === 'jsMs' ? js : 1, p90: m === 'jsMs' ? js : 1, total: m === 'jsMs' ? js : 1 }])) as RunReport['summary'],
     });
     expect(formatComparison(report('before', 80), report('after', 20))).toContain('| jsMs | 80 / 80; 80 | 20 / 20; 20 |');
+  });
+});
+
+describe('tv-nav light mode (no kernel tracing)', () => {
+  const head = 'Flags,IntendedVsync,Vsync,OldestInputEvent,NewestInputEvent,HandleInputStart,AnimationStart,PerformTraversalsStart,DrawStart,SyncQueued,SyncStart,IssueDrawCommandsStart,SwapBuffers,FrameCompleted,DequeueBufferDuration,QueueBufferDuration,';
+  const row = (flags: number, start: number, end: number) => `${flags},${start},${start},0,0,0,0,0,0,0,0,0,0,${end},0,0,`;
+
+  test('frames come once each from repeated framestats dumps; skipped frames are left out', () => {
+    const dump = ['---PROFILEDATA---', head, row(0, ms(100), ms(110)), row(0, ms(200), ms(240)), row(1, ms(300), ms(301)), '---PROFILEDATA---'].join('\n');
+    const frames = parseFramestats(`${dump}\n${dump}`);
+    expect(frames).toEqual([span(100, 10), span(200, 40)]);
+  });
+
+  test('a press: its first frame, the frame it settles on, jank, and each thread\'s run time', () => {
+    const frames = [span(50, 5), span(120, 30), span(170, 10), span(900, 5)];
+    const cpu = parseCpuSamples('p 0 1000000 2000000 3000000\ne 0 81000000 12000000 23000000\n');
+    const press = analyzeLightPress(frames, cpu, 0, 'row →', ms(100), ms(1300));
+    expect(press).toMatchObject({ frameMs: 50, settleMs: 80, frames: 3, jank: 1, worstMs: 30, jsMs: 80, mainMs: 10, renderMs: 20 });
+  });
+
+  test('a launch is interactive where its JS thread goes quiet for two samples in a row', () => {
+    const samples = parseJsSamples([
+      '  11.500000  1 2 I VELACPU : 1400000000 1 1', '  13.000000  1 2 I VELACPU : 2900000000 1 1',
+      '  14.500000  1 2 I VELACPU : 3100000000 1 1', '  16.000000  1 2 I VELACPU : 3200000000 1 1', '  17.500000  1 2 I VELACPU : 3300000000 1 1',
+    ].join('\n'));
+    // Busy (1 s of each 1.5 s) until 13.0 s, then under a quarter: quiet from 13.0 s, 3 s after launch at 10 s.
+    expect(jsQuietMs(samples, 10e9, 20e9)).toBe(3000);
+    expect(jsQuietMs(samples.slice(0, 2), 10e9, 20e9)).toBeNull();
+  });
+
+  test('the script marks each key after input returns and samples run time around it', () => {
+    const script = lightScript([{ key: 'DPAD_DOWN', window: 2000 }], false);
+    expect(script).toContain('log -t VELANAV 0\ncpu p 0\ninput keyevent KEYCODE_DPAD_DOWN\nlog -t VELAKEY 0\nwait_ 2000\ncpu e 0');
+    expect(script).toContain('dumpsys gfxinfo app.ether.vela framestats');
   });
 });

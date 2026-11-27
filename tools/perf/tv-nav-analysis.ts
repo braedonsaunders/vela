@@ -48,6 +48,10 @@ export interface PressMetrics {
   renderMs: number;
   mounts: number;
   frames: number;
+  /** Frames over the 60 Hz budget (16.7 ms from intended vsync to completion); light mode only. */
+  jank?: number;
+  /** The slowest frame's duration, ms; light mode only. */
+  worstMs?: number;
   commits: number;
   comps: number;
   top: string;
@@ -231,13 +235,116 @@ export function summarize(values: (number | null)[]): Summary {
   return { n: present.length, median: pick(0.5), p90: pick(0.9), total: round(present.reduce((a, b) => a + b, 0)) };
 }
 
-export const METRICS = ['focusMs', 'mountMs', 'frameMs', 'settleMs', 'contentMs', 'jsMs', 'mainMs', 'renderMs', 'mounts', 'frames', 'commits', 'comps'] as const;
+export const METRICS = ['focusMs', 'mountMs', 'frameMs', 'settleMs', 'contentMs', 'jsMs', 'mainMs', 'renderMs', 'mounts', 'frames', 'jank', 'worstMs', 'commits', 'comps'] as const;
 export type Metric = typeof METRICS[number];
 
 export function summarizePresses(presses: PressMetrics[]): Record<Metric, Summary> {
-  return Object.fromEntries(METRICS.map(metric => [metric, summarize(presses.map(p => p[metric]))])) as Record<Metric, Summary>;
+  return Object.fromEntries(METRICS.map(metric => [metric, summarize(presses.map(p => p[metric] ?? null))])) as Record<Metric, Summary>;
+}
+
+// Light mode: devices whose kernel has no tracing (the lab's tx1-box) give no system trace. There a press
+// is measured from what the device does give: the logcat mark written as `input keyevent` returns (on
+// Android 10 it waits for the app to handle the key), the frames `dumpsys gfxinfo framestats` recorded
+// (CLOCK_MONOTONIC, as logcat), and each thread's run time from /proc/<pid>/task/<tid>/schedstat.
+
+/** Frames from any number of `framestats` dumps, once each (by intended vsync), in order: ts is the
+ * intended vsync, dur runs to FrameCompleted. Frames the platform marked as skipped are left out. */
+export function parseFramestats(text: string): Span[] {
+  const frames = new Map<number, Span>();
+  let columns: string[] | null = null;
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (line.startsWith('Flags,')) { columns = line.split(','); continue; }
+    if (!columns || !/^\d+,/.test(line)) { if (line.startsWith('---')) columns = null; continue; }
+    const cells = line.split(',');
+    const at = (name: string) => Number(cells[columns!.indexOf(name)]);
+    const flags = Number(cells[0]);
+    const start = at('IntendedVsync');
+    const end = at('FrameCompleted');
+    if (flags !== 0 || !(start > 0) || !(end > start)) continue;
+    frames.set(start, { ts: start, dur: end - start });
+  }
+  return [...frames.values()].sort((a, b) => a.ts - b.ts);
+}
+
+/** schedstat samples from the device script: `<tag> <press> <js ns> <main ns> <render ns>`. */
+export interface CpuSample { tag: string; press: number; js: number; main: number; render: number }
+
+export function parseCpuSamples(text: string): CpuSample[] {
+  const samples: CpuSample[] = [];
+  for (const line of text.split('\n')) {
+    const m = /^(\w+) (\d+) (\d+) (\d+) (\d+)\s*$/.exec(line.trim());
+    if (m) samples.push({ tag: m[1], press: Number(m[2]), js: Number(m[3]), main: Number(m[4]), render: Number(m[5]) });
+  }
+  return samples;
+}
+
+const JANK_NS = 16.7 * MS;
+
+/** A press in light mode, from the key's handling (`from`) to the next press or its window's end. The
+ * first frame shows the press; it settles at the end of the first frame followed by `quietMs` without
+ * one. CPU is the threads' run time from just before the key to the window's end. */
+export function analyzeLightPress(frames: Span[], cpu: CpuSample[], press: number, label: string, from: number, to: number, quietMs = 400): PressMetrics {
+  const own = frames.filter(frame => frame.ts >= from && frame.ts < to);
+  const first = own[0];
+  let settle: Span | undefined;
+  for (let i = 0; i < own.length; i++) {
+    const end = own[i].ts + own[i].dur;
+    const next = own[i + 1];
+    if (!next ? to - end >= quietMs * MS : next.ts - end >= quietMs * MS) { settle = own[i]; break; }
+  }
+  const before = cpu.find(sample => sample.press === press && sample.tag === 'p');
+  const after = cpu.find(sample => sample.press === press && sample.tag === 'e');
+  const ran = (key: 'js' | 'main' | 'render') => (before && after ? round((after[key] - before[key]) / MS) : 0);
+  const ms = (at: number | undefined) => (at === undefined ? null : round((at - from) / MS));
+  return {
+    label,
+    focusMs: null,
+    mountMs: null,
+    frameMs: ms(first ? first.ts + first.dur : undefined),
+    settleMs: ms(settle ? settle.ts + settle.dur : undefined),
+    contentMs: null,
+    jsMs: ran('js'),
+    mainMs: ran('main'),
+    renderMs: ran('render'),
+    mounts: 0,
+    frames: own.length,
+    jank: own.filter(frame => frame.dur > JANK_NS).length,
+    worstMs: own.length ? round(Math.max(...own.map(frame => frame.dur)) / MS) : 0,
+    commits: 0,
+    comps: 0,
+    top: '',
+    jsTop: '',
+    updated: '',
+    sources: '',
+  };
 }
 
 function round(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+/** The JS thread's run time logged through a launch (`VELACPU <js ns> <main ns> <render ns>`, logcat -v monotonic). */
+export function parseJsSamples(logcat: string): { ts: number; js: number }[] {
+  const samples: { ts: number; js: number }[] = [];
+  for (const line of logcat.split('\n')) {
+    const m = /^\s*(\d+)\.(\d+)\s.*VELACPU\s*:\s*(\d+) \d+ \d+/.exec(line);
+    if (m) samples.push({ ts: Number(m[1]) * 1e9 + Number(m[2].padEnd(9, '0').slice(0, 9)), js: Number(m[3]) });
+  }
+  return samples;
+}
+
+/** When a launch's JS thread went quiet: the start of the first stretch of `chunks` samples in a row each
+ * under `busy` of their interval, ms after `from`; null when it never did before `to`. */
+export function jsQuietMs(samples: { ts: number; js: number }[], from: number, to: number, busy = 0.25, chunks = 2): number | null {
+  const own = samples.filter(sample => sample.ts >= from && sample.ts <= to);
+  let previous = { ts: from, js: own[0]?.js ?? 0 };
+  let run = 0, start = from;
+  for (const sample of own) {
+    const share = (sample.js - previous.js) / Math.max(1, sample.ts - previous.ts);
+    if (share < busy) { if (run++ === 0) start = previous.ts; if (run >= chunks) return round((start - from) / MS); }
+    else run = 0;
+    previous = sample;
+  }
+  return null;
 }

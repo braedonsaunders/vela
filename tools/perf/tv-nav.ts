@@ -8,6 +8,8 @@
 //   --keep <dir> keeps each run's trace (<scenario>-<label>.pftrace) for ui.perfetto.dev
 //   bun tools/perf/tv-nav.ts --lab tx1-box --owner <claim owner> --scenario cold,home   (on the lab host,
 //     through the claimed device's `lab shell`; --settle <ms> and --buffer-mb for slow, small devices)
+//   --light: for a kernel without tracing (tx1-box): frames from framestats, CPU from schedstat (no focus
+//     or mount times); see lightScript and analyzeLightPress
 //
 // Scenarios start the app afresh (force-stop, launch, wait), so runs are comparable; the build decides
 // the server (a lab or mock sign-in build). Software-rendered emulators make renderMs and frame times
@@ -18,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  analyzePress, anchorPresses, cpuIn, parseMarks, parseProbe, parseProbeJs, pressStarts, summarizePresses, METRICS,
+  analyzeLightPress, analyzePress, anchorPresses, cpuIn, jsQuietMs, parseCpuSamples, parseFramestats, parseJsSamples, parseMarks, parseProbe, parseProbeJs, pressStarts, summarizePresses, METRICS,
   type PressMetrics, type Span, type TraceEvents, type Metric, type Summary,
 } from './tv-nav-analysis';
 
@@ -109,9 +111,10 @@ export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: 
       press('DPAD_DOWN', 'rows ↓ after'),
     ],
   },
+  /** What Home costs just being on show: one press that does nothing (KEYCODE_UNKNOWN), measured for 10 s. */
   idle: {
     settle: 15000,
-    steps: [{ wait: 10000 }],
+    steps: [press('UNKNOWN', 'idle 10 s', 10000)],
   },
   /** Screen transitions, each measured to its first content (contentMs): Movies, a title page and
    * back, Movies' Library grid, Home. */
@@ -164,7 +167,7 @@ export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: 
   },
 };
 
-interface Options { device: Device; tp: string; quietMs: number; keep?: string; settle?: number; bufferMb?: number }
+interface Options { device: Device; tp: string; quietMs: number; keep?: string; settle?: number; bufferMb?: number; light?: boolean }
 
 /** How the runner reaches the device: adb, or the device lab's guarded shell (`lab shell`) on the
  * lab host, which has no push or pull: files go in as base64 and traces come back over the lab
@@ -272,6 +275,7 @@ function traceConfig(seconds: number, bufferMb = 96): string {
 buffers { size_kb: 4096 fill_policy: RING_BUFFER }
 data_sources { config { name: "linux.ftrace" target_buffer: 0 ftrace_config {
   ftrace_events: "sched/sched_switch" ftrace_events: "sched/sched_wakeup"
+  ftrace_events: "task/task_newtask" ftrace_events: "task/task_rename" ftrace_events: "sched/sched_process_free"
   atrace_categories: "gfx" atrace_categories: "view" atrace_categories: "input"
   atrace_apps: "${PACKAGE}" } } }
 data_sources { config { name: "linux.process_stats" target_buffer: 1 process_stats_config { scan_all_processes_on_start: true } } }
@@ -299,6 +303,115 @@ export function deviceScript(steps: Step[], hold = true): string {
     }
   }
   return lines.join('\n') + '\n';
+}
+
+
+/** The light-mode device script (no kernel tracing): per press a mark before the key, the key (Android 10's
+ * `input` returns once the app has handled it), a mark after it, the app's JS, UI and RenderThread run time
+ * from schedstat before the key and at the window's end, and framestats dumped through the window (its
+ * buffer holds about two seconds of continuous frames). */
+export function lightScript(steps: Step[], hold = true): string {
+  const lines = [
+    '#!/system/bin/sh',
+    'C=/data/local/tmp/tv-nav-cpu.txt; F=/data/local/tmp/tv-nav-frames.txt; : > $C; : > $F',
+    // The app's main thread, its busiest JS thread and its RenderThread. sort, not shell arithmetic: a
+    // 32-bit userland's mksh compares in 32 bits, and run times in ns pass 2^31 within seconds.
+    `threads() { P=$(pidof ${PACKAGE}); JS=$(for t in /proc/$P/task/*; do [ "$(cat $t/comm 2>/dev/null)" = mqt_v_js ] && ` +
+      `echo "$(cut -d' ' -f1 $t/schedstat) \${t##*/}"; done | sort -n | tail -1 | cut -d' ' -f2); R=; ` +
+      `for t in /proc/$P/task/*; do [ "$(cat $t/comm 2>/dev/null)" = RenderThread ] && R=\${t##*/}; done; }`,
+    'run() { [ -n "$P" ] && cut -d" " -f1 /proc/$P/task/$1/schedstat 2>/dev/null || echo 0; }',
+    'cpu() { echo "$1 $2 $(run $JS) $(run $P) $(run $R)" >> $C; }',
+    `frames() { dumpsys gfxinfo ${PACKAGE} framestats | grep -E '^(Flags|[0-9]+,|---)' >> $F; }`,
+    // While a launch window runs (LAUNCH=1), each chunk also logs the threads' run time, for when JS went quiet.
+    'wait_() { left=$1; while [ $left -gt 0 ]; do chunk=$(( left > 1500 ? 1500 : left )); sleep $(( chunk / 1000 )).$(printf %03d $(( chunk % 1000 ))); frames; ' +
+      '[ -n "$LAUNCH" ] && { threads; log -t VELACPU "$(run $JS) $(run $P) $(run $R)"; }; left=$(( left - chunk )); done; }',
+    'threads',
+  ];
+  let press = 0;
+  for (const step of steps) {
+    if ('link' in step) lines.push(`am start -a android.intent.action.VIEW -d '${step.link}' ${PACKAGE} >/dev/null 2>&1`, `sleep ${step.wait / 1000}`, 'threads');
+    else if ('wait' in step) lines.push(`wait_ ${step.wait}`);
+    else if ('launch' in step) {
+      const n = press++;
+      lines.push(`echo "p ${n} 0 0 0" >> $C`, `log -t ${MARK} ${n}`, `am start -n ${PACKAGE}/.MainActivity >/dev/null 2>&1`, `log -t VELAKEY ${n}`,
+        'LAUNCH=1', `wait_ ${step.window}`, 'LAUNCH=', 'threads', `cpu e ${n}`);
+    } else {
+      const n = press++;
+      const keys = Array.from({ length: step.burst ?? 1 }, () => `KEYCODE_${step.key}`).join(' ');
+      lines.push(`log -t ${MARK} ${n}`, `cpu p ${n}`, step.burst || !hold ? `input keyevent ${keys}` : `input keyevent --duration 80 ${keys}`,
+        `log -t VELAKEY ${n}`, `wait_ ${step.window ?? 1200}`, `cpu e ${n}`);
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+async function measureLight(o: Options, name: string, label: string): Promise<RunReport> {
+  const scenario = SCENARIOS[name];
+  if (!scenario) throw new Error(`unknown scenario ${name}; have ${Object.keys(SCENARIOS).join(', ')}`);
+  const work = mkdtempSync(join(tmpdir(), 'tv-nav-'));
+  const d = o.device;
+  try {
+    const presses = scenario.steps.filter((s): s is Extract<Step, { key: string } | { launch: true }> => 'key' in s || 'launch' in s);
+    const hold = Number(d.shell('getprop ro.build.version.sdk').trim()) >= 31;
+    d.shell(`am force-stop ${PACKAGE}`);
+    if (!scenario.cold) {
+      d.shell(`am start -n ${PACKAGE}/.MainActivity`);
+      await Bun.sleep(o.settle ?? scenario.settle);
+    } else await Bun.sleep(3000);
+    const runScript = async (file: string) => {
+      d.shell(`rm -f ${file}.done; (nohup sh -c 'sh ${file}; echo ok > ${file}.done' > /dev/null 2>&1 &)`);
+      while (d.shell(`cat ${file}.done 2>/dev/null; true`).trim() !== 'ok') await Bun.sleep(1500);
+    };
+    if (scenario.setup?.length) {
+      writeFileSync(join(work, 'setup.sh'), deviceScript(scenario.setup, hold));
+      d.push(join(work, 'setup.sh'), '/data/local/tmp/tv-nav-setup.sh');
+      await runScript('/data/local/tmp/tv-nav-setup.sh');
+    }
+    writeFileSync(join(work, 'steps.sh'), lightScript(scenario.steps, hold));
+    d.push(join(work, 'steps.sh'), '/data/local/tmp/tv-nav-steps.sh');
+    d.shell('logcat -c');
+    await runScript('/data/local/tmp/tv-nav-steps.sh');
+    await d.pull('/data/local/tmp/tv-nav-frames.txt', join(work, 'frames.txt'));
+    const cpu = parseCpuSamples(d.shell('cat /data/local/tmp/tv-nav-cpu.txt'));
+    const frames = parseFramestats(readFileSync(join(work, 'frames.txt'), 'utf8'));
+    const logcat = d.shell(`logcat -d -v monotonic -s ReactNativeJS:I ${MARK}:I ${MARK}:D VELAKEY:I VELAKEY:D VELACPU:I VELACPU:D`);
+    const before = parseMarks(logcat, MARK);
+    const handled = parseMarks(logcat, 'VELAKEY');
+    const probe = parseProbe(logcat);
+    const warnings: string[] = [];
+    if (!frames.length) warnings.push('no frames in framestats');
+    if (handled.length < presses.length) warnings.push(`saw ${handled.length} key marks for ${presses.length} presses`);
+    const metrics: PressMetrics[] = [];
+    presses.forEach((step, i) => {
+      const from = handled[i];
+      if (from === undefined) return;
+      const window = ('window' in step ? step.window : undefined) ?? 1200;
+      const to = before[i + 1] ?? from + window * 1e6;
+      const quiet = window >= 4000 ? 1000 : o.quietMs;
+      const press = analyzeLightPress(frames, cpu, i, step.label ?? ('key' in step ? step.key : 'launch'), from, to, quiet);
+      // A launch is interactive once its JS thread goes quiet (contentMs here).
+      if ('launch' in step) press.contentMs = jsQuietMs(parseJsSamples(logcat), from, to);
+      const commits = probe.filter(commit => commit.ts >= from && commit.ts < to);
+      metrics.push({ ...press, commits: commits.length, comps: commits.reduce((sum, c) => sum + c.comps, 0) });
+    });
+    const first = cpu.find(sample => sample.tag === 'p');
+    const last = [...cpu].reverse().find(sample => sample.tag === 'e');
+    const start = before[0] ?? 0;
+    const end = (handled[handled.length - 1] ?? start) + (((presses[presses.length - 1] as { window?: number })?.window ?? 1200) * 1e6);
+    const seconds = Math.max(0.001, (end - start) / 1e9);
+    const per = (ns: number) => Math.round((ns / 1e6 / seconds) * 10) / 10;
+    const totals: RunTotals = {
+      seconds: Math.round(seconds * 10) / 10,
+      framesPerSecond: Math.round((frames.filter(f => f.ts >= start && f.ts < end).length / seconds) * 10) / 10,
+      jsMsPerSecond: first && last ? per(last.js - first.js) : 0,
+      mainMsPerSecond: first && last ? per(last.main - first.main) : 0,
+      renderMsPerSecond: first && last ? per(last.render - first.render) : 0,
+    };
+    return { label, totals, scenario: name, serial: d.serial, measuredAt: new Date().toISOString(), presses: metrics, summary: summarizePresses(metrics), warnings };
+  } finally {
+    if (o.keep) Bun.spawnSync(['cp', join(work, 'frames.txt'), join(o.keep, `${name}-${label}.framestats.txt`)]);
+    rmSync(work, { recursive: true, force: true });
+  }
 }
 
 const EVENTS_SQL = `
@@ -401,8 +514,9 @@ async function measure(o: Options, name: string, label: string): Promise<RunRepo
     const out = `${traces}/tv-nav.pftrace`;
     d.shell(`rm -f ${out}`);
     d.shell('logcat -c');
-    // The config on stdin: Android 10 has no /data/misc/perfetto-configs.
-    const pid = d.shell(`perfetto --txt -c - -o ${out} --background < /data/local/tmp/tv-nav.cfg`).trim().split('\n').pop()!.trim();
+    // The config on stdin, through a pipe: Android 10 has no /data/misc/perfetto-configs, and newer
+    // Androids do not let perfetto read a shell file handed over by redirection.
+    const pid = d.shell(`cat /data/local/tmp/tv-nav.cfg | perfetto --txt -c - -o ${out} --background`).trim().split('\n').pop()!.trim();
     await Bun.sleep(1500);
     await runScript('/data/local/tmp/tv-nav-steps.sh');
     await Bun.sleep(2000);
@@ -455,14 +569,14 @@ async function measure(o: Options, name: string, label: string): Promise<RunRepo
   }
 }
 
-const cell = (s: Summary) => (s.median === null ? '–' : `${s.median} / ${s.p90}`);
+const cell = (s: Summary | undefined) => (!s || s.median === null ? '–' : `${s.median} / ${s.p90}`);
 
 export function formatReport(report: RunReport): string {
   const head = `| press | ${METRICS.join(' | ')} | heaviest commit | JS time |`;
   const rule = `|${' --- |'.repeat(METRICS.length + 3)}`;
   const rows = report.presses.map(p => `| ${p.label} | ${METRICS.map(m => p[m] ?? '–').join(' | ')} | ${p.top} | ${p.jsTop ?? ''} |`);
   const summary = `| **median / p90** | ${METRICS.map(m => cell(report.summary[m])).join(' | ')} | | |`;
-  const totals = `| **total** | ${METRICS.map(m => report.summary[m].total).join(' | ')} | | |`;
+  const totals = `| **total** | ${METRICS.map(m => report.summary[m]?.total ?? '–').join(' | ')} | | |`;
   const t = report.totals;
   const whole = t ? `whole run ${t.seconds} s: ${t.framesPerSecond} frames/s, CPU ms/s JS ${t.jsMsPerSecond}, main ${t.mainMsPerSecond}, RenderThread ${t.renderMsPerSecond}` : '';
   return [`### ${report.scenario} (${report.label}, ${report.serial}, ${report.measuredAt})`, ...report.warnings.map(w => `> ${w}`), whole, '', head, rule, ...rows, summary, totals].join('\n');
@@ -470,7 +584,8 @@ export function formatReport(report: RunReport): string {
 
 export function formatComparison(before: RunReport, after: RunReport): string {
   const lines = [`### ${after.scenario}: ${before.label} → ${after.label} (median / p90; total)`, '', '| metric | before | after |', '| --- | --- | --- |'];
-  for (const m of METRICS) lines.push(`| ${m} | ${cell(before.summary[m])}; ${before.summary[m].total} | ${cell(after.summary[m])}; ${after.summary[m].total} |`);
+  // Reports from before a metric existed have no summary for it.
+  for (const m of METRICS) lines.push(`| ${m} | ${cell(before.summary[m])}; ${before.summary[m]?.total ?? '–'} | ${cell(after.summary[m])}; ${after.summary[m]?.total ?? '–'} |`);
   for (const k of ['framesPerSecond', 'jsMsPerSecond', 'mainMsPerSecond', 'renderMsPerSecond'] as const) {
     if (before.totals && after.totals) lines.push(`| whole run ${k} | ${before.totals[k]} | ${after.totals[k]} |`);
   }
@@ -494,6 +609,7 @@ if (import.meta.main) {
       'device-ip': { type: 'string' },
       settle: { type: 'string' },
       'buffer-mb': { type: 'string', default: '96' },
+      light: { type: 'boolean', default: false },
     },
     allowPositionals: true,
   });
@@ -509,11 +625,11 @@ if (import.meta.main) {
     const device = values.lab ? labDevice(values.lab, values.owner!, values['device-ip']) : adbDevice(values.adb!, values.serial!);
     const options: Options = {
       device, tp: values.tp!, quietMs: Number(values.quiet), keep: values.keep,
-      settle: values.settle ? Number(values.settle) : undefined, bufferMb: Number(values['buffer-mb']),
+      settle: values.settle ? Number(values.settle) : undefined, bufferMb: Number(values['buffer-mb']), light: values.light,
     };
     const reports: RunReport[] = [];
     for (const name of values.scenario!.split(',')) {
-      const report = await measure(options, name, values.label!);
+      const report = await (options.light ? measureLight : measure)(options, name, values.label!);
       reports.push(report);
       console.log(formatReport(report) + '\n');
     }
