@@ -1,3 +1,4 @@
+import { titleRatings } from '../../../../protocol/fixtures/skins/title-ratings';
 import type { BoxNode, Node, Style } from '../../../../protocol/skin';
 import { card, playedBadge } from './cards';
 import {
@@ -334,6 +335,7 @@ export const band: Node = {
           motion: enter(260),
           style: { 'font-size': '14px', color: '$ui.inkSecondary', 'font-variant-numeric': 'tabular-nums' },
         },
+        titleRatings('$ui.inkSecondary'),
         ...titleSupplement.map(node => ({ ...node, when: [...(node.when ?? []), { ...shortLandscape, not: true }] })),
         {
           type: 'box',

@@ -6,5 +6,5 @@
  * generic block fallbacks and slot surfaces (docs/experiences.md); renderer 21 adds the bindings
  * env.canManageLibraries and nav.showLive and the press action manageLibraries; renderer 22 adds the
  * profile menu primitive (the `profileMenu` node and the document's `profileMenus` looks), the
- * binding env.canDownloads and the press actions downloads and addServer. */
-export const RENDERER_VERSION = 22;
+ * binding env.canDownloads and the press actions downloads and addServer; renderer 23 adds the title ratings repeat and test. */
+export const RENDERER_VERSION = 23;

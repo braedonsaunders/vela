@@ -1,3 +1,4 @@
+import { titleRatings } from '../title-ratings';
 import { episodePage } from '../../../episode-page';
 // Kids, a skin document (protocol/v0/skin.ts, docs/skin-schema.md): a bright, friendly
 // family skin. Big rounded sticker tiles over a daylight sky, three-way navigation
@@ -7,7 +8,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Condition, Node, ProfileMenuLook, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.24';
+const version = '1.2.25';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -426,6 +427,7 @@ const titleReady: Node = { type: 'box', when: [{ test: 'env.load', is: 'eq', val
       ] },
       { type: 'box', style: { display: 'flex', 'flex-direction': 'column', gap: '8px', flex: '1', 'min-width': '16rem', 'max-width': '44rem' }, small: { 'min-width': '0px' }, children: [
         { type: 'text', text: '{detail.factsLine}', style: { 'font-size': '15px', 'font-weight': '700', color: '$ink-soft' } },
+        titleRatings('$ink-soft'),
 
       ] },
     ] },
@@ -490,7 +492,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
 
 const calm = { keyframes: 'dissolve', duration: 220 };
 const kids: SkinDocument = {
-  schema: 1, renderer: 22, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
+  schema: 1, renderer: 23, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
   preview: art('preview.jpg'), swatches: ['#FFF8EE', '#1B2550', '#FFC93C', '#3FA9F5', '#FF6B57'],
   // Kids' cream, navy ink and a deep sky accent (readable as text on cream; the sun stays a fill),
   // for the routes it inherits (search, library, collection, sign-in).

@@ -1,3 +1,4 @@
+import { titleRatings } from '../title-ratings';
 // The flat title page: poster beside the facts, then seasons, episodes, extras, cast and crew.
 import type { Condition, Node, Style } from '../../../skin';
 import {
@@ -262,6 +263,7 @@ const facts: Node = {
   small: { gap: '14px' },
   children: [
     factRow,
+    titleRatings('$ink-dim'),
     {
       type: 'box',
       role: 'list',

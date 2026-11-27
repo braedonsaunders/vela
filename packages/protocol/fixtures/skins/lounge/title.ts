@@ -1,3 +1,4 @@
+import { titleRatings } from '../title-ratings';
 import type { Node, Style } from '../../../skin';
 import { capsule, capsuleFocus, ease, gutter, gutterSmall, lift, rest, ring, sans, side } from './look';
 import { playedBadge } from './cards';
@@ -412,6 +413,7 @@ export const titleCopy: Node = {
       },
       small: { 'font-size': '14px' },
     },
+    titleRatings('$ink-dim'),
     {
       type: 'use', template: 'velaSummary',
       when: [{ test: 'detail.summary' }],

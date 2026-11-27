@@ -1,3 +1,4 @@
+import { titleRatings } from '../title-ratings';
 // The title page: the framed sticker book page with artwork, episodes, extras, people and related shelves.
 import type { Condition, Node, Style } from '../../../skin';
 import {
@@ -437,6 +438,7 @@ export const titleHead: Node = {
                 },
               ],
             },
+            titleRatings('$ui.inkSecondary'),
           ],
         },
       ],

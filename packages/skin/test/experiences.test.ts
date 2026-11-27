@@ -34,11 +34,11 @@ const children = (n: RNode) => (n as Extract<RNode, { kind: 'box' }>).children;
 const rich = (n: RNode) => n as Extract<RNode, { kind: 'rich' }>;
 
 describe('renderer 20 and the renderer-bump rule', () => {
-  test('the renderer is 22', () => expect(RENDERER_VERSION).toBe(22));
-  test('a renderer-23 document is refused whole on its version, never half-drawn', () => {
-    const over = JSON.parse(readFileSync(join(import.meta.dir, 'fixtures/renderer-23-page.json'), 'utf8')) as ScreenDocument;
-    expect(() => checkScreenDocument(over)).toThrow('needs renderer 23; this client draws 22');
-    expect(() => resolveScreenDocument(over, at())).toThrow('needs renderer 23');
+  test('the renderer is 23', () => expect(RENDERER_VERSION).toBe(23));
+  test('a renderer-24 document is refused whole on its version, never half-drawn', () => {
+    const over = JSON.parse(readFileSync(join(import.meta.dir, 'fixtures/renderer-24-page.json'), 'utf8')) as ScreenDocument;
+    expect(() => checkScreenDocument(over)).toThrow('needs renderer 24; this client draws 23');
+    expect(() => resolveScreenDocument(over, at())).toThrow('needs renderer 24');
   });
   test('every renderer-19 plugin document (Sports, the news desk) still resolves unchanged in shape', () => {
     const fixtures = join(import.meta.dir, '../../protocol/fixtures/screens');

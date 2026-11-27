@@ -5,7 +5,7 @@
 import { cardFacts, joinMeta } from './meta-line';
 import { identityKeys } from './identity-keys';
 import { pagerBinding, pagerState } from './pager-book';
-import { drawnAs, duration, isUnreleased, msg, releaseLabel, videoRoleLabel } from '@vela/core';
+import { drawnAs, duration, isUnreleased, msg, number, releaseLabel, videoRoleLabel } from '@vela/core';
 import { shouldRotateHero } from './hero-rotation';
 import { selectEnv } from './host-source';
 import { aboutLabel, aboutLine, type About } from './about';
@@ -127,6 +127,7 @@ export interface Ctx {
   extra?: Extra;
   person?: Person;
   fact?: string;
+  rating?: DetailModel['ratings'][number];
   /** A season's compact selector label; absent when the same card appears outside a selector. */
   seasonLabel?: string;
   hit?: Hit;
@@ -145,6 +146,14 @@ export interface Ctx {
 
 
 export type Accessor = (c: Ctx, e: Env) => string;
+
+function ratingIcon(rating: NonNullable<Ctx['rating']>): string {
+  if (rating.source === 'rt-audience' || rating.source === 'popcorn') return 'rating-popcorn';
+  if (rating.source !== 'rt-critics' && rating.source !== 'tomatoes') return '';
+  if (rating.state === 'rotten') return 'rating-splat';
+  if (rating.state === 'certified') return 'rating-certified';
+  return 'rating-tomato';
+}
 
 const yes = (value: boolean) => (value ? 'true' : 'false');
 const pct = (at: number, of: number) => (of > 0 ? String(Math.min(100, (at / of) * 100)) : '0');
@@ -353,6 +362,27 @@ export const VOCABULARY: Record<string, Accessor> = {
   'person.initials': c => (c.person ? c.person.name.split(' ').slice(0, 2).map(w => w.slice(0, 1)).join('').toUpperCase() : ''),
   'person.seed': c => (c.person ? String(c.person.name.length) : ''),
   'person.nameLength': c => (c.person ? String(c.person.name.length) : ''),
+  'rating.source': c => c.rating?.source ?? '',
+  'rating.label': c => c.rating?.label ?? '',
+  'rating.value': c => c.rating?.value ?? '',
+  'rating.score': c => c.rating ? String(c.rating.score) : '',
+  'rating.state': c => c.rating?.state ?? '',
+  'rating.icon': c => c.rating ? ratingIcon(c.rating) : '',
+  'rating.display': c => {
+    const r = c.rating;
+    return r ? (ratingIcon(r) ? r.value : `${r.label} ${r.value}`) : '';
+  },
+  'rating.accessibleLabel': c => {
+    const r = c.rating;
+    if (!r) return '';
+    const icon = ratingIcon(r);
+    if (!icon) return `${r.label} ${r.value}`;
+    const source = msg(icon === 'rating-popcorn' ? 'ratings.rtAudience' : 'ratings.rtCritics');
+    const value = msg('ratings.percentSpoken', { value: number(r.score, { maximumFractionDigits: 0 }) });
+    const state = ['fresh', 'rotten', 'certified', 'upright', 'spilled'].includes(r.state) ? msg(`ratings.state.${r.state}`) : '';
+    return state ? `${source} ${value}, ${state}` : `${source} ${value}`;
+  },
+  'rating.hasNext': (c, e) => yes(c.index + 1 < (e.detail?.ratings.length ?? 0)),
   'fact.text': c => c.fact ?? '',
   'genre.text': c => c.fact ?? '',
 
@@ -485,6 +515,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'detail.hasResume': detail(d => yes(!!detailPlaybackCard(d) && hasProgress(detailPlaybackCard(d)!)), 'false'),
   'detail.hasSeasons': detail(d => yes(d.seasons.length > 1), 'false'),
   'detail.hasEpisodes': detail(d => yes(d.episodes.length > 0 || d.seasons.length > 0), 'false'),
+  'detail.hasRatings': detail(d => yes(d.ratings.length > 0), 'false'),
   'detail.hasCast': detail(d => yes(d.castPeople.length > 0), 'false'),
   'detail.hasExtras': detail(d => yes(d.extras.length > 0), 'false'),
   'detail.hasMediaFacts': detail(d => yes(d.mediaFacts.length > 0), 'false'),
@@ -545,6 +576,7 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
     case 'detail.trailers': return at((d?.extras ?? []).filter(x => x.kind === 'trailer' && x.ready), extra => ({ extra }));
     case 'detail.cast': return at(d?.castPeople ?? [], person => ({ person }));
     case 'detail.crew': return at(d?.crewPeople ?? [], person => ({ person }));
+    case 'detail.ratings': return at(d?.ratings ?? [], rating => ({ rating }));
     case 'detail.mediaFacts': return at(d?.mediaFacts ?? [], fact => ({ fact }));
     case 'detail.genres': return at(d?.title[0]?.genres ?? [], fact => ({ fact }));
     case 'detail.related': return at(d?.related ?? [], row => ({ row: row as Row }));

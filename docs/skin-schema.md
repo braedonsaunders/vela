@@ -107,10 +107,31 @@ documents that need 20 or less draw unchanged.
 
 Renderer 22 adds the profile menu primitive ([Profile menu](#profile-menu)): the `profileMenu`
 node, the document's `profileMenus` looks, the binding `env.canDownloads` and the press actions
-`downloads` and `addServer`. Every built-in skin draws its menu with it and declares 22. A
-renderer-21 client refuses those documents on their version. A document that needs 21 or less
+`downloads` and `addServer`. Built-in skins that supply their own menu use the primitive and declare renderer 22 or later.
+A renderer-21 client refuses those documents on their version. A document that needs 21 or less
 draws unchanged: if it leaves the shell to the Vela base it gets the primitive in the default
 look, and if it builds its own menu it keeps that menu exactly as written.
+
+## Renderer 23
+
+On a title page, `detail.hasRatings` tests whether the title has any review scores.
+The `detail.ratings` repeat exposes the scores in server order. Use these bindings
+within each repeated item:
+
+| Binding | Value |
+| --- | --- |
+| `rating.source` | Provider key, including `rt-critics`, `rt-audience`, `imdb`, `metacritic`, `tmdb` and `letterboxd`. |
+| `rating.label` | Localized provider label, or the provider key for an unrecognized source. |
+| `rating.value` | Formatted score on the provider's own scale, such as `92%` or `7.8`. |
+| `rating.score` | Score normalized to 0–100 for comparisons. |
+| `rating.state` | Server state, such as `fresh`, `rotten` or `certified`, or empty. |
+| `rating.icon` | One of `rating-tomato`, `rating-splat`, `rating-certified` or `rating-popcorn`, or empty. |
+| `rating.display` | Formatted value with the provider label when there is no icon. |
+| `rating.accessibleLabel` | Spoken provider, score and any recognized state. |
+| `rating.hasNext` | Whether the full ratings collection has another item, for separators in an untruncated repeat. |
+
+`detail.rating` continues to hold the title's content classification, such as PG-13.
+Documents that use the ratings repeat or its bindings declare `renderer: 23`.
 
 ## Profile menu
 
