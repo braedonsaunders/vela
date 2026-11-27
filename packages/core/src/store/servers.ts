@@ -239,6 +239,10 @@ export class Servers {
     };
   }
 
+  has(id: string): boolean {
+    return this.session.servers.read().servers.some(record => record.id === id);
+  }
+
   async select(id: string): Promise<ServerResult> {
     try {
       const forgetting = this.forgetting.get(id);

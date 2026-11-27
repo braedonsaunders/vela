@@ -34,6 +34,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
   const selecting = useRef(false);
   const busy = pending !== '';
   if (!switcher) return null;
+  const selectServer = (id: string) => switcher.selectServer?.(id) ?? switcher.actions.select(id);
   const pick = async (server: ServerOption) => {
     if (server.selected || selecting.current) return;
     setConfirmId('');
@@ -44,7 +45,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
     try {
       // Let the pressed row paint its progress before selection updates the app's models.
       await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
-      const outcome = await switcher.actions.select(server.id);
+      const outcome = await selectServer(server.id);
       if (outcome.error) setError(outcome.error);
     } finally {
       selecting.current = false;
@@ -116,7 +117,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
                 </View>
               </View>
             ) : null}
-            {server.etherOrigin ? <Row label="Ether available" testID={`server-ether-${server.id}`} disabled={busy} onPress={() => void (async () => { const result = await switcher.actions.add('ether', server.name, server.etherOrigin!); if (result.error) setError(result.error); else { const selected = await switcher.actions.select(result.id); if (selected.error) setError(selected.error); } })()} /> : null}
+            {server.etherOrigin ? <Row label="Ether available" testID={`server-ether-${server.id}`} disabled={busy} onPress={() => void (async () => { const result = await switcher.actions.add('ether', server.name, server.etherOrigin!); if (result.error) setError(result.error); else { const selected = await selectServer(result.id); if (selected.error) setError(selected.error); } })()} /> : null}
           </View>
         );
       })}
