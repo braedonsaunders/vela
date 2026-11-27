@@ -61,6 +61,8 @@ export interface Condition {
 export type Action =
   | 'select' | 'person' | 'play' | 'pickHero' | 'home' | 'search' | 'live' | 'library'
   | 'toggle' | 'open' | 'close' | 'reset' | 'openPicker' | 'switchProfile' | 'playlists' | 'addToPlaylist' | 'signOut' | 'moreRow' | 'playExtra' | 'back'
+  /** Open Manage libraries, the viewer's order and hidden libraries for the navigation (`env.canManageLibraries`). */
+  | 'manageLibraries'
   /** A failed route asks again for what failed (`env.canRetry`). */
   | 'retry'
   /** Shell: open this flag alone, closing the others (keep- flags stay); pressed again it closes. */

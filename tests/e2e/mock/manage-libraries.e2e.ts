@@ -16,6 +16,20 @@ const clearPreference = (browser: Browser) =>
   browser.evaluate(key => { try { localStorage.removeItem(key); } catch { /* No page to clear. */ } }, PREFERENCE).catch(() => {});
 // The mock's libraries after its first three, in the server's order.
 const later = ['live', 'videos', 'all', 'music', 'books', 'audiobooks', 'podcasts', 'photos'];
+// The skin a viewer picked is kept per server and viewer (vela.pref.skin.<origin>.<viewer>).
+const clearSkin = (browser: Browser) => browser.evaluate(() => {
+  try { for (const key of Object.keys(localStorage)) if (key.startsWith('vela.pref.skin')) localStorage.removeItem(key); } catch { /* No page to clear. */ }
+}).catch(() => {});
+const pickSkin = async (screen: Screen, name: string) => {
+  await expect(screen.getByRole('heading', 'Appearance')).toBeVisible();
+  await screen.getByRole('button', name).tap();
+  await expect(screen.getByRole('heading', 'Appearance')).toBeHidden();
+};
+// The library row that holds the focused control, and that control's name.
+const focusedRow = (browser: Browser) => browser.evaluate(() => {
+  const focused = document.activeElement;
+  return { row: focused?.closest('[data-testid^="library-row-"]')?.getAttribute('data-testid') ?? '', label: focused?.getAttribute('aria-label') ?? '' };
+});
 
 describe('Manage libraries release gate', () => {
   test('a phone viewer reorders and hides libraries in the menu from the profile menu, keeps it after a reload, and resets it', async ({ app, browser, screen }) => {
@@ -130,6 +144,115 @@ describe('Manage libraries release gate', () => {
       release();
       await browser.unroute(bootstrap);
       await clearPreference(browser);
+    }
+  });
+
+  test('two libraries with the same name and kind are told apart, and each Hide acts on its own', async ({ app, browser, screen }) => {
+    await signInMockViewer(app, screen);
+    await browser.setViewport({ width: 390, height: 844 });
+    // The server names a second library of kind movies "Movies" too.
+    const list = /\/vela\/v0\/libraries(\?|$)/;
+    await browser.route(list, async route => {
+      const response = await route.fetch();
+      if (response.status !== 200) return route.continue();
+      const body = await response.json<{ items: { id: string; name: string; kind: string }[] }>();
+      await route.fulfill({ status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+        json: { ...body, items: body.items.map(item => item.id === 'documentaries' ? { ...item, name: 'Movies' } : item) } });
+    });
+    const detail = (id: string) => browser.evaluate(row => document.querySelector(`[data-testid="library-row-${row}"]`)?.textContent ?? '', id);
+    try {
+      await app.open('/vela/libraries');
+      await expect(screen.getByRole('heading', 'Manage libraries')).toBeVisible({ timeout: 30_000 });
+      await expect.poll(() => managerRows(browser)).toEqual(['movies', 'shows', 'documentaries', ...later]);
+      expect(await detail('movies')).toContain('movies · 1');
+      expect(await detail('documentaries')).toContain('movies · 2');
+      await expect(screen.getByRole('button', 'Move Movies, movies 1 up')).toBeDisabled();
+      await screen.getByRole('button', 'Hide Movies, movies 2').tap();
+      await expect.poll(() => managerRows(browser)).toEqual(['movies', 'shows', 'documentaries (hidden)', ...later]);
+      expect(await detail('documentaries')).toContain('movies · 2 · Hidden');
+      await expect(screen.getByRole('button', 'Show Movies, movies 2')).toBeVisible();
+      await screen.getByRole('button', 'Hide Movies, movies 1').tap();
+      await expect.poll(() => managerRows(browser)).toEqual(['movies (hidden)', 'shows', 'documentaries (hidden)', ...later]);
+      await screen.getByRole('button', 'Show Movies, movies 2').tap();
+      await expect.poll(() => managerRows(browser)).toEqual(['movies (hidden)', 'shows', 'documentaries', ...later]);
+      // The number is the server's place, so it stays with the library when the viewer moves it.
+      await screen.getByRole('button', 'Move Movies, movies 2 up').tap();
+      await screen.getByRole('button', 'Move Movies, movies 2 up').tap();
+      await expect.poll(() => managerRows(browser)).toEqual(['documentaries', 'movies (hidden)', 'shows', ...later]);
+      expect(await detail('documentaries')).toContain('movies · 2');
+      expect(await detail('documentaries')).not.toContain('Hidden');
+      expect(await detail('movies')).toContain('movies · 1 · Hidden');
+    } finally {
+      await browser.unroute(list);
+      await clearPreference(browser);
+    }
+  });
+
+  test('Enter on a move keeps focus in the moved row, also once it reaches the end', async ({ app, browser, screen }) => {
+    await signInMockViewer(app, screen);
+    await browser.setViewport({ width: 1440, height: 900 });
+    try {
+      await openManager(screen);
+      await expect.poll(() => managerRows(browser)).toEqual(['movies', 'shows', 'documentaries', ...later]);
+      const middle = screen.getByRole('button', 'Move TV Shows down');
+      await middle.focus();
+      await middle.press('Enter');
+      await expect.poll(() => managerRows(browser)).toEqual(['movies', 'documentaries', 'shows', ...later]);
+      await expect.poll(() => focusedRow(browser)).toEqual({ row: 'library-row-shows', label: 'Move TV Shows down' });
+      // Podcasts reaches the bottom: its Move down turns off and focus goes to its Move up.
+      const end = screen.getByRole('button', 'Move Podcasts down');
+      await end.focus();
+      await end.press('Enter');
+      await expect.poll(() => managerRows(browser)).toEqual(['movies', 'documentaries', 'shows', 'live', 'videos', 'all', 'music', 'books', 'audiobooks', 'photos', 'podcasts']);
+      await expect(screen.getByRole('button', 'Move Podcasts down')).toBeDisabled();
+      await expect.poll(() => focusedRow(browser)).toEqual({ row: 'library-row-podcasts', label: 'Move Podcasts up' });
+    } finally {
+      await clearPreference(browser);
+    }
+  });
+
+  test('Broadcast and Index offer the manager, and a hidden Live TV leaves their navigation while Home still loads', async ({ app, browser, screen }) => {
+    await signInMockViewer(app, screen);
+    await browser.setViewport({ width: 1440, height: 900 });
+    // Broadcast's home draws the live monitor and its in-page Full guide controls (env.canLive).
+    const fullGuide = () => browser.evaluate(() => [...document.querySelectorAll('[aria-label="Full guide"]')].filter(item => item.getBoundingClientRect().width > 0).length);
+    try {
+      await openManager(screen);
+      await screen.getByRole('button', 'Hide Live TV').tap();
+      await expect(screen.getByRole('button', 'Show Live TV')).toBeVisible();
+      await screen.getByRole('button', 'Back').tap();
+      await expect(screen.getByRole('heading', 'Manage libraries')).toBeHidden();
+
+      await screen.getByTestId('profile-menu').tap();
+      await screen.getByTestId('skin-picker').tap();
+      await pickSkin(screen, 'Broadcast');
+      await expect(screen.getByRole('link', 'Live')).toBeVisible({ timeout: 30_000 });
+      await expect.poll(fullGuide, { timeout: 30_000 }).toBeGreaterThan(0);
+      await expect(screen.getByRole('link', 'Guide')).toBeHidden();
+      await screen.getByTestId('profile-menu').tap();
+      await screen.getByTestId('manage-libraries').tap();
+      await expect(screen.getByRole('heading', 'Manage libraries')).toBeVisible({ timeout: 30_000 });
+      await expect(screen.getByRole('button', 'Show Live TV')).toBeVisible();
+      await screen.getByRole('button', 'Back').tap();
+      await expect(screen.getByRole('heading', 'Manage libraries')).toBeHidden();
+
+      await screen.getByTestId('profile-menu').tap();
+      await screen.getByRole('button', 'Appearance').tap();
+      await pickSkin(screen, 'Index');
+      await expect(screen.getByRole('link', 'Home')).toBeVisible({ timeout: 30_000 });
+      await expect(screen.getByRole('link', 'Movies')).toBeVisible();
+      await expect(screen.getByRole('link', 'Live TV')).toBeHidden();
+      await screen.getByTestId('manage-libraries').tap();
+      await expect(screen.getByRole('heading', 'Manage libraries')).toBeVisible({ timeout: 30_000 });
+      await screen.getByRole('button', 'Show Live TV').tap();
+      await expect(screen.getByRole('button', 'Hide Live TV')).toBeVisible();
+      await screen.getByRole('button', 'Back').tap();
+      await expect(screen.getByRole('heading', 'Manage libraries')).toBeHidden();
+      // Shown again, Live TV is back in Index's rail.
+      await expect(screen.getByRole('link', 'Live TV')).toBeVisible();
+    } finally {
+      await clearPreference(browser);
+      await clearSkin(browser);
     }
   });
 });

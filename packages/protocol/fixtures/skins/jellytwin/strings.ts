@@ -17,6 +17,7 @@ export const strings: Record<string, string> = {
   moreSections: 'More sections',
   home: 'Home',
   appearance: 'Change appearance',
+  manageLibraries: 'Manage libraries',
   install: 'Install Vela',
   update: 'Update ready, reload',
   signOut: 'Sign out',

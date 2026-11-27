@@ -21,7 +21,7 @@ const rise = {
 
 export default {
   schema: 1,
-  renderer: 18,
+  renderer: 21,
   id,
   name: 'Marquee',
   version,
@@ -92,6 +92,7 @@ export default {
       searchYourLibrary: 'Search your library',
       profile: 'Profile and appearance',
       changeAppearance: 'Change appearance',
+      manageLibraries: 'Manage libraries',
       install: 'Install Vela',
       update: 'Update ready, reload',
       signOut: 'Sign out',

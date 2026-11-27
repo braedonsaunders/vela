@@ -76,7 +76,7 @@ export { DEFAULT_STREAMING, STREAMING_LIMITS, STREAMING_QUALITIES, streamingSett
 export { storedPlayerSettings, type PictureFit, type PlayerSettingsState, type StoredPlayerSettings } from './store/player-settings';
 export { matchSeriesTracks, matchTrack, MAX_SERIES_TRACKS, parseSeriesTrackKey, pruneSeriesTracks, removeServerSeriesTracks, seriesTrackKey, storedSeriesTracks, trackChoiceOf, trackCodecFamily, type SeriesTrackChoice, type SeriesTrackMap, type SeriesTrackMatch, type SeriesTrackPreference } from './series-tracks';
 export type { SeriesTracksState } from './store/series-tracks';
-export { arrangeLibraries, orderLibraries, type LibraryOrder, type OrderedLibrary } from './library-order';
+export { arrangeLibraries, libraryQualifiers, orderLibraries, type LibraryOrder, type LibraryQualifier, type OrderedLibrary } from './library-order';
 export { viewerLibraryOrder, type LibraryOrdersState } from './store/library-orders';
 export { autoplayNext, current as currentInQueue, queuedNext, sourceNext, upNext, type AudioQueue, type RepeatMode } from './audio/queue';
 export { albumOrder, audioCardsOf, listenFrom, playStart, resumePoint } from './audio/cards';

@@ -141,14 +141,14 @@ export const destinations = (fit = false): Node[] => [
       type: 'box',
       ...(fit ? { when: [not('dest.more')] } : {}),
       style: { ...row, 'flex-shrink': '0' },
-      states: [{ when: [is('dest.kind', 'live'), not('env.canLive')], style: { display: 'none' } }],
+      states: [{ when: [is('dest.kind', 'live'), not('nav.showLive')], style: { display: 'none' } }],
       children: [
         navItem(
           '{dest.name}',
           navIcon('tv'),
           [is('env.section', 'live')],
           { action: 'live' },
-          { when: [is('dest.kind', 'live'), set('env.canLive')] },
+          { when: [is('dest.kind', 'live'), set('nav.showLive')] },
         ),
         navItem(
           '{dest.name}',
@@ -165,7 +165,7 @@ export const destinations = (fit = false): Node[] => [
     navIcon('tv'),
     [is('env.section', 'live')],
     { action: 'live' },
-    { when: [set('env.canLive'), not('env.hasLiveLibrary'), ...(fit ? [not('nav.liveMore')] : [])] },
+    { when: [set('nav.showLive'), not('env.hasLiveLibrary'), ...(fit ? [not('nav.liveMore')] : [])] },
   ),
   ...(fit ? [navMore] : []),
 ];
@@ -213,10 +213,10 @@ const moreMenu: Node = {
       item: {
         type: 'box',
         style: { ...col, 'align-items': 'stretch' },
-        states: [{ when: [is('dest.kind', 'live'), not('env.canLive')], style: { display: 'none' } }],
+        states: [{ when: [is('dest.kind', 'live'), not('nav.showLive')], style: { display: 'none' } }],
         children: [
           tall(navItem('{dest.name}', navIcon('tv'), [is('env.section', 'live')], { action: 'live' },
-            { when: [is('dest.kind', 'live'), set('env.canLive')], testId: 'nav-more-{dest.id}' })),
+            { when: [is('dest.kind', 'live'), set('nav.showLive')], testId: 'nav-more-{dest.id}' })),
           tall(navItem('{dest.name}', libIcon, [set('dest.on')], { action: 'library', arg: '{dest.id}' },
             { when: [{ test: 'dest.kind', is: 'ne', value: 'live' }], testId: 'nav-more-{dest.id}' })),
         ],
@@ -224,7 +224,7 @@ const moreMenu: Node = {
     },
     {
       ...tall(navItem('{s:live}', navIcon('tv'), [is('env.section', 'live')], { action: 'live' }, { testId: 'nav-more-live' })),
-      when: [set('env.canLive'), not('env.hasLiveLibrary'), set('nav.liveMore')],
+      when: [set('nav.showLive'), not('env.hasLiveLibrary'), set('nav.liveMore')],
     },
   ],
 };

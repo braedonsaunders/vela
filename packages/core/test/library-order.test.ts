@@ -11,7 +11,7 @@ import {
 } from '../src/library-order';
 import { LibraryOrders, viewerLibraryOrder } from '../src/store/library-orders';
 import { StateBox, ready } from '../src/store/state';
-import type { VelaState } from '../src';
+import { libraryQualifiers, type VelaState } from '../src';
 
 const library = (id: string) => ({ id, name: id, kind: 'movies', dateDisplay: 'year' as const, backdrop: '' });
 const server = ['movies', 'shows', 'music', 'live'].map(library);
@@ -176,5 +176,34 @@ describe('library orders store', () => {
     expect(viewerLibraryOrder(box.get())).toEqual({ order: ['movies', 'shows', 'music', 'live'], hidden: ['shows'] });
     forget('srv-2');
     expect(Object.keys(box.get().libraryOrders)).toEqual([libraryOrderKey('srv-1', 'viewer-a')]);
+  });
+});
+
+describe('telling libraries with one name apart', () => {
+  const named = (id: string, name: string, kind: string) => ({ id, name, kind });
+
+  test('a unique name needs nothing; a name shared across kinds gets the kind', () => {
+    const qualifiers = libraryQualifiers([named('a', 'Movies', 'movies'), named('b', 'Archive', 'movies'), named('c', 'Archive', 'tv')]);
+    expect(qualifiers.get('a')).toBeUndefined();
+    expect(qualifiers.get('b')).toEqual({ kind: 'movies' });
+    expect(qualifiers.get('c')).toEqual({ kind: 'tv' });
+  });
+
+  test('the same name and kind adds the place among them in the server order', () => {
+    const server = [named('m2', 'Movies', 'movies'), named('tv', 'Movies', 'tv'), named('m1', 'Movies', 'movies'), named('m3', 'Movies', 'movies')];
+    const qualifiers = libraryQualifiers(server);
+    expect(qualifiers.get('m2')).toEqual({ kind: 'movies', position: 1 });
+    expect(qualifiers.get('m1')).toEqual({ kind: 'movies', position: 2 });
+    expect(qualifiers.get('m3')).toEqual({ kind: 'movies', position: 3 });
+    expect(qualifiers.get('tv')).toEqual({ kind: 'tv' });
+  });
+
+  test('the place follows the server, not the viewer order', () => {
+    const server = [named('first', 'Movies', 'movies'), named('second', 'Movies', 'movies')];
+    const arranged = orderLibraries(server, { order: ['second', 'first'], hidden: ['first'] }).map(row => row.library.id);
+    expect(arranged).toEqual(['second', 'first']);
+    const qualifiers = libraryQualifiers(server);
+    expect(qualifiers.get('first')).toEqual({ kind: 'movies', position: 1 });
+    expect(qualifiers.get('second')).toEqual({ kind: 'movies', position: 2 });
   });
 });

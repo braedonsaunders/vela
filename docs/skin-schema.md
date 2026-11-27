@@ -96,6 +96,31 @@ against); skins are `#/$defs/SkinDocument`. Published lists are data, each a
 `bun tools/screen-schema.ts check` (run by the tests) fails when the types, the schema, the
 built-in index or a fixture drift.
 
+## Renderer 21
+
+Renderer 21 adds the bindings `env.canManageLibraries` and `nav.showLive` and the press action
+`manageLibraries` ([Libraries in the navigation](#libraries-in-the-navigation)). A renderer-20
+client refuses a skin that needs 21 on its version, instead of failing it on an unknown binding;
+documents that need 20 or less draw unchanged.
+
+## Libraries in the navigation
+
+The viewer can order and hide their libraries in the navigation from Manage libraries, an
+app-owned screen (`apps/vela/src/libraries/libraries-screen.tsx`); the choice is kept on the
+device per server and viewer. A skin reads it through these keys:
+
+- `nav.destinations` and `env.libraryCount` list `env.navigation`: the libraries in the viewer's
+  order without the hidden ones, and the plugin screens. `env.libraries` stays every library the
+  server lists (search, the guide, `env.hasLiveLibrary`).
+- `nav.showLive`: Live TV belongs in the navigation. It is `env.canLive`, unless the server lists
+  a Live TV library and the viewer hid it. Navigation entries for live (a Guide or Live TV tab or
+  link) read it; content that shows live TV (a live home's monitor, in-page guide buttons) keeps
+  `env.canLive`. A standalone Live TV entry still pairs it with `not env.hasLiveLibrary`, so it is
+  not drawn twice beside a Live TV library.
+- `env.canManageLibraries`: a viewer is signed in, so the profile menu offers Manage libraries;
+  the press action `manageLibraries` opens it (`/libraries` on the web). A menu built on the
+  `serverSwitcher` widget already has the entry and needs no row of its own.
+
 ## Rows (Recommendations)
 
 A row in `home.rows`, `library.rows` or `detail.related` binds these keys beside `row.id`,

@@ -70,3 +70,31 @@ describe('navigation in the viewer order', () => {
     expect(navigationOf(other)).toBe(server);
   });
 });
+
+describe('Live TV in the navigation (nav.showLive)', () => {
+  test('a visible Live TV library keeps Live TV in the navigation', () => {
+    expect(read('nav.showLive', env())).toBe('true');
+    expect(read('nav.showLive', env({ order: ['live'], hidden: ['shows'] }))).toBe('true');
+  });
+
+  test('a hidden Live TV library takes Live TV out of the navigation, and env.canLive stays', () => {
+    const e = env({ order: [], hidden: ['live'] });
+    expect(read('nav.showLive', e)).toBe('false');
+    expect(read('env.canLive', e)).toBe('true');
+  });
+
+  test('a server with live TV but no Live TV library keeps its own entry', () => {
+    const libraries = server.filter(item => item.kind !== 'live');
+    const e = { section: 'home', flags: [], canLive: true, libraries, navigation: libraries } as unknown as Env;
+    expect(read('nav.showLive', e)).toBe('true');
+    expect(read('nav.showLive', { ...e, canLive: false })).toBe('false');
+    // An environment built without the lists reads them as empty.
+    expect(read('nav.showLive', { section: 'home', flags: [], canLive: true } as unknown as Env)).toBe('true');
+  });
+
+  test('Sports stays in the navigation while Live TV is hidden', () => {
+    const e = env({ order: [], hidden: ['movies', 'shows', 'live', 'music'] }, sports);
+    expect(destinations(e)).toEqual(['screen:sports']);
+    expect(read('nav.showLive', e)).toBe('false');
+  });
+});

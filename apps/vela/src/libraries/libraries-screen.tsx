@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, t
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { router } from '../router';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
-import { orderLibraries, viewerLibraryOrder } from '@vela/core';
+import { libraryQualifiers, orderLibraries, viewerLibraryOrder } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
 import { FocusPressable as Pressable } from '@vela/skin/src/focus';
 import { useFocusClaim } from '@vela/skin/src/widgets/common/focus-claim';
@@ -26,8 +26,8 @@ export function LibrariesScreen() {
   // The control that takes focus after the list changes under it: `<library id>:up`, `:down`, 'reset'.
   const [refocus, setRefocus] = useState('');
   const claimed = useCallback(() => setRefocus(''), []);
-  const names = new Map<string, number>();
-  for (const { library } of rows) names.set(library.name, (names.get(library.name) ?? 0) + 1);
+  // From the server's list, so a library keeps its number when the viewer moves it.
+  const qualifiers = useMemo(() => libraryQualifiers(libraries ?? []), [libraries]);
   const back = () => (router.canGoBack() ? router.back() : router.replace('/'));
   const move = (id: string, step: -1 | 1) => {
     const to = rows.findIndex(row => row.library.id === id) + step;
@@ -50,10 +50,11 @@ export function LibrariesScreen() {
       : !libraries.length ? <Text style={styles.empty}>This server has no libraries to show yet.</Text> : null}
     <ScrollView style={styles.list} contentContainerStyle={styles.rows}>
       {rows.map(({ library, hidden }, index) => {
-        const shared = names.get(library.name)! > 1;
-        const detail = [shared ? library.kind : '', hidden ? 'Hidden' : ''].filter(Boolean).join(' · ');
-        // Two libraries with one name differ by their kind, on screen and in the button labels.
-        const named = shared ? `${library.name}, ${library.kind}` : library.name;
+        // Libraries with one name differ by their kind, and by their place in the server's list when
+        // the kind is the same too ("movies · 2"), on screen and in the button labels.
+        const qualifier = qualifiers.get(library.id);
+        const detail = [qualifier?.kind, qualifier?.position, hidden ? 'Hidden' : ''].filter(Boolean).join(' · ');
+        const named = qualifier ? `${library.name}, ${[qualifier.kind, qualifier.position].filter(Boolean).join(' ')}` : library.name;
         return <View key={library.id} testID={`library-row-${library.id}`} style={styles.row}>
           <View style={styles.name}>
             <Text style={[styles.nameText, hidden && styles.hidden]}>{library.name}</Text>

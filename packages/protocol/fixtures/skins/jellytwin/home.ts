@@ -329,7 +329,7 @@ const myMedia: Node = {
                 type: 'box',
                 style: row({ 'flex-shrink': '0' }),
                 children: [
-                  libraryTile({ action: 'live' }, [isLive, { test: 'env.canLive' }]),
+                  libraryTile({ action: 'live' }, [isLive, { test: 'nav.showLive' }]),
                   libraryTile({ action: 'library', arg: '{dest.id}' }, [not(isLive)]),
                 ],
               },

@@ -33,6 +33,30 @@ export function arrangeLibraries<T extends { id: string }>(libraries: T[], prefe
   return orderLibraries(libraries, preference).filter(item => !item.hidden).map(item => item.library);
 }
 
+/** What tells a library apart from others with its name: its kind when the name is shared across
+ * kinds, and also its one-based place among those with the same name and kind in the server's
+ * order (so it stays when the viewer moves rows). */
+export interface LibraryQualifier {
+  kind: string;
+  position?: number;
+}
+
+/** The qualifier of each library whose name another library in the server's list shares; a library
+ * with a name of its own has none. */
+export function libraryQualifiers(libraries: readonly { id: string; name: string; kind: string }[]): Map<string, LibraryQualifier> {
+  const byName = new Map<string, { id: string; kind: string }[]>();
+  for (const { id, name, kind } of libraries) byName.set(name, [...(byName.get(name) ?? []), { id, kind }]);
+  const qualifiers = new Map<string, LibraryQualifier>();
+  for (const shared of byName.values()) {
+    if (shared.length < 2) continue;
+    for (const { id, kind } of shared) {
+      const same = shared.filter(other => other.kind === kind);
+      qualifiers.set(id, same.length > 1 ? { kind, position: same.findIndex(other => other.id === id) + 1 } : { kind });
+    }
+  }
+  return qualifiers;
+}
+
 /** Move a library one place up (-1) or down (1) past the next library the server lists now;
  * libraries it no longer lists keep their places. At either end nothing changes. */
 export function moveLibrary(libraries: readonly { id: string }[], preference: LibraryOrder | undefined, id: string, step: -1 | 1): LibraryOrder {

@@ -61,8 +61,8 @@ export const libraryTab: Node = {
   when: [{ test: 'dest.more', not: true }],
 };
 
-// Live TV, when the server has it and no library already stands for it.
-const showLive: Node['when'] = [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }];
+// Live TV, when the navigation has it (nav.showLive) and no library already stands for it.
+const showLive: Node['when'] = [{ test: 'nav.showLive' }, { test: 'env.hasLiveLibrary', not: true }];
 const onHome: Node['when'] = [{ test: 'env.section', is: 'eq', value: 'home' }];
 const onLive: Node['when'] = [{ test: 'env.section', is: 'eq', value: 'live' }];
 
@@ -596,6 +596,21 @@ export const shell: Node = {
               ],
             },
             { type: 'icon', symbol: 'forward-chevron', style: { width: '16px', height: '16px', opacity: '0.6' } },
+          ],
+        },
+        {
+          type: 'box',
+          when: [{ test: 'env.canManageLibraries' }],
+          press: { action: 'manageLibraries' },
+          controlStates: false,
+          label: '{s:manageLibraries}',
+          testId: 'manage-libraries',
+          style: { ...sheetRow() },
+          focus: sheetFocus(),
+          hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' },
+          children: [
+            { type: 'icon', symbol: 'library', style: { width: '24px', height: '24px' } },
+            { type: 'text', text: '{s:manageLibraries}', style: { 'font-weight': '650' } },
           ],
         },
         { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },

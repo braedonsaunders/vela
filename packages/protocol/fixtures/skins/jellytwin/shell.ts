@@ -81,12 +81,12 @@ const moreTab: Node = {
             type: 'box',
             style: col(),
             children: [
-              moreRow('{dest.name}', onLive, { action: 'live' }, 'nav-more-{dest.id}', [isLive, { test: 'env.canLive' }]),
+              moreRow('{dest.name}', onLive, { action: 'live' }, 'nav-more-{dest.id}', [isLive, { test: 'nav.showLive' }]),
               moreRow('{dest.name}', { test: 'dest.on' }, { action: 'library', arg: '{dest.id}' }, 'nav-more-{dest.id}', [not(isLive)]),
             ],
           },
         },
-        moreRow('{s:liveTv}', onLive, { action: 'live' }, 'nav-more-live', [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore' }]),
+        moreRow('{s:liveTv}', onLive, { action: 'live' }, 'nav-more-live', [{ test: 'nav.showLive' }, { test: 'env.hasLiveLibrary', not: true }, { test: 'nav.liveMore' }]),
       ],
     },
   ],
@@ -119,7 +119,7 @@ const sections = (style: Style, below: Style, fit = false): Node => ({
         children: [
           tabNode('{dest.name}', onLive, { action: 'live' }, sectionBar, {
             testId: 'nav-{dest.name}',
-            when: [isLive, { test: 'env.canLive' }],
+            when: [isLive, { test: 'nav.showLive' }],
           }),
           tabNode('{dest.name}', { test: 'dest.on' }, { action: 'library', arg: '{dest.id}' }, sectionBar, {
             testId: 'nav-{dest.name}',
@@ -130,7 +130,7 @@ const sections = (style: Style, below: Style, fit = false): Node => ({
     },
     tabNode('{s:liveTv}', onLive, { action: 'live' }, sectionBar, {
       testId: 'nav-{s:liveTv}',
-      when: [{ test: 'env.canLive' }, { test: 'env.hasLiveLibrary', not: true }, ...(fit ? [{ test: 'nav.liveMore', not: true }] : [])],
+      when: [{ test: 'nav.showLive' }, { test: 'env.hasLiveLibrary', not: true }, ...(fit ? [{ test: 'nav.liveMore', not: true }] : [])],
     }),
     ...(fit ? [moreTab] : [{ type: 'box', style: { flex: '1' } } as Node]),
   ],
@@ -293,6 +293,17 @@ const userMenu: Node[] = [
         focus: { outline: 'auto', 'background-color': '$hover' },
         children: [glyph('sparkles', 20), { type: 'text', text: '{s:appearance}' }],
       },
+      {
+        type: 'box',
+        when: [{ test: 'env.canManageLibraries' }],
+        press: { action: 'manageLibraries' },
+        label: '{s:manageLibraries}',
+        testId: 'manage-libraries',
+        style: menuRow,
+        hover: { 'background-color': '$hover' },
+        focus: { outline: 'auto', 'background-color': '$hover' },
+        children: [glyph('library', 20), { type: 'text', text: '{s:manageLibraries}' }],
+      },
       { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
       { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
       {
@@ -413,7 +424,7 @@ const drawer: Node[] = [
           } as Node,
           {
             ...drawerHeading('{s:media}'),
-            when: [{ test: 'env.libraryCount', is: 'eq', value: '0' }, { test: 'env.canLive' }],
+            when: [{ test: 'env.libraryCount', is: 'eq', value: '0' }, { test: 'nav.showLive' }],
           } as Node,
           {
             type: 'repeat',
@@ -428,7 +439,7 @@ const drawer: Node[] = [
                   [jelly('live', 22)],
                   onLive,
                   { action: 'live' },
-                  [isLive, { test: 'env.canLive' }],
+                  [isLive, { test: 'nav.showLive' }],
                 ),
                 drawerItem(
                   'jt-drawer-{dest.id}',
@@ -442,7 +453,7 @@ const drawer: Node[] = [
             },
           },
           drawerItem('jt-drawer-live', '{s:liveTv}', [jelly('live', 22)], onLive, { action: 'live' }, [
-            { test: 'env.canLive' },
+            { test: 'nav.showLive' },
             { test: 'env.hasLiveLibrary', not: true },
           ]),
           drawerHeading('{s:user}'),
@@ -462,6 +473,9 @@ const drawer: Node[] = [
             { action: 'openPicker' },
             [{ test: 'env.skinCount', is: 'gt', value: '1' }],
           ),
+          drawerItem('jt-drawer-manage-libraries', '{s:manageLibraries}', [glyph('library', 22)], undefined, { action: 'manageLibraries' }, [
+            { test: 'env.canManageLibraries' },
+          ]),
           drawerItem('jt-drawer-signout', '{s:signOut}', [glyph('sign-out', 22)], undefined, {
             action: 'signOut',
           }),

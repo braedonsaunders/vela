@@ -7,7 +7,7 @@ import { aboutOf, searchView, type About, type Env, type RouteName } from '@vela
 import type { LiveView } from '@vela/skin/src/widgets/guide';
 import { waitForResumeSeason, detailSeason, selectedDetailSeason } from './detail-season';
 import { screenDestinationId, withScreens } from './plugin-screens';
-import { navigationOf } from './navigation';
+import { canManageLibraries, navigationOf } from './navigation';
 import type { ViewState } from './view-state';
 import { sameDestinations, sameFields } from './env-identity';
 
@@ -54,6 +54,7 @@ export function environment({ state, view, live, route, entry, library, width, s
     canLive: home.value?.liveAvailable ?? false,
     canPlaylists: home.value?.playlistsAvailable ?? false,
     canSwitchProfile: state.auth.phase === 'signed-in' && state.auth.plexHomeAvailable,
+    canManageLibraries: canManageLibraries(state.auth),
     width,
     home: home.value,
     heroIndex: home.value ? view.heroIndex % Math.max(1, home.value.hero.length) : 0,

@@ -7,7 +7,7 @@ import { episodePage } from '../../../episode-page';
 // from kids/assets/; licences in kids/licences/ (Nunito is OFL, the art is drawn for Vela).
 import type { BoxNode, Condition, Node, SkinDocument, Style } from '../../../skin';
 
-const version = '1.2.22';
+const version = '1.2.23';
 const art = (file: string) => `/vela/v0/appearance/skins/kids/${version}/${file}`;
 
 const rounded = '"Kids Nunito", ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Quicksand", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -159,6 +159,7 @@ const gate: Node = { type: 'box', when: [{ test: 'env.viewer' }, { test: 'flag:g
       ] },
       { ...menuRow({ action: 'switchProfile' }, '{s:switchProfile}', 'person', 'switch-profile'), when: [{ test: 'env.canSwitchProfile' }] },
       { ...menuRow({ action: 'playlists' }, 'Playlists', 'layers', 'kids-playlists'), when: [{ test: 'env.canPlaylists' }] },
+      { ...menuRow({ action: 'manageLibraries' }, '{s:manageLibraries}', 'library', 'kids-manage-libraries'), when: [{ test: 'env.canManageLibraries' }] },
       menuRow({ action: 'openPicker' }, '{s:changeLook}', 'sparkles', 'skin-picker'),
       { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
       { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
@@ -479,7 +480,7 @@ const title: Node = { type: 'box', style: { position: 'absolute', inset: '0px', 
 
 const calm = { keyframes: 'dissolve', duration: 220 };
 const kids: SkinDocument = {
-  schema: 1, renderer: 18, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
+  schema: 1, renderer: 21, id: 'kids', name: 'Kids', version, tagline: 'Big bright tiles, three simple ways in, and a grown-ups corner.',
   preview: art('preview.jpg'), swatches: ['#FFF8EE', '#1B2550', '#FFC93C', '#3FA9F5', '#FF6B57'],
   // Kids' cream, navy ink and a deep sky accent (readable as text on cream; the sun stays a fill),
   // for the routes it inherits (search, library, collection, sign-in).
@@ -502,7 +503,7 @@ const kids: SkinDocument = {
   strings: { en: {
     velaHome: 'Vela home', mainNav: 'Main', watch: 'Watch', more: 'More', moreWaysIn: 'More ways in', search: 'Search', grownUps: 'Grown-ups', tryAgain: 'Try again', close: 'Close',
     gateOne: 'What is 6 × 3?', gateTwo: 'And 14 − 8?', signedInAs: 'Watching as', changeLook: 'Change the look',
-    install: 'Install Vela', update: 'Update ready, reload', switchProfile: 'Switch profile', signOut: 'Sign out', backToWatching: 'Back to watching',
+    install: 'Install Vela', update: 'Update ready, reload', switchProfile: 'Switch profile', manageLibraries: 'Manage libraries', signOut: 'Sign out', backToWatching: 'Back to watching',
     moreInfo: 'More info', featured: 'Featured', back: 'Back', opening: 'Getting it ready…', failed: 'Oops, this one won’t open right now.',
     episodes: 'Episodes', seasons: 'Seasons', details: 'Details', behindStory: 'Behind the story', cast: 'Cast', extras: 'Extras', moreLikeThis: 'More like this',
   } },

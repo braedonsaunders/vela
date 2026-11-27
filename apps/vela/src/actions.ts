@@ -189,6 +189,9 @@ export function useDispatcher({ store, view, live, openPicker, openAddToPlaylist
       case 'playlists':
         actions.resetFlags();
         return router.push('/playlists');
+      case 'manageLibraries':
+        actions.resetFlags();
+        return router.push('/libraries');
       case 'addToPlaylist': {
         const [titleId, titleKind] = arg.split('|');
         if (titleId) openAddToPlaylist(titleId, titleKind || undefined);

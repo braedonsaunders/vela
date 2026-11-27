@@ -107,7 +107,7 @@ const library = (full: boolean): Node[] => [
     glyph('live', 22),
     is('env.section', 'live'),
     { action: 'live' },
-    [is('dest.kind', 'live'), set('env.canLive')],
+    [is('dest.kind', 'live'), set('nav.showLive')],
     'nav-{dest.name}',
   ),
   navRow(
@@ -187,7 +187,7 @@ const destinations = (full: boolean, extra: Style = {}): Node => {
         },
       },
       navRow(full, '{s:live}', glyph('live', 22), is('env.section', 'live'), { action: 'live' }, [
-        set('env.canLive'),
+        set('nav.showLive'),
         unset('env.hasLiveLibrary'),
       ]),
     ],
@@ -370,7 +370,7 @@ const topBar: Node = {
 const menuRow = (
   text: string,
   icon: Node,
-  press: { action: 'openPicker' | 'signOut' },
+  press: { action: 'openPicker' | 'manageLibraries' | 'signOut' },
   extra: Partial<Node> = {},
 ): Node =>
   ({
@@ -447,6 +447,10 @@ const accountMenu: Node = {
       testId: 'skin-picker',
       when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
       a11y: { haspopup: 'dialog' },
+    } as Partial<Node>),
+    menuRow('{s:manageLibraries}', glyph('rows', 18), { action: 'manageLibraries' }, {
+      testId: 'manage-libraries',
+      when: [set('env.canManageLibraries')],
     } as Partial<Node>),
     {
       type: 'box',
