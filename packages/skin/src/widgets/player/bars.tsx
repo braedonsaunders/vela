@@ -3,7 +3,7 @@
 // the clock, then icon transport and the screening controls with their menus). Both slide
 // and fade with the chrome's visibility.
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMemo, useRef, type ComponentRef, type ReactNode } from 'react';
+import { memo, useMemo, useRef, type ComponentRef, type ReactNode } from 'react';
 import { Platform, Text, View, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { msg, time } from '@vela/core';
@@ -18,6 +18,7 @@ import { PHONE_CONTROL_GAP, PHONE_PLAY_WIDTH } from './phone-layout';
 import { MenuAction, MenuPanel } from './menu';
 import { AudioMenu, qualityMenuRows, SleepMenu, SpeedMenu, SubtitlesMenu, type MenuName } from './menus';
 import type { PlayerView } from './present';
+import { sameControls } from './steady-controls';
 import { Scrubber } from './scrubber';
 import { Volume } from './volume';
 import type { Focusable } from '../../escape';
@@ -68,7 +69,8 @@ interface TopProps {
   onClose(): void;
 }
 
-export function TopBar({ look, title, visible, bleed, onClose }: TopProps) {
+/** Drawn again only when its props change (not for the clock). */
+export const TopBar = memo(function TopBar({ look, title, visible, bleed, onClose }: TopProps) {
   const fade = look.small ? (look.short ? 44 : 72) : look.size(140);
   // The same style object while nothing changes: Reanimated compares and re-applies a new one each redraw.
   const shown = useMemo(() => shownStyle(look, visible, -14), [look, visible]);
@@ -119,7 +121,7 @@ export function TopBar({ look, title, visible, bleed, onClose }: TopProps) {
       </FocusZone>
     </Animated.View>
   );
-}
+});
 
 interface BottomProps {
   look: PlayerLook;
@@ -196,7 +198,7 @@ export function BottomBar(props: BottomProps) {
           ) : (
             <Timeline {...props} />
           )}
-          <Controls {...props} />
+          <SteadyControls {...props} />
         </View>
       </FocusZone>
     </Animated.View>
@@ -259,6 +261,8 @@ function LiveTimeline({ look, state, view, blocked, seek, onActive, visible, rev
     </View>
   );
 }
+
+const SteadyControls = memo(Controls, sameControls);
 
 function Controls(props: BottomProps) {
   const {

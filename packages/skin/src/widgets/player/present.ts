@@ -514,6 +514,20 @@ const subtitleOptions = lastFor((planned: AnyTrack[], observed: AnyTrack[]) => t
 const qualityOptions = lastFor((plan: PlaybackPlan | null, path: Path | undefined, renditions: Snapshot['renditions'] | undefined,
   unplayable: Snapshot['unplayablePaths']) => qualities(plan, path, { renditions, unplayablePaths: unplayable } as Snapshot));
 const formatOf = lastFor((format: Snapshot['format']) => formatLines(format));
+const chapterMarks = lastFor((chapters: PlaybackPlan['chapters'] | undefined, duration: number): ChapterMark[] => (chapters ?? []).map(c => ({
+  id: c.id,
+  name: c.name,
+  seconds: c.startSeconds,
+  at: duration > 0 ? Math.min(1, c.startSeconds / duration) : 0,
+})));
+const outputChoices = lastFor((available: string[] | undefined, preferences: Record<string, string> | undefined) =>
+  (available ?? []).flatMap(name => {
+    const value = preferences?.[name];
+    return value ? [{ name, value }] : [];
+  }));
+const subtitleLookOf = lastFor((available: boolean | undefined, style: Snapshot['subtitleStyle'] | undefined): SubtitleLook | null =>
+  available && style ? { size: style.subtitleSize, background: style.subtitleBackground, color: style.subtitleColor, position: style.subtitlePosition } : null);
+const serverStreamOf = lastFor((choice: string, selected: boolean) => ({ choice, selected }));
 const NO_TRACKS: AnyTrack[] = [];
 
 export function present(plan: PlaybackPlan | null, own: Snapshot | null): PlayerView {
@@ -560,19 +574,11 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     subtitleId: snapshot ? (snapshot.subtitleTrackId ?? '') : (plan?.selectedSubtitleTrackId ?? ''),
     pendingSubtitleId: snapshot?.pendingSubtitleTrackId ?? '',
     subtitleError: snapshot?.subtitleError ?? '',
-    subtitleLook:
-      snapshot?.subtitleStyleAvailable && style
-        ? {
-            size: style.subtitleSize,
-            background: style.subtitleBackground,
-            color: style.subtitleColor,
-            position: style.subtitlePosition,
-          }
-        : null,
+    subtitleLook: subtitleLookOf(snapshot?.subtitleStyleAvailable, style),
     subtitleOffset: style && Number.isFinite(style.offsetSeconds) ? style.offsetSeconds : null,
     // Of the report, only its renditions and unplayable paths make the rows.
     qualities: qualityOptions(plan, path, snapshot?.renditions, snapshot?.unplayablePaths),
-    serverStream: unnamed ? { choice: `path:${unnamed.id}`, selected: path?.id === unnamed.id } : undefined,
+    serverStream: unnamed ? serverStreamOf(`path:${unnamed.id}`, path?.id === unnamed.id) : undefined,
     qualityAuto: rendition && Math.max(path?.qualities.length ?? 0, snapshot?.renditions?.length ?? 0) > 1,
     lockedQuality: lockedQuality(snapshot, path),
     qualityId: snapshot?.renditions?.some(q => q.id === snapshot.renditionId) || path?.qualities.some(q => q.id === snapshot?.renditionId)
@@ -584,18 +590,10 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     path: snapshot?.strategy || path?.kind ? msg(`data.${snapshot?.strategy ?? path?.kind}`) : '',
     playingLabel: playing?.label ?? '',
     playingVersionId: playing ? playing.versionId : undefined,
-    chapters: (plan?.chapters ?? []).map(c => ({
-      id: c.id,
-      name: c.name,
-      seconds: c.startSeconds,
-      at: duration > 0 ? Math.min(1, c.startSeconds / duration) : 0,
-    })),
+    chapters: chapterMarks(plan?.chapters, duration),
     stats: facts,
     format: formatOf(snapshot?.format),
-    output: (snapshot?.outputPreferencesAvailable ?? []).flatMap(name => {
-      const value = snapshot?.outputPreferences?.[name];
-      return value ? [{ name, value }] : [];
-    }),
+    output: outputChoices(snapshot?.outputPreferencesAvailable, snapshot?.outputPreferences),
     pip: snapshot?.capabilities.pip ?? false,
     fullscreen: snapshot?.capabilities.fullscreen ?? false,
     reason: snapshot?.failure?.message ?? '',

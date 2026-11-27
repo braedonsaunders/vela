@@ -41,6 +41,16 @@ const ANDROID_TV = Platform.OS === 'android' && Platform.isTV;
 const POINTER_CLICKS = Platform.OS === 'web' && typeof window !== 'undefined'
   && typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
+/** Callbacks that keep their identity across redraws and call the latest closure: the controls skip a
+ * redraw that only moved the clock (bars.tsx sameControls), which a new callback each time would defeat. */
+function useSteady<T extends Record<string, (...args: never[]) => unknown>>(handlers: T): T {
+  const latest = useRef(handlers);
+  latest.current = handlers;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => Object.fromEntries(Object.keys(handlers).map(key =>
+    [key, (...args: never[]) => latest.current[key]!(...args)])) as T, []);
+}
+
 /** Draws nothing outside a watch route (the route provides the chrome's state). */
 export function PlayerChrome() {
   return <WatchPlayerChrome />;
@@ -165,7 +175,8 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
   });
   // A `toggle` overlay's switch is the chrome's ticker button (the others are in the subtitles menu).
   const toggleSwitch = surfaces.switches.find(s => s.button);
-  const overlay: TickerToggle = { available: !!toggleSwitch, ticker: toggleSwitch?.on ?? false, toggleTicker: () => toggleSwitch?.toggle(), label: toggleSwitch?.label ?? '' };
+  const overlay: TickerToggle = useMemo(() => ({ available: !!toggleSwitch, ticker: toggleSwitch?.on ?? false,
+    toggleTicker: () => toggleSwitch?.toggle(), label: toggleSwitch?.label ?? '' }), [toggleSwitch]);
   // No screensaver or display sleep over a playing film (web and desktop; native players hold it themselves).
   useScreenAwake(view.playing);
   const { send } = state;
@@ -349,7 +360,13 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
     return () => clearTimeout(timer);
   }, [opened, hasPanel, look.still]);
   // Fade across the whole picture, including the area under side insets or a book's other pane.
-  const bleed = look.small ? { left: -frame.left, right: -frame.right } : undefined;
+  const bleed = useMemo(() => (look.small ? { left: -frame.left, right: -frame.right } : undefined), [look.small, frame.left, frame.right]);
+  const steady = useSteady({
+    stepFrom: recentStep, seek, seekBy, toggle, toggleInfo, closeMenu: () => setOpened(null),
+    onMenuLayout: (width: number, height: number) => setMenuLayout(previous =>
+      previous?.menu === opened && previous.width === width && previous.height === height
+        ? previous : { menu: opened, width, height }),
+  });
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="player-chrome">
       {/* On TV remove the picture's focus destination on reveal, rather than leaving a
@@ -386,23 +403,21 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
           view={view}
           visible={idle.visible && !failed}
           reveal={reveal}
-          stepFrom={recentStep}
+          stepFrom={steady.stepFrom}
           blocked={blocked}
           opened={opened}
           presentPanel={!hasPanel || presentedMenu === opened}
           info={info}
           menuHeight={menuHeight}
           onRowLayout={setRowHeight}
-          onMenuLayout={(width, height) => setMenuLayout(previous =>
-            previous?.menu === opened && previous.width === width && previous.height === height
-              ? previous : { menu: opened, width, height })}
+          onMenuLayout={steady.onMenuLayout}
           bleed={bleed}
           send={send}
-          seek={seek}
-          seekBy={seekBy}
-          toggle={toggle}
-          closeMenu={() => setOpened(null)}
-          toggleInfo={toggleInfo}
+          seek={steady.seek}
+          seekBy={steady.seekBy}
+          toggle={steady.toggle}
+          closeMenu={steady.closeMenu}
+          toggleInfo={steady.toggleInfo}
           onActive={setActive}
           live={live}
           overlay={overlay}
