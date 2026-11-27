@@ -994,13 +994,16 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
     const y = e.clientY ?? e.nativeEvent?.clientY ?? e.nativeEvent?.pageY ?? 0;
     setCardMenu({ mode: 'pointer', anchor: { kind: 'point', point: { x, y } } });
   }, [cardPrimary?.action, cardPrimary?.arg]);
-  useFocusedTVKeys(ui.focus && !!cardPrimary, event => {
+  const tvMenuOpen = Platform.isTV && cardMenu !== null && !!cardPrimary;
+  // The TV modal can take focus in a separate window without blurring the opener.
+  const cardUi = tvMenuOpen ? { hover: false, focus: false, active: false } : ui;
+  useFocusedTVKeys(cardUi.focus && !!cardPrimary, event => {
     if (!cardPrimary) return;
     // Android TV's Menu key opens the card's menu; tvOS's Menu is Back (it reaches here while anything
     // holds Back, a section's root included), so there only a long select does.
     if (event.eventType === 'longSelect' || (event.eventType === 'menu' && Platform.OS !== 'ios')) openAnchoredMenu('tv');
   });
-  const rows = rowsFor(node, ctx, env, ui, parentGroup, disabled);
+  const rows = rowsFor(node, ctx, env, cardUi, parentGroup, disabled);
   const { own, inherited } = split(rows);
   const text = inheritFrom(parentText, inherited, viewport);
   const parentDirection = useContext(Direction);
@@ -1021,7 +1024,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   const report = useCallback((kind: 'hover' | 'focus', on: boolean) => {
     setGroupUi(g => (g[kind] === on ? g : { ...g, [kind]: on }));
   }, []);
-  const groupValue = useMemo<GroupState | null>(() => (node.group ? { ...groupUi, report } : parentGroup), [node.group, groupUi, report, parentGroup]);
+  const groupValue = useMemo<GroupState | null>(() => (node.group ? { ...(tvMenuOpen ? { hover: false, focus: false } : groupUi), report } : parentGroup), [node.group, groupUi, report, parentGroup, tvMenuOpen]);
   const set = (kind: keyof Interaction, on: boolean) => {
     setUi(u => (u[kind] === on ? u : { ...u, [kind]: on }));
     if (kind !== 'active') groupValue?.report(kind, on);
@@ -1076,7 +1079,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   // A focused control always shows it, but in its document's own focus look where it has one (a
   // card's lift, a button's fill): the shared ring is only for controls the document left without.
   // A stop the document marks (an About line) is a line of text: its ring goes around it.
-  const focusRing = ui.focus && (!!node.press || stop) && !focusLook(node) ? focusStyle(style.transform, env.still, !node.press && marked) : undefined;
+  const focusRing = cardUi.focus && (!!node.press || stop) && !focusLook(node) ? focusStyle(style.transform, env.still, !node.press && marked) : undefined;
   const vertical = !!route || (!!fx.scrollY && !fx.scrollX);
   const stops = Platform.isTV && vertical ? readingStops(node) : undefined;
   const children = node.children.map((child, i) => stops?.has(i)
