@@ -1,3 +1,4 @@
+import { titleRatings } from '../title-ratings';
 import { episodePage } from '../../../episode-page';
 // Index: a quiet printed catalogue (light paper, serif type, plain lists), as a skin
 // document (protocol/v0/skin.ts). It reproduces the compiled Index element for element:
@@ -11,7 +12,7 @@ import { episodePage } from '../../../episode-page';
 import type { Condition, Node, ProfileMenuLook, SkinDocument, Style } from '../../../skin';
 
 const id = 'index';
-const version = '1.0.16';
+const version = '1.0.17';
 const asset = (file: string) => `/vela/v0/appearance/skins/${id}/${version}/${file}`;
 const serif = 'Georgia, serif';
 /** A rule under a box (and nothing on its other sides). */
@@ -1155,6 +1156,7 @@ const detail: Node = {
             },
             { type: 'use', template: 'velaEpisodeContext' },
             { type: 'text', text: '{detail.facts}', style: { 'font-size': '13px' } },
+            titleRatings('$ui.inkSecondary'),
             { type: 'use', template: 'velaSummary', style: { 'font-size': '16px', 'line-height': '1.6' } },
             { type: 'box', style: { 'flex-direction': 'row', 'flex-wrap': 'wrap', 'align-items': 'center', gap: '10px' }, children: [
               playButton('{s:resume}', [{ test: 'detail.canPlay' }, { test: 'detail.hasResume' }]),
@@ -1276,7 +1278,7 @@ const title: Node = {
 
 export default {
   schema: 1,
-  renderer: 22,
+  renderer: 23,
   status: true,
   id,
   name: 'Index',

@@ -298,7 +298,26 @@ function updateFeedback(g: Grant, id: string, body: Partial<V.WatchRequest>) {
   feedback.set(g.viewer.id, titles);
   feedChanged();
 }
+const titleRatings: Partial<Record<string, V.TitleRating[]>> = {
+  'title-1-1': [
+    { source: 'tomatoes', kind: 'critic', value: 92, scale: 100, state: 'fresh' },
+    { source: 'popcorn', kind: 'audience', value: 87, scale: 100, state: 'upright' },
+    { source: 'imdb', kind: 'audience', value: 7.8, scale: 10 },
+    { source: 'metacritic', kind: 'critic', value: 83, scale: 100 },
+    { source: 'tmdb', kind: 'audience', value: 8.1, scale: 10 },
+    { source: 'letterboxd', kind: 'audience', value: 4.2, scale: 5 },
+  ],
+  'title-1-2': [
+    { source: 'tomatoes', kind: 'critic', value: 35, scale: 100, state: 'rotten' },
+    { source: 'tmdb', kind: 'audience', value: 6.3, scale: 10 },
+  ],
+  'title-1-3': [
+    { source: 'tomatoes', kind: 'critic', value: 96, scale: 100, state: 'certified' },
+  ],
+};
 const present = (g: Grant, title: V.Title): V.Title => {
+  const ratings = titleRatings[title.id];
+  if (ratings) title = { ...title, ratings };
   const value = title.media ? withReading(g.viewer.id, levelsEnabled || !title.media.childCounts ? title : withoutLevels(title)) : title;
   return capabilities.features.notInterested?.available ? { ...value, watch: {
     positionSeconds: 0, played: false, favorite: false, watchlisted: false, ...value.watch, ...titleFeedback(g, value.id),

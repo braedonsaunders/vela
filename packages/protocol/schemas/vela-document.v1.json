@@ -3460,12 +3460,12 @@
       "type": "object"
     },
     "Renderer": {
-      "const": 22,
+      "const": 23,
       "description": "The RENDERER_VERSION this schema describes."
     },
     "RepeatNode": {
       "additionalProperties": false,
-      "description": "Repeat a template over a collection from the vocabulary (`home.rows`, `row.items`, `home.heroes`, `nav.destinations`).",
+      "description": "Repeat a template over a collection from the vocabulary (`home.rows`, `row.items`, `home.heroes`, `nav.destinations`).\nRenderer 23 adds `detail.ratings`, with `rating.source`, `rating.label`, `rating.value`, `rating.score` and `rating.state`.",
       "properties": {
         "a11y": {
           "additionalProperties": false,

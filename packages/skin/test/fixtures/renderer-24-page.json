@@ -1,5 +1,5 @@
 {
-  "schema": 1, "kind": "screen", "renderer": 23, "owner": "vela", "experience": "listen",
+  "schema": 1, "kind": "screen", "renderer": 24, "owner": "vela", "experience": "listen",
   "screen": "listen", "page": "album", "version": "1", "title": "Album", "presentation": "section",
   "sources": { "album": { "from": "vela.title", "id": "{param.id}" } },
   "tree": { "type": "sections", "children": [

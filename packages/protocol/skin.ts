@@ -165,7 +165,8 @@ export interface Breakpoints { below?: Record<string, Style>; above?: Record<str
 export interface ImageNode extends NodeBase { type: 'image'; src: Template; alt?: Template; /** Fade in once loaded. */ fade?: boolean;
   /** Renderer 19: drawn instead when the source is empty, refused or fails to load. */ fallback?: Node }
 export interface IconNode extends NodeBase { type: 'icon'; /** A platform symbol, */ symbol?: string; /** or the document's own glyph: SVG path data (up to 8) painted in currentColor. */ paths?: string[]; viewBox?: string; fillRule?: 'nonzero' | 'evenodd' }
-/** Repeat a template over a collection from the vocabulary (`home.rows`, `row.items`, `home.heroes`, `nav.destinations`). */
+/** Repeat a template over a collection from the vocabulary (`home.rows`, `row.items`, `home.heroes`, `nav.destinations`).
+ * Renderer 23 adds `detail.ratings`, with `rating.source`, `rating.label`, `rating.value`, `rating.score` and `rating.state`. */
 export interface RepeatNode extends NodeBase { type: 'repeat'; over: string; limit?: number; item: Node;
   /** Renderer 19 (screens): the item's name (`{game.sides.0.score}`), an offset, a record key left out
    *  before `limit`, an identity template, and a time filter (only items whose `at` <= `time`). */

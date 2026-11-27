@@ -1,3 +1,4 @@
+import { titleRatings } from '../title-ratings';
 // The title page: backdrop, poster, facts and actions, then seasons, episodes, extras, cast and related rows.
 import type { Condition, Node, Style } from '../../../skin';
 import {
@@ -254,6 +255,7 @@ const titleTop: Node = {
                 },
               ],
             },
+            titleRatings('$ink-strong'),
             {
               type: 'box',
               style: row({

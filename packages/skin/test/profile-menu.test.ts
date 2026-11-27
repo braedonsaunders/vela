@@ -190,9 +190,9 @@ describe('every built-in skin', () => {
   });
 
   for (const [name, doc] of documents) {
-    test(`${name} declares renderer 22 or draws the base's menu`, () => {
+    test(`${name} declares at least renderer 22 or draws the base's menu`, () => {
       const own = doc.slots?.shell;
-      if (own) expect(doc.renderer).toBe(22);
+      if (own) expect(doc.renderer).toBeGreaterThanOrEqual(22);
     });
 
     test(`${name}'s menu offers every app entry once on each surface, on phones, desktops and TVs`, () => {
