@@ -48,7 +48,7 @@ async function plexRequest(origin: string, path: string, body: object, allowSele
   });
   if (!response.ok) {
     // Do not echo upstream bodies: neither a Plex credential nor an internal diagnostic is UI text.
-    if (response.status === 403) throw new Error(path.endsWith('/profile') ? 'This Plex Home profile is not available on this server.' : 'Ask the server owner to share this server with your Plex account.');
+    if (response.status === 403) throw new Error(path.endsWith('/profile') ? 'This Plex Home profile is not available on this server.' : 'This Plex account doesn\'t have access to this server. Sign in with the Plex account that owns it, or ask its owner to share it with you.');
     if (response.status === 401) throw new Error(path.endsWith('/profile') ? 'That Plex Home PIN was not accepted.' : 'This Plex account could not sign in to Ether. Link Plex again.');
     if (response.status === 429) throw new Error('Too many sign-in attempts. Wait before trying again.');
     if (response.status === 503) throw new Error('Plex is temporarily unavailable. Wait before trying again.');
