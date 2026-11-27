@@ -130,12 +130,13 @@ test('persists a movie, resumes a partial, plays offline, replays progress and d
       await visible(row.getByText(/ · [1-9]\d*%$/));
       await evidence(page, 'progress', release);
       await visible(row.getByText(/^Paused · /), 45_000);
+      // Listen before lifting the fault: core may resume an interrupted transfer by itself as soon as
+      // the network is healthy again, before the Resume press below lands.
+      const resumedResponse = page.waitForResponse(response => ticket.test(response.url()), { timeout: 45_000 });
       await admin(page, '/__admin/faults', 'POST', { bandwidthBps: 0 });
-
-      const [resumed] = await Promise.all([
-        page.waitForResponse(response => ticket.test(response.url())),
-        row.getByRole('button', { name: 'Resume', exact: true }).press('Enter'),
-      ]);
+      const resume = row.getByRole('button', { name: 'Resume', exact: true });
+      if (await resume.isVisible()) await resume.press('Enter').catch(() => undefined);
+      const resumed = await resumedResponse;
       expect(resumed.status()).toBe(206);
       expect(resumed.headers()['content-range']).toMatch(/^bytes [1-9]\d*-\d+\/\d+$/);
       const play = row.getByRole('button', { name: 'Play', exact: true });
