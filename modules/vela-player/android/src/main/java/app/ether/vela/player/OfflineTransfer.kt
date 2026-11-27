@@ -85,7 +85,7 @@ internal sealed class TransferOutcome {
     val posterPath: String?, val sidecarPaths: Map<String, String>) : TransferOutcome()
   class Failed(val code: String, val message: String, val bytesWritten: Long, val neededBytes: Long? = null) : TransferOutcome()
   /** A transient failure (connection, timeout, 5xx, a short body): try again after a backoff. */
-  class Retry(val bytesWritten: Long, val progressed: Boolean) : TransferOutcome()
+  class Retry(val bytesWritten: Long, val progressed: Boolean, val reason: String = "") : TransferOutcome()
   /** Paused, removed or stopped for the network: the caller decides what it reports. */
   class Cancelled(val bytesWritten: Long) : TransferOutcome()
 }
@@ -218,7 +218,7 @@ internal class OfflineTransfer(
     } catch (error: RedirectRefused) {
       return TransferOutcome.Failed("network", "The server sent the download to another address", start)
     } catch (error: Exception) {
-      return if (cancelled) TransferOutcome.Cancelled(start) else TransferOutcome.Retry(start, false)
+      return if (cancelled) TransferOutcome.Cancelled(start) else TransferOutcome.Retry(start, false, "connect ${error.javaClass.simpleName}")
     }
     try {
       val status = response.responseCode
@@ -235,7 +235,7 @@ internal class OfflineTransfer(
           if (changed) {
             // A different file or a range we did not ask for: start over on the next attempt.
             reset()
-            return TransferOutcome.Retry(0, false)
+            return TransferOutcome.Retry(0, false, "range changed")
           }
           offset = start
           total = range!!.second ?: pinned?.total
@@ -251,9 +251,9 @@ internal class OfflineTransfer(
         status == 416 && start > 0 -> {
           if (pinned?.total == start) return finish(start, pinned.etag, pinned.lastModified)
           reset()
-          return TransferOutcome.Retry(0, false)
+          return TransferOutcome.Retry(0, false, "HTTP 416")
         }
-        DownloadRules.transient(status) -> return TransferOutcome.Retry(start, false)
+        DownloadRules.transient(status) -> return TransferOutcome.Retry(start, false, "HTTP $status")
         else -> {
           val (code, message) = DownloadRules.httpFailure(status)
           return TransferOutcome.Failed(code, message, start)
@@ -278,7 +278,7 @@ internal class OfflineTransfer(
           while (true) {
             if (cancelled) return TransferOutcome.Cancelled(written)
             val count = try { input.read(buffer) } catch (error: IOException) {
-              return if (cancelled) TransferOutcome.Cancelled(written) else TransferOutcome.Retry(written, written > offset)
+              return if (cancelled) TransferOutcome.Cancelled(written) else TransferOutcome.Retry(written, written > offset, "read ${error.javaClass.simpleName}")
             }
             if (count < 0) break
             try { output.write(buffer, 0, count) } catch (error: IOException) {
@@ -306,10 +306,10 @@ internal class OfflineTransfer(
           return TransferOutcome.Failed("no_space", "Not enough free storage space to finish downloading", written,
             expected?.let { it - written }?.takeIf { it > 0 })
         }
-        return if (cancelled) TransferOutcome.Cancelled(written) else TransferOutcome.Retry(written, written > offset)
+        return if (cancelled) TransferOutcome.Cancelled(written) else TransferOutcome.Retry(written, written > offset, "write ${error.javaClass.simpleName}")
       }
       if (cancelled) return TransferOutcome.Cancelled(written)
-      if (expected != null && written < expected) return TransferOutcome.Retry(written, written > offset)
+      if (expected != null && written < expected) return TransferOutcome.Retry(written, written > offset, "short body")
       return finish(written, responseTag ?: pinned?.etag, lastModified ?: pinned?.lastModified)
     } finally {
       response.disconnect()

@@ -340,6 +340,7 @@ internal object OfflineDownloads {
             })
           }
           is TransferOutcome.Failed -> {
+            Log.i("vela-downloads", "transfer failed: ${outcome.code}")
             queue.remove(request.key)
             report(request.key, buildMap {
               put("status", "failed")
@@ -354,6 +355,8 @@ internal object OfflineDownloads {
           }
           is TransferOutcome.Retry -> {
             failures = if (outcome.progressed) 1 else failures + 1
+            // Status and exception class only: never a URL or a header.
+            Log.i("vela-downloads", "attempt ended (${outcome.reason}); failures $failures")
             if (failures > MAX_FAILURES) {
               queue.remove(request.key)
               report(request.key, mapOf("status" to "failed", "bytesWritten" to outcome.bytesWritten, "byteLength" to request.byteLength,
