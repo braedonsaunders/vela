@@ -1192,7 +1192,10 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         && pinOpeningScroll(opened.current, Date.now(), openingMoved.current || viewerPressedSince(opened.current) || viewerScrolledSince(opened.current));
       if (pin) {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
-        if (web) (e.currentTarget as unknown as HTMLElement).scrollTop = 0;
+        // react-native-web may hand over a scroll event without its currentTarget; the element the
+        // event came from is then its target.
+        const element = (e.currentTarget ?? e.target) as unknown as HTMLElement | null | undefined;
+        if (web && element) element.scrollTop = 0;
       } else trackScroll?.(e);
     } : trackScroll;
     if (rowScroll) content = <RowScroll.Provider value={rowScroll}>{content}</RowScroll.Provider>;
