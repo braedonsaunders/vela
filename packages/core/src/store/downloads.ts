@@ -717,8 +717,6 @@ export class Downloads {
     const { serverId, viewerId, phase } = this.box.get().auth;
     const enteredOnline = phase === 'signed-in' && this.lastAuthPhase !== phase;
     this.lastAuthPhase = phase;
-    if (enteredOnline && this.state.outbox.length) void this.replayProgress();
-    if (enteredOnline && this.state.hydrated) void this.resumeInterrupted();
     if (serverId && viewerId && (phase === 'signed-in' || phase === 'offline')) {
       const changed = this.activeViewer?.serverId !== serverId || this.activeViewer?.viewerId !== viewerId;
       this.activeViewer = { serverId, viewerId };
@@ -726,6 +724,9 @@ export class Downloads {
     } else if (phase === 'signed-out') {
       this.syncVisible();
     }
+    // After the visible list follows the viewer: hydration may have finished before sign-in did.
+    if (enteredOnline && this.state.outbox.length) void this.replayProgress();
+    if (enteredOnline && this.state.hydrated) void this.resumeInterrupted();
   }
 
   private syncVisible(): void {
@@ -1181,8 +1182,10 @@ export class Downloads {
     return this.resuming ??= (async () => {
       const tried = new Set<string>();
       for (;;) {
-        if (this.box.get().auth.phase !== 'signed-in') return;
-        const next = this.state.items.find(item => autoResumable(item) && !tried.has(item.titleId));
+        const { phase, serverId, viewerId } = this.box.get().auth;
+        if (phase !== 'signed-in') return;
+        const next = visibleDownloads(this.state.allItems, serverId, viewerId)
+          .find(item => autoResumable(item) && !tried.has(item.titleId));
         if (!next) return;
         tried.add(next.titleId);
         await this.resume(next.titleId).catch(() => false);

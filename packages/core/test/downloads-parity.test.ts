@@ -253,6 +253,20 @@ describe('interrupted transfers resume with fresh credentials', () => {
     expect(h.downloads.item('102')?.status).toBe('paused');
   });
 
+  test('a transfer interrupted by quitting resumes on relaunch when hydration finishes before sign-in', async () => {
+    const port = new Port();
+    port.snapshot.items = [record({ status: 'paused', errorCode: 'interrupted', bytesWritten: 1 * GB, etag: '"e"', sourceId: 'part-9' })];
+    const h = harness(port, 'offline');
+    // Launch: no viewer known yet while the index loads.
+    h.box.update('auth', auth => ({ ...auth, phase: 'signed-out', serverId: '', viewerId: '' }));
+    await h.downloads.hydrate();
+    await settle();
+    expect(h.box.get().downloads.items).toEqual([]);
+    h.box.update('auth', auth => ({ ...auth, phase: 'signed-in', serverId: 'srv', viewerId: 'viewer-1' }));
+    await settle();
+    expect(port.resumed.map(request => request.titleId)).toEqual(['101']);
+  });
+
   test('a transfer the server now refuses stays put rather than retrying forever', async () => {
     const port = new Port();
     port.snapshot.items = [record({ status: 'paused', errorCode: 'interrupted', bytesWritten: 1 * GB })];
