@@ -1,7 +1,7 @@
 /** Original procedural landscapes; no external art or font dependencies. */
 export function renderArtwork(id: string, kind: string, width: number): string {
   const seed = Number(Bun.hash(id) % 100000n), wide = kind !== 'poster';
-  const w = 960, h = wide ? 540 : 1440, height = Math.round(width * h / w);
+  const w = 960, h = id.startsWith('square-collection-') ? w : wide ? 540 : 1440, height = Math.round(width * h / w);
   const theme = seed % 4, hue = [208, 26, 174, 253][theme], light = seed % 2 ? '#efc992' : '#b2d4dc';
   const skyline = Array.from({ length: 14 }, (_, i) => { const x = i * 78 - 30, y = h * .62 - ((seed + i * 97) % 160); return `<rect x="${x}" y="${y}" width="${42 + i % 3 * 15}" height="${h - y}" fill="hsl(${hue},23%,${9 + i % 3 * 3}%)"/><path d="M${x + 10} ${y + 20}v45m15-45v45" stroke="${light}" stroke-width="3" opacity=".18"/>`; }).join('');
   const landscape = theme === 3 ? skyline : `<path d="M-50 ${h * .68}L165 ${h * .31} 330 ${h * .57} 565 ${h * .23} 850 ${h * .65} 1010 ${h * .49}V${h}H-50Z" fill="hsl(${hue},22%,18%)"/><path d="M165 ${h * .31}l-67 ${h * .14} 70-${h * .06} 65 ${h * .05}Z M565 ${h * .23}l-74 ${h * .11} 80-${h * .04} 45 ${h * .07}Z" fill="${light}" opacity=".22"/>`;

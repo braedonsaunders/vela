@@ -184,12 +184,6 @@ const phoneShapes = {
   velaCardTile: { width: 112, aspect: [1, 1] },
 } as const satisfies Record<string, CardShape>;
 const aspectOf = (shape: CardShape) => `${shape.aspect[0]} / ${shape.aspect[1]}`;
-// A row card's art height on a phone; any other template is sized as the poster.
-const smallArt = (template: string): number => {
-  const shape: CardShape = Object.hasOwn(phoneShapes, template) ? phoneShapes[template as keyof typeof phoneShapes] : phoneShapes.velaCard;
-  return shape.width * shape.aspect[1] / shape.aspect[0];
-};
-
 export const card: Node = {
   type: 'box',
   group: true,
@@ -373,15 +367,19 @@ export const numeral = (ten: boolean, art: number): Node => ({
     'padding-bottom': '52px',
     'flex-shrink': '0',
   },
-  small: {
+  small: compactNumeral(art),
+});
+
+function compactNumeral(art: number): Style {
+  return {
     'font-size': `${Math.round(art * 1.12)}px`,
     'text-shadow': '0px 0px 3px color-mix(in srgb, $ui.ink 88%, $ui.page)',
     'margin-right': `${Math.round(art * -0.15)}px`,
     'align-self': 'flex-start',
     'padding-top': `${Math.round(art * 0.08)}px`,
     'padding-bottom': `${Math.round(art * 0.08)}px`,
-  },
-});
+  };
+}
 const rowItemStyle = (layer: string): Style => ({
   position: 'relative',
   display: 'flex',
@@ -389,6 +387,21 @@ const rowItemStyle = (layer: string): Style => ({
   'align-items': 'flex-end',
   'z-index': layer,
 });
+/** The compact rank follows the rendered artwork height, including an explicit row shape. */
+function rowNumerals(template: string): Node[] {
+  const { width, aspect } = phoneShapes[template as keyof typeof phoneShapes] ?? phoneShapes.velaCard;
+  const shapes = Object.entries({
+    poster: phoneShapes.velaCard.aspect,
+    landscape: phoneShapes.velaCardWide.aspect,
+    square: phoneShapes.velaCardTile.aspect,
+  });
+  const states = shapes.map(([shape, [across, down]]) => ({
+    when: [small, { test: 'row.card', is: 'eq' as const, value: shape }],
+    style: compactNumeral(width * down / across),
+  }));
+  return [false, true].map(ten => ({ ...numeral(ten, width * aspect[1] / aspect[0]), states }));
+}
+
 const rowItemOf = (template: string): Node => ({
   type: 'box',
   motion: 'velaCard',
@@ -396,7 +409,7 @@ const rowItemOf = (template: string): Node => ({
   style: rowItemStyle('0'),
   // The previewing card's overlay opens over its neighbours.
   states: [{ when: [previewing], style: rowItemStyle('5') }],
-  children: [...(template === 'velaCardHero' ? [] : [numeral(false, smallArt(template)), numeral(true, smallArt(template))]), { type: 'use', template }],
+  children: [...(template === 'velaCardHero' ? [] : rowNumerals(template)), { type: 'use', template }],
 });
 export const rowItem: Node = rowItemOf('velaCard');
 /** Every expandable row's final card. Skins may override the `velaSeeAll` template. */

@@ -363,7 +363,19 @@ function recordPlayback(session: Session, ended: boolean): void {
   viewer.policyRevision = `mock-${++viewerRevision}`;
   feedChanged();
 }
-function homeScope(g: Grant) { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows, mediaHomeRows(g)]))}`; }
+const squareCollections: V.Row = {
+  id: 'square-collections', name: 'Square collections', purpose: 'collection', role: 'collection',
+  card: 'square', receiptToken: '', continuation: 'exhausted',
+  items: rows.filter(row => row.purpose === 'collection').slice(0, 3).map(row => {
+    const art = artwork(`square-collection-${row.id}`);
+    return {
+      id: `square-collections:${row.id}`, kind: 'collection', targetId: row.id, name: row.name,
+      itemCount: row.items.length, receiptToken: '',
+      artwork: [{ ...art, sizes: art.sizes.map(size => ({ ...size, height: size.width })) }],
+    };
+  }),
+};
+function homeScope(g: Grant) { return `${viewer.policyRevision}:${mac(JSON.stringify([featuredTitles.map(t => t.id), progressRows(), rows, mediaHomeRows(g), squareCollections]))}`; }
 function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
   const source = row.purpose === 'continue' ? { ...row, items: row.items.filter(item => item.kind !== 'title' || !removedContinue.has(item.title.id)) } : row;
   const bound = boundRow(g, source);
@@ -404,7 +416,7 @@ const labHomeRows: V.Row[] = [
 /** Home's page in order: progress rows, media rows, the catalogue's rows, and a plugin's surface
  * row where the page places it (after Top 10), as Ether lists them. */
 function homeRows(g: Grant, url: URL, surfaces: V.SurfaceRow[] = [], snapshot = rowSnapshot): V.Page<V.Row | V.SurfaceRow> {
-  const ordered: (V.Row | V.SurfaceRow)[] = [...progressRows(), ...mediaHomeRows(g), ...rows];
+  const ordered: (V.Row | V.SurfaceRow)[] = [...progressRows(), ...mediaHomeRows(g), ...rows, squareCollections];
   const top = ordered.findIndex(row => row.id === 'row-top10');
   ordered.splice(top + 1, 0, ...surfaces);
   const result = page(labPreset ? labHomeRows : ordered, url, g, `home-rows:${homeScope(g)}:${surfaces.map(row => row.id).join(',')}`, labPreset ? 5 : 2);
@@ -942,7 +954,7 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
   if (method === 'GET' && rowMatch) {
-    const r = mintedRow(decodeURIComponent(rowMatch[1]!), [...progressRows(), ...rows, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])]);
+    const r = mintedRow(decodeURIComponent(rowMatch[1]!), [...progressRows(), ...rows, squareCollections, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])]);
     return cached(req, minted(homeRow(g, r, url)), `${g.id}:${rowSnapshot}`);
   }
   const versionsMatch = /^\/titles\/([^/]+)\/versions(?:\/(choice))?$/.exec(path);
