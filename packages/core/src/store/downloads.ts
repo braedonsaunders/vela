@@ -677,6 +677,8 @@ export class Downloads {
   private lastAuthPhase: AuthPhase | undefined;
   private hydrating: Promise<void> | undefined;
   private resuming: Promise<void> | undefined;
+  /** Whether this session asked the browser to keep its storage (see refreshStorage). */
+  private askedPersist = false;
   private unsubscribePort: (() => void) | undefined;
   /** The last non-empty `(serverId, viewerId)` seen in `auth`, so a refused token can clean up its viewer. */
   private activeViewer: { serverId: string; viewerId: string } | undefined;
@@ -715,8 +717,6 @@ export class Downloads {
     const { serverId, viewerId, phase } = this.box.get().auth;
     const enteredOnline = phase === 'signed-in' && this.lastAuthPhase !== phase;
     this.lastAuthPhase = phase;
-    if (enteredOnline && this.state.outbox.length) void this.replayProgress();
-    if (enteredOnline && this.state.hydrated) void this.resumeInterrupted();
     if (serverId && viewerId && (phase === 'signed-in' || phase === 'offline')) {
       const changed = this.activeViewer?.serverId !== serverId || this.activeViewer?.viewerId !== viewerId;
       this.activeViewer = { serverId, viewerId };
@@ -724,6 +724,9 @@ export class Downloads {
     } else if (phase === 'signed-out') {
       this.syncVisible();
     }
+    // After the visible list follows the viewer: hydration may have finished before sign-in did.
+    if (enteredOnline && this.state.outbox.length) void this.replayProgress();
+    if (enteredOnline && this.state.hydrated) void this.resumeInterrupted();
   }
 
   private syncVisible(): void {
@@ -778,10 +781,13 @@ export class Downloads {
       this.port.freeBytes().catch(() => null),
       this.port.storage?.().catch(() => undefined),
     ]);
+    // A browser reports storage as not persistent until the page asks; only an answer to that ask
+    // (made on the viewer's first Download press) turns Download into Save file.
+    const persisted = storage ? (storage.persisted ? true : this.askedPersist ? false : null) : undefined;
     this.box.update('downloads', state => ({
       ...state,
       freeBytes,
-      ...(storage ? { persisted: storage.persisted, quotaBytes: storage.quotaBytes } : {}),
+      ...(storage ? { persisted, quotaBytes: storage.quotaBytes } : {}),
     }));
   }
 
@@ -794,6 +800,7 @@ export class Downloads {
   private async ensurePersistent(): Promise<boolean> {
     if (this.state.traits.engine !== 'page' || !this.port?.persist) return true;
     if (this.state.persisted === true) return true;
+    this.askedPersist = true;
     const persisted = await this.port.persist().catch(() => false);
     this.box.update('downloads', state => ({ ...state, persisted }));
     return persisted;
@@ -1175,8 +1182,10 @@ export class Downloads {
     return this.resuming ??= (async () => {
       const tried = new Set<string>();
       for (;;) {
-        if (this.box.get().auth.phase !== 'signed-in') return;
-        const next = this.state.items.find(item => autoResumable(item) && !tried.has(item.titleId));
+        const { phase, serverId, viewerId } = this.box.get().auth;
+        if (phase !== 'signed-in') return;
+        const next = visibleDownloads(this.state.allItems, serverId, viewerId)
+          .find(item => autoResumable(item) && !tried.has(item.titleId));
         if (!next) return;
         tried.add(next.titleId);
         await this.resume(next.titleId).catch(() => false);

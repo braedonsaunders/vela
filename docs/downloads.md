@@ -268,6 +268,27 @@ This follows iOS today:
 | Plex | per-account root `allowSync` and per-title `allowSync`; the server enforces it on `?download=1` | `Part.key?download=1` with Plex headers | `/:/timeline` and scrobble (existing) |
 | Jellyfin, Emby | `Policy.EnableContentDownloading` from `GET /Users/{id}`; the server enforces it on `/Items/{id}/Download` | `/Items/{id}/Download` with `X-Emby-Authorization` (never `api_key` in the URL); size and source from `MediaSources[0]` | user data `PlaybackPositionTicks` / `Played` (new) |
 
+**Jellyfin and Emby, live status (2026-11-27).** The adapter was checked against the lab
+Ether's Jellyfin- and Emby-compatible APIs (`/jellyfin`, `/emby`) with the lab viewer:
+
+| Check | Result |
+| --- | --- |
+| Policy | `Policy.EnableContentDownloading` read |
+| Download URL | header-only, no token |
+| Range resume | 206 |
+| Request without credentials | 401 |
+
+- **File length.** The resolution takes it from a HEAD of the download. The Jellyfin-compatible
+  `MediaSource.Size` there is an estimate, and every engine checks the finished file against
+  this length.
+- **Progress replay.** It writes user data (`POST /UserItems/{id}/UserData`, or the per-user route
+  on Emby). Where a server lacks that write, Vela falls back to a `Sessions/Playing/Stopped`
+  report plus `PlayedItems`.
+  - On the lab's Jellyfin API, the fallback replay landed and was restored.
+  - Emby's position fallback isn't stored by the lab yet. Ether is adding the user-data write
+    (W497).
+- **Not yet tested:** real Jellyfin and Emby servers.
+
 Every platform asks the same adapter, so permissions are identical everywhere.
 `downloadOffer` hides Download when the server says no. A 401/403 during a transfer
 fails it as `forbidden` with the server's message, and a 401 that ends the session
@@ -279,11 +300,23 @@ always asks again.
 
 - **Credentials.** Tokens never appear in file paths, index records, URLs Vela
   stores or logs. Transfer headers are held in memory and never written to disk on
-  Android, desktop or the web. Errors and events carry codes and messages only,
-  never URLs.
+  Android, desktop or the web. iOS is the exception, because its background session
+  finishes transfers while Vela isn't running. Its `transfer.json` keeps the request
+  without headers. The headers wait in the Keychain (this device only, readable after
+  first unlock) and are deleted when the transfer ends, is cancelled or is refused.
+  Builds that stored headers have them stripped on the next launch. Errors and events
+  carry codes and messages only, never URLs.
 - **Download hosts.** A download request goes only to the resolved server origin;
   redirects are allowed within the same exact origin only. Auxiliary fetches
-  (poster, sidecars) follow the same rule.
+  (poster, sidecars) follow the same rule. Browsers reject every redirect
+  (`redirect: 'error'`), because a manual redirect response hides its target.
+  iOS background sessions follow redirects without asking the app, so iOS checks
+  in two places:
+  - a no-follow preflight (`Range: bytes=0-0`) refuses a download that redirects
+    to another origin before the background session takes it;
+  - a download whose final URL is on another origin fails as `forbidden`.
+- **Network loss on iOS** is now `paused`/`interrupted` rather than `failed`, as on
+  every other platform, so core resumes it.
 - **Local media.** Local playback opens only paths inside the downloads root, or
   `blob:` URLs of the app's own origin. Media authorization (`protocol/media.ts`,
   Android `MediaScope`, `permittedMediaURL`, desktop `setAccess`) keeps its exact
