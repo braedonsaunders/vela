@@ -8,6 +8,7 @@ import { BlurView } from 'expo-blur';
 import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref, type ComponentRef } from 'react';
 import { Platform, StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { useAuthLayout } from '../auth/layout-context';
+import { DISPLAY_LINE_HEIGHT } from '../auth/layout';
 import { TextField } from './text-field';
 import { ownKeyboard, RETURN_FOCUS_MS, TvKeyboard } from './tv-keyboard';
 import Animated from 'react-native-reanimated';
@@ -65,19 +66,22 @@ export function Words({
   lines,
   children,
   style,
+  maxScale,
   ...a11y
 }: {
   rows: Css;
   lines?: number;
   children: ReactNode;
   style?: TextStyle;
+  /** The most the viewer's text size may enlarge it (a display title keeps its composition). */
+  maxScale?: number;
   accessibilityRole?: 'header' | 'alert' | 'text';
   accessibilityLabel?: string;
   testID?: string;
 }) {
   const look = useLook();
   return (
-    <Text style={[look.text(rows), style]} numberOfLines={lines} ellipsizeMode={lines ? 'tail' : undefined} {...a11y}>
+    <Text style={[look.text(rows), style]} numberOfLines={lines} ellipsizeMode={lines ? 'tail' : undefined} maxFontSizeMultiplier={maxScale} {...a11y}>
       {children}
     </Text>
   );
@@ -115,7 +119,7 @@ export function Heading({ eyebrow: over, title, lines = 2, accessibilityLabel }:
   return (
     <View style={{ gap: layout?.tight ? 4 : 10 }}>
       {over && !layout?.tight ? <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.accent' }}>{over}</Words> : null}
-      <Words rows={{ ...display, 'font-size': `${layout?.headingSize ?? 42}px` }} lines={lines}
+      <Words rows={{ ...display, 'font-size': `${layout?.headingSize ?? 42}px`, 'line-height': String(DISPLAY_LINE_HEIGHT) }} lines={lines} maxScale={1.4}
         accessibilityRole="header" accessibilityLabel={accessibilityLabel} aria-level={1}>
         {title}
       </Words>
@@ -167,36 +171,37 @@ export function Waiting({ children }: { children: string }) {
   );
 }
 
-/** A code drawn one tile per character, read aloud whole. */
-export function CodeTiles({ code, testID }: { code: string; testID?: string }) {
+/** A code drawn one tile per character, read aloud whole. `large`: the code is the page's
+ * centrepiece, readable at arm's length. */
+export function CodeTiles({ code, testID, large = false }: { code: string; testID?: string; large?: boolean }) {
   const look = useLook();
   const tile = look.box({
     flex: '1',
-    'max-width': '44px',
-    height: '54px',
+    'max-width': large ? '64px' : '44px',
+    height: large ? '82px' : '54px',
     'align-items': 'center',
     'justify-content': 'center',
-    'border-radius': '12px',
+    'border-radius': large ? '18px' : '12px',
     'background-color': '#0c0e12e6',
-    border: '1px solid $ui.glassEdge',
-    'box-shadow': 'inset 0px 1px 0px #ffffff2e',
+    border: '1px solid $ui.glassEdgeStrong',
+    'box-shadow': large ? '0px 18px 40px #00000066, inset 0px 1px 0px #ffffff33' : 'inset 0px 1px 0px #ffffff2e',
   });
   const ink = look.text({
     'font-family': 'ui-monospace, "SF Mono", Menlo, monospace',
-    'font-size': '24px',
+    'font-size': large ? '40px' : '24px',
     'font-weight': '600',
     color: '$ui.accent',
   });
   return (
     <View
-      style={{ flexDirection: 'row', width: '100%', gap: 6, justifyContent: 'center' }}
+      style={{ flexDirection: 'row', width: '100%', gap: large ? 10 : 6, justifyContent: 'center' }}
       accessible
       accessibilityLabel={code}
       testID={testID}
     >
       {[...code].map((char, i) => (
-        <Animated.View key={i} style={[tile, look.motion('velaCodeIn', i, { step: 45, cap: 12 })]}>
-          <Text style={ink}>{char}</Text>
+        <Animated.View key={i} style={[tile, look.motion('velaCodeIn', i, { step: large ? 90 : 45, cap: 12 })]}>
+          <Text style={ink} maxFontSizeMultiplier={1.2}>{char}</Text>
         </Animated.View>
       ))}
     </View>
@@ -291,6 +296,8 @@ interface FieldProps {
   doneLabel?: string;
   /** On a TV, the field takes focus as its step appears (the address, then the username). */
   preferred?: boolean;
+  /** No label drawn above it: the label is the placeholder (still its accessible name). */
+  bare?: boolean;
 }
 
 const KINDS = {
@@ -308,7 +315,8 @@ const OWN_KEYBOARD = ownKeyboard(Platform.OS, Platform.isTV);
 
 /** Android TV: the field is a button showing the text; selecting it opens Vela's keyboard
  * (tv-keyboard.tsx). `inputRef`'s focus() opens it too (a username's Next opens the password's). */
-function KeyboardField({ label, value, onChangeText, onSubmit, kind = 'username', placeholder, testID, inputRef, doneLabel, preferred }: FieldProps) {
+function KeyboardField({ label, value, onChangeText, onSubmit, kind = 'username', placeholder: hint, testID, inputRef, doneLabel, preferred, bare }: FieldProps) {
+  const placeholder = hint ?? (bare ? label : undefined);
   const look = useLook();
   const { state, handlers } = useInteraction();
   const layout = useAuthLayout();
@@ -334,7 +342,7 @@ function KeyboardField({ label, value, onChangeText, onSubmit, kind = 'username'
   const shown = kind === 'password' ? '\u2022'.repeat([...value].length) : value;
   return (
     <View style={{ gap: layout?.tight ? 4 : 8 }}>
-      {!layout?.minimal ? <Label>{label}</Label> : null}
+      {!layout?.minimal && !bare ? <Label>{label}</Label> : null}
       <Pressable
         ref={field as never}
         focusable
@@ -378,7 +386,8 @@ function KeyboardField({ label, value, onChangeText, onSubmit, kind = 'username'
   );
 }
 
-function SystemField({ label, value, onChangeText, onSubmit, kind = 'username', placeholder, testID, inputRef }: FieldProps) {
+function SystemField({ label, value, onChangeText, onSubmit, kind = 'username', placeholder: hint, testID, inputRef, bare }: FieldProps) {
+  const placeholder = hint ?? (bare ? label : undefined);
   const look = useLook();
   const { state, handlers } = useInteraction();
   const layout = useAuthLayout();
@@ -391,7 +400,7 @@ function SystemField({ label, value, onChangeText, onSubmit, kind = 'username', 
   const traits = KINDS[kind];
   return (
     <View style={{ gap: layout?.tight ? 4 : 8 }}>
-      {!layout?.minimal ? <Label>{label}</Label> : null}
+      {!layout?.minimal && !bare ? <Label>{label}</Label> : null}
       <Animated.View style={[box, Platform.isTV && state.focus && { transform: [{ scale: 1.025 }] }]} onPointerEnter={handlers.onHoverIn} onPointerLeave={handlers.onHoverOut}>
         <TextField
           ref={inputRef}

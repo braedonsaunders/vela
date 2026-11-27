@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Image } from 'expo-image';
+import Animated from 'react-native-reanimated';
+import { useHost } from '../../../host';
+import { animation } from '../../../motion';
+import { HORIZON_MOTION } from '../horizon-motion';
 import { useAuthLayout } from '../layout-context';
+import { Rise, StepFrame, useStepIndex } from '../step';
 // Linking a Plex server: a PIN entered at plex.tv/link (one tile per character), then the
 // account's servers to choose from, the recommended one marked. Only the chosen server's own
 // token is kept (the session store's concern); this view only starts, chooses and cancels.
-import { Linking, Platform, ScrollView, View, useWindowDimensions } from 'react-native';
+import { Linking, Platform, ScrollView, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { msg } from '@vela/core';
 import {
   APressable,
@@ -26,6 +31,8 @@ import { nextProfilePin, profileGridColumns, profileInitials } from './plex-prof
 export { nextProfilePin, profileGridColumns, profileInitials } from './plex-profile';
 
 export function PlexStep({
+  title,
+  subtitle,
   link,
   busy,
   starting,
@@ -33,8 +40,9 @@ export function PlexStep({
   onStart,
   onChoose,
   onChooseProfile,
-  onCancel,
 }: {
+  title: string;
+  subtitle: string;
   link: PlexLink | null;
   busy: boolean;
   /** A code was asked for and has not arrived yet. */
@@ -47,45 +55,84 @@ export function PlexStep({
 }) {
   const layout = useAuthLayout();
   const waiting = starting || link?.state === 'waiting';
-  return (
-    <View style={{ gap: layout?.tight ? 8 : 18, minHeight: 0, flexShrink: 1 }}>
-      {waiting ? (
-        <View style={{ gap: layout?.tight ? 8 : 18, alignItems: 'center' }}>
-          {link?.code ? <CodeTiles code={link.code} testID="plex-code" /> : null}
-          {link?.linkUrl ? <LinkLine url={link.linkUrl} /> : null}
-          <Waiting>{msg('connect.plex.waiting')}</Waiting>
-        </View>
-      ) : link?.state === 'profiles' ? <ProfilePicker profiles={link.profiles ?? []} busy={busy} onChoose={onChooseProfile ?? (() => {})} />
-      : link?.state === 'linked' ? (
-        <View style={{ gap: 8, minHeight: 0, flexShrink: 1 }}>
-          <Label>{msg('connect.plex.choose')}</Label>
-          {link.choices.length === 0 ? <Waiting>{msg('connect.plex.finding')}</Waiting> : null}
-          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled">
-          {link.choices.map(choice => (
-            <Choice key={choice.id} choice={choice} busy={busy} onChoose={onChoose} />
-          ))}
-          </ScrollView>
-        </View>
-      ) : (
-        <View style={{ gap: 12 }}>
-          {link?.state === 'expired' ? <Alert>{msg('connect.plex.expired')}</Alert> : null}
-          {link?.state === 'failed' ? <Alert>{msg('connect.plex.failed')}</Alert> : null}
-          <Pill
-            primary
-            label={msg('connect.plex.start')}
-            onPress={onStart}
-            disabled={busy}
-            busy={busy}
-            testID="plex-start"
-          />
-        </View>
-      )}
-      {error ? <Alert>{error}</Alert> : null}
-    </View>
-  );
+  const failure = error ? <Alert>{error}</Alert> : null;
+  if (waiting) {
+    // The code is the page: large tiles over a pool of light, the address to enter it at, and
+    // the horizon's light travelling while Plex is asked.
+    return <StepFrame title={title} align="centre" body={<View style={{ gap: layout?.tight ? 14 : 22, alignItems: 'center' }}>
+      <Rise index={2}>{link?.code ? <LinkLine url={link.linkUrl} /> : <Words rows={{ 'font-size': '17px', color: '$ui.inkSecondary' }}>Asking Plex for a code…</Words>}</Rise>
+      <View style={{ width: '100%', alignItems: 'center' }}>
+        <CodeGlow />
+        {link?.code ? <CodeTiles code={link.code} testID="plex-code" large /> : <GhostTiles />}
+      </View>
+      <Rise index={4}><Waiting>{msg('connect.plex.waiting')}</Waiting></Rise>
+      {failure}
+    </View>} actions={link?.linkUrl && !Platform.isTV ? <Pill label="Open plex.tv/link" testID="plex-open-link" height={layout?.controlHeight ?? 56} onPress={() => void Linking.openURL(link.linkUrl)} /> : undefined} />;
+  }
+  if (link?.state === 'profiles') {
+    return <StepFrame title={title} body={<><ProfilePicker labelled={false} profiles={link.profiles ?? []} busy={busy} onChoose={onChooseProfile ?? (() => {})} />{failure}</>} />;
+  }
+  if (link?.state === 'linked') {
+    return <StepFrame title={title} subtitle={subtitle} body={<>
+      {link.choices.length === 0 ? <FindingServers /> : <PlexChoices choices={link.choices} busy={busy} onChoose={onChoose} />}
+      {failure}
+    </>} />;
+  }
+  return <StepFrame title={title} subtitle={subtitle} body={<>
+    {link?.state === 'expired' ? <Alert>{msg('connect.plex.expired')}</Alert> : null}
+    {link?.state === 'failed' ? <Alert>{msg('connect.plex.failed')}</Alert> : null}
+    {failure}
+  </>} actions={<Pill primary label={msg('connect.plex.start')} onPress={onStart} disabled={busy} busy={busy} testID="plex-start" height={layout?.controlHeight ?? 56} />} />;
 }
 
-export function ProfilePicker({ profiles, busy, currentProfileId = '', onChoose }: { profiles: Profile[]; busy: boolean; currentProfileId?: string; onChoose(id: string, pin?: string): void }) {
+/** A pool of light under the code, breathing while it waits to be entered. */
+function CodeGlow() {
+  const look = useLook();
+  const host = useHost();
+  const preset = host.doc.motion.velaCodeGlow ?? HORIZON_MOTION.velaCodeGlow;
+  return <Animated.View pointerEvents="none" style={[look.box({
+    position: 'absolute', left: '-10%', right: '-10%', top: '30%', height: '120px',
+    'background-image': 'radial-gradient(ellipse 50% 50% at 50% 50%, #e8a06355 0%, #e8a06300 100%)',
+  }), animation(preset, host.doc.keyframes, look.still, 0) as ViewStyle]} />;
+}
+
+/** Where the code will be, before Plex has sent it. */
+function GhostTiles() {
+  const look = useLook();
+  const host = useHost();
+  const preset = host.doc.motion.velaGhostRow ?? HORIZON_MOTION.velaGhostRow;
+  return <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', width: '100%' }}>
+    {[0, 1, 2, 3].map(i => <Animated.View key={i} style={[look.box({ flex: '1', 'max-width': '64px', height: '82px', 'border-radius': '18px', 'background-color': '$ui.control', border: '1px solid $ui.glassEdge' }),
+      animation({ ...preset, delay: i * 140 }, host.doc.keyframes, look.still, 0) as ViewStyle]} />)}
+  </View>;
+}
+
+/** Linked, the account's servers not listed yet: their places breathing on the water. */
+function FindingServers() {
+  const look = useLook();
+  const host = useHost();
+  const from = useStepIndex();
+  const preset = host.doc.motion.velaGhostRow ?? HORIZON_MOTION.velaGhostRow;
+  return <View style={{ gap: 10 }}>
+    <Rise index={from} style={{ alignItems: 'center', paddingBottom: 4 }}><Waiting>{msg('connect.plex.finding')}</Waiting></Rise>
+    {[0, 1].map(i => <Rise key={i} index={from + 1 + i}>
+      <Animated.View style={[look.box({ height: '68px', 'border-radius': '18px', 'background-color': '$ui.control', border: '1px solid $ui.glassEdge', padding: '14px 18px', gap: '8px' }),
+        animation({ ...preset, delay: i * 260 }, host.doc.keyframes, look.still, 0) as ViewStyle]}>
+        <View style={look.box({ width: i ? '46%' : '58%', height: '14px', 'border-radius': '7px', 'background-color': '$ui.skeletonLight' })} />
+        <View style={look.box({ width: i ? '30%' : '38%', height: '10px', 'border-radius': '5px', 'background-color': '$ui.skeleton' })} />
+      </Animated.View>
+    </Rise>)}
+  </View>;
+}
+
+function PlexChoices({ choices, busy, onChoose }: { choices: PlexChoice[]; busy: boolean; onChoose(id: string): void }) {
+  const from = useStepIndex();
+  return <View style={{ gap: 10 }}>
+    {choices.map((choice, i) => <Rise key={choice.id} index={from + i}><Choice choice={choice} busy={busy} onChoose={onChoose} /></Rise>)}
+  </View>;
+}
+
+export function ProfilePicker({ profiles, busy, currentProfileId = '', onChoose, labelled = true }: { profiles: Profile[]; busy: boolean; currentProfileId?: string; onChoose(id: string, pin?: string): void; /** Its own WHO'S WATCHING? (a step titles it instead). */ labelled?: boolean }) {
   const width = useWindowDimensions().width;
   const [protectedId, setProtectedId] = useState('');
   const [pin, setPin] = useState('');
@@ -106,7 +153,7 @@ export function ProfilePicker({ profiles, busy, currentProfileId = '', onChoose 
     onBack={() => { setProtectedId(''); setPin(''); }} />;
   const columns = profileGridColumns(width);
   return <View style={{ gap: 12 }}>
-    <Label>WHO’S WATCHING?</Label>
+    {labelled ? <Label>WHO’S WATCHING?</Label> : null}
     <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }} keyboardShouldPersistTaps="handled">
       {profiles.map(profile => <ProfileCard key={profile.id} profile={profile} columns={columns} disabled={busy}
         current={profile.id === currentProfileId} onPress={() => profile.protected ? setProtectedId(profile.id) : onChoose(profile.id)} />)}
@@ -184,12 +231,12 @@ function LinkLine({ url }: { url: string }) {
   const look = useLook();
   const { state, handlers } = useInteraction();
   const canOpen = !Platform.isTV;
-  const rows = { 'font-size': '15px', 'font-weight': '650' };
+  const rows = { 'font-size': '17px', 'font-weight': '650' };
   return (
     <View
       style={{ flexDirection: 'row', gap: 6, alignItems: 'baseline', justifyContent: 'center', flexWrap: 'wrap' }}
     >
-      <Words rows={{ 'font-size': '15px', color: '$ui.inkSecondary' }}>{msg('connect.plex.enterAt')}</Words>
+      <Words rows={{ 'font-size': '17px', color: '$ui.inkSecondary' }}>{msg('connect.plex.enterAt')}</Words>
       {canOpen ? (
         <APressable
           onPress={Platform.OS === 'web' ? undefined : () => Linking.openURL(url)}
@@ -220,9 +267,9 @@ function Choice({ choice, busy, onChoose }: { choice: PlexChoice; busy: boolean;
   const { state, handlers } = useInteraction();
   const rows = overlaid(
     {
-      'min-height': '60px',
-      padding: '10px 16px',
-      'border-radius': '16px',
+      'min-height': '68px',
+      padding: '12px 18px',
+      'border-radius': '18px',
       border: '1px solid $ui.glassEdge',
       'background-color': '$ui.control',
       transition: 'background-color 180ms linear',
@@ -241,10 +288,10 @@ function Choice({ choice, busy, onChoose }: { choice: PlexChoice; busy: boolean;
       {...handlers}
     >
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Words rows={{ 'font-size': '16px', 'font-weight': '600' }} lines={1}>
+        <Words rows={{ 'font-size': '17px', 'font-weight': '600' }} lines={1}>
           {choice.name}
         </Words>
-        <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }} lines={1}>
+        <Words rows={{ 'font-size': '13px', color: '$ui.inkQuiet' }} lines={1}>
           {choice.connectionLabel}
         </Words>
       </View>

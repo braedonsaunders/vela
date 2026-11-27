@@ -34,9 +34,9 @@ export function ServerRow({
     {
       flex: '1',
       'min-width': '0px',
-      'min-height': '56px',
-      padding: '8px 14px',
-      'border-radius': '14px',
+      'min-height': '68px',
+      padding: '12px 18px',
+      'border-radius': '18px',
       border: '1px solid $ui.glassEdge',
       'background-color': server.selected ? '$ui.controlHover' : '$ui.control',
       transition: 'background-color 180ms linear',
@@ -46,9 +46,9 @@ export function ServerRow({
   );
   const removeRows = overlaid(
     {
-      width: '40px',
-      height: '40px',
-      'border-radius': '20px',
+      width: '44px',
+      height: '44px',
+      'border-radius': '22px',
       'align-items': 'center',
       'justify-content': 'center',
       'background-color': '$ui.control',
@@ -72,19 +72,16 @@ export function ServerRow({
         {...pick.handlers}
       >
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-          <Words rows={{ 'font-size': '15px', 'font-weight': '600' }} lines={1}>
+          <Words rows={{ 'font-size': '17px', 'font-weight': '600' }} lines={1}>
             {server.name}
           </Words>
           <Words
-            rows={{ 'font-size': '12px', color: server.status === 'ready' ? '$ui.inkQuiet' : '$ui.accent' }}
+            rows={{ 'font-size': '13px', color: server.status === 'ready' ? '$ui.inkSecondary' : '$ui.accent' }}
             lines={1}
           >
             {serverDetail(server)}
           </Words>
           {server.origin ? <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }} lines={1}>{server.origin}{server.basePath === '/' ? '' : server.basePath ?? ''}</Words> : null}
-          <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }} lines={1}>
-            {server.status === 'ready' ? 'Signed in' : 'Sign-in required'}
-          </Words>
         </View>
         {server.selected ? <Glyph symbol="checkmark" size={14} color={look.ui.accent} /> : null}
       </APressable>
