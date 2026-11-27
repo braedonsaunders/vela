@@ -100,3 +100,8 @@ test('the server\'s reason for no adaptive path reads as its own words, a bare c
   expect(adaptiveUnavailableText('The source has no regular keyframes')).toBe('The source has no regular keyframes');
   expect(adaptiveUnavailableText('keyframe_grid')).toBe("Automatic quality isn't available for this title");
 });
+
+test('the localized message comes before the reason code', async () => {
+  const { adaptiveUnavailableText } = await import('../src/widgets/player/present');
+  expect(adaptiveUnavailableText('keyframe_grid', 'Las calidades automáticas no están disponibles')).toBe('Las calidades automáticas no están disponibles');
+});

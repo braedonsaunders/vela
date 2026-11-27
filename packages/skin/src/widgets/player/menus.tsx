@@ -267,7 +267,7 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
   const source = convertedFrom(groups.versions, selectedVersionId, view.playingLabel);
   const elsewhere = playingElsewhere(groups.versions, view.playingVersionId, view.playingLabel);
   const autoReason = selectedVersionId && selectedVersionId === groups.versions[0]?.id ? plan?.autoSelectionReason?.message?.trim() ?? '' : '';
-  const adaptiveReason = adaptiveUnavailableText(plan?.adaptiveUnavailable?.reason);
+  const adaptiveReason = adaptiveUnavailableText(plan?.adaptiveUnavailable?.reason, plan?.adaptiveUnavailable?.message);
   const convertedTitle = source ? msg('player.quality.convertedFrom', { version: source }) : msg('player.quality.convertedFromCurrent');
   const hasConversions = view.qualityAuto || converted.length > 0 || !!serverStream;
   const showQuality = hasVersions && (hasConversions || originals.length > 0);

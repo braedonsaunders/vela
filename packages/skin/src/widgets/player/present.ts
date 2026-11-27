@@ -389,10 +389,10 @@ export function qualityLimitReason(code: string | undefined): string {
   return /^[a-z0-9_.-]+$/.test(code) ? msg('player.qualityReason.other') : code;
 }
 
-/** The server's reason a plan has no adaptive path, in the viewer's words: its own text, or a plain line for a
- * bare machine code it does not explain. */
-export function adaptiveUnavailableText(reason: string | undefined): string {
-  const text = reason?.trim() ?? '';
+/** The server's reason a plan has no adaptive path, in the viewer's words: its localized message, else its own
+ * text, or a plain line for a bare machine code it does not explain. */
+export function adaptiveUnavailableText(reason: string | undefined, message?: string): string {
+  const text = message?.trim() || reason?.trim() || '';
   if (!text) return '';
   return /^[a-z0-9_.-]+$/.test(text) ? msg('player.quality.adaptiveUnavailable') : text;
 }
