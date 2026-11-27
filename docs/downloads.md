@@ -159,7 +159,7 @@ desktop bridge when present, else OPFS, else none.
     worker. Each chunk is flushed, so a closed tab keeps its partial file.
   - **Not persisted:** Vela doesn't store the title in the browser, because the
     browser may silently evict it. Download becomes **Save file**, with the line:
-    “This browser may clear stored videos, so Vela saves the file to your computer
+    “This browser may clear stored videos, so Vela saves the file to your downloads
     instead.”
 - **Quota.** Space admission runs against quota minus usage, less the reserve,
   before any byte is fetched. A `QuotaExceededError` mid-transfer becomes

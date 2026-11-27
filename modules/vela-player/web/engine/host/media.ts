@@ -1,3 +1,4 @@
+import { localMediaURL, localMediaPolicy } from '../local-media';
 import { activatePacketRuntime } from './packet-runtime';
 import { playbackMark } from '../timing';
 import { type DecoderRetry } from '../universal/retry';
@@ -46,6 +47,10 @@ export function resetMedia(context: HostContext, keepPicture = false) {
   context.tracks.nativeTrack = undefined;
   context.surface.video.removeAttribute('src');
   context.surface.video.load();
+  if (context.media.nativeObjectURL) {
+    URL.revokeObjectURL(context.media.nativeObjectURL);
+    context.media.nativeObjectURL = undefined;
+  }
   context.surface.video.playbackRate = 1;
 }
 export async function activateSource(
@@ -171,9 +176,25 @@ export async function activateSource(
         throw new Error('Invalid media timeline origin');
       context.media.nativeOrigin =
         source.delivery === 'hls' ? (source.timelineOriginSeconds ?? (legacyOffset ? position : 0)) : 0;
-      const attached = context.surface.mediaAccess
-        ? await context.surface.mediaAccess.nativeURL(media.url, token.signal)
-        : media.url;
+      let attached: string;
+      if (context.session.current?.id.startsWith('local-')) {
+        const local = localMediaURL(media.url);
+        if (!local) throw new Error('Local media URL is outside the downloads scope');
+        attached = local.href;
+        if (local.protocol !== 'blob:') {
+          // The native element has no credentials-omit mode for a same-origin URL.
+          const response = await localMediaPolicy().fetch(local, { signal: token.signal });
+          if (!response.ok) throw new Error('Local media could not be opened');
+          cancelled(token.signal);
+          const blob = await response.blob();
+          cancelled(token.signal);
+          attached = context.media.nativeObjectURL = URL.createObjectURL(blob);
+        }
+      } else {
+        attached = context.surface.mediaAccess
+          ? await context.surface.mediaAccess.nativeURL(media.url, token.signal)
+          : media.url;
+      }
       cancelled(token.signal);
       context.surface.video.src = attached;
     }

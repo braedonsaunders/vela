@@ -102,7 +102,7 @@ function DownloadLibrary() {
 function storageNotice(traits: DownloadsState['traits'], persisted: boolean | null): string {
   if (traits.engine !== 'page') return '';
   return persisted === false
-    ? 'This browser may clear stored videos, so Vela saves files to your computer instead. Downloads already here can still be removed by the browser.'
+    ? 'This browser may clear stored videos, so Vela saves files to your downloads instead. Downloads already here can still be removed by the browser.'
     : 'Downloads are kept in this browser\'s storage for this site. Clearing site data or uninstalling the app removes them.';
 }
 

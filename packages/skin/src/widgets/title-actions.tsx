@@ -100,6 +100,7 @@ export function TitleActions() {
   const [actions, setActions] = useState<Actions | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [note, setNote] = useState('');
   useEffect(() => {
     let live = true;
     setActions(null);
@@ -145,14 +146,17 @@ export function TitleActions() {
         {host.env.canPlaylists ? <ActionButton testID="detail-add-playlist" disabled={busy}
           icon="playlist-add" active={false} label={msg('cardMenu.addToPlaylist')}
           run={() => host.dispatch('addToPlaylist', `${id}|${title.kind}`)} /> : null}
-        {downloadTitle ? <TitleDownload key={id} id={id} kind={title.kind} name={title.name} onError={setError} /> : null}
+        {downloadTitle ? <TitleDownload key={id} id={id} kind={title.kind} name={title.name} onError={setError} onNote={setNote} /> : null}
       </View>
       {error ? <Text accessibilityRole="alert" style={look.text({ 'font-size': '13px', color: '$ui.accent' })}>{error}</Text> : null}
+      {note && !error ? <Text testID="detail-download-note" style={[look.text({ 'font-size': '13px', color: '$ui.inkSecondary' }), { maxWidth: '100%', flexShrink: 1 }]}>{note}</Text> : null}
     </View>
   );
 }
 
-function TitleDownload({ id, kind, name, onError }: { id: string; kind: string; name: string; onError(message: string): void }) {
+const SAVE_FILE_NOTE = 'This browser may clear stored videos, so Vela saves the file to your downloads instead.';
+
+function TitleDownload({ id, kind, name, onError, onNote }: { id: string; kind: string; name: string; onError(message: string): void; onNote(message: string): void }) {
   const vela = useVela();
   const host = useHost();
   const switcher = useServerSwitch();
@@ -172,9 +176,12 @@ function TitleDownload({ id, kind, name, onError }: { id: string; kind: string; 
     return () => { current = false; };
   }, [vela, revision, kind, persisted]);
   const reason = downloadOfferReason(offer);
+  // Why this title saves a file or can't be downloaded here is information, not an error.
+  const note = item ? '' : offer.kind === 'save-file' ? SAVE_FILE_NOTE : offer.kind === 'none' && offer.reason === 'browser' ? reason : '';
   useEffect(() => {
-    if (reason && !item && offer.kind === 'none' && offer.reason === 'browser') onError(reason);
-  }, [reason, item, offer, onError]);
+    onNote(note);
+    return () => onNote('');
+  }, [note, onNote]);
   if (offer.kind === 'none' && !item) return null;
 
   const versionId = async () => (await vela.catalogue.titleVersions(id).catch(() => null))?.selectedVersionId ?? undefined;
@@ -190,6 +197,11 @@ function TitleDownload({ id, kind, name, onError }: { id: string; kind: string; 
         const version = await versionId();
         if (vela.getState().auth.revision !== revision) return;
         started = await vela.downloads.enqueue(id, { versionId: version });
+      }
+      // A browser that won't keep its storage turns Download into Save file; the note says why.
+      if (!started && vela.getState().downloads.persisted === false && vela.getState().downloads.traits.engine === 'page') {
+        vela.downloads.clearError();
+        return;
       }
       setFailed(!started);
       if (!started) onError(vela.getState().downloads.error || 'Could not start the download');

@@ -1,3 +1,4 @@
+import { localMediaPolicy, localMediaURL } from '../local-media';
 import type { SubtitleSession } from '../universal/subtitles/session';
 import type { SubtitleFailure } from '../universal/subtitles/types';
 import type { HostContext } from './state';
@@ -50,7 +51,7 @@ export async function ensureOverlay(context: HostContext): Promise<SubtitleSessi
       surface,
       reader: original?.supportsSubtitles ? original.byteReader : undefined,
       clusterStream: original?.subtitleClusters,
-      mediaRequests: context.surface.mediaAccess,
+      mediaRequests: session.id.startsWith('local-') ? localMediaPolicy() : context.surface.mediaAccess,
       source: {
         url: source.url,
         container: original?.sourceContainer ?? source.delivery,
@@ -195,8 +196,9 @@ export function applyLegacySubtitle(context: HostContext) {
     (track) => track.id === context.tracks.subtitle,
   );
   if (!selected?.url) throw new Error('Selected subtitle has no WebVTT URL');
-  if (context.surface.mediaAccess?.authorization())
-    throw new Error('Authorized subtitles require the installed overlay');
+  const local = context.session.current?.id.startsWith('local-');
+  if (local ? !localMediaURL(selected.url) || !selected.url.startsWith('blob:') : context.surface.mediaAccess?.authorization())
+    throw new Error('Selected subtitles require the installed overlay');
   const track = (context.tracks.nativeTrack = document.createElement('track'));
   track.kind = 'subtitles';
   track.label = selected.label;
