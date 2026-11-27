@@ -63,3 +63,33 @@ test('original download tickets preserve file identity, support ranges and enfor
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('with the sidecar fixture on, a download grant carries an external WebVTT sidecar behind its ticket', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vela-mock-download-sidecar-'));
+  await Bun.write(join(root, 'direct.mp4'), new Uint8Array(16));
+  await Bun.write(join(root, 'subtitles.vtt'), 'WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello\n');
+  const mock = await launchMock({ VELA_MOCK_DOWNLOADS: '1', VELA_MOCK_MEDIA_ROOT: root });
+  try {
+    const api = `${mock.url}/vela/v0`;
+    const device = { id: 'test-download-sidecar', name: 'Test', platform: 'android', appVersion: '0.2.79' };
+    const post = (path: string, body: object, accessToken?: string) => fetch((path.startsWith('/__') ? mock.url : api) + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}`, 'X-Vela-Device-Id': device.id } : {}) },
+      body: JSON.stringify(body),
+    });
+    const { accessToken } = await post('/auth/sign-in', { device, idempotencyKey: 'login', username: 'demo', password: 'vela' }).then(response => response.json()) as Tokens;
+    const plain = await post('/titles/title-1-1/download', { idempotencyKey: 'plain' }, accessToken).then(response => response.json()) as DownloadGrant;
+    expect(plain.subtitleTracks).toEqual([]);
+    await post('/__admin/sidecar', { enabled: true });
+    const grant = await post('/titles/title-1-1/download', { idempotencyKey: 'sidecar' }, accessToken).then(response => response.json()) as DownloadGrant;
+    const delivery = grant.subtitleTracks[0]?.delivery;
+    expect(delivery).toEqual({ kind: 'external', format: 'webvtt', url: `${grant.url}/subtitles.vtt` });
+    const sidecar = await fetch(mock.url + (delivery as { url: string }).url);
+    expect(sidecar.status).toBe(200);
+    expect(await sidecar.text()).toStartWith('WEBVTT');
+    expect((await fetch(`${mock.url}/vela/v0/download/00000000-0000-4000-8000-000000000000/subtitles.vtt`)).status).toBe(404);
+  } finally {
+    await mock.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});

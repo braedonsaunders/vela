@@ -1379,12 +1379,12 @@ async function dispatch(req: Request): Promise<Response> {
     if (req.method === 'GET' && response.status === 200 && media[3].endsWith('/init.mp4')) requestedInit(s, media[3], () => !g.revoked && g.expires > Date.now());
     return response;
   }
-  const download = /^\/vela\/v0\/download\/([a-f0-9-]+)$/.exec(url.pathname);
+  const download = /^\/vela\/v0\/download\/([a-f0-9-]+)(\/subtitles\.vtt)?$/.exec(url.pathname);
   if (download && (req.method === 'GET' || req.method === 'HEAD')) {
     return serveDownload(req, download[1]!, owner => {
       const grant = grants.get(owner);
       return !!grant && !grant.revoked && grant.expires > Date.now();
-    });
+    }, !!download[2]);
   }
   // Reading grants: opaque short-lived document URLs, fetched without the bearer.
   const reading = /^\/reading\/media\/([a-f0-9]+)\/([^/]+)$/.exec(url.pathname);
