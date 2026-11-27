@@ -103,6 +103,84 @@ Renderer 21 adds the bindings `env.canManageLibraries` and `nav.showLive` and th
 client refuses a skin that needs 21 on its version, instead of failing it on an unknown binding;
 documents that need 20 or less draw unchanged.
 
+## Renderer 22
+
+Renderer 22 adds the profile menu primitive ([Profile menu](#profile-menu)): the `profileMenu`
+node, the document's `profileMenus` looks, the binding `env.canDownloads` and the press actions
+`downloads` and `addServer`. Every built-in skin draws its menu with it and declares 22. A
+renderer-21 client refuses those documents on their version. A document that needs 21 or less
+draws unchanged: if it leaves the shell to the Vela base it gets the primitive in the default
+look, and if it builds its own menu it keeps that menu exactly as written.
+
+## Profile menu
+
+The profile menu's entries belong to the app, not to the skin. They live in
+[packages/skin/src/profile-menu/entries.ts](../packages/skin/src/profile-menu/entries.ts) as
+data. Each entry has its kind, label, icon, press, the conditions it shows under, a stable test
+id, its accessibility and a default section:
+
+| Entry | Shows when | Press | testId |
+| --- | --- | --- | --- |
+| `viewer` (header) | always | (none) | `profile-menu-viewer` |
+| `switchProfile` | `env.canSwitchProfile` | `switchProfile` | `switch-profile` |
+| `playlists` | `env.canPlaylists` | `playlists` | `profile-playlists` |
+| `downloads` | `env.canDownloads` | `downloads` | `server-downloads` |
+| `manageLibraries` | `env.canManageLibraries` | `manageLibraries` | `manage-libraries` |
+| `appearance` | always | `openPicker` | `skin-picker` |
+| `servers` (the `serverSwitcher` list) | always | (its rows) | `server-<id>` rows |
+| `addServer` | always | `addServer` | `server-add` |
+| `signOut` | always | `signOut` | `sign-out` |
+| `about` (a reading stop) | `env.aboutLine` | (none) | `about-line` |
+
+A skin places the menu with a `profileMenu` node. The node is the menu's box: its `style`,
+variants, `motion`, `role`, `label`, `escape` and `returnFocus` make it a dropdown, a sheet or a
+panel. Like any box with `escape` it is the TV focus guide, so the remote stays inside the menu
+and Back returns focus to `returnFocus`. Give a menu that can outgrow a short screen a
+`max-height` and `overflow-y: auto`; a scrolling box with `escape` keeps its guide. The node can
+also sit inside the document's own drawer or dialog with only layout styles (Jelly Twin's phone
+drawer, Kids' grown-ups gate). `look` names one of the document's `profileMenus`; without it the
+node uses `default`, and without that the Vela base's look.
+
+A look (`ProfileMenuLook` in [skin.ts](../packages/protocol/skin.ts)) can restyle, rearrange and
+extend the menu:
+
+- **Restyle** with `parts`, node templates the entries are drawn with: `row` (an action entry),
+  `picker` (Appearance; the look's `row` when it has none), `header` (the viewer), `title` (the
+  look's `title`, for example Late Night's "Setup menu"), `section` (a section's `title`),
+  `divider`, `group` (a box around each section; without one, sections sit directly in the
+  menu), `about` (the About line) and `servers` (a box around the server list, whose type
+  (`font-family`, `font-size`, `letter-spacing`, `text-transform`) the server rows take). A part
+  reads its entry as `{entry.label}`, `{entry.detail}`, `{entry.id}` and `{entry.testId}`.
+  `{section.title}` is the section's title. An icon whose `symbol` is `{entry.icon}` draws the
+  entry's icon, or its `glyph`, and is left out when the entry has neither. A `when` on `entry.*`
+  is decided as the menu is built. The entry's press, label, testId, accessibility and visibility
+  go to the node whose `testId` is `{entry.testId}`, or to the part's root otherwise. Marking an
+  inner node this way keeps the About line's focus ring around its text, with any rule outside
+  it. Hover, focus, states and motion are the part's own. A part the look leaves out is the Vela
+  base's, except `group`.
+- **Rearrange** with `sections`: `{ id, title, divider, entries }`, in order. The default
+  arrangement is `viewer`; `you` (with a divider before it); `servers` (titled Servers); `session`;
+  `about`. An entry no section names joins the look's section with its default id, and that
+  section is added in the default order if the look has none. Entries the app adds later appear
+  in every skin this way.
+- **Override** a single entry with `entries`: `{ <entry id>: { label, icon, glyph, detail, part } }`.
+  For example, Kids labels Appearance "Change the look", and Mochi draws Sign out with its puffy
+  part.
+- **Extend** with `extras`, the skin's own rows: `{ id: { label, press, when, testId, icon, glyph,
+  part, a11y } }`. An extra is placed by naming its id in a section; an extra no section names
+  joins `you`. Kids adds "Back to watching" after Sign out.
+- **Opt out** with `hide`. The only entry a look may hide is `viewer`, for a menu whose
+  surroundings already show the viewer. Every action entry is always offered.
+
+An unknown look, part, entry id or hidden entry, an entry placed twice and an extra that reuses
+an entry's id all refuse the document. Nothing is half-drawn. The `serverSwitcher` widget with
+`params.entries: "servers"` draws only the server list. Placed bare in an older document, it still
+draws Downloads, Manage libraries, the Servers heading and Add a server.
+
+`packages/skin/test/profile-menu.test.ts` checks that every built-in skin offers every entry once
+per profile surface on phones, desktops and TVs, and none while closed. It also checks that each
+menu keeps its TV guide and Back target, and that the About line stays a text-only reading stop.
+
 ## Libraries in the navigation
 
 The viewer can order and hide their libraries in the navigation from Manage libraries, an
@@ -118,8 +196,9 @@ device per server and viewer. A skin reads it through these keys:
   `env.canLive`. A standalone Live TV entry still pairs it with `not env.hasLiveLibrary`, so it is
   not drawn twice beside a Live TV library.
 - `env.canManageLibraries`: a viewer is signed in, so the profile menu offers Manage libraries;
-  the press action `manageLibraries` opens it (`/libraries` on the web). A menu built on the
-  `serverSwitcher` widget already has the entry and needs no row of its own.
+  the press action `manageLibraries` opens it (`/libraries` on the web). The profile menu
+  primitive ([Profile menu](#profile-menu)) draws the entry; an older menu built on the bare
+  `serverSwitcher` widget has it there.
 
 ## Rows (Recommendations)
 

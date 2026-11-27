@@ -9,7 +9,7 @@ const managerRows = (browser: Browser) => browser.evaluate(() => [...document.qu
   .map(row => `${row.getAttribute('data-testid')!.slice('library-row-'.length)}${row.textContent?.includes('Hidden') ? ' (hidden)' : ''}`));
 const openManager = async (screen: Screen) => {
   await screen.getByTestId('profile-menu').tap();
-  await screen.getByTestId('server-libraries').tap();
+  await screen.getByTestId('manage-libraries').tap();
   await expect(screen.getByRole('heading', 'Manage libraries')).toBeVisible({ timeout: 30_000 });
 };
 const clearPreference = (browser: Browser) =>
@@ -242,6 +242,8 @@ describe('Manage libraries release gate', () => {
       await expect(screen.getByRole('link', 'Home')).toBeVisible({ timeout: 30_000 });
       await expect(screen.getByRole('link', 'Movies')).toBeVisible();
       await expect(screen.getByRole('link', 'Live TV')).toBeHidden();
+      // Index's reader menu opens from the viewer's plate in its rail.
+      await screen.getByTestId('profile-menu').tap();
       await screen.getByTestId('manage-libraries').tap();
       await expect(screen.getByRole('heading', 'Manage libraries')).toBeVisible({ timeout: 30_000 });
       await screen.getByRole('button', 'Show Live TV').tap();
