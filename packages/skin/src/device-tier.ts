@@ -58,3 +58,29 @@ export function deviceFacts(tv: boolean, profile: Record<string, unknown> | null
     screenPixels,
   };
 }
+
+/** The tier this process renders in (a device constant): set once by the app, before the first render, so
+ * translated styles never need it in their cache keys. */
+let lite = false;
+export function setLiteRender(on: boolean): void { lite = on; }
+export function liteRender(): boolean { return lite; }
+
+/** A box-shadow for the lite tier: only its unblurred layers (rings, edges, a focus outline). A blurred
+ * shadow is rasterised per frame per card; a ring is a stroke. '' when nothing is left. */
+export function liteShadow(value: string): string {
+  const layers: string[] = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i <= value.length; i++) {
+    const c = value[i];
+    if (c === '(') depth++;
+    else if (c === ')') depth--;
+    else if ((c === ',' && depth === 0) || i === value.length) { layers.push(value.slice(start, i).trim()); start = i + 1; }
+  }
+  return layers.filter(layer => {
+    if (!layer) return false;
+    // Lengths in order: x, y, blur, spread (colour functions removed first).
+    const lengths = layer.replace(/[a-z-]+\([^()]*(\([^()]*\))*[^()]*\)/gi, ' ').split(/\s+/).filter(part => /^-?\d*\.?\d+(px|em|rem)?$/.test(part));
+    const blur = lengths[2] ? parseFloat(lengths[2]) : 0;
+    return blur === 0;
+  }).join(', ');
+}

@@ -2,6 +2,7 @@
 // style matrix in docs/architecture.md. Box rows become a ViewStyle plus effects the renderer
 // draws with extra components (blur, mask, background image, scrolling, grid). Text rows are
 // translated where text is drawn, with the inherited rows of every ancestor merged in.
+import { liteRender, liteShadow } from './device-tier';
 import { Platform, type TextStyle, type ViewStyle } from 'react-native';
 import {
   colour,
@@ -185,11 +186,17 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
       }
       case 'outline-style': if (v === 'none') s.outlineWidth = 0; break;
       case 'outline-offset': s.outlineOffset = len(v); break;
-      case 'box-shadow': s.boxShadow = v === 'none' ? undefined : pxText(withTokens(v), m); break;
+      case 'box-shadow': {
+        // The lite tier keeps a shadow's rings and drops its blurred layers (device-tier.ts).
+        const value = v === 'none' ? '' : liteRender() ? liteShadow(v) : v;
+        s.boxShadow = value ? pxText(withTokens(value), m) : undefined;
+        break;
+      }
       case 'filter': {
         if (v === 'none') break;
         const blur = /blur\(([^)]+)\)/.exec(v);
-        if (blur) fx.imageBlur = points(blur[1], { ...m, axis: 'x' });
+        // An image blur is a CPU pass over the decoded bitmap on Android: the lite tier draws it sharp.
+        if (blur && !liteRender()) fx.imageBlur = points(blur[1], { ...m, axis: 'x' });
         if (web) {
           s.filter = pxText(v, m);
           break;
@@ -233,7 +240,8 @@ export function boxStyle(css: Css, m: Measure): { style: ViewStyle & Transitions
       }
       case 'rotate': transform.push({ rotate: /deg|turn|rad/.test(v) ? v : `${Number(v)}deg` }); break;
       case 'perspective': transform.unshift({ perspective: points(v, { ...m, axis: 'x' }) ?? 0 }); break;
-      case 'transition': Object.assign(s, transitions(v)); break;
+      // The lite tier changes state in one frame: no animated focus scale, shadow or fade.
+      case 'transition': if (!liteRender()) Object.assign(s, transitions(v)); break;
       // box-none (React Native's, a box that takes no pointer while its children do): a strip
       // laid over content that holds a button.
       case 'pointer-events': s.pointerEvents = v === 'none' ? 'none' : v === 'box-none' ? 'box-none' : 'auto'; break;
@@ -287,7 +295,7 @@ export function textStyle(css: Css, m: Measure): { style: TextStyle; numberOfLin
       case 'text-overflow': ellipsize = v === 'ellipsis'; break;
       case 'line-clamp': numberOfLines = Number(v) || undefined; break;
       case 'font-variant-numeric': if (v.includes('tabular-nums')) s.fontVariant = ['tabular-nums']; break;
-      case 'text-shadow': Object.assign(s, textShadow(v, m)); break;
+      case 'text-shadow': if (!liteRender()) Object.assign(s, textShadow(v, m)); break;
       case 'cursor': if (web) s.cursor = v; break;
       default: break;
     }

@@ -8,6 +8,10 @@ import { systemBarStyle } from '../src/system-bar-style';
 import { AudioDock } from '../src/media/audio';
 import { SurfaceProvider, SurfaceToasts } from '../src/surfaces';
 import { VisualizerProvider } from '../src/visualizer/host';
+import { appRenderTier } from '../src/render-tier';
+
+// The render tier is a device constant the renderer reads from its first style on (device-tier.ts).
+appRenderTier();
 
 export default function Layout() {
   return (

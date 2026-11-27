@@ -68,6 +68,7 @@ import { stickyLimit, stickyOffset, type StickyLayout } from './sticky-layout';
 import { scrollStyles } from './scroll-styles';
 import { pointerPolicy, type PointerMode } from './pointer-policy';
 import { plainBox } from './plain-box';
+import { liteRender } from './device-tier';
 import { moveWebRowFocus } from './web-row-navigation';
 import { rowLinkAvailable } from './row-link-available';
 import { fitKey, measureCopy, navOverflow, sameOverflow, type FitItem } from './nav-fit';
@@ -1938,7 +1939,7 @@ function ImageNode({ node, ctx }: { node: Extract<RNode, { kind: 'image' }>; ctx
           style={StyleSheet.absoluteFill}
           contentFit={fx.contentFit ?? 'fill'}
           blurRadius={fx.imageBlur}
-          transition={node.fade ? 420 : 0}
+          transition={node.fade && !liteRender() ? 420 : 0}
           accessible={!hidden}
           accessibilityLabel={hidden ? '' : alt}
           {...(node.fallback ? { onLoad: () => setLoadState({ src, ok: true }), onError: () => setLoadState({ src, ok: false }) } : {})}

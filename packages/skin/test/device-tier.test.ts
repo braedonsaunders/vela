@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { deviceFacts, renderTier, type DeviceFacts } from '../src/device-tier';
+import { deviceFacts, liteShadow, renderTier, type DeviceFacts } from '../src/device-tier';
 
 const p720 = { width: 1280, height: 720 };
 const p1080 = { width: 1920, height: 1080 };
@@ -44,5 +44,19 @@ describe('render tier', () => {
     expect(deviceFacts(true, { totalMemoryMiB: '2048', lowRam: 1 })).toEqual({ tv: true, totalMemoryMiB: undefined, lowRam: undefined,
       littleCoresOnly: undefined, maxCpuMHz: undefined, is64Bit: undefined, screenPixels: undefined });
     expect(renderTier(deviceFacts(true, null))).toBe('full');
+  });
+});
+
+describe('lite shadows', () => {
+  test('a shadow keeps its rings and drops its blurred layers', () => {
+    expect(liteShadow('0px 0px 0px 3px $ui.ink, 0px 28px 50px -14px $ui.shadow')).toBe('0px 0px 0px 3px $ui.ink');
+    expect(liteShadow('0px 10px 24px -12px $ui.shadow, 0px 0px 0px 1px $ui.glassEdge')).toBe('0px 0px 0px 1px $ui.glassEdge');
+    expect(liteShadow('0px 2px 10px rgba(0, 0, 0, 0.45), 0px 0px 0px 1px rgba(0, 0, 0, 0.35)')).toBe('0px 0px 0px 1px rgba(0, 0, 0, 0.35)');
+  });
+
+  test('a blurred-only or inset blurred shadow goes; a two-length shadow has no blur and stays', () => {
+    expect(liteShadow('0px 8px 24px $ui.shadow')).toBe('');
+    expect(liteShadow('inset 0px 0px 12px color-mix(in srgb, $ui.ink 20%, transparent)')).toBe('');
+    expect(liteShadow('2px 2px #000')).toBe('2px 2px #000');
   });
 });
