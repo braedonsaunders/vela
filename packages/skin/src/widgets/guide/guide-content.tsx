@@ -189,7 +189,8 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   const previewWidth = Math.min(232, Math.round(viewport.width * 0.25));
   // Leave room for the sidebar's channel heading, Watch button and listing status on short screens.
   const sidebarTileHeight = clamp(viewport.height - 314, 36, 72);
-  const tileHeight = landscape ? Math.min(sidebarTileHeight, previewWidth * 9 / 16) : cinematic ? band.pictureHeight : Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
+  const sidebarTileWidth = Math.min(180, previewWidth - 6);
+  const tileHeight = landscape ? sidebarTileHeight : cinematic ? band.pictureHeight : Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
   const headerHeight = cinematic ? band.height : Platform.isTV ? tileHeight + 32 : small ? 196 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
   const landing = useMemo(() => ({
     minute: handOff && handOff.minute >= 0 ? handOff.minute + (handOffOffset ?? 0) : model.landing,
@@ -234,12 +235,13 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
         />
       ) : null}
       {view.tile.state !== 'off' ? (
-        <View style={{ position: 'absolute', right: landscape ? (previewWidth - tileHeight * 16 / 9) / 2 : cinematic && band.stacked ? (viewport.width - tileHeight * 16 / 9) / 2 : side, ...(landscape ? { top: 6 } : cinematic ? { top: band.stacked ? 0 : band.gap } : { bottom: small ? 12 : 8 }), zIndex: 2 }}>
+        <View style={{ position: 'absolute', right: landscape ? (previewWidth - sidebarTileWidth) / 2 : cinematic && band.stacked ? (viewport.width - tileHeight * 16 / 9) / 2 : side, ...(landscape ? { top: 6 } : cinematic ? { top: band.stacked ? 0 : band.gap } : { bottom: small ? 12 : 8 }), zIndex: 2 }}>
           <GuideTile
             look={look}
             tile={view.tile}
             channelName={tunedName}
             height={tileHeight}
+            width={landscape ? sidebarTileWidth : undefined}
             small={small || landscape}
             still={still}
             controller={controller}
@@ -309,7 +311,7 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
           }}
         >
           <View style={{ flexShrink: 1, minWidth: 0, marginLeft: -side }}>
-            <DayChips look={look} model={model} onPick={pickDay} side={side} />
+            <DayChips look={look} model={model} onPick={pickDay} side={side} fadeEdges={landscape} />
           </View>
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center', flexShrink: 0 }}>
             <IconButton look={look} label={msg('ui.earlierProgrammes')} glyph="back" onPress={() => shift(-2)} />

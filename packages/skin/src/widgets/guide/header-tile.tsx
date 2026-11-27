@@ -23,19 +23,22 @@ interface TileProps {
   tile: TileView;
   channelName: string;
   height: number;
+  width?: number;
   small: boolean;
   still: boolean;
   controller: LiveController;
 }
 
-export function GuideTile({ look, tile, channelName, height, small, still, controller }: TileProps) {
+export function GuideTile({ look, tile, channelName, height, width, small, still, controller }: TileProps) {
   const radius = small ? 10 : look.radiusTile;
+  // Keep the video at 16:9 and crop it in the wide, shallow phone tile.
+  const pictureHeight = width === undefined ? height : width * 9 / 16;
   return (
     <View
       style={{
         position: 'relative',
         height,
-        aspectRatio: 16 / 9,
+        ...(width === undefined ? { aspectRatio: 16 / 9 } : { width }),
         borderRadius: radius,
         overflow: 'hidden',
         backgroundColor: look.media,
@@ -44,7 +47,9 @@ export function GuideTile({ look, tile, channelName, height, small, still, contr
         boxShadow: `0px 18px 50px ${look.shadow}`,
       }}
     >
-      <TilePicture />
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: (height - pictureHeight) / 2, height: pictureHeight }}>
+        <TilePicture />
+      </View>
       {tile.state === 'connecting' ? <Tuning look={look} still={still} channelName={channelName} /> : null}
       <TileAction look={look} tile={tile} channelName={channelName} controller={controller} />
       <LinearGradient
@@ -52,7 +57,7 @@ export function GuideTile({ look, tile, channelName, height, small, still, contr
         style={[styles.top, { paddingVertical: small ? 5 : 8, paddingHorizontal: small ? 6 : 10 }]}
         pointerEvents="none"
       >
-        <LiveBadge look={look} size={12} />
+        <LiveBadge look={look} size={width === undefined ? 12 : 11} />
         {!small ? (
           <Line
             look={look}
