@@ -605,3 +605,39 @@ describe('Manage libraries in every built-in skin', async () => {
     }
   });
 });
+
+test('Home artwork frames use the declared row aspect at TV width', async () => {
+  const { fill } = await import('../src/resolve');
+  const { feedRow } = await import('../../core/src/discovery/models');
+  const row = feedRow({
+    id: 'collections', name: 'Collections', purpose: 'collection', receiptToken: '', continuation: 'exhausted',
+    items: [{ id: 'collection', kind: 'collection', targetId: 'collection', name: 'Collection', artwork: [], receiptToken: '' }],
+  });
+  const context = { index: 0, row, card: { ...row.items[0]!, poster: 'fixture-poster', backdrop: 'fixture-backdrop' } };
+  // Only call bindings in the row's artwork subtree. The URLs identify the box that frames them.
+  const hasArt = (node: RNode): boolean => node.kind === 'image'
+    ? ['fixture-poster', 'fixture-backdrop'].includes(fill(node.src, context, {} as never))
+    : node.kind === 'box' && node.children.some(hasArt);
+  for (const [name, doc] of documents) {
+    const frames: Extract<RNode, { kind: 'box' }>[] = [];
+    const visit = (node: RNode, rowItem = false) => {
+      if (node.kind === 'repeat') visit(node.item, node.over === 'row.items');
+      if (node.kind !== 'box') return;
+      if (rowItem && node.base.style['aspect-ratio'] && node.children.some(hasArt)) frames.push(node);
+      node.children.forEach(child => visit(child, rowItem));
+    };
+    visit(resolveDocument(doc, 1920).routes.home!);
+    // Index uses a text catalogue with no artwork.
+    if (name === 'index') {
+      expect(frames).toHaveLength(0);
+      continue;
+    }
+    expect(frames.length, name).toBeGreaterThan(0);
+    for (const [card, ratio] of [['poster', '2 / 3'], ['landscape', '16 / 9'], ['square', '1 / 1']] as const) {
+      for (const frame of frames) {
+        const aspect = fill(frame.base.style['aspect-ratio'], { ...context, row: { ...row, card } }, {} as never);
+        expect(aspect, name).toBe(ratio);
+      }
+    }
+  }
+});
