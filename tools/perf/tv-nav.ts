@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-  analyzeLightPress, analyzePress, anchorPresses, cpuIn, jsQuietMs, parseCpuSamples, parseFramestats, parseJsSamples, parseMarks, parseProbe, parseProbeJs, pressStarts, summarizePresses, METRICS,
+  analyzeLightPress, analyzePress, anchorPresses, sumCounts, cpuIn, jsQuietMs, parseCpuSamples, parseFramestats, parseJsSamples, parseMarks, parseProbe, parseProbeJs, pressStarts, summarizePresses, METRICS,
   type PressMetrics, type Span, type TraceEvents, type Metric, type Summary,
 } from './tv-nav-analysis';
 
@@ -580,7 +580,10 @@ async function measureLight(o: Options, name: string, label: string): Promise<Ru
       if ('launch' in step) press.contentMs = jsQuietMs(parseJsSamples(logcat), from, to);
       const commits = probe.filter(commit => commit.ts >= from && commit.ts < to);
       const windowMs = Math.round(((before[i + 1] ?? to) - (before[i] ?? from)) / 1e5) / 10;
-      metrics.push({ ...press, commits: commits.length, comps: commits.reduce((sum, c) => sum + c.comps, 0), windowMs });
+      const commitMs = commits.length ? Math.round((commits[0]!.ts - from) / 1e5) / 10 : null;
+      const top = commits.length ? sumCounts(commits.map(c => c.top)) : press.top;
+      metrics.push({ ...press, commits: commits.length, comps: commits.reduce((sum, c) => sum + c.comps, 0), windowMs, commitMs, top,
+        sources: commits.length ? sumCounts(commits.map(c => c.src ?? '')) : press.sources });
     });
     const first = cpu.find(sample => sample.tag === 'p');
     const last = [...cpu].reverse().find(sample => sample.tag === 'e');

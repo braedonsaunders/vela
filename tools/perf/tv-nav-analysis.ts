@@ -55,6 +55,9 @@ export interface PressMetrics {
   /** How long the press's CPU was counted for (light mode: from before `input keyevent` to the next press),
    * so a press's JS can be told from the screen's own JS per second over the same stretch. */
   windowMs?: number;
+  /** Light mode with a probe build: the key's handling (its logcat mark) to the first React commit after it, the
+   * JS answer to the press when the press is what drew (its `top`/`src` say). */
+  commitMs?: number | null;
   commits: number;
   comps: number;
   top: string;
@@ -238,7 +241,7 @@ export function summarize(values: (number | null)[]): Summary {
   return { n: present.length, median: pick(0.5), p90: pick(0.9), total: round(present.reduce((a, b) => a + b, 0)) };
 }
 
-export const METRICS = ['focusMs', 'mountMs', 'frameMs', 'settleMs', 'contentMs', 'jsMs', 'mainMs', 'renderMs', 'mounts', 'frames', 'jank', 'worstMs', 'commits', 'comps', 'windowMs'] as const;
+export const METRICS = ['focusMs', 'mountMs', 'frameMs', 'settleMs', 'contentMs', 'jsMs', 'mainMs', 'renderMs', 'mounts', 'frames', 'jank', 'worstMs', 'commits', 'comps', 'windowMs', 'commitMs'] as const;
 export type Metric = typeof METRICS[number];
 
 export function summarizePresses(presses: PressMetrics[]): Record<Metric, Summary> {
