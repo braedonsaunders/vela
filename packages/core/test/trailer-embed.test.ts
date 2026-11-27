@@ -64,6 +64,8 @@ describe('embed URL validation', () => {
     expect(embedFrameUrl(url.href)).toBe(`https://www.youtube-nocookie.com/embed/${VIDEO}`);
     expect(new URL(embedPlayerUrl({ provider: 'youtube', videoId: VIDEO }, 'http://127.0.0.1:1', 'http://127.0.0.1:2')).origin).toBe('http://127.0.0.1:2');
     expect(() => embedPlayerUrl({ provider: 'youtube', videoId: '../x/y?z=12' }, 'https://ether.example')).toThrow();
+    // A lab or development build's quiet playback starts the embed muted.
+    expect(new URL(embedPlayerUrl({ provider: 'youtube', videoId: VIDEO }, 'https://ether.example', undefined, true)).searchParams.get('mute')).toBe('1');
   });
 });
 

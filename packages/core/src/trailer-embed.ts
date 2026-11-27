@@ -82,10 +82,11 @@ export function acceptEmbedOriginOverride(value: unknown): string | null {
 }
 
 /** The URL the embed loads: the nocookie embed (or a mock's stand-in) with autoplay, no other channels'
- * suggestions, inline on phones, and YouTube's message API reporting to `parentOrigin` only. */
-export function embedPlayerUrl(embed: TrailerEmbed, parentOrigin: string, embedOrigin: string = YOUTUBE_EMBED_ORIGIN): string {
+ * suggestions, inline on phones, and YouTube's message API reporting to `parentOrigin` only. `muted`: a lab
+ * or development build's quiet playback starts it muted (mute=1); the viewer can unmute in the player. */
+export function embedPlayerUrl(embed: TrailerEmbed, parentOrigin: string, embedOrigin: string = YOUTUBE_EMBED_ORIGIN, muted = false): string {
   if (!isYoutubeVideoId(embed.videoId)) throw new Error('Invalid YouTube video id');
-  const params = new URLSearchParams({ autoplay: '1', rel: '0', playsinline: '1', enablejsapi: '1', origin: parentOrigin });
+  const params = new URLSearchParams({ autoplay: '1', rel: '0', playsinline: '1', enablejsapi: '1', origin: parentOrigin, ...(muted ? { mute: '1' } : {}) });
   return `${embedOrigin}/embed/${embed.videoId}?${params}`;
 }
 

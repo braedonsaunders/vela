@@ -13,6 +13,7 @@ import {
 } from '@vela/core';
 import { VelaEmbedView } from '@vela/player';
 import { PlayerIcon } from '@vela/skin/src/widgets/player/icons';
+import { quietPlayback } from '@vela/skin/src/quiet-playback';
 import { trailerEmbedOrigin } from './trailer-embed-origin';
 
 const BAR = 56;
@@ -47,11 +48,13 @@ export function TrailerEmbedWatch({ extra, close, onFallback }: Props) {
   const [area, setArea] = useState({ width: 0, height: 0 });
   const source = useMemo(() => {
     const embedOrigin = trailerEmbedOrigin();
+    // A lab or development build starts playback silent, the embed included.
+    const muted = quietPlayback();
     if (Platform.OS === 'web') {
-      return { playerUrl: embedPlayerUrl(embed, window.location.origin, embedOrigin), page: '', pageOrigin: '' };
+      return { playerUrl: embedPlayerUrl(embed, window.location.origin, embedOrigin, muted), page: '', pageOrigin: '' };
     }
     const pageOrigin = nativeEmbedHostOrigin(embedOrigin);
-    const playerUrl = embedPlayerUrl(embed, pageOrigin, embedOrigin);
+    const playerUrl = embedPlayerUrl(embed, pageOrigin, embedOrigin, muted);
     return { playerUrl, page: nativeEmbedPage(playerUrl), pageOrigin };
     // The same video keeps its player when the title is read again.
   }, [embed.videoId]);
