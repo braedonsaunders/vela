@@ -10,7 +10,7 @@ import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
-import { belongs, presentedAfter, qualityReached, restartAt } from './present';
+import { belongs, planSource, presentedAfter, qualityReached, restartAt, settlePick, viewCommand, type PendingPick } from './present';
 import { paceSnapshot, type Paced } from './snapshot-pace';
 import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
@@ -54,17 +54,17 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const [failure, setFailure] = useState<Failure | null>(null);
   const [refused, setRefused] = useState('');
   // A quiet (lab or development) build starts muted: the view takes this as its first command.
-  const [command, setCommand] = useState<Command | undefined>(() => (quietPlayback() ? { id: 1, type: 'mute', muted: true } as Command : undefined));
+  // The latest command and the session it was sent on, set together so no render pairs one with the other's successor.
+  const [sent, setSent] = useState<{ command: Command | undefined; on: string }>(() => ({ command: quietPlayback() ? { id: 1, type: 'mute', muted: true } as Command : undefined, on: '' }));
   const nextId = useRef(quietPlayback() ? 1 : 0);
-  const commandSession = useRef('');
   const pendingQuality = useRef(0);
   const [pendingQualityId, setPendingQualityId] = useState<string>();
   /** The viewer's quality pick awaiting the engine, read synchronously when the engine asks the server. */
   const qualityPick = useRef<string | undefined>(undefined);
   qualityPick.current = pendingQualityId;
   /** Deliberate audio/subtitle picks awaiting engine confirmation before remembering for the series. */
-  const pendingAudio = useRef<{ commandId: number; sessionId: string; trackId: string } | null>(null);
-  const pendingSubtitle = useRef<{ commandId: number; sessionId: string; trackId: string | null } | null>(null);
+  const pendingAudio = useRef<(PendingPick & { commandId: number }) | null>(null);
+  const pendingSubtitle = useRef<(PendingPick & { commandId: number }) | null>(null);
   const [pendingVersionId, setPendingVersionId] = useState<string>();
   const [versionMessage, setVersionMessage] = useState('');
   const [offerVersions, setOfferVersions] = useState(0);
@@ -86,6 +86,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const sessionId = plan?.sessionId ?? '';
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
+  // The file showing, which a track pick names a track of.
+  const sourceRef = useRef(planSource(plan));
+  sourceRef.current = planSource(plan);
 
   useEffect(() => {
     if (!external || !ownedPlan) return;
@@ -205,8 +208,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
         void vela.playback.liveTransport(current.sessionId, transport).then(accepted => {
           if (!accepted || current.sessionId !== sessionIdRef.current || transport.kind === 'seek') return;
           viewerPaused.current = transport.kind === 'pause';
-          commandSession.current = current.sessionId;
-          setCommand({ id: ++nextId.current, type: viewerPaused.current ? 'pause' : 'play' });
+          setSent({ command: { id: ++nextId.current, type: viewerPaused.current ? 'pause' : 'play' }, on: current.sessionId });
         });
         return;
       }
@@ -219,12 +221,11 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     if (input.type === 'seek' || input.type === 'seekBy') presented.current = false;
     if (input.type === 'quality') { pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }
     if (input.type === 'audio' && sessionIdRef.current) {
-      pendingAudio.current = { commandId: nextId.current, sessionId: sessionIdRef.current, trackId: input.trackId };
+      pendingAudio.current = { commandId: nextId.current, sessionId: sessionIdRef.current, source: sourceRef.current, trackId: input.trackId };
     } else if (input.type === 'subtitle' && sessionIdRef.current) {
-      pendingSubtitle.current = { commandId: nextId.current, sessionId: sessionIdRef.current, trackId: input.trackId };
+      pendingSubtitle.current = { commandId: nextId.current, sessionId: sessionIdRef.current, source: sourceRef.current, trackId: input.trackId };
     }
-    commandSession.current = sessionIdRef.current;
-    setCommand({ ...input, id: nextId.current } as Command);
+    setSent({ command: { ...input, id: nextId.current } as Command, on: sessionIdRef.current });
   }, [vela]);
 
   // The sleep timer (core sleep.ts, as spoken audio has it): an ordinary pause after some minutes, or at
@@ -339,8 +340,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const liveRecoveryNotice = Platform.OS === 'android' && actionError === msg('catchUp.recoveredLive') ? actionError : '';
   const view: VelaPlayerProps = {
     plan: enginePlan,
-    // A queued transport command belongs to the engine that received it.
-    command: command && ['play', 'pause', 'seek', 'seekBy', 'catchUp'].includes(command.type) && commandSession.current !== sessionId ? undefined : command,
+    command: viewCommand(sent.command, sent.on, sessionId),
     videoFill: pictureChoice && settings.picture === 'fill',
     onSnapshot: next => {
       const drawn = paceSnapshot(paced.current, next, Date.now());
@@ -353,20 +353,11 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
         reported.current = next;
         position.current = next.position;
         paused.current = next.state === 'paused';
-        if (pendingAudio.current && pendingAudio.current.sessionId === sessionId && !next.pendingAudioTrackId && next.audioTrackId === pendingAudio.current.trackId) {
-          const chosen = pendingAudio.current;
-          pendingAudio.current = null;
-          vela.playback.rememberTrack(chosen.sessionId, 'audio', chosen.trackId);
-        }
-        if (pendingSubtitle.current && pendingSubtitle.current.sessionId === sessionId && !next.pendingSubtitleTrackId) {
-          const activeSub = next.subtitleTrackId || null;
-          if (activeSub === pendingSubtitle.current.trackId && !next.subtitleError) {
-            const chosen = pendingSubtitle.current;
-            pendingSubtitle.current = null;
-            vela.playback.rememberTrack(chosen.sessionId, 'subtitle', chosen.trackId);
-          } else if (next.subtitleError) {
-            pendingSubtitle.current = null;
-          }
+        for (const [track, pending] of [['audio', pendingAudio], ['subtitle', pendingSubtitle]] as const) {
+          const chosen = pending.current;
+          const settled = chosen ? settlePick(chosen, track, next, plan) : 'wait';
+          if (settled !== 'wait') pending.current = null;
+          if (chosen && settled === 'confirm') vela.playback.rememberTrack(chosen.sessionId, track, chosen.trackId);
         }
         const asleep = sleepRef.current;
         // The end came first: an end-of-item sleep has done its work (nothing follows), a timer has none left.

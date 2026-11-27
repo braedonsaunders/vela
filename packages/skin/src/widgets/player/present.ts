@@ -4,7 +4,7 @@
 // empty rather than estimated.
 import { languageLabel, msg, number, playingRelease, second } from '@vela/core';
 import { QUALITY_HEADROOM, videoInfo, type VideoInfo } from '../../../../../modules/vela-player/web/engine/video-info';
-import type { PlaybackPlan, Snapshot } from '@vela/player-api';
+import type { Command, PlaybackPlan, Snapshot } from '@vela/player-api';
 import { formatLines, type FormatLines } from './format';
 
 type Path = PlaybackPlan['paths'][number];
@@ -438,6 +438,40 @@ export function belongs(snapshot: Snapshot | null, plan: PlaybackPlan | null): s
     snapshot.sourceGeneration === plan.sourceGeneration &&
     snapshot.seekGeneration === plan.seekGeneration
   );
+}
+
+/** The command a view is handed: a track command names a track of the file of the session it was
+ * sent on (`sentOn`), so a view mounted for a replacement session does not replay it there, and a
+ * queued transport command belongs to the engine that received it. */
+export function viewCommand(command: Command | undefined, sentOn: string, sessionId: string): Command | undefined {
+  return command && ['audio', 'subtitle', 'play', 'pause', 'seek', 'seekBy', 'catchUp'].includes(command.type) && sentOn !== sessionId ? undefined : command;
+}
+
+/** An audio or subtitle pick awaiting the player: the session and the file (`planSource`) it was made
+ * on, and the track (null: Off). */
+export interface PendingPick { sessionId: string; source: string | undefined; trackId: string | null }
+
+/** The file a plan plays: its selected path's `sourceId`; without one, the release playing (`playingVersionId`,
+ * or `selectedVersionId` when the plan does not say which plays); undefined when nothing names it. The
+ * row alone tells files apart but an equal row does not prove the same file (`settlePick` only drops on a difference). */
+export function planSource(plan: PlaybackPlan | null | undefined): string | undefined {
+  if (!plan) return undefined;
+  const version = plan.playingVersionId !== undefined ? plan.playingVersionId : plan.selectedVersionId;
+  return plan.paths?.find(path => path.id === plan.selectedPathId)?.sourceId || version || undefined;
+}
+
+/** What a report of `plan` does to a pending pick: confirms it as the viewer's choice, drops it, or
+ * leaves it waiting. A pick names a track of the file it was made on, so a report of another file
+ * (the next version, whichever of its plan and the switch reply came first) drops it unconfirmed.
+ * When either file is unknown, the pick is judged by the report alone. */
+export function settlePick(pick: PendingPick, kind: 'audio' | 'subtitle', snapshot: Snapshot, plan: PlaybackPlan | null): 'confirm' | 'drop' | 'wait' {
+  if (pick.sessionId !== plan?.sessionId) return 'wait';
+  const now = planSource(plan);
+  if (pick.source && now && pick.source !== now) return 'drop';
+  if (kind === 'audio') return !snapshot.pendingAudioTrackId && snapshot.audioTrackId === pick.trackId ? 'confirm' : 'wait';
+  if (snapshot.pendingSubtitleTrackId) return 'wait';
+  if (snapshot.subtitleError) return 'drop';
+  return (snapshot.subtitleTrackId || null) === pick.trackId ? 'confirm' : 'wait';
 }
 
 /** Where Try again or a return to the foreground starts the session again: the last reported position, a zero

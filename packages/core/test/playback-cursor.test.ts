@@ -2636,9 +2636,11 @@ test('an audio report from an older seek generation, arriving after a seek on th
 });
 
 test('an audio report before a seek on the same source still chooses the tracks recovery asks for', async () => {
-  await watch(async ({ playback, sessionId, restart, plan, adapter }) => {
+  await watch(async ({ playback, sessionId, restart, publish, plan, adapter }) => {
     const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
     const sent = audioOnReplacement(adapter, plan);
+    // A reported id counts only when the plan lists it (track-match.ts): the session's plan lists both tracks.
+    await publish(1, 1815, { audioTracks: twoAudioTracks, selectedAudioTrackId: '1' } as Partial<PlaybackPlan>);
     // Audio 2 is reported at seek generation 1; then a seek to 90 is accepted at seek generation 2.
     playback.snapshot({ ...at(sessionId(), 'playing', 1815), audioTrackId: '2' });
     const { waiting, restore } = answerSeeks(adapter);

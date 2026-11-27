@@ -24,8 +24,9 @@ import { hasColdVersion, sessionVersionsOf, type SessionVersions } from './sessi
 import { withPlaying } from './playing-release';
 import { onlyClockMoved } from './plan-clock';
 import { serverEnd } from './server-end';
+import { carriedTrack, fileOf, trackChoice, type TrackChoice } from './track-match';
 import { episodeAfter, type EpisodeRef } from '../adapter/series';
-import { matchSeriesTracks } from '../series-tracks';
+import { matchSeriesTracks, playableLocally } from '../series-tracks';
 import { atLiveEdge, liveRestart, liveRestartSeek, type LiveResume } from '../live/recovery';
 import { msg } from '../i18n';
 import type { ArchiveRange } from '../live/timeshift';
@@ -103,6 +104,43 @@ export interface MediaAccessGrant {
 /** The last position the player reported for a session, and whether it said the item ended. */
 interface LastPosition { sessionId: string; seconds: number; ended: boolean }
 
+/** What a track command was sent on: the session, its source generation, version (not one the plan shows unavailable) and file
+ * (track-match.ts `fileOf`), the versions taken in by then, the plan and the tracks it asked for. */
+interface SentOn { sessionId: string; sourceGeneration: number | undefined; version: string | undefined; file: string | undefined; versions: number;
+  plan: V.PlaybackPlan | undefined; tracks: TracksCommand | undefined }
+
+type TracksCommand = Extract<V.SessionCommand, { kind: 'tracks' }>;
+
+/** What each kind showed before a track command: the choice then, what the plan showed and (subtitles) what the player last reported,
+ * on the source generation it was sent from; and whether the player has reported the command's choice of a kind since. */
+interface Before { audio: (string | undefined)[]; subtitle: (string | null | undefined)[]; sourceGeneration: number | undefined; reported: { audio: boolean; subtitle: boolean } }
+
+/** A selection the player showed, on the source generation it showed it on. */
+interface Shown { id: string | null; sourceGeneration: number }
+
+/** A track command not yet answered: a plan the session publishes after it that shows it confirms it, kind by kind (`takePick`).
+ * It stays while its request awaits the answer (`inFlight`), and after it timed out or was lost while a kind of it is still to
+ * be confirmed; a reply or a refusal ends it. `confirmed`: the source generation of the plan that confirmed a kind. */
+/** `left`: the kinds the player showed this command's choice for (`recorded`, or `confirmed` on a later source) and then the viewer's
+ * newer choice: for `recorded`, another selection on that source, or on a later source one other than the first it showed there
+ * (`first`); for `confirmed`, another selection on that source or a later one. Neither a plan nor its reply records those, and a
+ * stale retry does not send them again. `recorded`: for the kinds a playing or paused report of this command's choice recorded, the
+ * source generation of the last such report. `first`: for those kinds, the first selection a playing or paused report showed on the
+ * newest source later than that (a reopen of the same file), with its generation: that file's own selection, not a choice, so the
+ * pick is still the viewer's (`passed`); a still later source has its own. `waiting`: it awaits the session (`session.ready()`);
+ * until it is sent, it holds back an older stale retry only for the kinds recorded. `passed`: for the kinds the player showed its
+ * choice for, also while buffering, and after it left reported another selection for while playing or paused on a plan newer than
+ * it was sent on, the newest such plan: a reply older than that plan does not record those (the player's selection there is newer),
+ * a reply as new does, and a stale retry still sends them again (the viewer's pick is still owed). */
+interface Pick { at: V.PlaybackPlan; sent: SentOn; command: TracksCommand; origin: CommandOrigin; number: number; before: Before; left: { audio: boolean; subtitle: boolean };
+  recorded: { audio?: number; subtitle?: number }; first: { audio?: Shown; subtitle?: Shown }; waiting: boolean; inFlight: boolean; confirmed: { audio?: number; subtitle?: number };
+  passed: { audio?: V.PlaybackPlan; subtitle?: V.PlaybackPlan } }
+
+/** After a track command's choice (`to`) was recorded for a kind: what the player showed before it, at the source generation and
+ * on the file (track-match.ts `fileOf`) it was recorded on. A report there that still shows one of those is from before the
+ * command, not a newer choice (`snapshot`). */
+interface Echo { from: Set<string | null>; to: string | null; sourceGeneration: number; file: string | undefined }
+
 interface Intent {
   run: object;
   target: PlaybackTarget;
@@ -115,8 +153,8 @@ interface Intent {
 }
 
 /** A version switch still waiting for its version: the session, the source generation it was asked from, the version asked
- * for, and its number as sent. */
-interface VersionSwitch { sessionId: string; sourceGeneration: number; versionId: string; number: number }
+ * for, its number as sent, and whether its request still awaits the answer (else it was answered, timed out or was lost). */
+interface VersionSwitch { sessionId: string; sourceGeneration: number; versionId: string; number: number; inFlight: boolean }
 
 /** How many sessions this client stopped are remembered (`stoppedSessions`). */
 const STOPPED_REMEMBERED = 32;
@@ -198,6 +236,35 @@ export class Playback {
   private localTracks = false;
   private audio: string | undefined;
   private subtitle: string | null | undefined;
+  /** The file `audio` and `subtitle` were chosen on and what those tracks were there (track-match.ts). */
+  private audioChoice: TrackChoice | undefined;
+  private subtitleChoice: TrackChoice | undefined;
+  /** `subtitle` is null because the viewer turned subtitles off, not because none was ever on. */
+  private subtitleOff = false;
+  /** What the player last reported for subtitles on the current source; undefined before its first report there. */
+  private subtitleReported: string | null | undefined;
+  /** The number of the newest version switch that took effect (its reply, or its version published). */
+  private appliedSwitch = 0;
+  /** Versions taken in (`takeVersion`): a track command sent before one belongs to the version it was chosen on. */
+  private versionsTaken = 0;
+  /** The session, version, source generation and file (track-match.ts `fileOf`) the last version was taken on (`takeVersion`), and
+   * the plan it was taken on; a new session, a recovery and the end of the session clear it. */
+  private versionTaken: { sessionId: string; versionId?: string; sourceGeneration: number; file?: string; plan: V.PlaybackPlan } | undefined;
+  /** The track commands not yet answered, with the plan and what they were sent on (`takePick`). */
+  private picks: Pick[] = [];
+  /** The session's track commands are numbered as sent; for each kind, the number of the newest command or player confirmation
+   * whose choice was recorded. A reply records its choice for a kind unless a newer one was (`takeTracks`). */
+  private tracksSent = 0;
+  private applied = { audio: 0, subtitle: 0 };
+  /** For each kind, the numbers of the commands sent and player confirmations the server has not refused: a stale command is
+   * sent again only for the kinds it is still the newest of (`latest`). */
+  private chosen = { audio: new Set<number>(), subtitle: new Set<number>() };
+  /** For each kind, the plan that last confirmed a command (`takePick`): one plan confirms one command at most. */
+  private confirmedBy: { audio?: V.PlaybackPlan; subtitle?: V.PlaybackPlan } = {};
+  /** For each kind, the selections a report does not take for a newer choice after a command's was recorded (`snapshot`). */
+  private echoes: { audio?: Echo; subtitle?: Echo } = {};
+  /** The session's track commands awaiting their reply, with their numbers. */
+  private outstanding = new Map<TracksCommand, number>();
   /** Series-track context for the active title session: server, viewer, title and series ID. */
   private sessionContext: { sessionId: string; serverId: string; viewerId: string; titleId: string; showId?: string; connection: Connection } | undefined;
   private externalId: string | undefined;
@@ -457,13 +524,16 @@ export class Playback {
     }
     // A replacement session that already carries the viewer's tracks needs no command, and a live
     // re-tune gets none at all: its tracks are the new stream's (with new ids) and live sessions
-    // refuse track commands. Only choices that name a track in the new plan are carried.
+    // refuse track commands. Only choices that name a track in the new plan are carried, by id on
+    // the same file and by what the track is on another (track-match.ts), and only those the new
+    // plan has not selected already. Subtitles that were never on are no choice: the server's stand.
     const live = target.kind === 'channel' || target.kind === 'library-live' || (target.kind === 'programme' && target.from === 'start');
-    const audio = this.audio !== undefined && plan.audioTracks.some(t => t.id === this.audio) ? this.audio : undefined;
-    const subtitle = this.subtitle === null || (this.subtitle !== undefined && plan.subtitleTracks.some(t => t.id === this.subtitle)) ? this.subtitle : undefined;
-    const differs = (audio !== undefined && audio !== plan.selectedAudioTrackId)
-      || (subtitle !== undefined && subtitle !== (plan.selectedSubtitleTrackId ?? null));
-    if (this.recovering && !live && differs) {
+    const { audio: carriedAudio, subtitle: carriedSubtitle } = this.carried(plan);
+    const audio = carriedAudio !== plan.selectedAudioTrackId ? carriedAudio : undefined;
+    const subtitle = carriedSubtitle !== (plan.selectedSubtitleTrackId ?? null) ? carriedSubtitle : undefined;
+    // The new source's reports are measured against its own selection. The choice stays until that player reports.
+    if (this.recovering) this.subtitleReported = undefined;
+    if (this.recovering && !live && (audio !== undefined || subtitle !== undefined)) {
       if (this.localTracks) {
         // Tracks chosen locally (remembered series choices, or a server that leaves track selection
         // to the engine) stay local across recovery too — never written back to the server.
@@ -476,10 +546,22 @@ export class Playback {
             idempotencyKey: this.session.key(),
           }));
         } catch {
+          // Subtitles off refused together with an audio change are asked for on their own: a
+          // stream with burned-in subtitles cannot have them removed by the engine. Not once the
+          // viewer has moved on: on Plex, Off is also stored as the part's subtitle preference.
+          const off = this.run === run && subtitle === null && audio !== undefined && (plan.selectedSubtitleTrackId ?? null) !== null
+            ? await this.send(connection.adapter, plan.sessionId, { kind: 'tracks', subtitleTrackId: null, sourceGeneration: plan.sourceGeneration,
+              seekGeneration: plan.seekGeneration, idempotencyKey: this.session.key() }).catch(() => undefined)
+            : undefined;
           // Some servers leave track selection to the engines. Their plan still describes the
-          // available tracks, so carry the viewer's choices into the new engine session.
-          this.localTracks = true;
-          plan = this.withLocalTracks(plan);
+          // available tracks, so carry the viewer's choices, as matched on the new file, into the new engine session; not when
+          // the server took Off on its own, which leaves selection with it.
+          // Taken after the viewer left, Off still moved the session on: it is stopped where it is now.
+          if (off) plan = connection.plan(off);
+          else if (this.run === run) {
+            this.localTracks = true;
+            plan = this.withLocalTracks(plan);
+          }
         }
         if (this.run !== run) {
           this.stopped(plan.sessionId);
@@ -506,10 +588,20 @@ export class Playback {
         const matched = matchSeriesTracks(plan, preference, { explicitAudio: !!target.audioTrackId, client });
         const audioDiff = matched.audioTrackId !== undefined && matched.audioTrackId !== plan.selectedAudioTrackId;
         const subtitleDiff = matched.subtitleTrackId !== undefined && matched.subtitleTrackId !== (plan.selectedSubtitleTrackId ?? null);
-        if (audioDiff || subtitleDiff) {
-          this.localTracks = true;
-          if (audioDiff) this.audio = matched.audioTrackId;
-          if (subtitleDiff) this.subtitle = matched.subtitleTrackId;
+        // A remembered Off is the viewer's even when the episode starts without subtitles: a replacement keeps it.
+        // Only a choice that changes the start makes the tracks local; an Off equal to it is just remembered.
+        const subtitleOff = matched.subtitleTrackId === null;
+        if (audioDiff || subtitleDiff || subtitleOff) {
+          if (audioDiff || subtitleDiff) this.localTracks = true;
+          if (audioDiff) {
+            this.audio = matched.audioTrackId;
+            this.audioChoice = trackChoice(plan, plan.audioTracks, this.audio);
+          }
+          if (subtitleDiff || subtitleOff) {
+            this.subtitle = matched.subtitleTrackId;
+            this.subtitleChoice = trackChoice(plan, plan.subtitleTracks, this.subtitle ?? undefined);
+            this.subtitleOff = this.subtitle === null;
+          }
           plan = this.withLocalTracks(plan);
         }
       }
@@ -523,6 +615,7 @@ export class Playback {
     this.recovering = false;
     this.established = true;
     this.recoveryAttempt = 0;
+    this.resetTrackNumbers();
     const watchTarget = this.box.get().playback.target ?? target;
     if (this.watch?.target !== watchOf(watchTarget)) this.watch = { target: watchOf(watchTarget), session: '', restarts: 0 };
     this.watch.session = plan.sessionId;
@@ -642,6 +735,8 @@ export class Playback {
       const shown = this.box.get().playback.plan;
       if (!ended && shown && this.box.get().playback.phase === 'playing' && onlyClockMoved(shown, plan)) {
         this.clockAhead = plan;
+        // It still shows what a pending track command asked for (takePick).
+        this.takePick(plan);
         return;
       }
       this.clockAhead = null;
@@ -739,9 +834,23 @@ export class Playback {
 
   private withLocalTracks(plan: V.PlaybackPlan): V.PlaybackPlan {
     if (!this.localTracks) return plan;
+    // Only what the engine can switch to on this plan: a muxed transcode keeps the server's tracks.
+    const { audio, subtitle } = this.carried(plan);
+    let client: V.ClientCapabilities | undefined;
+    try { client = this.session.client; } catch { /* Capabilities optional for matching. */ }
+    const local = playableLocally(plan, { audioTrackId: audio, subtitleTrackId: subtitle }, client);
     return { ...plan,
-      ...(this.audio && plan.audioTracks.some(track => track.id === this.audio) ? { selectedAudioTrackId: this.audio } : {}),
-      ...(this.subtitle === null || (this.subtitle !== undefined && plan.subtitleTracks.some(track => track.id === this.subtitle)) ? { selectedSubtitleTrackId: this.subtitle ?? null } : {}),
+      ...(local.audioTrackId !== undefined ? { selectedAudioTrackId: local.audioTrackId } : {}),
+      ...(local.subtitleTrackId !== undefined ? { selectedSubtitleTrackId: local.subtitleTrackId } : {}),
+    };
+  }
+
+  /** The viewer's choices as ids in `plan` (track-match.ts); undefined leaves the plan's own selection. */
+  private carried(plan: V.PlaybackPlan): { audio: string | undefined; subtitle: string | null | undefined } {
+    return {
+      audio: this.audio !== undefined ? carriedTrack(this.audio, this.audioChoice, plan, plan.audioTracks) : undefined,
+      subtitle: this.subtitle === null ? (this.subtitleOff ? null : undefined)
+        : this.subtitle !== undefined ? carriedTrack(this.subtitle, this.subtitleChoice, plan, plan.subtitleTracks) : undefined,
     };
   }
 
@@ -752,8 +861,27 @@ export class Playback {
   rememberTrack(sessionId: string, kind: 'audio' | 'subtitle', trackId: string | null): void {
     const current = this.box.get().playback;
     if (!sessionId || current.sessionId !== sessionId || current.plan?.sessionId !== sessionId) return;
-    if (kind === 'audio' && trackId) this.audio = trackId;
-    if (kind === 'subtitle') this.subtitle = trackId;
+    // A confirmation of what the latest command of this kind awaiting its reply asked for counts as that command, while no later
+    // one of this kind was sent; any other is newer than all sent. Either supersedes an older command of this kind not yet
+    // answered, and that command too for a plan published later (`takeTracks`, `takePick`), and it is the viewer's even when the
+    // player reported something else since.
+    let latest: { number: number; trackId: string | null | undefined } | undefined;
+    for (const [command, number] of this.outstanding) {
+      const asked = kind === 'audio' ? command.audioTrackId : command.subtitleTrackId;
+      if (asked !== undefined && number > (latest?.number ?? 0)) latest = { number, trackId: asked };
+    }
+    if (latest?.trackId === trackId && latest.number === this.latest(kind)) this.applied[kind] = Math.max(this.applied[kind], latest.number);
+    else this.chosen[kind].add(this.applied[kind] = ++this.tracksSent);
+    this.echoes[kind] = undefined;
+    if (kind === 'audio' && trackId) {
+      this.audio = trackId;
+      this.audioChoice = trackChoice(current.plan, current.plan.audioTracks, trackId);
+    }
+    if (kind === 'subtitle') {
+      this.subtitle = trackId;
+      this.subtitleChoice = trackChoice(current.plan, current.plan.subtitleTracks, trackId ?? undefined);
+      this.subtitleOff = trackId === null;
+    }
     if (!this.seriesTracks || this.sessionContext?.sessionId !== sessionId) return;
     const { serverId, viewerId, titleId, connection } = this.sessionContext;
     if (!viewerId) return;
@@ -832,11 +960,18 @@ export class Playback {
     this.stall = undefined;
     this.recovering = true;
     this.switches = [];
+    this.versionTaken = undefined;
     this.follow?.abort();
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = undefined;
-    this.audio ??= current.plan?.selectedAudioTrackId;
-    if (this.subtitle === undefined) this.subtitle = current.plan?.selectedSubtitleTrackId;
+    if (this.audio === undefined) {
+      this.audio = current.plan?.selectedAudioTrackId;
+      this.audioChoice = trackChoice(current.plan, current.plan?.audioTracks, this.audio);
+    }
+    if (this.subtitle === undefined) {
+      this.subtitle = current.plan?.selectedSubtitleTrackId;
+      this.subtitleChoice = trackChoice(current.plan, current.plan?.subtitleTracks, this.subtitle ?? undefined);
+    }
     const { plan } = current;
     const sample = this.liveCursor;
     const saved = sample?.sessionId === sessionId && sample.sourceGeneration === plan?.sourceGeneration &&
@@ -1036,12 +1171,77 @@ export class Playback {
     const answered = (plan: V.PlaybackPlan | null) => {
       if (watch && this.stall && current.sessionId === sessionId && this.box.get().playback.sessionId === sessionId) this.stall = engineCommandAnswered(this.stall, plan);
     };
+    // A track command belongs to the file and version it was chosen on: refused as stale, it is sent again only
+    // while no switch of the session awaits its answer and it still plays that file (`stillOn`), and only for the
+    // kinds no newer command the server did not refuse was sent for and no newer choice confirmed since (`latest`), nor those
+    // the player showed and then left. A switch whose request timed out or was lost may have moved the session to its version:
+    // then it is sent again only when a read of the session shows that file and version, at the generations read.
+    const at = current.plan?.sessionId === sessionId ? current.plan : undefined;
+    const sent: SentOn = { sessionId, sourceGeneration: at?.sourceGeneration, version: at?.sourceFailure === 'version_unavailable' ? undefined : at?.selectedVersionId,
+      file: fileOf(at), versions: this.versionsTaken, plan: at, tracks: command.kind === 'tracks' ? command : undefined };
+    let tracks = command.kind === 'tracks' && current.sessionId === sessionId ? command : undefined;
+    const number = tracks ? ++this.tracksSent : 0;
+    const chosen = this.chosen;
+    if (tracks) this.outstanding.set(tracks, number);
+    if (tracks?.audioTrackId !== undefined) chosen.audio.add(number);
+    if (tracks?.subtitleTrackId !== undefined) chosen.subtitle.add(number);
+    const before: Before = { audio: [this.audio, at?.selectedAudioTrackId], subtitle: [this.subtitle, at && (at.selectedSubtitleTrackId ?? null), this.subtitleReported],
+      sourceGeneration: at?.sourceGeneration, reported: { audio: false, subtitle: false } };
+    const pick: Pick | undefined = command.kind === 'tracks' && at
+      ? { at, sent, command, origin, number, before, left: { audio: false, subtitle: false }, recorded: {}, first: {},
+        waiting: true, inFlight: true, confirmed: {}, passed: {} } : undefined;
+    const retry = command.kind === 'tracks' ? async (generations: { sourceGeneration: number; seekGeneration: number }): Promise<V.SessionCommand | undefined> => {
+      const switching = () => this.switches.filter(s => s.sessionId === sessionId && s.number > this.appliedSwitch);
+      const blocked = () => switching().some(s => s.inFlight) || !this.stillOn(sent, this.box.get().playback.plan);
+      if (blocked()) return undefined;
+      if (switching().length) {
+        const read = await this.server.sessionSnapshot(sessionId).then(snapshot => withPlaying(snapshot.plan, snapshot), () => undefined);
+        if (!read || !sent.file || fileOf(read) !== sent.file || read.selectedVersionId !== at?.selectedVersionId
+          || !this.stillOn(sent, read) || blocked()) return undefined;
+        generations = { sourceGeneration: read.sourceGeneration, seekGeneration: read.seekGeneration };
+      }
+      const { audioTrackId, subtitleTrackId, ...rest } = command;
+      const again = { ...rest, ...generations,
+        ...(audioTrackId !== undefined && (!tracks || this.latest('audio', true) === number) && !pick?.left.audio ? { audioTrackId } : {}),
+        ...(subtitleTrackId !== undefined && (!tracks || this.latest('subtitle', true) === number) && !pick?.left.subtitle ? { subtitleTrackId } : {}) };
+      if (again.audioTrackId === undefined && again.subtitleTrackId === undefined) return undefined;
+      // The reply answers the kinds sent again; the others are no longer this command's choice.
+      if (tracks) {
+        if (again.audioTrackId === undefined) chosen.audio.delete(number);
+        if (again.subtitleTrackId === undefined) chosen.subtitle.delete(number);
+        this.outstanding.delete(tracks);
+        this.outstanding.set(tracks = again, number);
+      }
+      if (pick) pick.command = again;
+      return again;
+    } : undefined;
+    // Kept from now on, so a player report of its choice before the session is ready counts.
+    if (pick) this.picks.push(pick);
     const seek: WaitingSeek | undefined = command.kind === 'seek'
       ? { sessionId, seconds: command.positionSeconds, sourceGeneration: command.sourceGeneration, seekGeneration: command.seekGeneration, open: this.open } : undefined;
     if (seek) this.seeking.add(seek);
     try {
-      const connection = await this.session.ready();
-      const plan = await this.send(connection.adapter, sessionId, command, origin);
+      let connection: Connection;
+      // A command that never left is no choice sent, as a refused one, unless a report of the player already recorded it.
+      try { connection = await this.session.ready(); } catch (error) {
+        if (pick) this.dropPick(pick);
+        if (tracks && pick?.recorded.audio === undefined) chosen.audio.delete(number);
+        if (tracks && pick?.recorded.subtitle === undefined) chosen.subtitle.delete(number);
+        throw error;
+      }
+      if (pick) pick.waiting = false;
+      // A command lost on its way stays to be confirmed by a plan the session publishes; a reply or a refusal ends it. Refused,
+      // it is no longer a choice sent: an earlier one of its kinds is the newest again.
+      const plan = await this.send(connection.adapter, sessionId, command, origin, undefined, retry)
+        .catch(error => {
+          if (tracks && serverRefused(error)) { chosen.audio.delete(number); chosen.subtitle.delete(number); }
+          if (pick) {
+            pick.inFlight = false;
+            if (serverRefused(error) || !this.eligible(pick).length) this.dropPick(pick);
+          }
+          throw error;
+        });
+      if (pick) this.dropPick(pick);
       answered(plan);
       // An accepted seek is the viewer's place at its reply's position and generations, also behind the plan shown,
       // in place of a published plan taken as its answer, while its session is still the one shown.
@@ -1056,21 +1256,69 @@ export class Playback {
         // newest heard, a plan held back for moving only the clock included.
         const shown = this.box.get().playback.plan;
         let nextPlan = connection.plan(plan);
-        // A track reply on the shown plan's source records its selection even when its seek generation is behind.
-        if (command.kind === 'tracks' && !(shown && plan.sourceGeneration < shown.sourceGeneration)) {
-          if (command.audioTrackId !== undefined && nextPlan.selectedAudioTrackId) this.audio = nextPlan.selectedAudioTrackId;
-          if (command.subtitleTrackId !== undefined) this.subtitle = nextPlan.selectedSubtitleTrackId;
+        // The plan shown, with what a track reply behind the newest plan heard brings in.
+        let held = shown;
+        // A track reply that brought the version a switch still waits for (below).
+        let took = false;
+        if (command.kind === 'tracks') {
+          // Not for the kinds the player showed and then left, nor those it reported another selection for on a plan newer than the reply,
+          // nor, after a reopen where the player first showed the file's own selection (also when it then showed this command's on the
+          // source shown), for a reply behind the newest plan heard, those a later command not yet answered chose on a plan that already
+          // showed it, when the plan shown shows that and not this command's.
+          const passed = (kind: 'audio' | 'subtitle') => !!pick?.passed[kind] && olderPlan(plan, pick.passed[kind]!);
+          const later = (kind: 'audio' | 'subtitle') => !!shown && !!pick && (reopenedOther(pick, kind)
+            || (pick.first[kind]?.sourceGeneration === shown.sourceGeneration
+              && pick.first[kind]!.id !== (kind === 'audio' ? pick.command.audioTrackId : pick.command.subtitleTrackId)))
+            && olderThanShown(nextPlan, this.newestShown()) && !showsKind(shown, pick.command, kind)
+            && this.picks.some(other => other.number > number && showsKind(other.at, other.command, kind) && showsKind(shown, other.command, kind));
+          const left = pick && { audio: pick.left.audio || passed('audio') || later('audio'), subtitle: pick.left.subtitle || passed('subtitle') || later('subtitle') };
+          const asked = left ? without(pick!.command, left) : tracks ?? command;
+          // A reply for an older source than the plan shown does not replace it. Its choice stands while the
+          // session plays the same file (a reopen); after a version switch or on another file it does not.
+          // Nor, from behind a further reopen, the kinds the player showed another selection for first after a reopen (that file's own).
+          if (shown?.sessionId === sessionId && nextPlan.sourceGeneration < shown.sourceGeneration) {
+            const reopened = { audio: !!pick && reopenedOther(pick, 'audio'), subtitle: !!pick && reopenedOther(pick, 'subtitle') };
+            if (this.stillOn(sent, shown)) this.takeTracks(without(asked, reopened), nextPlan, origin, number, before);
+            return false;
+          }
+          // A reply that brings the version a switch still waits for, not behind the newest plan heard, is that version's first
+          // plan: the version is taken from the reply as the server sent it, and no choice of the previous version is put on it.
+          took = !olderThanShown(nextPlan, this.newestShown()) && this.tookVersion(nextPlan);
+          // A kind takes when it was asked for and no later choice was recorded for it. For the others the plan shown keeps its
+          // selection when a later choice was recorded or the player left it, unless the reply already shows the choice recorded;
+          // a reply older than the newest plan heard only brings in the kinds that take.
+          const kinds = ['audio', 'subtitle'] as const;
+          const takes = (kind: 'audio' | 'subtitle') => this.onVersion(sent, shown, nextPlan)
+            && (kind === 'audio' ? asked.audioTrackId : asked.subtitleTrackId) !== undefined && number >= this.applied[kind];
+          const recorded = (kind: 'audio' | 'subtitle') => kind === 'audio'
+            ? this.audio !== undefined && nextPlan.selectedAudioTrackId === this.audio
+            : this.subtitle !== undefined && (nextPlan.selectedSubtitleTrackId ?? null) === this.subtitle;
+          const keeps = (kind: 'audio' | 'subtitle') => !takes(kind) && (number < this.applied[kind] || !!left?.[kind]) && !recorded(kind);
+          const older = shown?.sessionId === sessionId && olderThanShown(nextPlan, this.newestShown());
+          const from = took ? [] : older ? kinds.filter(takes) : shown?.sessionId === sessionId ? kinds.filter(keeps) : [];
+          // A command sent before a version was taken does not choose on that version. Behind the newest plan heard on the
+          // same source, what it chose is recorded on the plan shown with the kinds that take.
+          const recordOn = nextPlan;
+          if (from.length) {
+            const [base, other] = older ? [shown!, nextPlan] : [nextPlan, shown!];
+            const joined = { ...base, ...(from.includes('audio') ? { selectedAudioTrackId: other.selectedAudioTrackId } : {}),
+              ...(from.includes('subtitle') ? { selectedSubtitleTrackId: other.selectedSubtitleTrackId } : {}) };
+            if (older) held = joined;
+            else nextPlan = joined;
+          }
+          if (this.onVersion(sent, shown, nextPlan)) this.takeTracks(asked, older && from.length ? held! : recordOn, origin, number, before);
         }
         if (nextPlan.live && (command.kind === 'goLive' || command.kind === 'seek' || command.kind === 'pause')) {
           this.liveTransportIntent = { sessionId, atLive: command.kind === 'goLive' };
         }
         if (origin === 'viewer' && command.kind === 'goLive') this.resetRestartBudget(sessionId);
-        if (shown && olderPlan(plan, shown, false)) return true;
+        // Behind the plan shown on its generations, the reply is not shown, but the kinds it brought in are.
+        if (shown && olderPlan(plan, shown, false) && held === shown) return true;
         const behind = olderThanShown(plan, this.newestShown());
-        const newer = behind ? shown : undefined;
+        const newer = behind ? held : undefined;
         // A reply naming the version a switch still waits for brings it, as a published plan would; one behind the
         // newest plan heard is not shown and brings nothing (that version's next plan still may).
-        if (!behind && this.tookVersion(nextPlan)) this.taken(nextPlan);
+        if (!behind && (took || this.tookVersion(nextPlan))) this.taken(nextPlan);
         this.expire(plan.sourceGeneration);
         nextPlan = this.withLocalTracks(nextPlan);
         this.patch({ plan: newer ? this.withLocalTracks(newer) : nextPlan });
@@ -1092,8 +1340,127 @@ export class Playback {
       if (words && this.box.get().playback.sessionId === sessionId) this.patch({ error: words });
       return false;
     } finally {
+      if (tracks) this.outstanding.delete(tracks);
       if (seek) this.seeking.delete(seek);
     }
+  }
+
+  /** What the answer to track command `number` selected becomes the viewer's choice, for each kind no newer choice was recorded for. */
+  private takeTracks(command: TracksCommand, plan: V.PlaybackPlan, origin: CommandOrigin, number: number, before?: Before): void {
+    if (command.audioTrackId !== undefined && plan.selectedAudioTrackId && this.recordNewest('audio', number, plan, plan.selectedAudioTrackId, before)) {
+      this.audio = plan.selectedAudioTrackId;
+      this.audioChoice = trackChoice(plan, plan.audioTracks, this.audio);
+    }
+    if (command.subtitleTrackId !== undefined && this.recordNewest('subtitle', number, plan, plan.selectedSubtitleTrackId ?? null, before)) {
+      this.subtitle = plan.selectedSubtitleTrackId;
+      this.subtitleChoice = trackChoice(plan, plan.subtitleTracks, this.subtitle ?? undefined);
+      // Subtitles off the viewer asked for are carried to a replacement; a subtitle asked for ends that.
+      if (origin === 'viewer') this.subtitleOff = command.subtitleTrackId === null;
+    }
+  }
+
+  /** Track command `number` is not older than the newest choice recorded for `kind`: it is recorded now. Recorded for the first
+   * time, what was there before it (and before the commands recorded just ahead of it on this source) is not taken from a report
+   * on the source generation it was sent from for a newer choice, until the player reports something else (`snapshot`); not
+   * when the player already reported its choice while it was awaited. */
+  private recordNewest(kind: 'audio' | 'subtitle', number: number, plan: V.PlaybackPlan, chosen: string | null, before?: Before): boolean {
+    if (number < this.applied[kind]) return false;
+    if (number > this.applied[kind]) {
+      const earlier = this.echoes[kind] && this.echoedOn(this.echoes[kind], plan) ? this.echoes[kind] : undefined;
+      const from = new Set([...earlier?.from ?? [], earlier && (kind === 'audio' ? this.audio : this.subtitle), ...before?.[kind] ?? []]
+        .filter((id): id is string | null => id !== undefined && id !== chosen));
+      this.echoes[kind] = from.size && before?.sourceGeneration !== undefined && !before.reported[kind]
+        ? { from, to: chosen, sourceGeneration: before.sourceGeneration, file: fileOf(plan) } : undefined;
+    }
+    this.applied[kind] = number;
+    return true;
+  }
+
+  /** No version came in since a track command was sent, or only the one it was sent on a usable plan of, on that file, taken on that
+   * session and source generation (a version shown there before its switch reply) while `shown` is still that version and file: its
+   * reply chooses on the plan shown. When the plans do not name their file, only a reply (`reply`) not older than the plan the version
+   * was taken on, and only while each track it asked for is the same track on the plan shown as on the plan it was sent on. */
+  private onVersion(sent: SentOn, shown: V.PlaybackPlan | null | undefined, reply?: V.PlaybackPlan): boolean {
+    const last = this.versionTaken;
+    const same = (plan: V.PlaybackPlan, id: string | null | undefined, from: V.Track[], to: V.Track[]) =>
+      id === undefined || id === null || (!!sent.plan && carriedTrack(id, trackChoice(sent.plan, from, id), plan, to) === id);
+    return sent.versions === this.versionsTaken || (sent.versions + 1 === this.versionsTaken && sent.version !== undefined
+      && last?.sessionId === sent.sessionId && last.versionId === sent.version && last.sourceGeneration === sent.sourceGeneration
+      && last.file === sent.file && shown?.sessionId === sent.sessionId && shown.selectedVersionId === sent.version && fileOf(shown) === sent.file
+      && (sent.file !== undefined || ((!reply || !olderPlan(reply, last.plan))
+        && same(shown, sent.tracks?.audioTrackId, sent.plan?.audioTracks ?? [], shown.audioTracks)
+        && same(shown, sent.tracks?.subtitleTrackId, sent.plan?.subtitleTracks ?? [], shown.subtitleTracks))));
+  }
+
+  private echoedOn(echo: Echo, plan: V.PlaybackPlan | null | undefined): boolean {
+    return !!plan && echo.sourceGeneration === plan.sourceGeneration && echo.file === fileOf(plan);
+  }
+
+  private resetTrackNumbers(): void {
+    this.tracksSent = 0;
+    this.applied = { audio: 0, subtitle: 0 };
+    this.chosen = { audio: new Set(), subtitle: new Set() };
+    this.confirmedBy = {};
+    this.echoes = {};
+    this.picks = [];
+    this.outstanding.clear();
+    this.versionTaken = undefined;
+  }
+
+  /** `shown` still plays what a track command was sent on: the same session, no version taken in since, not an older
+   * source generation, not another file, and the same source generation or the same file named by more than its
+   * version row (track-match.ts `fileOf`). */
+  private stillOn(sent: SentOn, shown: V.PlaybackPlan | null | undefined): boolean {
+    const file = fileOf(shown);
+    return !!shown && shown.sessionId === sent.sessionId && sent.versions === this.versionsTaken
+      && (sent.sourceGeneration === undefined || shown.sourceGeneration >= sent.sourceGeneration)
+      && !(sent.file && file && file !== sent.file)
+      && (shown.sourceGeneration === sent.sourceGeneration || (!!sent.file && file === sent.file));
+  }
+
+  /** The session published a plan of the file a track command not yet answered was sent on, which moved since it was sent
+   * and shows, for a kind, what it asked for, which the plan at sending did not: that kind was taken. For each kind a plan
+   * confirms one command, the oldest it fits, and only a plan newer than the one that confirmed the last. */
+  private takePick(plan: V.PlaybackPlan): void {
+    if (this.recovering) return;
+    const newer = (kind: 'audio' | 'subtitle') => {
+      const by = this.confirmedBy[kind];
+      return !by || plan.sourceGeneration > by.sourceGeneration || (plan.sourceGeneration === by.sourceGeneration && (plan.revision ?? 0) > (by.revision ?? 0));
+    };
+    for (const pick of [...this.picks].sort((a, b) => a.number - b.number)) {
+      const moved = plan.sourceGeneration > pick.at.sourceGeneration || (plan.revision ?? 0) > (pick.at.revision ?? 0);
+      const kinds = moved && this.stillOn(pick.sent, plan)
+        ? this.eligible(pick).filter(kind => newer(kind) && !showsKind(pick.at, pick.command, kind) && showsKind(plan, pick.command, kind)) : [];
+      for (const kind of kinds) {
+        this.confirmedBy[kind] = plan;
+        pick.confirmed[kind] = plan.sourceGeneration;
+      }
+      if (kinds.length) this.takeTracks(without(pick.command, { audio: !kinds.includes('audio'), subtitle: !kinds.includes('subtitle') }),
+        plan, pick.origin, pick.number, pick.before);
+      // Awaiting its reply, it stays: the player may still show its choice and leave it.
+      if (!pick.inFlight && !this.eligible(pick).length) this.dropPick(pick);
+    }
+  }
+
+  /** The kinds of a pick a plan can still confirm: not those a later command or a player confirmation (of this command too)
+   * recorded, nor those the player showed and then left, nor those a report recorded and the player then followed with another
+   * selection on a later source (`passed`, `first`, also while it awaits the session): only an answer as new as that source records
+   * those. */
+  private eligible(pick: Pick): ('audio' | 'subtitle')[] {
+    return (['audio', 'subtitle'] as const).filter(kind => (kind === 'audio' ? pick.command.audioTrackId : pick.command.subtitleTrackId) !== undefined
+      && pick.number > this.applied[kind] && !pick.left[kind] && !reopenedOther(pick, kind)
+      && !(pick.recorded[kind] !== undefined && (pick.passed[kind]?.sourceGeneration ?? -1) > pick.recorded[kind]!));
+  }
+
+  /** The newest number of `kind` sent or confirmed that the server has not refused, or recorded: a refusal does not undo a
+   * confirmation. For a stale retry (`retry`), not that of a pick still awaiting the session whose choice no report recorded. */
+  private latest(kind: 'audio' | 'subtitle', retry = false): number {
+    const waiting = (number: number) => retry && this.picks.some(pick => pick.number === number && pick.waiting && pick.recorded[kind] === undefined);
+    return Math.max(this.applied[kind], ...[...this.chosen[kind]].filter(number => !waiting(number)));
+  }
+
+  private dropPick(pick: Pick): void {
+    this.picks = this.picks.filter(other => other !== pick);
   }
 
   async switchVersion(sessionId: string, versionId: string, positionSeconds?: number): Promise<V.PlaybackPlan> {
@@ -1103,7 +1470,8 @@ export class Playback {
     const connection = await this.session.ready();
     if (!hasVersions(connection.adapter)) throw new Error('Versions are unavailable');
     // Until its version is taken, a published plan on this session that moves to this version is the one the viewer chose.
-    const switching: VersionSwitch = { sessionId, sourceGeneration: plan.sourceGeneration, versionId, number: ++this.switchesSent };
+    // One whose request timed out or was lost may still have been taken: so it can until a later one takes effect.
+    const switching: VersionSwitch = { sessionId, sourceGeneration: plan.sourceGeneration, versionId, number: ++this.switchesSent, inFlight: true };
     this.switches = [...this.switches, switching];
     let next: V.PlaybackPlan;
     try {
@@ -1113,39 +1481,57 @@ export class Playback {
         idempotencyKey: this.session.key(),
       }));
     } catch (error) {
+      switching.inFlight = false;
       // A refusal ends this switch only. A lost reply says nothing against it: a plan naming the version still counts as it.
       if (serverRefused(error)) this.dropSwitch(switching);
       throw error;
     }
+    switching.inFlight = false;
     // Neither a published plan nor a later switch has taken it yet: the reply does, also when its source is already
     // shown, but not when it shows this version unavailable, nor from behind a plan that does: its first usable plan
-    // still takes it.
+    // still takes it. Nor from an older source than a usable plan of another version a later switch still waiting asked for.
     const newest = this.newestShown();
     const unavailable = next.sourceFailure === 'version_unavailable';
     const unseen = !unavailable && this.switches.includes(switching) && !(olderThanShown(next, newest) &&
-      newest?.selectedVersionId === switching.versionId && newest.sourceFailure === 'version_unavailable');
+      newest?.selectedVersionId === switching.versionId && newest.sourceFailure === 'version_unavailable')
+      && !(newest && newest.sourceFailure !== 'version_unavailable' && next.sourceGeneration < newest.sourceGeneration
+        && this.switches.some(other => other.number > switching.number && other.versionId === newest.selectedVersionId && other.versionId !== switching.versionId));
     if (unseen) this.applySwitch(switching.number);
     const now = this.box.get().playback;
     // A restart (stall recovery) asks for the file now playing, not the one first asked for. Once a published plan
     // brought this version or a later switch was taken, a reply behind the plan shown (that later version's, a
-    // seek's on this one) changes nothing, nor does a reply arriving while recovering. Any reply behind the newest
-    // plan heard (a seek, track change or pause on its version, also one held back for moving only the clock)
-    // neither replaces the plan shown nor takes its tracks.
+    // seek's on this one) changes nothing, nor does a reply arriving while recovering, but for the version a later
+    // recovery asks for (below). Any reply behind the newest plan heard (a seek, track change or pause on its version,
+    // also one held back for moving only the clock) neither replaces the plan shown nor takes its tracks.
     const fresh = !olderThanShown(next, newest);
+    const failed = this.newestShown(this.abandoned);
     if (now.sessionId === sessionId && !this.recovering && (unseen || fresh)) {
       // The version is taken once, with a fresh restart budget: here, unless a published plan already brought it.
       if (unseen) {
         this.resetRestartBudget(sessionId);
-        if (fresh) this.takeTracks(next);
+        // Its version already taken on this source, by a usable plan of it shown: the choices made on it stand.
+        const last = this.versionTaken;
+        const already = now.plan?.sessionId === sessionId && now.plan.sourceGeneration === next.sourceGeneration
+          && now.plan.selectedVersionId === next.selectedVersionId && now.plan.sourceFailure !== 'version_unavailable'
+          && last?.sessionId === sessionId && last.versionId === next.selectedVersionId && last.sourceGeneration === next.sourceGeneration;
+        if (fresh && !already) this.takeVersion(next);
         // Behind a newer plan of another version, the reply's tracks are not the player's: the first usable plan of
         // its version brings them.
-        else if (newest?.selectedVersionId !== switching.versionId) this.owedTracks = { sessionId, versionId: switching.versionId };
+        else if (!fresh && newest?.selectedVersionId !== switching.versionId) this.owedTracks = { sessionId, versionId: switching.versionId };
         this.taken(next);
       }
       // A reply showing its version unavailable is shown, with the local choices, and changes nothing else.
       if (!unavailable) this.expire(next.sourceGeneration);
       const target = unseen && now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {};
       this.patch(fresh ? { plan: unavailable ? this.withLocalTracks(next) : next, error: '', ...target } : target);
+    } else if (now.sessionId === sessionId && this.recovering && !unavailable && switching.number > this.appliedSwitch
+      && !olderThanShown(next, failed) && !(failed?.selectedVersionId === switching.versionId && failed.sourceFailure === 'version_unavailable'
+        && !olderThanShown(failed, next))) {
+      // A reply that comes while the session is recovered changes neither the plan nor the choices; a later recovery asks for its
+      // version, unless it is behind the failed session's last plan heard or, no newer than that plan, that plan shows its version
+      // unavailable.
+      this.applySwitch(switching.number);
+      if (now.target?.kind === 'title') this.patch({ target: { ...now.target, versionId: next.selectedVersionId ?? versionId } });
     }
     return next;
   }
@@ -1156,17 +1542,31 @@ export class Playback {
 
   /** Switch `number` took effect: it and those sent before it are no longer awaited. */
   private applySwitch(number: number): void {
+    this.appliedSwitch = number;
     this.switches = this.switches.filter(other => other.number > number);
     this.owedTracks = undefined;
   }
 
-  /** Track IDs and local choices belong to the previous version. Keep the negotiated
+  /** A new version's plan: track IDs and local choices belong to the previous version. Keep the negotiated
    * selection through later snapshots and recovery, even when a track ID is reused. */
-  private takeTracks(plan: V.PlaybackPlan): void {
+  private takeVersion(next: V.PlaybackPlan): void {
     this.owedTracks = undefined;
+    this.versionsTaken++;
+    // Numbered on from the commands sent before it: one sent on a plan of this version may still be answered (`onVersion`).
+    const sent = this.tracksSent, picks = this.picks;
+    this.resetTrackNumbers();
+    this.tracksSent = sent;
+    this.versionTaken = { sessionId: next.sessionId, versionId: next.selectedVersionId, sourceGeneration: next.sourceGeneration, file: fileOf(next), plan: next };
+    // A pick sent on a plan of this version and file stays: the player's reports of its choice still count for it.
+    this.picks = picks.filter(pick => this.onVersion(pick.sent, next));
     this.localTracks = false;
-    this.audio = plan.selectedAudioTrackId;
-    this.subtitle = plan.selectedSubtitleTrackId;
+    this.audio = next.selectedAudioTrackId;
+    this.subtitle = next.selectedSubtitleTrackId;
+    this.audioChoice = trackChoice(next, next.audioTracks, this.audio);
+    this.subtitleChoice = trackChoice(next, next.subtitleTracks, this.subtitle ?? undefined);
+    // An Off chosen on the previous version is not the viewer's on this one; its reports start from its own selection.
+    this.subtitleOff = false;
+    this.subtitleReported = undefined;
   }
 
   private resetRestartBudget(sessionId: string): void {
@@ -1179,7 +1579,7 @@ export class Playback {
   }
 
   private async send(api: ServerAdapter, sessionId: string, command: V.SessionCommand, origin: CommandOrigin = 'viewer',
-    canRetry?: () => Promise<boolean>): Promise<V.PlaybackPlan> {
+    canRetry?: () => Promise<boolean>, again?: (generations: { sourceGeneration: number; seekGeneration: number }) => Promise<V.SessionCommand | undefined>): Promise<V.PlaybackPlan> {
     try {
       return await sendCommand(api, sessionId, command);
     } catch (error) {
@@ -1195,7 +1595,10 @@ export class Playback {
       const wanted = command.kind === 'switch' && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
       if ((!absolute && !wanted) || !generations) throw error;
       if (canRetry && !(await canRetry())) throw error;
-      return sendCommand(api, sessionId, { ...command, ...generations, idempotencyKey: this.session.key() });
+      // What to send again, and at which generations, is decided as it is sent: a command may have been superseded meanwhile.
+      const retry = again ? await again(generations) : { ...command, ...generations };
+      if (!retry) throw error;
+      return sendCommand(api, sessionId, { ...retry, idempotencyKey: this.session.key() });
     }
   }
 
@@ -1232,12 +1635,12 @@ export class Playback {
       plan.sourceGeneration > other.sourceGeneration);
     if (!switching) {
       const owed = this.owedTracks;
-      if (owed?.sessionId === plan.sessionId && owed.versionId === plan.selectedVersionId) this.takeTracks(plan);
+      if (owed?.sessionId === plan.sessionId && owed.versionId === plan.selectedVersionId) this.takeVersion(plan);
       return false;
     }
     this.applySwitch(switching.number);
     this.resetRestartBudget(plan.sessionId);
-    this.takeTracks(plan);
+    this.takeVersion(plan);
     const { target } = this.box.get().playback;
     if (target?.kind === 'title') this.patch({ target: { ...target, versionId: plan.selectedVersionId } });
     return true;
@@ -1470,10 +1873,9 @@ export class Playback {
   }
 
   /** A player snapshot: live status (reconnecting, delivery, drift) when the engine observes it. */
-  /** The plan on show, with the revision of a newer one of the same generations held back for
-   * moving only the clock: later plans are ordered against what was heard, not what was drawn. */
-  private newestShown(): V.PlaybackPlan | null {
-    const shown = this.box.get().playback.plan;
+  /** The plan on show (or `shown`, as the plan a recovery left), with the revision of a newer one of the same generations held
+   * back for moving only the clock: later plans are ordered against what was heard, not what was drawn. */
+  private newestShown(shown = this.box.get().playback.plan): V.PlaybackPlan | null {
     const ahead = this.clockAhead;
     if (!shown || !ahead || ahead.sessionId !== shown.sessionId || ahead.sourceGeneration !== shown.sourceGeneration
       || ahead.seekGeneration !== shown.seekGeneration || typeof ahead.revision !== 'number') return shown;
@@ -1518,11 +1920,75 @@ export class Playback {
       this.liveCursor = { sessionId: plan.sessionId, sourceGeneration: plan.sourceGeneration,
         seekGeneration: plan.seekGeneration, seconds: snapshot.position };
     }
+    // A report from the session's previous source (queued before the plan moved on) names that
+    // source's tracks: the last choice made on the current one stands. So does one on this source that still
+    // shows what was there before a command whose choice was recorded, until the player shows something else.
+    const echo = (kind: 'audio' | 'subtitle', id: string | null) => {
+      const before = this.echoes[kind];
+      if (before && this.echoedOn(before, current.plan) && before.from.has(id)) return true;
+      this.echoes[kind] = undefined;
+      return false;
+    };
+    // A choice the player shows on the source a report recorded a pick's on, or on the source a plan that confirmed the pick moved
+    // to, is no longer that pick's to record. A report that did not record it (one while buffering) only showed it. On a later source
+    // than the one a report recorded it on (a reopen), the first selection shown is that file's own: only another one after it there
+    // is the viewer's.
+    const generation = snapshot.sourceGeneration ?? current.plan?.sourceGeneration;
+    const leave = (kind: 'audio' | 'subtitle', id: string | null) => {
+      for (const pick of this.picks) {
+        const asked = kind === 'audio' ? pick.command.audioTrackId : pick.command.subtitleTrackId;
+        const confirmed = pick.confirmed[kind], recorded = pick.recorded[kind], first = pick.first[kind];
+        const later = recorded !== undefined && generation !== undefined && generation > recorded;
+        if (later && !(first && first.sourceGeneration >= generation)) pick.first[kind] = { id, sourceGeneration: generation };
+        const shown = (recorded !== undefined && (generation === undefined || generation <= recorded))
+          || (later && first?.sourceGeneration === generation && first.id !== id)
+          || (confirmed !== undefined && confirmed > pick.at.sourceGeneration && generation !== undefined && generation >= confirmed);
+        if (shown && asked !== undefined && asked !== id) pick.left[kind] = true;
+        // Shown, also while buffering, and then another selection on a plan newer than it was sent on (a reopen, a seek): that plan.
+        const newer = !!current.plan && (current.plan.sourceGeneration > pick.at.sourceGeneration || current.plan.seekGeneration > pick.at.seekGeneration);
+        if (pick.before.reported[kind] && !pick.waiting && newer && asked !== undefined && asked !== id) pick.passed[kind] = current.plan!;
+      }
+    };
+    // A playing or paused report of a pick's choice records it for that pick, on the report's source (a buffering one only shows it).
+    const record = (kind: 'audio' | 'subtitle', id: string | null) => {
+      for (const pick of this.picks) {
+        if ((kind === 'audio' ? pick.command.audioTrackId : pick.command.subtitleTrackId) === id) pick.recorded[kind] = generation ?? pick.at.sourceGeneration;
+      }
+    };
     // A report behind the newest generations the session has shown or has evidence at (an older source, or a seek
     // since accepted on the same one) names tracks the player has since left; one without generations is at the newest.
-    if (!this.localTracks && presenting && !stale) {
-      if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
-      if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
+    const onSource = snapshot.sourceGeneration === undefined || snapshot.sourceGeneration === current.plan?.sourceGeneration;
+    if (!this.localTracks && (snapshot.state === 'playing' || snapshot.state === 'paused' || snapshot.state === 'buffering') && onSource && !stale) {
+      // The player showed a pending command's choice, also while buffering: once recorded, a report of what was there before it
+      // is a newer change; shown once it was recorded, it ends the hold on such reports. Only a playing or paused report records
+      // the choice itself (`record`).
+      for (const pick of this.picks) {
+        if (snapshot.audioTrackId && pick.command.audioTrackId === snapshot.audioTrackId) pick.before.reported.audio = true;
+        if (snapshot.subtitleTrackId !== undefined && pick.command.subtitleTrackId === snapshot.subtitleTrackId) pick.before.reported.subtitle = true;
+      }
+      if (snapshot.audioTrackId && this.echoes.audio?.to === snapshot.audioTrackId && this.echoedOn(this.echoes.audio, current.plan)) this.echoes.audio = undefined;
+      if (snapshot.subtitleTrackId !== undefined && this.echoes.subtitle?.to === snapshot.subtitleTrackId
+        && this.echoedOn(this.echoes.subtitle, current.plan)) this.echoes.subtitle = undefined;
+    }
+    if (!this.localTracks && presenting && onSource && !stale) {
+      if (snapshot.audioTrackId && !echo('audio', snapshot.audioTrackId)) {
+        leave('audio', snapshot.audioTrackId);
+        record('audio', snapshot.audioTrackId);
+        this.audio = snapshot.audioTrackId;
+        this.audioChoice = trackChoice(current.plan, current.plan?.audioTracks, this.audio);
+      }
+      if (snapshot.subtitleTrackId !== undefined && !echo('subtitle', snapshot.subtitleTrackId)) {
+        leave('subtitle', snapshot.subtitleTrackId);
+        // Off is the viewer's once a subtitle was on this source: reported, or before any report selected by the plan.
+        // A report supersedes the choice; none on a source that selected none leaves no choice.
+        const before = this.subtitleReported !== undefined ? this.subtitleReported : current.plan?.selectedSubtitleTrackId ?? null;
+        this.subtitleOff = snapshot.subtitleTrackId === null && (this.subtitleOff || before !== null);
+        // An Off that only repeats what was there is no report of a pick of Off.
+        if (snapshot.subtitleTrackId !== null || before !== null) record('subtitle', snapshot.subtitleTrackId);
+        this.subtitleReported = snapshot.subtitleTrackId;
+        this.subtitle = snapshot.subtitleTrackId;
+        this.subtitleChoice = trackChoice(current.plan, current.plan?.subtitleTracks, this.subtitle ?? undefined);
+      }
     }
     if (this.stall && snapshot.sessionId && current.phase === 'playing') {
       this.stall = heardEngine(this.stall, snapshot, Date.now());
@@ -1761,6 +2227,11 @@ export class Playback {
     this.localTracks = false;
     this.audio = undefined;
     this.subtitle = undefined;
+    this.audioChoice = undefined;
+    this.subtitleChoice = undefined;
+    this.subtitleOff = false;
+    this.subtitleReported = undefined;
+    this.resetTrackNumbers();
     this.sessionContext = undefined;
     if (this.watchdog) clearTimeout(this.watchdog);
     this.watchdog = undefined;
@@ -1895,7 +2366,13 @@ export class Playback {
   }
 
   private patch(change: Partial<PlaybackState>): void {
-    if (change.plan) this.refreshHeld(change.plan);
+    if (change.plan) {
+      this.refreshHeld(change.plan);
+      // A new source of the session (a version, a part): its own subtitle selection is what its reports are measured against.
+      const before = this.box.get().playback.plan;
+      if (before?.sessionId === change.plan.sessionId && before.sourceGeneration !== change.plan.sourceGeneration) this.subtitleReported = undefined;
+      this.takePick(change.plan);
+    }
     this.box.update('playback', playback => ({ ...playback, ...change }));
   }
 
@@ -1984,6 +2461,24 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
     }, ms);
     signal.addEventListener('abort', abort, { once: true });
   });
+}
+
+/** The plan shows what a track command asked for of `kind`. */
+function showsKind(plan: V.PlaybackPlan, command: TracksCommand, kind: 'audio' | 'subtitle'): boolean {
+  return kind === 'audio' ? command.audioTrackId !== undefined && plan.selectedAudioTrackId === command.audioTrackId
+    : command.subtitleTrackId !== undefined && (plan.selectedSubtitleTrackId ?? null) === command.subtitleTrackId;
+}
+
+/** A report recorded `pick`'s choice of `kind`, and on a later source (a reopen) the player first showed another selection (`first`). */
+function reopenedOther(pick: Pick, kind: 'audio' | 'subtitle'): boolean {
+  const first = pick.first[kind], recorded = pick.recorded[kind];
+  return !!first && recorded !== undefined && first.sourceGeneration > recorded
+    && first.id !== (kind === 'audio' ? pick.command.audioTrackId : pick.command.subtitleTrackId);
+}
+
+/** The track command without the kinds `drop` names. */
+function without(command: TracksCommand, drop: { audio?: boolean; subtitle?: boolean }): TracksCommand {
+  return { ...command, ...(drop.audio ? { audioTrackId: undefined } : {}), ...(drop.subtitle ? { subtitleTrackId: undefined } : {}) };
 }
 
 /**
