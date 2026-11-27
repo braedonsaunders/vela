@@ -1364,6 +1364,12 @@ async function dispatch(req: Request): Promise<Response> {
       }
     }
     if (req.method === 'GET' && url.pathname === '/__admin/catch-up-fixture') return json(archiveFixture);
+    if (req.method === 'POST' && url.pathname === '/__admin/remint-home') {
+      const { bootstrapStaleReads } = await req.json();
+      if (bootstrapStaleReads === 1) faults.bootstrapStaleReads = 1;
+      feedChanged();
+      return json({ accepted: true });
+    }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; if ('refreshAbandonMs' in data) { abandonedRefreshKeys.clear(); refreshAbandonArmed = faults.refreshAbandonMs > 0; } return json(faults); }
     if (req.method === 'POST' && url.pathname === '/__admin/sports') return json(sportsAdmin(await req.json()));

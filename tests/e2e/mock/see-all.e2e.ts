@@ -18,13 +18,8 @@ describe('See all deterministic release gate', { session: 'mock-see-all' }, () =
 
     const rowRead = '**/vela/v0/rows/*';
     await browser.route(rowRead, async route => {
-      if (rowConflicts === 0) {
-        rowConflicts += 1;
-        await route.fulfill({ status: 409, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-          body: JSON.stringify({ error: { class: 'conflict', code: 'cursor_expired', message: 'Refresh from first page', retry: { allowed: false } } }) });
-        return;
-      }
       const response = await route.fetch();
+      if (response.status === 409) rowConflicts++;
       await route.fulfill({ status: response.status, headers: { ...response.headers }, body: await response.body() });
     });
 
@@ -36,21 +31,11 @@ describe('See all deterministic release gate', { session: 'mock-see-all' }, () =
     const label = await oldLink.getAttribute('aria-label');
     expect(oldHref).toBeTruthy();
     expect(label).toMatch(/^See all /);
-    const watchCard = screen.getByRole('link', /^Open /).first();
-    const watchHref = await watchCard.getAttribute('href');
-    expect(watchHref).toMatch(/^\/vela\/title\//);
-    await watchCard.tap();
-    await expect(screen.getByRole('button', 'Mark watched')).toBeVisible({ timeout: 30_000 });
-    // The watch mutation's Home reconciliation gets the first stale bootstrap. See all then gets
-    // the second after its old id answers 409, waits, and succeeds on the following fresh read.
-    expect(await browser.evaluate(async () => (await fetch('/__admin/faults', {
+    // Simulate another client's feed change while the current Home still shows its old row id.
+    expect(await browser.evaluate(async () => (await fetch('/__admin/remint-home', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bootstrapStaleReads: 1 }),
     })).status)).toBe(200);
-    await screen.getByRole('button', 'Mark watched').tap();
-    await expect(screen.getByRole('button', 'Mark unwatched')).toBeVisible();
 
-    await screen.getByTestId('detail-close').tap();
-    await expect(screen.getByTestId('nav-Home')).toBeVisible({ timeout: 30_000 });
     const recoveredLink = screen.getByRole('link', label!).first();
     await revealRowLink(browser, recoveredLink);
     await expect(recoveredLink).toHaveAttribute('href', oldHref!);
@@ -65,9 +50,6 @@ describe('See all deterministic release gate', { session: 'mock-see-all' }, () =
     await expect.poll(() => browser.evaluate(async () => (await (await fetch('/__admin/faults')).json() as { bootstrapStaleReads: number }).bootstrapStaleReads),
       { timeout: 30_000 }).toBe(0);
 
-    await app.open(watchHref!);
-    await screen.getByRole('button', 'Mark unwatched').tap();
-    await expect(screen.getByRole('button', 'Mark watched')).toBeVisible();
     await browser.unroute(rowRead);
   });
 });

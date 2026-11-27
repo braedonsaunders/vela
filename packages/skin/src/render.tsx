@@ -5,7 +5,7 @@ import { sameRouteHost } from './route-host';
 import { GRID_DRAWN, GRID_OPEN, gridFocus, type GridFocus, type GridKey } from './grid-focus';
 import { LAZY_STILL_MS, gridDrawn, lazyBatch, lazyExtent, lazyNear, lazyPitch, lazyReach, scrollAudience, type LazySample } from './lazy-items';
 import { WebLibraryGrid } from './web-library-grid';
-import { msg } from '@vela/core';
+import { drawnAs, msg } from '@vela/core';
 import { heroResumeLayout, restartAction, secondaryPlayAction } from './restart-action';
 import { CardContextMenu, type CardMenuAnchor, type CardMenuOpenMode } from './widgets/card-context-menu';
 import { visibleRowItems } from './row-visible';
@@ -41,7 +41,7 @@ import { useFocusStyles } from './focus';
 import { focusStyle } from './focus-style';
 import { isFocusVisible } from './focus-visible';
 import { RouteFocusContext, useRouteFocus, useRouteFocusContext, viewerPressedSince } from './route-focus';
-import { RevealContext, noteTopBar, revealer, revealing } from './tv-reveal';
+import { RevealContext, homeFocus, leaveHomeCard, noteTopBar, revealer, revealing, type HomeFocus } from './tv-reveal';
 import { useFocusedTVKeys } from './tv-keys';
 import { selectEnv } from './host-source';
 import { FOCUSABLE_WIDGETS, WIDGETS } from './widgets';
@@ -157,6 +157,7 @@ interface RouteLayoutValue {
 const RouteLayout = createContext<RouteLayoutValue | null>(null);
 /** What a host draws first in a route's own scroll, before the document's nodes (SkinRoute's `lead`). */
 const RouteLead = createContext<ReactNode>(null);
+const HomeScrollFocus = createContext<HomeFocus | null>(null);
 /** A horizontal row's scroll, which its lazily drawn items hear of (LazyRepeat). */
 const RowScroll = createContext<ScrollListeners | null>(null);
 const LoadingLibraryNav = createContext(false);
@@ -956,6 +957,14 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   };
   useEffect(() => () => { if (route && scrolled.current) host.setFlag('keep-page-scrolled', false); }, []);
   const routeReveal = useMemo(() => (route && revealing ? revealer(scrollRef, offsetY, viewport.height) : null), [route, viewport.height]);
+  const parentHomeFocus = useContext(HomeScrollFocus);
+  const homePage = androidTV && !!route && env.route === 'home';
+  const homeRows = homePage ? env.home?.rows : undefined;
+  const routeHomeFocus = useMemo(() => homePage ? homeFocus(scrollRef, offsetY) : null, [homePage]);
+  useLayoutEffect(() => {
+    if (!routeHomeFocus || !homeRows) return;
+    return routeHomeFocus.restore(homeRows.map(row => ({ key: drawnAs(row), cards: row.items.map(card => card.id) })));
+  }, [routeHomeFocus, homeRows]);
   const inHero = !!heroParent || !!hero;
 
   const disabled = node.disabled ? holds(node.disabled, ctx, env) : false;
@@ -1367,6 +1376,11 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
         onFocus={event => {
           const visible = isFocusVisible(event.currentTarget);
           set('focus', visible);
+          if (androidTV) {
+            if (parentHomeFocus && ctx.card && ctx.row && buttonRef.current) {
+              parentHomeFocus.focus(drawnAs(ctx.row), ctx.card.id, buttonRef.current);
+            } else leaveHomeCard();
+          }
           if (heroButton && buttonRef.current) buttonCarry?.focused(buttonRef.current, true);
           if ((Platform.isTV || web) && (inHero || (heroControl && visible))) holdHero(host.setFlag, true, Platform.isTV);
           routeFocus?.focused();
@@ -1470,6 +1484,7 @@ function Box({ node, ctx, route, after, hero, measure }: { node: Extract<RNode, 
   // passes its parent's group, and a band or reading stop below an ancestor's resets it only where
   // one is set. Each is fixed by the node and where it sits, so the tree's shape never changes.
   const ownBand = Platform.isTV && (vertical || node.id === 'vela-library-alternative');
+  if (routeHomeFocus) element = <HomeScrollFocus.Provider value={routeHomeFocus}>{element}</HomeScrollFocus.Provider>;
   let provided: ReactNode = routeReveal ? <RevealContext.Provider value={routeReveal}>{element}</RevealContext.Provider> : element;
   if (readingStop) provided = <ReadingStop.Provider value={false}>{provided}</ReadingStop.Provider>;
   if (ownBand !== band) provided = <Band.Provider value={ownBand}>{provided}</Band.Provider>;
