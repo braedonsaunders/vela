@@ -258,7 +258,8 @@ function TitleDownload({ id, kind, name, onError, onNote }: { id: string; kind: 
     testID="detail-download" disabled={busy || (transferring && !downloaded && !switcher?.openDownloads)} round
     active={downloaded} run={press} value={status === 'downloading' && percent !== undefined ? `${percent}%` : undefined}>
     {downloaded ? <View pointerEvents="none" style={{
-      position: 'absolute', right: -1, bottom: -1, width: 16, height: 16, borderRadius: 8,
+      // A TV's 3px focus border moves the button's content box inward: keep the badge on the rim.
+      position: 'absolute', right: Platform.isTV ? -4 : -1, bottom: Platform.isTV ? -4 : -1, width: 16, height: 16, borderRadius: 8,
       alignItems: 'center', justifyContent: 'center', backgroundColor: look.ui.ink,
     }}><Glyph symbol="checkmark" size={11} color={look.ui.inkInverse} /></View> : null}
     {status === 'downloading' && !downloaded ? (
@@ -296,7 +297,8 @@ function ActionButton({ label, icon, active, testID, run, disabled, round, value
     <FocusPressable
       ref={tooltip}
       accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled, selected: active }}
-      accessibilityValue={value ? { text: value } : undefined}
+      // Android keeps the last value when the prop goes undefined: clear it with an empty text.
+      accessibilityValue={{ text: value ?? '' }}
       testID={testID}
       disabled={disabled} onPress={run}
       onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)}
