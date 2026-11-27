@@ -3,6 +3,7 @@ import type { AppearanceModel, PackEntryModel } from '../../core/src/appearance'
 import { uiDefaults } from './resolve/ui-defaults';
 import { resolveDocument } from './resolve';
 import { portabilityReport } from './resolve/portability';
+import { faceStyle, faceWeight } from './font-face';
 
 /** Owner assets never escape the selected server's appearance tree. */
 export function appearanceAsset(value: string, origin: string): string {
@@ -33,7 +34,8 @@ export function installedDocument(value: unknown, origin: string, resolved = fal
     if (typeof v === 'string') {
       if (/url\s*\(|javascript:|@import/i.test(v)) throw new Error('Unsafe skin value');
       if (['src', 'url', 'preview'].includes(key)) {
-        if (key === 'src' && /^\{[a-zA-Z][a-zA-Z0-9.]*\}$/.test(v)) return v;
+        // A data binding (catalogue artwork); the skin's own name is text, never an image source.
+        if (key === 'src' && /^\{[a-zA-Z][a-zA-Z0-9.]*\}$/.test(v) && v !== '{env.skinName}') return v;
         return appearanceAsset(v, origin);
       }
       return v;
@@ -47,6 +49,11 @@ export function installedDocument(value: unknown, origin: string, resolved = fal
   };
   const doc = visit(value) as SkinDocument;
   if (doc.schema !== 1 || !doc.id || !doc.name || !Array.isArray(doc.swatches) || !Number.isInteger(doc.renderer)) throw new Error('Invalid skin metadata');
+  // A font face's weight and style are written into a stylesheet on the web: CSS's own values only.
+  for (const font of Object.values(doc.fonts ?? {})) {
+    if (!font || typeof font.family !== 'string' || !Array.isArray(font.files)) throw new Error('Invalid skin font');
+    for (const file of font.files) if (faceWeight(file?.weight) === undefined || faceStyle(file?.style) === undefined) throw new Error('Invalid skin font');
+  }
   if (resolved) return doc;
   for (const width of [390, 1440, 1920]) resolveDocument(doc, width, 'en');
   if (portabilityReport(doc).some(f => f.level === 'error')) throw new Error('Nonportable skin');

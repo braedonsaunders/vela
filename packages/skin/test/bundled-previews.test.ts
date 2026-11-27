@@ -30,7 +30,9 @@ test('every picker built-in preview resolves to a bundled module with any server
   }
 });
 
-test('server-provided previews retain remote URL resolution', () => {
+test('server-provided previews resolve on the selected server only', () => {
   expect(resolveAssetSource('/custom/preview.jpg', 'https://ether.example', assets)).toBe('https://ether.example/custom/preview.jpg');
-  expect(resolveAssetSource('https://skins.example/preview.jpg', '', assets)).toBe('https://skins.example/preview.jpg');
+  expect(resolveAssetSource('https://ether.example/vela/v0/appearance/skins/a/1/preview.jpg', 'https://ether.example', assets)).toBe('https://ether.example/vela/v0/appearance/skins/a/1/preview.jpg');
+  expect(resolveAssetSource('https://skins.example/preview.jpg', '', assets)).toBeUndefined();
+  expect(resolveAssetSource('https://skins.example/preview.jpg', 'https://ether.example', assets)).toBeUndefined();
 });

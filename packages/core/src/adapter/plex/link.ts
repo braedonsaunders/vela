@@ -22,6 +22,22 @@ const kind = (c: PlexResource['connections'][number]): PlexConnectionKind =>
  * token beside it only so the device can switch Plex Home members later (never sent to the server);
  * an Ether server exchanges the account token for its own session and keeps neither.
  */
+/**
+ * The origin of one of a server's published connections, if it is one to read: an http(s) address
+ * with a host, no credentials, path, query or fragment, whose scheme is the protocol plex.tv
+ * published for it, and which is one of this resource's own connections.
+ */
+export function candidateOrigin(resource: PlexResource, connection: PlexResource['connections'][number]): string | undefined {
+  if (!resource.connections.includes(connection)) return undefined;
+  let url: URL;
+  try { url = new URL(connection.uri); } catch { return undefined; }
+  const scheme = url.protocol.slice(0, -1);
+  if ((scheme !== 'http' && scheme !== 'https') || !url.hostname || url.username || url.password) return undefined;
+  if (url.pathname !== '/' || url.search || url.hash) return undefined;
+  if (connection.protocol && connection.protocol !== scheme) return undefined;
+  return url.origin;
+}
+
 export class PlexLink {
   private pin?: { id: number; code: string; expiresAt: string };
   private account?: { token: string; viewer: Tokens['viewer'] };
@@ -120,9 +136,11 @@ export class PlexLink {
     const account = this.account;
     if (!account || this.pin?.code !== code || !resource) throw new Error('Link Plex again to choose a server');
     for (const connection of this.reachable(resource, pageSecure)) {
-      const origin = new URL(connection.uri).origin;
+      const origin = candidateOrigin(resource, connection);
+      if (!origin) continue;
       try {
-        const response = await fetch(`${origin}/identity`, { headers: { ...plexHeaders(this.device), 'X-Plex-Token': resource.accessToken },
+        // /identity needs no token: none goes to an address before it proves to be this server.
+        const response = await fetch(`${origin}/identity`, { headers: plexHeaders(this.device),
           redirect: 'error', credentials: 'omit', signal: timeoutSignal(6000) });
         if (!response.ok) continue;
         const body = await response.json() as { MediaContainer?: { machineIdentifier?: string } };
