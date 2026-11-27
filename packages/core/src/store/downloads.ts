@@ -952,7 +952,7 @@ export class Downloads {
       const viewerId = tokens?.viewer.id || this.box.get().auth.viewerId;
       if (!serverId || !viewerId) throw new Error('Sign in required');
       if (!await this.ensurePersistent()) {
-        throw new Error('This browser may clear stored videos, so Vela saves the file to your computer instead.');
+        throw new Error('This browser may clear stored videos, so Vela saves the file to your downloads instead.');
       }
       if (this.port.storage) await this.refreshStorage();
       const currentViewer = () => {

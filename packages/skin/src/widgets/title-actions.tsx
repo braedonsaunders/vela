@@ -154,7 +154,7 @@ export function TitleActions() {
   );
 }
 
-const SAVE_FILE_NOTE = 'This browser may clear stored videos, so Vela saves the file to your computer instead.';
+const SAVE_FILE_NOTE = 'This browser may clear stored videos, so Vela saves the file to your downloads instead.';
 
 function TitleDownload({ id, kind, name, onError, onNote }: { id: string; kind: string; name: string; onError(message: string): void; onNote(message: string): void }) {
   const vela = useVela();

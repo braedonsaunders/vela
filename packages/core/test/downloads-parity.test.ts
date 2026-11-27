@@ -302,7 +302,7 @@ describe('the browser', () => {
     expect(await h.downloads.offer('movie')).toEqual({ kind: 'save-file' });
     expect(port.started).toHaveLength(0);
     expect(h.box.get().downloads).toMatchObject({ persisted: false });
-    expect(h.box.get().downloads.error).toContain('saves the file to your computer');
+    expect(h.box.get().downloads.error).toContain('saves the file to your downloads');
 
     expect(await h.downloads.saveFile('101')).toBe(true);
     expect(port.saved).toEqual([{

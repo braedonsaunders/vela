@@ -219,7 +219,7 @@ test('denied persistence offers Save file and saves an Ether grant through the b
   const action = screen.getByTestId('detail-download');
   await expect(action).toHaveAttribute('aria-label', 'Download', { timeout: 30_000 });
   await action.press('Enter');
-  await expect(screen.getByText('This browser may clear stored videos, so Vela saves the file to your computer instead.')).toBeVisible();
+  await expect(screen.getByText('This browser may clear stored videos, so Vela saves the file to your downloads instead.')).toBeVisible();
   await expect(action).toHaveAttribute('aria-label', 'Save file');
   await app.screenshot('save-file');
   const saved = await browser.waitForDownload(() => action.press('Enter'), { timeout: 60_000 });
