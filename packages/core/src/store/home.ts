@@ -207,7 +207,7 @@ export class Home {
     this.refreshRevision++;
     try {
       const connection = await this.session.ready();
-      const fresh = await this.readFresh(connection, controller.signal);
+      const fresh = await this.readFresh(connection, controller.signal, true);
       if (controller.signal.aborted || epoch !== this.session.epoch) return;
       this.box.update('home', home => {
         if (!home.value) return home;
@@ -374,21 +374,42 @@ export class Home {
    * rows as Home shows are covered (the viewer scrolled through them), at most HOME_PAGES. A
    * further page that cannot be read ends the read there; its cursor is kept for the next page.
    */
-  private async readFresh(connection: Connection, signal: AbortSignal): Promise<HomeModel> {
+  private async readFresh(connection: Connection, signal: AbortSignal, keepDepth = false): Promise<HomeModel> {
     // Ether answers 409 bootstrap_changed (retry allowed) while its feed is being rebuilt, which
     // is exactly when a re-read happens: asked again on the server's terms before giving up.
     const bootstrap = await withReadRetry(() => connection.adapter.home(true, signal), { signal, sleep: this.retrySleep });
     const images = await connection.images();
     let fresh = homeModel({ ...bootstrap, capabilities: advertise(connection.adapter, bootstrap.capabilities) }, images, this.artWidth());
-    const shown = this.box.get().home.value?.rows.length ?? 0;
-    for (let page = 1; page < HOME_PAGES && fresh.nextCursor && fresh.rows.length < shown; page++) {
+    const shown = this.box.get().home.value?.rows ?? [];
+    const coversShown = () => keepDepth ? matchRows(shown, fresh.rows).size >= shown.length : fresh.rows.length >= shown.length;
+    for (let page = 1; page < HOME_PAGES && fresh.nextCursor && !coversShown(); page++) {
       if (signal.aborted) break;
       const cursor = fresh.nextCursor;
       const data = await connection.adapter.rows({ cursor, placement: 'home' }, true).catch(() => undefined);
       if (!data || data.continuation === 'more' && (!data.nextCursor || data.nextCursor === cursor)) break;
       fresh = { ...fresh, rows: [...fresh.rows, ...this.pageRows(fresh, data.items, images)], nextCursor: data.nextCursor ?? '' };
     }
-    return fresh;
+    if (!keepDepth || signal.aborted) return fresh;
+    const matched = matchRows(shown, fresh.rows);
+    const featured = new Set(fresh.hero.map(card => card.id));
+    const rows = await Promise.all(fresh.rows.map(async row => {
+      const count = matched.get(row)?.items.length ?? 0;
+      let next = row;
+      const seen = new Set(row.items.map(card => card.id));
+      const cursors = new Set<string>();
+      while (!signal.aborted && next.items.length < count && next.continuation === 'more' && next.nextCursor && !cursors.has(next.nextCursor)) {
+        cursors.add(next.nextCursor);
+        const data = await connection.adapter.row(row.id, next.nextCursor, PAGE_ITEMS).catch(() => undefined);
+        if (!data || data.id !== row.id || data.continuation === 'more' && !data.nextCursor) break;
+        const items = data.items
+          .filter(item => row.purpose === 'watchlist' || item.kind !== 'title' || !featured.has(item.title.id))
+          .map(item => entry(item, images, this.artWidth()))
+          .filter(item => !seen.has(item.id) && !!seen.add(item.id));
+        next = { ...next, items: [...next.items, ...items], nextCursor: data.nextCursor ?? '', continuation: data.continuation };
+      }
+      return next;
+    }));
+    return { ...fresh, rows };
   }
 
   /** A further page of Home's rows: without the heroes' titles and without rows already listed. */

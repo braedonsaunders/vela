@@ -365,3 +365,21 @@ test('Home read afresh reads its further pages of rows past every cache', async 
   await home.refreshProgress();
   expect(feed.calls).toEqual(['bootstrap', 'rows fresh']);
 });
+
+test('an in-place Home refresh keeps paged cards after an insertion at the head of their row', async () => {
+  const feed = new Feed();
+  feed.shelves = [{ key: 'watch', name: 'Watchlist', purpose: 'watchlist', titles: films('film', 60) }];
+  const { box, home } = harness(feed);
+  await home.ensure();
+  await home.rowItems('watch@1');
+  const focused = box.get().home.value!.rows[0]!.items[34];
+  feed.shelves[0]!.titles.unshift(title('new'));
+  feed.played();
+
+  await home.refresh('mutation');
+  const row = box.get().home.value!.rows[0]!;
+  expect(row.drawnAs).toBe('watch@1');
+  expect(row.items[0]!.id).toBe('new');
+  expect(row.items[35]).toBe(focused);
+  expect(row.nextCursor).toBe('watch@2|40');
+});
