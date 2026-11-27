@@ -5,11 +5,10 @@ import { Alert as Notice, Glyph, Heading, Pill, Words } from '@vela/skin/src/wid
 import { useLook } from '@vela/skin/src/widgets/common/look';
 import { RoundButton } from '@vela/skin/src/widgets/media/parts';
 import { confirmAction } from '@vela/skin/src/widgets/common/confirm';
-import { FocusPressable } from '@vela/skin/src/focus';
 import { Image } from 'expo-image';
 import { router } from '../src/router';
 import { useEffect, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DOWNLOAD_SETTINGS, useVela as useApp } from '../src/vela';
 import { preferences } from '../src/data/preferences';
@@ -28,7 +27,10 @@ export default function Downloads() {
 function DownloadLibrary() {
   const store = useVela();
   const { ui } = useLook();
-  const wide = useHost().viewport.width >= 640;
+  const width = useHost().viewport.width;
+  const wide = width >= 640;
+  // A desktop window gives the list more room, so a row's actions sit on one line beside its title.
+  const roomy = width >= 1200;
   const { items, usedBytes, hydrated, error, traits, persisted, settings } = useVelaState(state => state.downloads);
   const toggleWifi = () => {
     store.downloads.setWifiOnly(!settings.wifiOnly);
@@ -60,7 +62,7 @@ function DownloadLibrary() {
   };
   return (
     <SafeAreaView style={[styles.page, { backgroundColor: ui.page }]}>
-      <ScrollView contentContainerStyle={[styles.content, wide && styles.wideContent]} testID="downloads-screen">
+      <ScrollView contentContainerStyle={[styles.content, wide && styles.wideContent, roomy && styles.roomyContent]} testID="downloads-screen">
         <View style={styles.header}>
           <RoundButton icon="back" label="Back" onPress={back} testID="downloads-back" />
           <View style={styles.heading}>
@@ -116,7 +118,6 @@ function DownloadRow({ item, online, wide, busy, play, pause, resume, remove, re
   const { ui } = look;
   const { title, titleId, status, bytesWritten, byteLength } = item;
   const [poster, setPoster] = useState<string>();
-  const [focused, setFocused] = useState(false);
   const [badLocal, setBadLocal] = useState<string>();
   const [badRemote, setBadRemote] = useState<string>();
   const storedPosterPath = item.posterPath ?? item.previousCompleted?.posterPath;
@@ -162,18 +163,14 @@ function DownloadRow({ item, online, wide, busy, play, pause, resume, remove, re
           {item.error ? <Notice>{item.error}</Notice> : null}
         </View>
         <View style={[styles.actions, wide && styles.wideActions]}>
-          {playable ? <Pill label="Play" primary height={44} onPress={play} disabled={busy} /> : null}
-          {transferring ? <Pill label="Pause" height={44} onPress={pause} disabled={busy} /> : null}
+          {playable ? <Pill label="Play" primary height={40} onPress={play} disabled={busy} /> : null}
+          {transferring ? <Pill label="Pause" height={40} onPress={pause} disabled={busy} /> : null}
           {online && (status === 'paused' || status === 'failed') ? (
-            <Pill label={status === 'paused' ? 'Resume' : 'Retry'} height={44} onPress={resume} disabled={busy} />
+            <Pill label={status === 'paused' ? 'Resume' : 'Retry'} height={40} onPress={resume} disabled={busy} />
           ) : null}
-          {playable && reveal ? <Pill label={Platform.OS === 'web' && desktopMac() ? 'Show in Finder' : 'Show in folder'} height={44} onPress={reveal} disabled={busy} testID={`download-reveal-${titleId}`} /> : null}
-          {playable && exportCopy ? <Pill label="Save a copy…" height={44} onPress={exportCopy} disabled={busy} testID={`download-export-${titleId}`} /> : null}
-          <FocusPressable accessibilityRole="button" accessibilityLabel="Delete" disabled={busy} onPress={remove}
-            testID={`download-delete-${titleId}`} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-            style={({ pressed }) => [styles.delete, { borderColor: focused ? ui.accent : 'transparent', opacity: pressed || busy ? 0.55 : 1 }]}>
-            <Text style={look.text({ 'font-size': '14px', color: '$ui.live', 'font-weight': '650' })}>Delete</Text>
-          </FocusPressable>
+          {playable && reveal ? <Pill label={Platform.OS === 'web' && desktopMac() ? 'Show in Finder' : 'Show in folder'} height={40} onPress={reveal} disabled={busy} testID={`download-reveal-${titleId}`} /> : null}
+          {playable && exportCopy ? <Pill label="Save a copy…" height={40} onPress={exportCopy} disabled={busy} testID={`download-export-${titleId}`} /> : null}
+          <Pill label="Delete" height={40} onPress={remove} disabled={busy} testID={`download-delete-${titleId}`} />
         </View>
       </View>
     </View>
@@ -184,6 +181,7 @@ const styles = StyleSheet.create({
   page: { flex: 1 },
   content: { width: '100%', maxWidth: 800, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32, gap: 14 },
   wideContent: { paddingHorizontal: 40 },
+  roomyContent: { maxWidth: 1120 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 12 },
   heading: { flex: 1, gap: 2 },
   row: { flexDirection: 'row', alignItems: 'flex-start', padding: 14, gap: 14, borderRadius: 16, borderWidth: 1 },
@@ -193,8 +191,7 @@ const styles = StyleSheet.create({
   metadata: { minWidth: 0, gap: 5 },
   wideMetadata: { flex: 1 },
   actions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 5 },
-  wideActions: { marginTop: 0, justifyContent: 'flex-end', maxWidth: '50%' },
-  delete: { minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: 12, borderWidth: 2, borderRadius: 22 },
+  wideActions: { marginTop: 0, justifyContent: 'flex-end', flexShrink: 0, maxWidth: '62%' },
   track: { height: 4, borderRadius: 2, overflow: 'hidden', marginVertical: 2 },
   setting: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
   settingText: { flex: 1, minWidth: 180 },
