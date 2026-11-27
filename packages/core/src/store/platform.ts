@@ -8,7 +8,7 @@ import type { DownloadsPort } from './downloads';
 export type MediaCapabilities = Pick<
   ClientCapabilities,
   'containers' | 'videoCodecs' | 'audioCodecs' | 'subtitleFormats' | 'hls' | 'mse' | 'hdr' | 'maxWidth' | 'maxHeight' | 'originalPlayback'
-  | 'dolbyVisionProfiles' | 'dolbyVisionReshape' | 'audioOutput'
+  | 'dolbyVisionProfiles' | 'dolbyVisionReshape' | 'audioOutput' | 'features'
 >;
 
 export interface VelaPlatform {

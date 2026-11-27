@@ -4,6 +4,7 @@
 // the epoch moves on and every slice drops what it read under the old one.
 import type * as V from '../wire';
 import type { ServerAdapter } from '../adapter';
+import { capabilitiesOf } from '../adapter/advertise';
 import { hasClientDeclaration, hasPasswordSignIn } from '../adapter/capabilities';
 import { etherConnection, nativeConnection, type Connection } from '../adapter/connection';
 import { EtherAdapter } from '../adapter/ether';
@@ -35,6 +36,8 @@ export class Session {
   /** The selected server's feature statements, as its home advertised them. */
   searchCapabilities: Pick<V.ServerCapabilities, 'searchSorts' | 'searchKinds' | 'searchLibraries'> | undefined;
   features: V.ServerCapabilities['features'] | undefined;
+  /** A features read for a start that came before Home (knowFeatures), shared by starts in the same server session. */
+  private featuresRead: { epoch: number; pending: Promise<V.ServerCapabilities['features'] | undefined> } | undefined;
   /** Server names as they describe themselves, by record ID. */
   readonly names = new Map<string, string>();
 
@@ -108,7 +111,7 @@ export class Session {
   /** What this client declares it can play; unavailable until the player has said. */
   get client(): V.ClientCapabilities {
     if (!this.clientValue) throw new Error('Media capabilities are unavailable');
-    return cappedClient(this.clientValue, this.streamingCap);
+    return cappedClient(serverFeatures(this.clientValue, this.features), this.streamingCap);
   }
 
   /** What an audio session declares (music, audiobooks, podcasts): what the app's audio engine plays,
@@ -262,6 +265,19 @@ export class Session {
     return connection.credentials.get();
   }
 
+  /**
+   * The server's features, read once per server session when no Home read has brought them yet: a watch opened by
+   * a deep link starts before Home, and what the client declares (adaptive HLS) depends on them.
+   */
+  async knowFeatures(api: ServerAdapter): Promise<void> {
+    if (this.features) return;
+    const epoch = this.epoch;
+    const reading = this.featuresRead?.epoch === epoch ? this.featuresRead.pending
+      : (this.featuresRead = { epoch, pending: capabilitiesOf(api).then(c => c.features, () => undefined) }).pending;
+    const features = await reading;
+    if (epoch === this.epoch && !this.features && features) this.features = features;
+  }
+
   /** The player declares new media capabilities: servers that tailor plans to them are told again. */
   setMedia(media: MediaCapabilities): void {
     const updated = { device: this.device, protocolVersions: [0], ...media };
@@ -393,4 +409,13 @@ function validOrigin(candidate: string): string {
   const bare = !parsed.username && !parsed.password && parsed.pathname === '/' && !parsed.search && !parsed.hash;
   if (!['http:', 'https:'].includes(parsed.protocol) || !bare) throw new Error('Invalid server origin');
   return parsed.origin;
+}
+
+/** A player's features as far as the server offers them: an adaptive-HLS declaration goes only to a server with
+ * features.adaptiveHLS, so an older one never sees a field it does not know. */
+export function serverFeatures(client: V.ClientCapabilities, features: Partial<V.ServerCapabilities['features']> | undefined): V.ClientCapabilities {
+  if (!client.features) return client;
+  const { features: declared, ...rest } = client;
+  const adaptiveHLS = declared.adaptiveHLS && features?.adaptiveHLS?.available === true;
+  return adaptiveHLS ? { ...rest, features: { adaptiveHLS: true } } : rest;
 }

@@ -33,8 +33,52 @@ export interface Paced { facts: string; at: number }
 
 /** What to remember if `next` should be drawn now, given what was last drawn (null: nothing
  * yet), else null: the report waits for the clock's next redraw. */
-export function paceSnapshot(last: Paced | null, next: Snapshot, now: number): Paced | null {
+export function paceSnapshot(last: Paced | null, next: Snapshot, now: number, redrawMs = CLOCK_REDRAW_MS): Paced | null {
   const facts = snapshotFacts(next);
-  if (!last || facts !== last.facts || now - last.at >= CLOCK_REDRAW_MS) return { facts, at: now };
+  if (!last || facts !== last.facts || now - last.at >= redrawMs) return { facts, at: now };
   return null;
+}
+
+/** The clock's redraw interval while the chrome rests out of sight on a title (nothing of it shows the clock). */
+export const QUIET_CLOCK_REDRAW_MS = 10_000;
+
+/**
+ * How often the clock is drawn. While the chrome stands (or a menu or the info card shows), every second.
+ * While it rests over a title, only what appears at a position is drawn from the clock: a skip button inside
+ * an intro or credits range, the end of the title. So: every second within reach of a skip range (or inside
+ * one) or of the end, otherwise every QUIET_CLOCK_REDRAW_MS. A live or archive picture keeps every second
+ * (its delivery notices and timeline read the clock). Any other change is drawn at once regardless.
+ */
+export function clockRedrawMs(watch: { quiet: boolean; live: boolean; position: number; duration: number | null;
+  markers?: readonly { startSeconds: number; endSeconds: number }[] }): number {
+  if (!watch.quiet || watch.live) return CLOCK_REDRAW_MS;
+  const reach = QUIET_CLOCK_REDRAW_MS / 1000 + 1;
+  const near = (seconds: number) => seconds - watch.position <= reach && watch.position - seconds <= 1;
+  const inside = (m: { startSeconds: number; endSeconds: number }) => watch.position >= m.startSeconds - 1 && watch.position <= m.endSeconds + 1;
+  if (watch.markers?.some(m => inside(m) || near(m.startSeconds) || near(m.endSeconds))) return CLOCK_REDRAW_MS;
+  if (watch.duration && watch.duration - watch.position <= reach) return CLOCK_REDRAW_MS;
+  return QUIET_CLOCK_REDRAW_MS;
+}
+
+/** The report to draw: `next`'s clock over the drawn report's facts, when its facts are the same (`same`),
+ * so that what is derived from them (track lists, the quality menu, the info card's format lines) keeps
+ * its identity and is not worked out again every second. */
+export function withClock(drawn: Snapshot | null, next: Snapshot, same: boolean): Snapshot {
+  if (!drawn || !same) return next;
+  const shown = { ...drawn } as Record<string, unknown>;
+  const source = next as unknown as Record<string, unknown>;
+  for (const key of CLOCK_FIELDS) {
+    if (key in source) shown[key] = source[key];
+    else delete shown[key];
+  }
+  return shown as unknown as Snapshot;
+}
+
+/** Whether a clock-only report would draw anything new: a paused title still reports four times a second
+ * with the same clock, and a redraw of the standing chrome for it changes nothing. The position, the
+ * duration and the buffered ranges are what the clock draws (the info card's figures move with them). */
+export function clockMoved(drawn: Snapshot | null, next: Snapshot): boolean {
+  if (!drawn || drawn.position !== next.position || drawn.duration !== next.duration || drawn.live || next.live) return true;
+  const a = drawn.playable ?? [], b = next.playable ?? [];
+  return a.length !== b.length || a.some((range, i) => range.start !== b[i]!.start || range.end !== b[i]!.end);
 }

@@ -411,6 +411,8 @@ export class Playback {
       connection = await this.session.ready();
       const api = connection.adapter;
       await this.session.negotiate(api);
+      // A start before Home (a deep link) reads the server's features first: the declaration depends on them.
+      if (!this.session.features && this.session.knowFeatures) await this.session.knowFeatures(api);
       if (this.run !== run) return;
       viewerId = (await this.session.tokens?.(connection))?.viewer.id ?? '';
       if (this.run !== run) return;
@@ -1592,7 +1594,7 @@ export class Playback {
       // planned against and is not: the engine plans again from the newer plan.
       const generations = staleGeneration(error) ? error.detail.currentGenerations : undefined;
       const absolute = ['stop', 'seek', 'pause', 'resume', 'tracks', 'goLive'].includes(command.kind);
-      const wanted = command.kind === 'switch' && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
+      const wanted = command.kind === 'switch' && 'pathId' in command && origin === 'viewer' && this.offersPath(sessionId, command.pathId);
       if ((!absolute && !wanted) || !generations) throw error;
       if (canRetry && !(await canRetry())) throw error;
       // What to send again, and at which generations, is decided as it is sent: a command may have been superseded meanwhile.

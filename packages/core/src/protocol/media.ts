@@ -1,18 +1,31 @@
 import type { PlaybackPlan } from '../wire';
 
+/** Media references already resolved, by origin and reference. A following server sends the session's plan
+ * again about once a second with the same references, and the URL parser is JavaScript in React Native. */
+const resolved = new Map<string, string>();
+function remembered(origin: string, kind: string, value: string, resolve: () => string): string {
+  const key = `${kind}\u0000${origin}\u0000${value}`;
+  const known = resolved.get(key);
+  if (known !== undefined) return known;
+  const href = resolve();
+  if (resolved.size >= 256) resolved.delete(resolved.keys().next().value!);
+  resolved.set(key, href);
+  return href;
+}
+
 /** Resolve broker-issued media references without changing their grant tokens. */
 export function mediaPlan(plan: PlaybackPlan, origin: string): PlaybackPlan {
-  const url = (value: string) => {
+  const url = (value: string) => remembered(origin, 'media', value, () => {
     const parsed = new URL(value, `${origin.replace(/\/$/, '')}/`);
     if (parsed.origin !== origin || !parsed.pathname.startsWith('/sessions/media/') || parsed.username || parsed.password) throw new Error('Media URL outside bound session broker');
     return parsed.href;
-  };
+  });
   // A sidecar's delivery URL (a subtitle downloaded mid-session too) is made absolute against the server
   // as the track URL is, so a native player can fetch it; one elsewhere is left exactly as it came.
-  const delivery = (value: string) => {
+  const delivery = (value: string) => remembered(origin, 'delivery', value, () => {
     const parsed = new URL(value, `${origin.replace(/\/$/, '')}/`);
     return parsed.origin === origin && !parsed.username && !parsed.password ? parsed.href : value;
-  };
+  });
   const track = (value: PlaybackPlan['audioTracks'][number]) => {
     const resolved = value.url ? { ...value, url: url(value.url) } : value;
     return resolved.delivery?.kind === 'external' ? { ...resolved, delivery: { ...resolved.delivery, url: delivery(resolved.delivery.url) } } : resolved;

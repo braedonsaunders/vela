@@ -73,6 +73,7 @@ export { cardMedia, durationLabel, isAudioRole, mediaClass, mediaRole, mediaCard
 export type { ChildrenModel, MediaFeatures } from './store/media';
 export { AUDIO_RATES, chapterEnd, preloadLead, type AudioEngine, type AudioEngineEvent, type AudioPreload, type AudioSound, type AudioPhase, type AudioRequest, type AudioState, type SleepMode } from './store/audio';
 export { AWAKE, holdsNext, sleepDue, sleepFrom, sleepLeftMs, type Sleep } from './sleep';
+export { deliveryEvidence, deliveryWatch, heardDelivery, measuredThroughput, pathRate, playerAdapts, stepDown, type DeliveryWatch, type StepDown, type StepOptions } from './delivery';
 export { DEFAULT_STREAMING, STREAMING_LIMITS, STREAMING_QUALITIES, streamingSettings, type StreamingQuality, type StreamingSettings } from './streaming';
 export { storedPlayerSettings, type PictureFit, type PlayerSettingsState, type StoredPlayerSettings } from './store/player-settings';
 export { matchSeriesTracks, matchTrack, MAX_SERIES_TRACKS, parseSeriesTrackKey, pruneSeriesTracks, removeServerSeriesTracks, seriesTrackKey, storedSeriesTracks, trackChoiceOf, trackCodecFamily, type SeriesTrackChoice, type SeriesTrackMap, type SeriesTrackMatch, type SeriesTrackPreference } from './series-tracks';

@@ -60,12 +60,18 @@ export interface PlayerChromeState {
   /** The last command the engine or the server refused, in words ("" when none). */
   actionError: string;
   liveRecoveryNotice?: string;
+  /** The session stepped down to a server transcode the network can carry (delivery.ts), for a moment. */
+  qualityNotice?: string;
   /** Only the quality command currently awaiting acknowledgement. */
   pendingQualityId?: string;
   pendingVersionId?: string;
   versionMessage: string;
   /** Increments when an explicitly pinned original disappears; the chrome opens version choices. */
   offerVersions?: number;
+  /** The chrome rests out of sight (no bars, menu or info card): the clock need not be drawn every second. */
+  chromeQuiet?(quiet: boolean): void;
+  /** The engine's latest report, drawn or not: a chrome coming back up shows the clock as it is now. */
+  latestSnapshot?(): Snapshot | null;
   send(command: CommandInput): void;
   switchVersion(versionId: string): void;
   /** The quality menu opened: re-read the session's versions (the plan prop shows the result). */

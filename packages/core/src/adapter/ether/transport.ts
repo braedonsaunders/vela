@@ -91,8 +91,9 @@ export class EtherTransport {
     signal?.throwIfAborted();
     let tokens = auth ? await abortable(this.credentials.get(), signal) : null;
     if (auth && !tokens) throw new Error('Sign in required');
-    const identity = method === 'GET' ? path : JSON.stringify([method, path, body]);
-    const key = this.cacheKey(tokens, identity);
+    // Only a cacheable request has a cache identity: a player's observation every second needs none.
+    const identity = cacheable ? (method === 'GET' ? path : JSON.stringify([method, path, body])) : '';
+    const key = cacheable ? this.cacheKey(tokens, identity) : '';
     const cached = cacheable && !fresh ? this.cache.get(key) ?? (persistent ? persistentRead(key) : undefined) : undefined;
     if (cached && !this.cache.has(key)) this.cache.set(key, cached);
     const send = (token: Token, useCache = true) => {
@@ -105,28 +106,33 @@ export class EtherTransport {
       return this.fetchBound(`/vela/v0${path}`, init, token);
     };
     let response = await send(tokens);
+    // A native response reads its status and headers from the platform on every access: once each.
+    let status = response.status;
     // An expired Studio preview token is not the session's: no token rotation for it.
-    if (response.status === 401 && tokens && retryAuth && !(options.headers?.['X-Vela-Screen-Preview'] && await previewRefused(response))) {
+    if (status === 401 && tokens && retryAuth && !(options.headers?.['X-Vela-Screen-Preview'] && await previewRefused(response))) {
       tokens = await abortable(this.refresh(tokens), signal);
       signal?.throwIfAborted();
       response = await send(tokens, false);
+      status = response.status;
     }
-    if (response.status === 304 && cached) return cached.body as T;
-    if (!response.ok) throw await this.failure(response, signal);
+    if (status === 304 && cached) return cached.body as T;
+    if (status < 200 || status >= 300) throw await this.failure(response, signal);
     // A mutation may answer with no body (favourites, multiview ends).
-    if (response.status === 204) return undefined as T;
+    if (status === 204) return undefined as T;
     const value = await response.json() as T;
     signal?.throwIfAborted();
-    const etag = response.headers.get('etag');
+    if (!cacheable) return value;
+    const headers = response.headers;
+    const etag = headers.get('etag');
     // A refresh may change policy: do not store under the old identity.
     const sameIdentity = !tokens || key === this.cacheKey(tokens, identity);
     // A partial answer (a title still being filled) says no-store: it is never kept or revalidated.
-    const storable = !/(^|,)\s*no-store\s*(,|$)/i.test(response.headers.get('cache-control') ?? '');
-    if (etag && cacheable && sameIdentity && storable) {
+    const storable = !/(^|,)\s*no-store\s*(,|$)/i.test(headers.get('cache-control') ?? '');
+    if (etag && sameIdentity && storable) {
       const entry = { etag, body: value };
       this.cache.set(key, entry);
       if (persistent) persistentWrite(key, entry);
-    } else if (cacheable && !storable) {
+    } else if (!storable) {
       this.cache.delete(key);
       if (persistent) persistentDelete(key);
     }
@@ -283,10 +289,18 @@ export class EtherTransport {
     return new VelaError(detail, response.status, response.headers.get('retry-after'));
   }
 
+  /** Addresses already checked: the URL parser is JavaScript in React Native, and a playing session asks the
+   * same few addresses every second. */
+  private readonly bound = new Map<string, string>();
+
   private boundURL(path: string): string {
+    const known = this.bound.get(path);
+    if (known !== undefined) return known;
     const url = new URL(path, `${this.origin}/`);
     const inside = url.origin === this.origin && url.pathname.startsWith('/vela/v0/');
     if (!inside) throw new Error('Request outside bound server');
+    if (this.bound.size >= 64) this.bound.delete(this.bound.keys().next().value!);
+    this.bound.set(path, url.href);
     return url.href;
   }
 

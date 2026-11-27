@@ -143,6 +143,9 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
     fallback: { state: faults.fallbackUnavailable ? 'unavailable' : 'unsupported', reason: 'Mock serves pre-generated alternatives; no proactive encoder scheduler.' },
     ...versionData,
   };
+  // A client that adapts across an HLS master itself (Ether 0.3.25 features.adaptiveHLS) gets the multi-rendition
+  // transcode as an adaptive path.
+  if (request.client.features?.adaptiveHLS) for (const path of plan.paths) if (path.id === 'transcode') path.adaptive = true;
   if (plan.versions?.length) setPlaying(plan);
   if (!request.channelId && available && request.client.mse && request.allowTranscode !== false && !faults.fallbackUnavailable) {
     const mse = await mseFixture(base);
@@ -219,6 +222,10 @@ export function requestedInit(s: Session, resource: string, authorized: () => bo
     pending.timers.set(key, timer);
   }
 }
+function switchPath(s: Session, cmd: Extract<SessionCommand, { kind: 'switch' }>) {
+  if (!('pathId' in cmd)) return;
+  s.plan.selectedPathId = cmd.pathId; s.plan.sourceGeneration++; s.plan.positionSeconds = cmd.atSeconds;
+}
 export function applyCommand(s: Session, cmd: SessionCommand) {
   switch (cmd.kind) {
     case 'seek': s.plan.seekGeneration++; s.plan.positionSeconds = cmd.positionSeconds; break;
@@ -226,7 +233,7 @@ export function applyCommand(s: Session, cmd: SessionCommand) {
     case 'resume': s.plan.state = 'playing'; break;
     case 'stop': s.plan.state = 'ended'; break;
     case 'tracks': answerTracks(s.plan, cmd); break;
-    case 'switch': s.plan.selectedPathId = cmd.pathId; s.plan.sourceGeneration++; s.plan.positionSeconds = cmd.atSeconds; break;
+    case 'switch': switchPath(s, cmd); break;
     case 'version':
       s.plan.selectedVersionId = cmd.versionId;
       setPlaying(s.plan);

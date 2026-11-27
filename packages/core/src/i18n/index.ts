@@ -50,7 +50,29 @@ const numbers = new Map<string, Intl.NumberFormat>();
 const clocks = new Map<string, Intl.DateTimeFormat>();
 const clockLabels = new Map<string, string>();
 const plurals = new Map<string, Intl.PluralRules>();
-export function number(value: number, options?: Intl.NumberFormatOptions): string { return formatter(numbers, `${current.formatLocale}|${JSON.stringify(options)}`, () => new Intl.NumberFormat(current.formatLocale, options)).format(value); }
+export function number(value: number, options?: Intl.NumberFormatOptions): string {
+  const plain = plainInteger(value, options);
+  if (plain !== undefined) return plain;
+  return formatter(numbers, `${current.formatLocale}|${JSON.stringify(options)}`, () => new Intl.NumberFormat(current.formatLocale, options)).format(value);
+}
+/** Whether the locale writes integers in ASCII digits (Hermes formats through ICU over JNI on Android:
+ * a card's runtime and year, a player's clock, cost a 32-bit TV box hundreds of milliseconds). */
+const asciiDigits = new Map<string, boolean>();
+/** A small non-negative integer as Intl would write it, without Intl: no grouping (under 1000, or
+ * grouping off), the locale's digits ASCII, and only the options that do not change such a number. */
+function plainInteger(value: number, options?: Intl.NumberFormatOptions): string | undefined {
+  if (!Number.isInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return undefined;
+  const { useGrouping, minimumIntegerDigits, maximumFractionDigits, ...rest } = options ?? {};
+  if (Object.keys(rest).length || (useGrouping !== false && value >= 1000) || (minimumIntegerDigits ?? 1) > 21) return undefined;
+  if (maximumFractionDigits !== undefined && (!Number.isInteger(maximumFractionDigits) || maximumFractionDigits < 0 || maximumFractionDigits > 100)) return undefined;
+  const locale = current.formatLocale;
+  let ascii = asciiDigits.get(locale);
+  if (ascii === undefined) {
+    try { ascii = new Intl.NumberFormat(locale, { useGrouping: false }).format(9876543210) === '9876543210'; } catch { ascii = false; }
+    asciiDigits.set(locale, ascii);
+  }
+  return ascii ? String(value).padStart(minimumIntegerDigits ?? 1, '0') : undefined;
+}
 export function plural(value: number): string {
   return typeof Intl.PluralRules === 'function' ? formatter(plurals, current.resolvedLocale, () => new Intl.PluralRules(current.resolvedLocale)).select(value) : value === 1 ? 'one' : 'other';
 }

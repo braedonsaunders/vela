@@ -18,6 +18,7 @@ import { LiveDial, LiveNotice, useLiveWatchChrome } from './live';
 import { useShortcuts } from './keys';
 import { usePlayerLook } from './look';
 import { belongs, present, type PlayerView } from './present';
+import { withClock } from './snapshot-pace';
 import { NO_CLICK, pictureClick, UNDO_AFTER_MS, type ClickMemory, type PlayCommand } from './picture-click';
 import { PICTURE_TEST_ID } from './remote-actions';
 import { watchFrames, watchPictureBounds, watchWidth } from './fold-layout';
@@ -39,6 +40,16 @@ const ANDROID_TV = Platform.OS === 'android' && Platform.isTV;
  * keep tap-to-show-the-controls. */
 const POINTER_CLICKS = Platform.OS === 'web' && typeof window !== 'undefined'
   && typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+/** Callbacks that keep their identity across redraws and call the latest closure: the controls skip a
+ * redraw that only moved the clock (bars.tsx sameControls), which a new callback each time would defeat. */
+function useSteady<T extends Record<string, (...args: never[]) => unknown>>(handlers: T): T {
+  const latest = useRef(handlers);
+  latest.current = handlers;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => Object.fromEntries(Object.keys(handlers).map(key =>
+    [key, (...args: never[]) => latest.current[key]!(...args)])) as T, []);
+}
 
 /** Draws nothing outside a watch route (the route provides the chrome's state). */
 export function PlayerChrome() {
@@ -70,7 +81,12 @@ function waitingLabel(view: PlayerView): string {
 function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptionInsets?: (value: CaptionInsets) => void }) {
   const look = usePlayerLook();
   const { viewport } = useHost();
-  const view = useMemo(() => present(state.plan, state.snapshot), [state.plan, state.snapshot]);
+  // A chrome that rested had its clock drawn only every few seconds (session.ts): back up, it shows the
+  // engine's latest clock at once (the facts, unchanged, are the drawn report's).
+  const latest = state.latestSnapshot?.();
+  const snapshot = latest && state.snapshot && latest !== state.snapshot && belongs(latest, state.plan)
+    && Math.abs(latest.position - state.snapshot.position) > 1.5 ? withClock(state.snapshot, latest, true) : state.snapshot;
+  const view = useMemo(() => present(state.plan, snapshot), [state.plan, snapshot]);
   const [opened, setOpened] = useState<Opened>(null);
   const [info, setInfo] = useState(false);
   const [infoBounds, setInfoBounds] = useState<CaptionRect>();
@@ -147,6 +163,11 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
     idle.wake();
   }, [state.offerVersions]);
   const chromeUp = idle.visible || !!failed;
+  // Out of sight, the chrome draws nothing from the clock but a skip button or the end (session.ts).
+  const quiet = !chromeUp && !info && opened === null;
+  const { chromeQuiet } = state;
+  useEffect(() => { chromeQuiet?.(quiet); }, [chromeQuiet, quiet]);
+  useEffect(() => () => chromeQuiet?.(false), [chromeQuiet]);
   const surfaces = usePlayerSurfaces({
     channelId: live.live ? live.channelId : '', eventId: live.live ? liveEvent?.id ?? '' : '', feed: live.live ? liveEvent?.feed : undefined,
     kind: live.live ? 'channel' : live.archive ? 'programme' : 'title', titleId: !live.live && !live.archive ? state.target?.id : undefined,
@@ -154,7 +175,8 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
   });
   // A `toggle` overlay's switch is the chrome's ticker button (the others are in the subtitles menu).
   const toggleSwitch = surfaces.switches.find(s => s.button);
-  const overlay: TickerToggle = { available: !!toggleSwitch, ticker: toggleSwitch?.on ?? false, toggleTicker: () => toggleSwitch?.toggle(), label: toggleSwitch?.label ?? '' };
+  const overlay: TickerToggle = useMemo(() => ({ available: !!toggleSwitch, ticker: toggleSwitch?.on ?? false,
+    toggleTicker: () => toggleSwitch?.toggle(), label: toggleSwitch?.label ?? '' }), [toggleSwitch]);
   // No screensaver or display sleep over a playing film (web and desktop; native players hold it themselves).
   useScreenAwake(view.playing);
   const { send } = state;
@@ -177,9 +199,15 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
   };
   const recentStep = () =>
     lastStep.current && Date.now() - lastStep.current.at < STEP_MEMORY_MS ? lastStep.current.seconds : null;
+  // Where the picture is now: a resting chrome draws its clock only every few seconds (session.ts), so a step
+  // taken from it counts from the engine's latest report, not from the last drawn one.
+  const currentPosition = () => {
+    const latest = state.latestSnapshot?.();
+    return latest && belongs(latest, state.plan) ? latest.seekTarget ?? latest.position : view.position;
+  };
   const seekBy = (delta: number) => {
     if (blocked) return;
-    const from = recentStep() ?? (rewind ? rewind.position : view.position);
+    const from = recentStep() ?? (rewind ? rewind.position : currentPosition());
     const limit = rewind ? rewind.edge : view.duration > 0 ? view.duration : Number.POSITIVE_INFINITY;
     const toLive = !!rewind && stepLandsLive({ edge: rewind.edge, position: from }, delta);
     seek(Math.max(rewind ? rewind.start : 0, Math.min(limit, from + delta)), toLive);
@@ -338,7 +366,13 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
     return () => clearTimeout(timer);
   }, [opened, hasPanel, look.still]);
   // Fade across the whole picture, including the area under side insets or a book's other pane.
-  const bleed = look.small ? { left: -frame.left, right: -frame.right } : undefined;
+  const bleed = useMemo(() => (look.small ? { left: -frame.left, right: -frame.right } : undefined), [look.small, frame.left, frame.right]);
+  const steady = useSteady({
+    stepFrom: recentStep, seek, seekBy, toggle, toggleInfo, closeMenu: () => setOpened(null),
+    onMenuLayout: (width: number, height: number) => setMenuLayout(previous =>
+      previous?.menu === opened && previous.width === width && previous.height === height
+        ? previous : { menu: opened, width, height }),
+  });
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="player-chrome">
       {/* On TV remove the picture's focus destination on reveal, rather than leaving a
@@ -375,23 +409,21 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
           view={view}
           visible={idle.visible && !failed}
           reveal={reveal}
-          stepFrom={recentStep}
+          stepFrom={steady.stepFrom}
           blocked={blocked}
           opened={opened}
           presentPanel={!hasPanel || presentedMenu === opened}
           info={info}
           menuHeight={menuHeight}
           onRowLayout={setRowHeight}
-          onMenuLayout={(width, height) => setMenuLayout(previous =>
-            previous?.menu === opened && previous.width === width && previous.height === height
-              ? previous : { menu: opened, width, height })}
+          onMenuLayout={steady.onMenuLayout}
           bleed={bleed}
           send={send}
-          seek={seek}
-          seekBy={seekBy}
-          toggle={toggle}
-          closeMenu={() => setOpened(null)}
-          toggleInfo={toggleInfo}
+          seek={steady.seek}
+          seekBy={steady.seekBy}
+          toggle={steady.toggle}
+          closeMenu={steady.closeMenu}
+          toggleInfo={steady.toggleInfo}
           onActive={setActive}
           live={live}
           overlay={overlay}
@@ -422,12 +454,12 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
         />
       </View>
       {!idle.visible && !failed ? <LiveNotice look={look} watch={live} lift={surfaces.lift} /> : null}
-      {(state.liveRecoveryNotice || state.versionMessage) && !failed ? (
+      {(state.liveRecoveryNotice || state.versionMessage || state.qualityNotice) && !failed ? (
         <View pointerEvents="none" accessibilityLiveRegion="polite"
-          testID={state.liveRecoveryNotice ? 'player-live-recovery-notice' : 'player-version-notice'}
+          testID={state.liveRecoveryNotice ? 'player-live-recovery-notice' : state.versionMessage ? 'player-version-notice' : 'player-quality-notice'}
           style={{ position: 'absolute', top: top + look.size(64), alignSelf: 'center', maxWidth: '80%',
             paddingVertical: look.size(8), paddingHorizontal: look.size(14), borderRadius: look.radiusControl, backgroundColor: look.scrim }}>
-          <Text style={look.text(14, 500, look.ink)}>{state.liveRecoveryNotice || state.versionMessage}</Text>
+          <Text style={look.text(14, 500, look.ink)}>{state.liveRecoveryNotice || state.versionMessage || state.qualityNotice}</Text>
         </View>
       ) : null}
       {info && !failed ? <InfoCard look={look} view={view} top={top} onLayout={event => {

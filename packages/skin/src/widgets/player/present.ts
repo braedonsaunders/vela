@@ -389,6 +389,21 @@ export function qualityLimitReason(code: string | undefined): string {
   return /^[a-z0-9_.-]+$/.test(code) ? msg('player.qualityReason.other') : code;
 }
 
+/** The server's reason a plan has no adaptive path, in the viewer's words: its localized message, else its own
+ * text, or a plain line for a bare machine code it does not explain. */
+export function adaptiveUnavailableText(reason: string | undefined, message?: string): string {
+  const text = message?.trim() || reason?.trim() || '';
+  if (!text) return '';
+  return /^[a-z0-9_.-]+$/.test(text) ? msg('player.quality.adaptiveUnavailable') : text;
+}
+
+/** Why the plan's playing path cannot adapt (Ether 0.3.25 sends `adaptiveUnavailable` and its localized
+ * `adaptiveUnavailableMessage` on the selected path), in the viewer's words; '' when it adapts or the server says nothing. */
+export function adaptiveUnavailableNote(plan: PlaybackPlan | null | undefined): string {
+  const path = plan?.paths.find(candidate => candidate.id === plan.selectedPathId);
+  return adaptiveUnavailableText(path?.adaptiveUnavailable, path?.adaptiveUnavailableMessage);
+}
+
 /** The resolution a release label leads with ("1080p WEB-DL · …" → "1080p"), or ''. */
 export function labelResolution(label: string): string {
   const lead = /^\s*(4K|UHD|2160p|1440p|1080p|1080i|720p|576p|480p|SD)\b/i.exec(label)?.[1] ?? '';
@@ -497,6 +512,39 @@ export function qualityReached(id: string, snapshot: Snapshot | null, plan: Play
   return id.startsWith('path:') ? snapshot.sourceId === id.slice(5) : snapshot.renditionId === id;
 }
 
+/** The last answer for the same arguments (by identity). The chrome redraws its view every second for the
+ * clock; the session keeps a report's facts (tracks, renditions, format) the same objects while they do not
+ * change (snapshot-pace.ts withClock), so the menus' rows are not worked out again each time. */
+function lastFor<A extends unknown[], R>(make: (...args: A) => R): (...args: A) => R {
+  let last: { args: A; value: R } | null = null;
+  return (...args: A) => {
+    if (last && last.args.length === args.length && last.args.every((arg, i) => Object.is(arg, args[i]))) return last.value;
+    const value = make(...args);
+    last = { args, value };
+    return value;
+  };
+}
+const audioOptions = lastFor((planned: AnyTrack[], observed: AnyTrack[]) => trackOptions(planned, observed));
+const subtitleOptions = lastFor((planned: AnyTrack[], observed: AnyTrack[]) => trackOptions(planned, observed, true));
+const qualityOptions = lastFor((plan: PlaybackPlan | null, path: Path | undefined, renditions: Snapshot['renditions'] | undefined,
+  unplayable: Snapshot['unplayablePaths']) => qualities(plan, path, { renditions, unplayablePaths: unplayable } as Snapshot));
+const formatOf = lastFor((format: Snapshot['format']) => formatLines(format));
+const chapterMarks = lastFor((chapters: PlaybackPlan['chapters'] | undefined, duration: number): ChapterMark[] => (chapters ?? []).map(c => ({
+  id: c.id,
+  name: c.name,
+  seconds: c.startSeconds,
+  at: duration > 0 ? Math.min(1, c.startSeconds / duration) : 0,
+})));
+const outputChoices = lastFor((available: string[] | undefined, preferences: Record<string, string> | undefined) =>
+  (available ?? []).flatMap(name => {
+    const value = preferences?.[name];
+    return value ? [{ name, value }] : [];
+  }));
+const subtitleLookOf = lastFor((available: boolean | undefined, style: Snapshot['subtitleStyle'] | undefined): SubtitleLook | null =>
+  available && style ? { size: style.subtitleSize, background: style.subtitleBackground, color: style.subtitleColor, position: style.subtitlePosition } : null);
+const serverStreamOf = lastFor((choice: string, selected: boolean) => ({ choice, selected }));
+const NO_TRACKS: AnyTrack[] = [];
+
 export function present(plan: PlaybackPlan | null, own: Snapshot | null): PlayerView {
   const snapshot = belongs(own, plan) ? own : null;
   const position = snapshot?.seekTarget ?? snapshot?.position ?? plan?.positionSeconds ?? 0;
@@ -534,25 +582,18 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     muted: snapshot?.muted ?? false,
     speed: snapshot?.speed ?? 1,
     speeds: snapshot?.speeds ?? [],
-    audio: trackOptions(plan?.audioTracks ?? [], snapshot?.audioTracks ?? []),
+    audio: audioOptions(plan?.audioTracks ?? NO_TRACKS, snapshot?.audioTracks ?? NO_TRACKS),
     audioId: snapshot?.audioTrackId ?? plan?.selectedAudioTrackId ?? plan?.audioTracks.find(track => track.default)?.id ?? '',
     pendingAudioId: snapshot?.pendingAudioTrackId ?? '',
-    subtitles: trackOptions(plan?.subtitleTracks ?? [], snapshot?.subtitleTracks ?? [], true),
+    subtitles: subtitleOptions(plan?.subtitleTracks ?? NO_TRACKS, snapshot?.subtitleTracks ?? NO_TRACKS),
     subtitleId: snapshot ? (snapshot.subtitleTrackId ?? '') : (plan?.selectedSubtitleTrackId ?? ''),
     pendingSubtitleId: snapshot?.pendingSubtitleTrackId ?? '',
     subtitleError: snapshot?.subtitleError ?? '',
-    subtitleLook:
-      snapshot?.subtitleStyleAvailable && style
-        ? {
-            size: style.subtitleSize,
-            background: style.subtitleBackground,
-            color: style.subtitleColor,
-            position: style.subtitlePosition,
-          }
-        : null,
+    subtitleLook: subtitleLookOf(snapshot?.subtitleStyleAvailable, style),
     subtitleOffset: style && Number.isFinite(style.offsetSeconds) ? style.offsetSeconds : null,
-    qualities: qualities(plan, path, snapshot),
-    serverStream: unnamed ? { choice: `path:${unnamed.id}`, selected: path?.id === unnamed.id } : undefined,
+    // Of the report, only its renditions and unplayable paths make the rows.
+    qualities: qualityOptions(plan, path, snapshot?.renditions, snapshot?.unplayablePaths),
+    serverStream: unnamed ? serverStreamOf(`path:${unnamed.id}`, path?.id === unnamed.id) : undefined,
     qualityAuto: rendition && Math.max(path?.qualities.length ?? 0, snapshot?.renditions?.length ?? 0) > 1,
     lockedQuality: lockedQuality(snapshot, path),
     qualityId: snapshot?.renditions?.some(q => q.id === snapshot.renditionId) || path?.qualities.some(q => q.id === snapshot?.renditionId)
@@ -564,18 +605,10 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     path: snapshot?.strategy || path?.kind ? msg(`data.${snapshot?.strategy ?? path?.kind}`) : '',
     playingLabel: playing?.label ?? '',
     playingVersionId: playing ? playing.versionId : undefined,
-    chapters: (plan?.chapters ?? []).map(c => ({
-      id: c.id,
-      name: c.name,
-      seconds: c.startSeconds,
-      at: duration > 0 ? Math.min(1, c.startSeconds / duration) : 0,
-    })),
+    chapters: chapterMarks(plan?.chapters, duration),
     stats: facts,
-    format: formatLines(snapshot?.format),
-    output: (snapshot?.outputPreferencesAvailable ?? []).flatMap(name => {
-      const value = snapshot?.outputPreferences?.[name];
-      return value ? [{ name, value }] : [];
-    }),
+    format: formatOf(snapshot?.format),
+    output: outputChoices(snapshot?.outputPreferencesAvailable, snapshot?.outputPreferences),
     pip: snapshot?.capabilities.pip ?? false,
     fullscreen: snapshot?.capabilities.fullscreen ?? false,
     reason: snapshot?.failure?.message ?? '',

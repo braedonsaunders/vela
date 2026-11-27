@@ -23,7 +23,8 @@ Measured performance and load-regression tools for built-in experience documents
 - `data-reads.ts`: Bounded, opt-in load regression for parallel screen page data reads (`N` up to 8, requesting all sources) with 4 open `/vela/v0/live/stream` topics. Enforces a version gate (`>= 0.3.21-preview.32-screens`) before running against `--lab`.
 - `perf.test.ts`: Unit tests for `gate.ts`, `gfxinfo.ts`, `record-push.ts`, and the `data-reads.ts` version gate.
 - `tv-nav.ts`, `tv-nav-analysis.ts`, `tv-nav.test.ts`: per-press D-pad responsiveness on any Android TV emulator or device (section 3).
-- `repack-js.sh`: a measurement APK for a JS-only change (a fresh Hermes bundle in a release APK).
+- `repack-js.sh`: a measurement APK for a JS-only change (a fresh Hermes bundle in a release APK); `--map` keeps its source map.
+- `hermes-profile.ts`: a Hermes sampling profile summarized by original source (self, inclusive by function and by file).
 - `probe/`: measurement-only React commit and JS-time probes, bundled only with `VELA_PERF_PROBE=1`.
 
 ---
@@ -165,6 +166,14 @@ bun tools/perf/tv-nav.ts --compare before.json after.json
 - **Native profiles.** `VELA_PERF_PROFILEABLE=1` at prebuild (`plugins/android-profileable.js`) makes a
   release build profileable (simpleperf `--app app.ether.vela`) and adds a broadcast that runs Hermes's
   sampling profiler; see the plugin for the commands.
+- **JS profiles by source.** With a profileable build, start the profiler on the broadcast, stop it, pull
+  `js.cpuprofile` and summarize it against the bundle's source map: a Gradle release keeps it at
+  `app/generated/sourcemaps/react/release/index.android.bundle.map`, `repack-js.sh --map` writes `<out>.map`.
+  `--from`/`--to` (seconds into the profile) narrow it to a stretch, such as the presses after a quiet minute:
+
+  ```bash
+  bun tools/perf/hermes-profile.ts js.cpuprofile after.map --from 20 --to 40
+  ```
 - `--keep <dir>` keeps each trace for ui.perfetto.dev. Needs `adb` and `trace_processor` (`--adb`, `--tp`).
 
 ### Lab devices and kernels without tracing (`--lab`, `--light`)

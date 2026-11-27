@@ -5,13 +5,13 @@
 import { forcedMute, quietPlayback } from '../../quiet-playback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { AWAKE, commandOrigin, msg, sleepDue, sleepFrom, VelaError, withSessionVersions, type PlaybackTarget, type Sleep, type SleepMode, type StartRefusal, type StreamingSettings } from '@vela/core';
+import { AWAKE, commandOrigin, deliveryWatch, heardDelivery, measuredThroughput, msg, playerAdapts, stepDown, sleepDue, sleepFrom, VelaError, withSessionVersions, type PlaybackTarget, type Sleep, type SleepMode, type StartRefusal, type StreamingSettings } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
 import { belongs, planSource, presentedAfter, qualityReached, restartAt, settlePick, viewCommand, type PendingPick } from './present';
-import { paceSnapshot, type Paced } from './snapshot-pace';
+import { clockMoved, clockRedrawMs, paceSnapshot, withClock, type Paced } from './snapshot-pace';
 import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
 import { preparingRetry } from '../versions';
@@ -37,6 +37,18 @@ export interface LiveSessionOwner {
   updatePlan(plan: PlaybackPlan): void;
 }
 
+/** Media3 (Android) plays a server path at the one rate it has: a stream the network cannot carry steps down
+ * to a server transcode (core delivery.ts). The engine reports the bytes it receives (loadProgress). */
+const STEPS_DOWN = Platform.OS === 'android';
+/** How often the evidence is weighed (snapshots arrive four times a second). */
+const STEP_CHECK_MS = 1000;
+/** How long the step-down notice stands. */
+const QUALITY_NOTICE_MS = 6000;
+
+function withThroughput<T extends { throughputBps?: number }>(observation: T, bps: number | null): T {
+  return bps === null ? observation : { ...observation, throughputBps: bps };
+}
+
 /** Native phones and tablets offer both picture modes. The watch route opts in on compact web. */
 const PICTURE_CHOICE = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
 
@@ -51,6 +63,12 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   // The chrome redraws for a report that only moves the clock once a second (snapshot-pace.ts).
   const paced = useRef<Paced | null>(null);
+  const shownSnapshot = useRef<Snapshot | null>(null);
+  /** The chrome rests out of sight (chromeQuiet): the clock is drawn less often (clockRedrawMs). */
+  const quiet = useRef(false);
+  const chromeQuiet = useCallback((value: boolean) => { quiet.current = value; }, []);
+  const latest = useRef<Snapshot | null>(null);
+  const latestSnapshot = useCallback(() => latest.current, []);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [refused, setRefused] = useState('');
   // A quiet (lab or development) build starts muted: the view takes this as its first command.
@@ -73,6 +91,14 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const versionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const position = useRef(0);
   const paused = useRef(false);
+  /** Delivery evidence for an automatic step down (delivery.ts), when it was last weighed, and the session the
+   * viewer chose a quality on (an automatic step never overrides that). */
+  const delivery = useRef(deliveryWatch());
+  const deliveryChecked = useRef(0);
+  const viewerQuality = useRef('');
+  /** The session whose server refused a switch by bitrate. */
+  const bitrateRefused = useRef('');
+  const [qualityNotice, setQualityNotice] = useState('');
   const presented = useRef(false);
   const reported = useRef<Snapshot | null>(null);
   const { kind, id } = target;
@@ -103,6 +129,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const begin = useCallback(
     (positionSeconds?: number) => {
       paced.current = null;
+      shownSnapshot.current = null;
+      latest.current = null;
       setSnapshot(null);
       setFailure(null);
       setRefused('');
@@ -219,7 +247,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     else if (input.type === 'play' || input.type === 'catchUp') viewerPaused.current = false;
     // A seek leaves the presented place; the player's next presenting report says where it is.
     if (input.type === 'seek' || input.type === 'seekBy') presented.current = false;
-    if (input.type === 'quality') { pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }
+    if (input.type === 'quality') { viewerQuality.current = sessionIdRef.current; pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }
     if (input.type === 'audio' && sessionIdRef.current) {
       pendingAudio.current = { commandId: nextId.current, sessionId: sessionIdRef.current, source: sourceRef.current, trackId: input.trackId };
     } else if (input.type === 'subtitle' && sessionIdRef.current) {
@@ -331,6 +359,45 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     send({ type: 'pause' });
   }, [sessionId, send]);
 
+  // A stream the network cannot carry: the best server transcode the measured throughput carries, chosen as
+  // an automatic switch (the engine's own, like a recovery's, so a stale one is dropped), and said so briefly.
+  const stepDownIfStarved = (next: Snapshot) => {
+    const now = Date.now();
+    delivery.current = heardDelivery(delivery.current, next, now);
+    // The evidence is kept either way (it measures the throughput the observations report); a quality the viewer
+    // picked is never overridden.
+    if (viewerQuality.current === sessionId || now - deliveryChecked.current < STEP_CHECK_MS) return;
+    deliveryChecked.current = now;
+    const step = stepDown(delivery.current, plan, now, { adaptive: playerAdapts(plan), bitrateSwitch: bitrateRefused.current !== sessionId });
+    if (!step || !plan) return;
+    // Once per source: the switch brings new generations, and with them fresh evidence.
+    delivery.current = deliveryWatch();
+    const mbps = (bps: number) => Math.round(bps / 1e5) / 10;
+    if ('maxBitrate' in step) {
+      // No ladder on the plan: the server picks its best rung under the cap (Ether 0.3.25). A server that refuses
+      // the form is not asked again in this session.
+      console.info(`Vela playback: stepping down to at most ${mbps(step.maxBitrate)} Mbit/s at ${mbps(step.throughputBps)} Mbit/s measured`);
+      const target = plan.sessionId;
+      void vela.playback.command(target, { kind: 'switch', maxBitrate: step.maxBitrate, sourceGeneration: plan.sourceGeneration,
+        seekGeneration: plan.seekGeneration, idempotencyKey: `${target}:step:${plan.sourceGeneration}:${plan.seekGeneration}` }, 'engine')
+        .then(accepted => { if (!accepted) bitrateRefused.current = target; }, () => { bitrateRefused.current = target; });
+      setQualityNotice(msg('player.quality.steppedDown', { quality: `≤ ${mbps(step.maxBitrate)} Mb/s` }));
+      return;
+    }
+    console.info(`Vela playback: stepping down to ${step.pathId} (${step.adaptive ? 'adaptive' : `${mbps(step.rateBps)} Mbit/s`}) at ${mbps(step.throughputBps)} Mbit/s measured`);
+    nextId.current += 1;
+    setSent({ command: { id: nextId.current, type: 'quality', renditionId: `path:${step.pathId}` }, on: plan.sessionId });
+    if (step.adaptive) { setQualityNotice(msg('player.quality.steppedDownAdaptive')); return; }
+    const quality = plan.paths.find(path => path.id === step.pathId)?.quality;
+    setQualityNotice(msg('player.quality.steppedDown', { quality: quality ? `${quality.height}p · ${mbps(step.rateBps)} Mb/s` : '' }));
+  };
+  useEffect(() => {
+    if (!qualityNotice) return;
+    const timer = setTimeout(() => setQualityNotice(''), QUALITY_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [qualityNotice]);
+  useEffect(() => { delivery.current = deliveryWatch(); setQualityNotice(''); }, [sessionId]);
+
   const recovery = playback.timeshiftRecovery;
   const enginePlan = useMemo(() => Platform.OS === 'android' && recovery && plan &&
     recovery.sessionId === plan.sessionId && recovery.seekGeneration === plan.seekGeneration
@@ -343,10 +410,18 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     command: viewCommand(sent.command, sent.on, sessionId),
     videoFill: pictureChoice && settings.picture === 'fill',
     onSnapshot: next => {
-      const drawn = paceSnapshot(paced.current, next, Date.now());
-      if (drawn) {
+      latest.current = next;
+      const redraw = clockRedrawMs({ quiet: quiet.current, live: !!plan?.live || !!plan?.catchUp, position: next.position,
+        duration: next.duration, markers: plan?.markers });
+      const drawn = paceSnapshot(paced.current, next, Date.now(), redraw);
+      const same = !!drawn && drawn.facts === paced.current?.facts;
+      // A report due only for the clock, with the clock where it was (a paused title), draws nothing new.
+      if (drawn && same && !clockMoved(shownSnapshot.current, next)) paced.current = drawn;
+      else if (drawn) {
+        const shown = withClock(shownSnapshot.current, next, same);
         paced.current = drawn;
-        setSnapshot(next);
+        shownSnapshot.current = shown;
+        setSnapshot(shown);
       }
       if (belongs(next, plan)) {
         presented.current = presentedAfter(presented.current, reported.current, next);
@@ -359,6 +434,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
           if (settled !== 'wait') pending.current = null;
           if (chosen && settled === 'confirm') vela.playback.rememberTrack(chosen.sessionId, track, chosen.trackId);
         }
+        if (STEPS_DOWN && !external) stepDownIfStarved(next);
         const asleep = sleepRef.current;
         // The end came first: an end-of-item sleep has done its work (nothing follows), a timer has none left.
         if (asleep.mode !== 'off' && next.state === 'ended') setSleepState(AWAKE);
@@ -384,7 +460,12 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     },
     onObservation: event => {
       if (event.sessionId !== sessionId) return;
-      vela.playback.observe(event.sessionId, event.observation).catch(error => {
+      // The active download rate the server weighs for Auto and its own down-failover (Ether 0.3.25), when the
+      // engine reports none and there is a fresh measurement: omitted otherwise.
+      const observation = STEPS_DOWN && event.observation.throughputBps === undefined
+        && (event.observation.state === 'playing' || event.observation.state === 'buffering')
+        ? withThroughput(event.observation, measuredThroughput(delivery.current, Date.now())) : event.observation;
+      vela.playback.observe(event.sessionId, observation).catch(error => {
         const gone = error instanceof VelaError && (error.status === 404 || error.status === 410);
         if (gone) startOver(event.sessionId);
         else console.warn(`Playback observation not delivered: ${String(error)}`);
@@ -445,10 +526,13 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       failure: playback.phase === 'preparing' ? null : failure,
       actionError: refused || (liveRecoveryNotice ? '' : actionError),
       liveRecoveryNotice,
+      qualityNotice,
       pendingQualityId,
       pendingVersionId,
       versionMessage,
       offerVersions,
+      chromeQuiet,
+      latestSnapshot,
       send,
       switchVersion,
       refreshVersions,
