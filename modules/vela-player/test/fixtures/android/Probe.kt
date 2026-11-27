@@ -154,6 +154,16 @@ fun main() {
   check(runCatching { MediaScope("http://example.com", "/media?scope") }.isFailure)
   listOf("http://evil.com/media/file", "http://example.com/medial/file", "https://example.com/media/file",
     "http://example.com/media/%2e%2e/private", "http://user@example.com/media/file").forEach { check(!scope.contains(it)) }
+  // A host java.net.URI cannot parse (an underscore) is compared by its exact name and port, never as "no host".
+  val underscore = MediaScope("http://media_server:8096", "/")
+  check(underscore.contains("http://media_server:8096/media/x"))
+  check(underscore.contains("http://MEDIA_SERVER:8096/media/x"))
+  check(MediaScope("http://media_server", "/").contains("http://media_server:80/media/x"))
+  listOf("http://other_host.example:9999/media/x", "http://other_host:8096/media/x", "http://media_server:8097/media/x",
+    "http://media_server/media/x", "https://media_server:8096/media/x", "http://media_server:8096@other_host/media/x",
+    "http://user@media_server:8096/media/x", "http://media_server:8096:8096/media/x", "http://media_server:0x1f90/media/x",
+    "http://media_server.:8096/media/x", "http://example.com:8096/media/x").forEach { check(!underscore.contains(it)) { it } }
+  listOf("http://media_server/media/file", "http://other_host/media/file").forEach { check(!scope.contains(it)) { it } }
 
   val seen = mutableListOf<Pair<String, String?>>()
   val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
