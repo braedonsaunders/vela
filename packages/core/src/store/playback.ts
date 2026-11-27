@@ -184,6 +184,9 @@ export class Playback {
    * and those sent before it; a new session ends them all. */
   private switches: VersionSwitch[] = [];
   private switchesSent = 0;
+  /** A version whose switch reply came behind a newer plan of another version: taken with that reply, but its tracks
+   * are its first usable plan's. Ended by that plan, by another switch taking effect and by a new session. */
+  private owedTracks: { sessionId: string; versionId: string } | undefined;
   /** The newest plan held back because it only moved the server's clock (plan-clock.ts): later
    * plans are ordered against it, though the one on show is older. */
   private clockAhead: V.PlaybackPlan | null = null;
@@ -614,6 +617,9 @@ export class Playback {
     const present = (plan: V.PlaybackPlan) => connection.plan(plan);
     const show = (raw: V.PlaybackPlan) => {
       if (this.run !== run || controller.signal.aborted || raw.sessionId !== sessionId) return;
+      // A snapshot read, a poll or a plan replayed from it, behind the newest plan heard (a command the server has
+      // since accepted, a seek or a pause, or a version taken) would roll it back. An end is not held back.
+      if (raw.state !== 'ended' && olderThanShown(raw, this.newestShown())) return;
       let plan = this.withLocalTracks(raw);
       if (this.stall && !this.recovering) {
         this.stall = heardServer(this.stall, plan, Date.now());
@@ -669,9 +675,6 @@ export class Playback {
                 lost = true;
                 throw new Error('Session ended while its events were down');
               }
-              // A snapshot read, or a plan replayed from it, before a command the server has since accepted (a seek
-              // or a pause) would roll it back. An end is not held back.
-              if (plan.state !== 'ended' && olderThanShown(plan, this.newestShown())) return;
               show(plan);
             };
             const follow = followSession(adapter, present, sessionId, onPlan, attempt.signal, liveEvent => {
@@ -961,13 +964,20 @@ export class Playback {
     const shown = this.newestShown();
     if (olderThanShown(plan, shown)) {
       const track = added ?? chosen;
+      // Only while the same session and version are still playing.
       const listed = () => {
-        const now = this.box.get().playback.plan;
-        return !this.recovering && now?.sessionId === sessionId && now.selectedVersionId === plan.selectedVersionId &&
+        const { phase, sessionId: current, plan: now } = this.box.get().playback;
+        return !this.recovering && phase === 'playing' && current === sessionId && now?.sessionId === sessionId &&
+          now.state !== 'ended' && now.selectedVersionId === plan.selectedVersionId &&
           now.subtitleTracks.some(t => t.id === track);
       };
       if (!track || shown?.selectedVersionId !== plan.selectedVersionId) return null;
-      return listed() || (await this.refresh(sessionId) && listed()) ? track : null;
+      if (listed()) return track;
+      // Unless the read says the session ended or is gone, the plan shown then decides, also when the read fails (a
+      // plan heard meanwhile may list it).
+      let ended = false;
+      await this.refresh(sessionId, () => { ended = true; });
+      return !ended && listed() ? track : null;
     }
     // A reply naming the version a switch still waits for brings it, as a command reply would.
     if (this.tookVersion(plan)) this.taken(plan);
@@ -1056,9 +1066,11 @@ export class Playback {
         }
         if (origin === 'viewer' && command.kind === 'goLive') this.resetRestartBudget(sessionId);
         if (shown && olderPlan(plan, shown, false)) return true;
-        const newer = olderThanShown(plan, this.newestShown()) ? shown : undefined;
-        // A reply naming the version a switch still waits for brings it, as a published plan would.
-        if (this.tookVersion(nextPlan)) this.taken(nextPlan);
+        const behind = olderThanShown(plan, this.newestShown());
+        const newer = behind ? shown : undefined;
+        // A reply naming the version a switch still waits for brings it, as a published plan would; one behind the
+        // newest plan heard is not shown and brings nothing (that version's next plan still may).
+        if (!behind && this.tookVersion(nextPlan)) this.taken(nextPlan);
         this.expire(plan.sourceGeneration);
         nextPlan = this.withLocalTracks(nextPlan);
         this.patch({ plan: newer ? this.withLocalTracks(newer) : nextPlan });
@@ -1106,9 +1118,11 @@ export class Playback {
       throw error;
     }
     // Neither a published plan nor a later switch has taken it yet: the reply does, also when its source is already
-    // shown, but not from behind a plan showing this version unavailable: its first usable plan still takes it.
+    // shown, but not when it shows this version unavailable, nor from behind a plan that does: its first usable plan
+    // still takes it.
     const newest = this.newestShown();
-    const unseen = this.switches.includes(switching) && !(olderThanShown(next, newest) &&
+    const unavailable = next.sourceFailure === 'version_unavailable';
+    const unseen = !unavailable && this.switches.includes(switching) && !(olderThanShown(next, newest) &&
       newest?.selectedVersionId === switching.versionId && newest.sourceFailure === 'version_unavailable');
     if (unseen) this.applySwitch(switching.number);
     const now = this.box.get().playback;
@@ -1123,11 +1137,15 @@ export class Playback {
       if (unseen) {
         this.resetRestartBudget(sessionId);
         if (fresh) this.takeTracks(next);
+        // Behind a newer plan of another version, the reply's tracks are not the player's: the first usable plan of
+        // its version brings them.
+        else if (newest?.selectedVersionId !== switching.versionId) this.owedTracks = { sessionId, versionId: switching.versionId };
         this.taken(next);
       }
-      this.expire(next.sourceGeneration);
-      const target = now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {};
-      this.patch(fresh ? { plan: next, error: '', ...target } : target);
+      // A reply showing its version unavailable is shown, with the local choices, and changes nothing else.
+      if (!unavailable) this.expire(next.sourceGeneration);
+      const target = unseen && now.target?.kind === 'title' ? { target: { ...now.target, versionId: next.selectedVersionId ?? versionId } } : {};
+      this.patch(fresh ? { plan: unavailable ? this.withLocalTracks(next) : next, error: '', ...target } : target);
     }
     return next;
   }
@@ -1139,11 +1157,13 @@ export class Playback {
   /** Switch `number` took effect: it and those sent before it are no longer awaited. */
   private applySwitch(number: number): void {
     this.switches = this.switches.filter(other => other.number > number);
+    this.owedTracks = undefined;
   }
 
   /** Track IDs and local choices belong to the previous version. Keep the negotiated
    * selection through later snapshots and recovery, even when a track ID is reused. */
   private takeTracks(plan: V.PlaybackPlan): void {
+    this.owedTracks = undefined;
     this.localTracks = false;
     this.audio = plan.selectedAudioTrackId;
     this.subtitle = plan.selectedSubtitleTrackId;
@@ -1201,7 +1221,8 @@ export class Playback {
 
   /** A usable plan on the session that moves from the version shown to the version a switch still waits for, on a newer
    * source than that switch was sent against, is that version (the oldest such switch): recovery asks for it and its
-   * tracks, as after the switch reply, with a fresh restart budget. */
+   * tracks, as after the switch reply, with a fresh restart budget. One that moves to a version owed its tracks
+   * (`owedTracks`) brings only those. */
   private tookVersion(plan: V.PlaybackPlan): boolean {
     // A version shown only as unavailable has not been brought yet: its first usable plan still is.
     if (plan.sourceFailure === 'version_unavailable') return false;
@@ -1209,7 +1230,11 @@ export class Playback {
     if (plan.selectedVersionId === shown?.selectedVersionId && shown?.sourceFailure !== 'version_unavailable') return false;
     const switching = this.switches.find(other => other.sessionId === plan.sessionId && other.versionId === plan.selectedVersionId &&
       plan.sourceGeneration > other.sourceGeneration);
-    if (!switching) return false;
+    if (!switching) {
+      const owed = this.owedTracks;
+      if (owed?.sessionId === plan.sessionId && owed.versionId === plan.selectedVersionId) this.takeTracks(plan);
+      return false;
+    }
     this.applySwitch(switching.number);
     this.resetRestartBudget(plan.sessionId);
     this.takeTracks(plan);
@@ -1280,6 +1305,7 @@ export class Playback {
     this.settled = startOf(plan);
     this.open = new Map();
     this.settling = undefined;
+    this.owedTracks = undefined;
   }
 
   private offersPath(sessionId: string, pathId: string): boolean {
@@ -1288,14 +1314,16 @@ export class Playback {
   }
 
   /** Read the session's authoritative plan again (the player found its grant expired or a reply stale).
-   * False when the session is gone (the server ended it, or it cannot be read): the caller starts over. */
-  async refresh(sessionId: string): Promise<boolean> {
+   * False when the session is gone (the server ended it, or it cannot be read): the caller starts over. `ended` is
+   * called when the read says the session ended or is no longer known. */
+  async refresh(sessionId: string, ended?: () => void): Promise<boolean> {
     if (sessionId.startsWith('local-')) return this.box.get().playback.sessionId === sessionId;
     try {
       const connection = await this.session.ready();
       const snapshot = await connection.adapter.sessionSnapshot(sessionId);
       if (snapshot.plan.sessionId !== sessionId) throw new Error('Invalid session snapshot');
       if (snapshot.plan.state === 'ended') {
+        ended?.();
         const current = this.box.get().playback;
         const playerEnded = this.lastPosition?.sessionId === sessionId && this.lastPosition.ended;
         if (this.recovering || current.sessionId !== sessionId || current.phase !== 'playing' || serverEnd(current.target, playerEnded) !== 'stopped') return false;
@@ -1313,7 +1341,9 @@ export class Playback {
         }
       }
       return true;
-    } catch {
+    } catch (error) {
+      // A session the server no longer knows has ended as well.
+      if (error instanceof VelaError && error.detail.code === 'session_not_found') ended?.();
       // The caller starts over; the server's words are not the viewer's.
       return false;
     }
@@ -1360,7 +1390,8 @@ export class Playback {
         return 'version_unavailable';
       }
       if (plan.state === 'ended' || plan.sourceGeneration <= (failedSourceGeneration ?? before.sourceGeneration)) return 'gone';
-      if (this.tookVersion(raw)) plan = raw;
+      // A version taken (or owed its tracks) here brings its own tracks, not the previous version's local choices.
+      plan = this.tookVersion(raw) ? raw : this.withLocalTracks(raw);
       // The reopened source is where playback is.
       this.taken(plan);
       this.expire(plan.sourceGeneration);
@@ -1487,10 +1518,9 @@ export class Playback {
       this.liveCursor = { sessionId: plan.sessionId, sourceGeneration: plan.sourceGeneration,
         seekGeneration: plan.seekGeneration, seconds: snapshot.position };
     }
-    // A report from a source older than the newest the session has shown or has evidence at names that source's
-    // tracks, also when an older plan is back on screen (a poll); one without a source generation is at the newest.
-    const oldSource = at.sourceGeneration < marks.sourceGeneration;
-    if (!this.localTracks && presenting && !oldSource) {
+    // A report behind the newest generations the session has shown or has evidence at (an older source, or a seek
+    // since accepted on the same one) names tracks the player has since left; one without generations is at the newest.
+    if (!this.localTracks && presenting && !stale) {
       if (snapshot.audioTrackId) this.audio = snapshot.audioTrackId;
       if (snapshot.subtitleTrackId !== undefined) this.subtitle = snapshot.subtitleTrackId;
     }
