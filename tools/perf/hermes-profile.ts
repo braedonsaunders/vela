@@ -8,7 +8,6 @@
 // app/generated/sourcemaps/react/release/, and tools/perf/repack-js.sh writes one beside the APK with --map.
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { SourceMapConsumer } from 'source-map';
 
 /** Where a sampled frame is: Hermes's trace names bytecode (`funcVirtAddr` + `offset`, which the bundle's
  * source map addresses as line 1, that column); a Chrome .cpuprofile names a line and column. */
@@ -117,6 +116,10 @@ if (import.meta.main) {
   const [profileFile, mapFile] = positionals;
   if (!profileFile || !mapFile) throw new Error('usage: hermes-profile.ts <js.cpuprofile> <bundle.map> [--from s] [--to s] [--top n] [--stacks text]');
   const profile = samplesOf(JSON.parse(readFileSync(profileFile, 'utf8')) as CpuProfile | HermesTrace);
+  // The hoisted source-map (0.5, untyped) builds its consumer at once; newer ones answer a promise.
+  const { SourceMapConsumer } = await import('source-map' as string) as {
+    SourceMapConsumer: new (map: unknown) => { originalPositionFor(at: { line: number; column: number }): { source: string | null; line: number | null; name: string | null }; destroy?(): void };
+  };
   const consumer = await new SourceMapConsumer(JSON.parse(readFileSync(mapFile, 'utf8')));
   const label = (frame: CallFrame) => {
     if (frame.bytecode || (frame.lineNumber >= 0 && /bundle/.test(frame.url ?? ''))) {
@@ -135,5 +138,5 @@ if (import.meta.main) {
   const top = Number(values.top);
   const rows = (list: [string, number][]) => list.slice(0, top).map(([key, ms]) => `${ms.toFixed(0).padStart(7)} ms  ${key}`).join('\n');
   console.log(`total ${summary.totalMs.toFixed(0)} ms sampled\n== self\n${rows(summary.self)}\n== inclusive (function)\n${rows(summary.inclusive)}\n== inclusive (file)\n${rows(summary.files)}`);
-  (consumer as { destroy?: () => void }).destroy?.();
+  consumer.destroy?.();
 }
