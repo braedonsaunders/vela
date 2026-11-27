@@ -270,8 +270,10 @@ describe('the browser', () => {
     const port = new WebPort();
     const h = harness(port);
     await h.downloads.hydrate();
-    expect(await h.downloads.offer('movie')).toEqual({ kind: 'save-file' });
+    // Not yet persistent and never asked: Download, which asks on the press.
+    expect(await h.downloads.offer('movie')).toEqual({ kind: 'download' });
     expect(await h.downloads.enqueue('101')).toBeNull();
+    expect(await h.downloads.offer('movie')).toEqual({ kind: 'save-file' });
     expect(port.started).toHaveLength(0);
     expect(h.box.get().downloads).toMatchObject({ persisted: false });
     expect(h.box.get().downloads.error).toContain('saves the file to your computer');

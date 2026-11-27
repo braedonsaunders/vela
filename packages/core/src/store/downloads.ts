@@ -677,6 +677,8 @@ export class Downloads {
   private lastAuthPhase: AuthPhase | undefined;
   private hydrating: Promise<void> | undefined;
   private resuming: Promise<void> | undefined;
+  /** Whether this session asked the browser to keep its storage (see refreshStorage). */
+  private askedPersist = false;
   private unsubscribePort: (() => void) | undefined;
   /** The last non-empty `(serverId, viewerId)` seen in `auth`, so a refused token can clean up its viewer. */
   private activeViewer: { serverId: string; viewerId: string } | undefined;
@@ -778,10 +780,13 @@ export class Downloads {
       this.port.freeBytes().catch(() => null),
       this.port.storage?.().catch(() => undefined),
     ]);
+    // A browser reports storage as not persistent until the page asks; only an answer to that ask
+    // (made on the viewer's first Download press) turns Download into Save file.
+    const persisted = storage ? (storage.persisted ? true : this.askedPersist ? false : null) : undefined;
     this.box.update('downloads', state => ({
       ...state,
       freeBytes,
-      ...(storage ? { persisted: storage.persisted, quotaBytes: storage.quotaBytes } : {}),
+      ...(storage ? { persisted, quotaBytes: storage.quotaBytes } : {}),
     }));
   }
 
@@ -794,6 +799,7 @@ export class Downloads {
   private async ensurePersistent(): Promise<boolean> {
     if (this.state.traits.engine !== 'page' || !this.port?.persist) return true;
     if (this.state.persisted === true) return true;
+    this.askedPersist = true;
     const persisted = await this.port.persist().catch(() => false);
     this.box.update('downloads', state => ({ ...state, persisted }));
     return persisted;

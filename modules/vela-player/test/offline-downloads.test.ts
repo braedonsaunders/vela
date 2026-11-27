@@ -68,6 +68,12 @@ beforeAll(async () => {
           headers: { 'Content-Type': 'text/x-ssa; charset=utf-8' },
         });
       }
+      if (url.pathname === '/redirect') {
+        return new Response(null, { status: 302, headers: { Location: url.searchParams.get('to') ?? '/' } });
+      }
+      if (url.pathname === '/media/slow.mkv') {
+        return Bun.sleep(1500).then(() => new Response('A'.repeat(32), { status: 200, headers: { 'Content-Type': 'video/x-matroska' } }));
+      }
       if (url.pathname === '/media/truncated.mkv') {
         return new Response('A'.repeat(24), {
           status: 200,
@@ -134,8 +140,18 @@ appleTest('OfflineDownloads refuses to promote a truncated file whose size does 
 
 appleTest('OfflineDownloads resumes a partial .part file using Range and If-Range with fresh headers', async () => {
   expect(await runMode('resume-range')).toBe('resume_ok');
-  const rangeHit = seen.find(h => h.path === '/media/range-resume.mkv');
+  // The first request is the redirect preflight (bytes=0-0); the transfer follows it.
+  const rangeHit = seen.find(h => h.path === '/media/range-resume.mkv' && h.headers.get('range') !== 'bytes=0-0');
   expect(rangeHit?.headers.get('range')).toBe('bytes=16-');
   expect(rangeHit?.headers.get('if-range')).toBe('"etag-resumed"');
   expect(rangeHit?.headers.get('x-plex-token')).toBe('fresh-token');
+});
+
+appleTest('OfflineDownloads keeps credential headers off disk while a transfer is in flight', async () => {
+  expect(await runMode('credentials')).toBe('credentials_ok');
+});
+
+appleTest('OfflineDownloads refuses a download redirected to another origin and never sends credentials there', async () => {
+  expect(await runMode('redirect')).toBe('redirect_ok');
+  expect(seen.some(hit => hit.headers.get('host')?.startsWith('localhost'))).toBe(false);
 });

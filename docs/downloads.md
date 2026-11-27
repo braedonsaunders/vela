@@ -279,11 +279,23 @@ always asks again.
 
 - **Credentials.** Tokens never appear in file paths, index records, URLs Vela
   stores or logs. Transfer headers are held in memory and never written to disk on
-  Android, desktop or the web. Errors and events carry codes and messages only,
-  never URLs.
+  Android, desktop or the web. iOS is the exception, because its background session
+  finishes transfers while Vela isn't running. Its `transfer.json` keeps the request
+  without headers. The headers wait in the Keychain (this device only, readable after
+  first unlock) and are deleted when the transfer ends, is cancelled or is refused.
+  Builds that stored headers have them stripped on the next launch. Errors and events
+  carry codes and messages only, never URLs.
 - **Download hosts.** A download request goes only to the resolved server origin;
   redirects are allowed within the same exact origin only. Auxiliary fetches
-  (poster, sidecars) follow the same rule.
+  (poster, sidecars) follow the same rule. Browsers reject every redirect
+  (`redirect: 'error'`), because a manual redirect response hides its target.
+  iOS background sessions follow redirects without asking the app, so iOS checks
+  in two places:
+  - a no-follow preflight (`Range: bytes=0-0`) refuses a download that redirects
+    to another origin before the background session takes it;
+  - a download whose final URL is on another origin fails as `forbidden`.
+- **Network loss on iOS** is now `paused`/`interrupted` rather than `failed`, as on
+  every other platform, so core resumes it.
 - **Local media.** Local playback opens only paths inside the downloads root, or
   `blob:` URLs of the app's own origin. Media authorization (`protocol/media.ts`,
   Android `MediaScope`, `permittedMediaURL`, desktop `setAccess`) keeps its exact

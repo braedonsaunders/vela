@@ -205,6 +205,68 @@ enum OfflineDownloadsProbe {
             }
             print("resume_ok")
 
+        case "credentials":
+            // While a transfer is in flight, nothing on disk holds its credential headers.
+            let done = DispatchSemaphore(value: 0)
+            downloads.emit = { event in
+                let status = event["status"] as? String
+                if status == "completed" || status == "failed" { done.signal() }
+            }
+            try downloads.startTransfer([
+                "serverId": "srv-plex", "viewerId": "viewer-1", "titleId": "slow",
+                "url": "\(origin)/media/slow.mkv", "headers": ["X-Plex-Token": "secret-token"],
+                "container": "mkv", "mimeType": "video/x-matroska", "byteLength": 32, "wifiOnly": true, "sidecars": [],
+            ])
+            var leaked = false
+            var sawMeta = false
+            if let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) {
+                for case let file as URL in walker {
+                    if file.lastPathComponent == "transfer.json" { sawMeta = true }
+                    if let data = try? Data(contentsOf: file), let text = String(data: data, encoding: .utf8),
+                       text.contains("secret-token") { leaked = true }
+                }
+            }
+            guard sawMeta, !leaked else {
+                fputs("credential headers on disk: meta=\(sawMeta) leaked=\(leaked)\n", stderr)
+                exit(1)
+            }
+            guard done.wait(timeout: .now() + 10) == .success else {
+                fputs("slow transfer timed out\n", stderr)
+                exit(1)
+            }
+            print("credentials_ok")
+
+        case "redirect":
+            // A download that redirects to another origin is refused before any byte; an auxiliary
+            // fetch never follows a redirect there.
+            let other = origin.replacingOccurrences(of: "127.0.0.1", with: "localhost")
+            do {
+                try downloads.startTransfer([
+                    "serverId": "srv-plex", "viewerId": "viewer-1", "titleId": "away",
+                    "url": "\(origin)/redirect?to=\(other)/media/101.mkv", "headers": ["X-Plex-Token": "secret-token"],
+                    "container": "mkv", "mimeType": "video/x-matroska", "byteLength": 32, "wifiOnly": true, "sidecars": [],
+                ])
+                fputs("cross-origin redirect was accepted\n", stderr)
+                exit(1)
+            } catch {}
+            let done = DispatchSemaphore(value: 0)
+            var last: [String: Any] = [:]
+            downloads.emit = { event in
+                let status = event["status"] as? String
+                if status == "completed" || status == "failed" { last = event; done.signal() }
+            }
+            try downloads.startTransfer([
+                "serverId": "srv-plex", "viewerId": "viewer-1", "titleId": "101",
+                "url": "\(origin)/redirect?to=\(origin)/media/101.mkv", "headers": ["X-Plex-Token": "secret-token"],
+                "container": "mkv", "mimeType": "video/x-matroska", "byteLength": 32, "wifiOnly": true,
+                "posterUrl": "\(origin)/redirect?to=\(other)/poster/101.jpg", "sidecars": [],
+            ])
+            guard done.wait(timeout: .now() + 10) == .success, last["status"] as? String == "completed", last["posterPath"] == nil else {
+                fputs("same-origin redirect download failed or the poster followed another origin: \(last)\n", stderr)
+                exit(1)
+            }
+            print("redirect_ok")
+
         default:
             fputs("unknown mode \(mode)\n", stderr)
             exit(2)
