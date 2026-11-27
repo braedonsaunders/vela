@@ -87,4 +87,31 @@ describe('Trailer embed deterministic release gate', { session: 'mock-trailer-em
       await browser.unroute(YOUTUBE);
     }
   });
+
+  test('A refused embed of a trailer the server cannot play says so, and starts nothing on the server', async ({ app, browser, screen }) => {
+    const youtube: string[] = [];
+    await browser.route(YOUTUBE, route => { youtube.push(route.request.url); return route.abort(); });
+    try {
+      await app.open('/vela/title/title-1-3');
+      await expect(screen.getByRole('heading', 'Signal from Europa')).toBeVisible({ timeout: 30_000 });
+      expect(await trailerEmbed(browser, { reset: true, player: 'error', errorCode: 150 })).toMatchObject({ player: 'error' });
+      await browser.evaluate(async () => (await fetch('/__e2e/last-playback', { method: 'DELETE' })).status);
+      await screen.getByTestId('detail-trailer').tap();
+
+      const surface = screen.getByTestId('trailer-embed');
+      await expect(surface).toHaveAttribute('data-embed-state', 'failed', { timeout: 15_000 });
+      await expect(screen.getByTestId('trailer-embed-unavailable')).toHaveText('This trailer can’t play right now.');
+      await expect(screen.getByTestId('trailer-embed-player')).toBeHidden();
+      await expect(screen.getByTestId('player-stage-input')).toBeHidden();
+      expect(await lastPlayback(browser)).toBeNull();
+      expect(youtube).toEqual([]);
+
+      await screen.getByTestId('trailer-embed-close').tap();
+      await expect(surface).toBeHidden();
+      await expect(screen.getByRole('heading', 'Signal from Europa')).toBeVisible();
+    } finally {
+      await trailerEmbed(browser, { reset: true });
+      await browser.unroute(YOUTUBE);
+    }
+  });
 });

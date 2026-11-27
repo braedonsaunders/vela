@@ -7,7 +7,7 @@ import type { Card, DetailModel, HeroAction, HomeModel, Person, PreviewGrant, Ra
 import { artworkURL, type Images } from './artwork';
 import { clock, duration as timeLeft, minute, msg, number, percent, plural, localeContext } from '../i18n';
 import { pluginLevelsOf } from '../plugin-levels';
-import { extraPlayback } from '../trailer-embed';
+import { extraPlayback, hiddenExtra } from '../trailer-embed';
 import { cardMedia, mediaCardKind, mediaFacts as mediaCardFacts, videoParents, videoRole } from '../media';
 
 function art(artwork: ArtworkRef[], kind: ArtworkRef['kind'], width: number, height: number, images?: Images): string {
@@ -517,7 +517,8 @@ export function detailModel(
   };
   const credit = (c: { name: string; role?: string }) => (c.role ? `${c.name} (${c.role})` : c.name);
   const theme = themeMusic(data, images, themeAvailable);
-  const extras = data.extras.map(e => ({ extra: e, playback: extraPlayback(e, { embeds: trailerEmbed, extraPlayback: extraPlaybackFeature }) }));
+  const extras = data.extras.map(e => ({ extra: e, playback: extraPlayback(e, { embeds: trailerEmbed, extraPlayback: extraPlaybackFeature }) }))
+    .filter(({ extra, playback }) => !hiddenExtra(extra, playback));
   // Watch trailer: a trailer that plays here (embedded or on the server), else the server's first one.
   const trailers = extras.filter(({ extra }) => extra.kind === 'trailer');
   const trailer = trailers.find(({ playback }) => playback.kind !== 'none') ?? trailers.find(({ extra }) => extra.availability !== 'unavailable') ?? trailers[0];

@@ -3,7 +3,7 @@ import type { Extra, TitleDetail, TrailerEmbedFeature } from '../src/wire';
 import { advertise } from '../src/adapter/advertise';
 import { detailModel } from '../src/discovery/models';
 import {
-  acceptClientPlayback, acceptEmbedOriginOverride, embedFrameUrl, embedPlayerUrl, EMBED_LISTENING, extraPlayback,
+  acceptClientPlayback, acceptEmbedOriginOverride, embedFrameUrl, embedOutcome, embedPlayerUrl, EMBED_LISTENING, extraPlayback,
   nativeEmbedHostOrigin, nativeEmbedPage, nextEmbedPhase, parseEmbedMessage, platformEmbedsTrailers,
   serverAllowsTrailerEmbed, trailerEmbedAllowed,
 } from '../src/trailer-embed';
@@ -126,6 +126,31 @@ describe('embed or server, per platform and capability', () => {
     const plain = detailModel(detail([server, embedded]), undefined, 1280, true);
     expect(plain.trailerReady).toBe(false);
     expect(plain.extras.every(extra => !extra.ready && !extra.embed)).toBe(true);
+  });
+
+  test('a trailer only the embed can play: offered on phones and browsers, never listed on TVs', () => {
+    const embedOnly = youtube({ id: 'embed-only', availability: 'unavailable' });
+    const local = youtube({ id: 'local', kind: 'featurette', clientPlayback: undefined, source: undefined, availability: 'unavailable' });
+    for (const os of ['ios', 'android']) {
+      const tv = detailModel(detail([embedOnly, local]), undefined, 1280, true, false, false, trailerEmbedAllowed(platformEmbedsTrailers({ os, isTV: true }), allowed));
+      expect(tv.extras.map(extra => extra.id)).toEqual(['local']);
+      expect(tv.trailerId).toBe('');
+      expect(tv.trailerReady).toBe(false);
+    }
+    for (const os of ['web', 'ios', 'android']) {
+      const phone = detailModel(detail([embedOnly]), undefined, 1280, true, false, false, trailerEmbedAllowed(platformEmbedsTrailers({ os, isTV: false }), allowed));
+      expect(phone.trailerId).toBe('embed-only');
+      expect(phone.trailerReady).toBe(true);
+      expect(phone.extras[0]!.embed).toEqual({ provider: 'youtube', videoId: VIDEO, fallback: false });
+    }
+  });
+
+  test('a failed embed hands over to the server, or says the trailer cannot play when the server cannot', () => {
+    expect(embedOutcome('starting', false)).toBe('embed');
+    expect(embedOutcome('ready', true)).toBe('embed');
+    expect(embedOutcome('failed', true)).toBe('server');
+    expect(embedOutcome('failed', false)).toBe('unavailable');
+    expect(embedOutcome('ended', false)).toBe('close');
   });
 
   test('the capability passes through to the client as the server states it', () => {

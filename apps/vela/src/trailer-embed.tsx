@@ -2,12 +2,13 @@
 // for an extra whose detail carries an embed on this device. The player sits 16:9 in the screen under a
 // bar with Close; Close, Back (and Escape on the web) leave as the watch route does. When the embed
 // reports an error, refuses to embed, never answers or cannot load, the server-played extra takes over
-// (onFallback); with none, the surface says so. The end of the trailer closes it.
+// (onFallback); when the server cannot play it (availability unavailable), the surface says the trailer
+// cannot play right now, with no spinner and no server start. The end of the trailer closes it.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  EMBED_LISTENING, EMBED_START_TIMEOUT_MS, embedPlayerUrl, msg, nativeEmbedHostOrigin, nativeEmbedPage, nextEmbedPhase,
+  EMBED_LISTENING, EMBED_START_TIMEOUT_MS, embedOutcome, embedPlayerUrl, msg, nativeEmbedHostOrigin, nativeEmbedPage, nextEmbedPhase,
   parseEmbedMessage, type EmbedPhase, type Extra,
 } from '@vela/core';
 import { VelaEmbedView } from '@vela/player';
@@ -72,10 +73,11 @@ export function TrailerEmbedWatch({ extra, close, onFallback }: Props) {
   fallback.current = onFallback;
   const leave = useRef(close);
   leave.current = close;
+  const outcome = embedOutcome(phase, embed.fallback);
   useEffect(() => {
-    if (phase === 'failed' && embed.fallback) fallback.current();
-    if (phase === 'ended') leave.current();
-  }, [phase, embed.fallback]);
+    if (outcome === 'server') fallback.current();
+    if (outcome === 'close') leave.current();
+  }, [outcome]);
 
   // Escape leaves on the web while focus is on the page (the player's own frame keeps its keys).
   useEffect(() => {
@@ -90,7 +92,6 @@ export function TrailerEmbedWatch({ extra, close, onFallback }: Props) {
     setArea(current => current.width === width && current.height === height ? current : { width, height });
   };
   const box = sixteenByNine(area.width, area.height);
-  const unavailable = phase === 'failed' && !embed.fallback;
   const label = msg('trailer.embedLabel', { name: extra.name });
   return (
     <View
@@ -112,9 +113,9 @@ export function TrailerEmbedWatch({ extra, close, onFallback }: Props) {
         <Text numberOfLines={1} style={styles.title} testID="trailer-embed-title">{extra.name}</Text>
       </View>
       <View style={styles.area} onLayout={onLayout}>
-        {unavailable ? (
-          <Text style={styles.message} accessibilityRole="alert">{msg('trailer.embedUnavailable')}</Text>
-        ) : phase === 'failed' ? null : box.width > 0 ? (
+        {outcome === 'unavailable' ? (
+          <Text style={styles.message} accessibilityRole="alert" testID="trailer-embed-unavailable">{msg('trailer.embedUnavailable')}</Text>
+        ) : outcome !== 'embed' ? null : box.width > 0 ? (
           <VelaEmbedView
             playerUrl={source.playerUrl}
             handshake={EMBED_LISTENING}

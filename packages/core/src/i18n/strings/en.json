@@ -64,7 +64,7 @@
   "ui.sSeasonEEpisodeTitle": "S{season} · E{episode} · {title}",
   "ui.closePlayer": "Close player",
   "ui.close": "Close",
-  "trailer.embedUnavailable": "This trailer can’t play here right now.",
+  "trailer.embedUnavailable": "This trailer can’t play right now.",
   "trailer.embedLabel": "Trailer: {name}",
   "detail.description": "Description",
   "detail.more": "More",

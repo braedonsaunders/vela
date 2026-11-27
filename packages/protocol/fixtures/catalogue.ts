@@ -44,7 +44,10 @@ export const extras: Extra[] = [{ id: 'extra-observatory-preview', parentId: tit
   // A TMDB trailer from YouTube, offered for the client embed (features.trailerEmbed clientWhenPossible). The id is
   // fictional; the server-played extra stays available as the fallback.
   { id: 'extra-quiet-stars-trailer', parentId: titles[1]!.id, kind: 'trailer', name: 'A Map of Quiet Stars — Trailer', durationSeconds: 150, availability: 'ready',
-    source: 'youtube', clientPlayback: { provider: 'youtube', videoId: 'VelaMock001', embedUrl: 'https://www.youtube-nocookie.com/embed/VelaMock001' } }];
+    source: 'youtube', clientPlayback: { provider: 'youtube', videoId: 'VelaMock001', embedUrl: 'https://www.youtube-nocookie.com/embed/VelaMock001' } },
+  // A YouTube trailer the server cannot play itself (no yt-dlp): offered only for the client embed.
+  { id: 'extra-europa-trailer', parentId: titles[2]!.id, kind: 'trailer', name: 'Signal from Europa — Trailer', durationSeconds: 140, availability: 'unavailable',
+    source: 'youtube', clientPlayback: { provider: 'youtube', videoId: 'VelaMock002', embedUrl: 'https://www.youtube-nocookie.com/embed/VelaMock002' } }];
 export function detail(id: string): TitleDetail | undefined {
   const title = allTitles.find(t => t.id === id);
   return title && { title, canPlay: title.kind === 'movie' || title.kind === 'episode',

@@ -142,6 +142,22 @@ export function nextEmbedPhase(phase: EmbedPhase, signal: EmbedSignal): EmbedPha
   return 'ready';
 }
 
+/** What the watch surface does in a phase: keep the embed, hand over to the server's extra, say the trailer
+ * cannot play (the embed failed and the server cannot play it: no spinner, no server start), or close. */
+export type EmbedOutcome = 'embed' | 'server' | 'unavailable' | 'close';
+
+export function embedOutcome(phase: EmbedPhase, fallback: boolean): EmbedOutcome {
+  if (phase === 'ended') return 'close';
+  if (phase === 'failed') return fallback ? 'server' : 'unavailable';
+  return 'embed';
+}
+
+/** An extra offered for the client embed that plays nowhere on this device (a TV, when the server cannot
+ * play it either): not offered at all, rather than listed as unavailable. */
+export function hiddenExtra(extra: Pick<V.Extra, 'clientPlayback'>, playback: ExtraPlayback): boolean {
+  return playback.kind === 'none' && extra.clientPlayback !== undefined;
+}
+
 function htmlAttribute(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

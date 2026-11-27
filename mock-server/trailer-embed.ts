@@ -5,7 +5,9 @@
 // older server). POST /__admin/trailer-embed {mode, player, errorCode} changes it at run time; GET reads it.
 // `player` is what the stand-in does: `play` (ready, playing), `error` (ready, then onError errorCode, as a
 // video whose owner refused embedding), or `silent` (never answers: the client's start timeout).
-// VELA_MOCK_YOUTUBE_VIDEO_ID: another video id for the fixture's YouTube trailer (a real one, for a manual
+// A YouTube trailer the server cannot play (availability unavailable) is listed only in clientWhenPossible
+// mode, as Ether does without yt-dlp.
+// VELA_MOCK_YOUTUBE_VIDEO_ID: another video id for the fixtures' YouTube trailers (a real one, for a manual
 // check against YouTube itself).
 //
 // GET /embed/:id is the stand-in, at the mock's own origin. A client points its embed origin here only in
@@ -52,8 +54,13 @@ export function servedExtra(extra: V.Extra): V.Extra {
   return { ...rest, clientPlayback: { provider: 'youtube', videoId, embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}` } };
 }
 
+/** Ether lists a YouTube trailer it cannot play itself only when a client may embed it. */
+function listed(extra: V.Extra): boolean {
+  return trailerEmbed.mode === 'clientWhenPossible' || !(extra.source === 'youtube' && extra.availability === 'unavailable');
+}
+
 export function servedExtras<T extends { extras: V.Extra[] }>(detail: T): T {
-  return { ...detail, extras: detail.extras.map(servedExtra) };
+  return { ...detail, extras: detail.extras.filter(listed).map(servedExtra) };
 }
 
 function escape(value: string): string {

@@ -38,6 +38,14 @@ describe('mock server: YouTube trailers in the client embed', () => {
     }
   });
 
+  test('a trailer the server cannot play is offered for the embed only', async () => {
+    await admin({ reset: true });
+    const europa = await (await fetch(`${mock.url}/vela/v0/titles/title-1-3`, { headers })).json() as V.TitleDetail;
+    expect(europa.extras.find(item => item.id === 'extra-europa-trailer')).toMatchObject({
+      availability: 'unavailable', source: 'youtube', clientPlayback: { videoId: 'VelaMock002' },
+    });
+  });
+
   test('server mode keeps the source and drops clientPlayback; off is an older server', async () => {
     try {
       await admin({ mode: 'server' });
@@ -45,6 +53,9 @@ describe('mock server: YouTube trailers in the client embed', () => {
       const served = await extra();
       expect(served.source).toBe('youtube');
       expect(served.clientPlayback).toBeUndefined();
+      // A trailer only the embed can play is not listed at all.
+      const europa = await (await fetch(`${mock.url}/vela/v0/titles/title-1-3`, { headers })).json() as V.TitleDetail;
+      expect(europa.extras.some(item => item.id === 'extra-europa-trailer')).toBe(false);
       await admin({ mode: 'off' });
       expect((await capabilities()).features.trailerEmbed).toBeUndefined();
       expect((await extra()).clientPlayback).toBeUndefined();
