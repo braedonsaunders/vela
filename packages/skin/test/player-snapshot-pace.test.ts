@@ -116,3 +116,14 @@ test('the playing path\'s adaptiveUnavailable (Ether\'s contract: a code and a m
   expect(adaptiveUnavailableNote(plan({ adaptive: true }))).toBe('');
   expect(adaptiveUnavailableNote(null)).toBe('');
 });
+
+test('adaptiveUnavailableNote reads the object Ether sends and the older string shape, never throwing', async () => {
+  const { adaptiveUnavailableNote } = await import('../src/widgets/player/present');
+  const plan = (path: Record<string, unknown>) => ({ selectedPathId: 'p', paths: [{ id: 'p', ...path }] }) as never;
+  expect(adaptiveUnavailableNote(plan({ adaptiveUnavailable: { reason: 'original_selected', message: 'The selected original file plays at its source quality.' } })))
+    .toBe('The selected original file plays at its source quality.');
+  expect(adaptiveUnavailableNote(plan({ adaptiveUnavailable: { reason: 'keyframe_grid' } }))).toBe("Automatic quality isn't available for this title");
+  expect(adaptiveUnavailableNote(plan({ adaptiveUnavailable: 'copy_alignment_unverified', adaptiveUnavailableMessage: 'Not yet aligned.' }))).toBe('Not yet aligned.');
+  expect(adaptiveUnavailableNote(plan({ adaptiveUnavailable: { reason: 42 } }))).toBe('');
+  expect(adaptiveUnavailableNote(plan({}))).toBe('');
+});

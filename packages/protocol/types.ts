@@ -367,7 +367,7 @@ export interface PlaybackPathBase { originalVideo?: OriginalVideo; original?: bo
   /** The selected HLS path of a client that asked for adaptive HLS stays single-variant: why, as a code
    * (`transcoding_disabled`, `shared_audio_unavailable`, `no_compatible_rungs`, a limit's reason), and in the viewer's
    * language (Ether 0.3.25). */
-  adaptiveUnavailable?: string; adaptiveUnavailableMessage?: string;
+  adaptiveUnavailable?: AdaptiveUnavailable | string; adaptiveUnavailableMessage?: string;
   mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
   timelineOriginSeconds?: number; initialRenditionId?: ID; audioRenditions?: AudioRendition[];
   /** Output target metadata; readiness remains independent. */
@@ -679,3 +679,7 @@ export interface ReadingGrant { titleId: ID; format: ReadingFormat; mimeType: st
 /** observedAt: when the reader was there (client clock). The server keeps the newest observed write, clamping
  * observedAt to its own time + 5 min; a write without it is accepted on arrival. */
 export interface ReadingProgressRequest extends Mutation { locator: string; fraction: number; label?: string; observedAt?: Timestamp }
+
+/** Why a path an adaptive-HLS client gets is single-variant (Ether 0.3.25): a code and the viewer's words. Earlier
+ * lab builds sent the code as a bare string beside `adaptiveUnavailableMessage`. */
+export interface AdaptiveUnavailable { reason: string; message?: string }
