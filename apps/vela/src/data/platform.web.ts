@@ -7,6 +7,7 @@ import { VelaPlayer } from '@vela/player';
 import { config, DEVELOPMENT_SERVER } from './config';
 import { consoleURL, pageServerOrigin, parseWebHandoff } from '@vela/core';
 import { secrets } from './secrets';
+import { webDownloads } from './downloads-web';
 
 let handoff: { code?: string; consoleUrl?: string } | undefined;
 function webHandoff(desktop: boolean): NonNullable<typeof handoff> {
@@ -82,6 +83,7 @@ export function platform(): VelaPlatform {
     appVersion: config.appVersion,
     media: VelaPlayer.capabilities(),
     audio: VelaPlayer.audioCapabilities(),
+    downloads: webDownloads(),
     page: { origin: location.origin, webCode: link.code, consoleUrl: link.consoleUrl },
     beginExternalAuth: () => {
       // WebView desktop shells hand a requested window to the system browser. Ordinary browsers

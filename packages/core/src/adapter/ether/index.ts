@@ -291,6 +291,9 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
     return this.http.request<V.Ack>('POST', `/titles/${segment(id)}/watch`, request);
   }
 
+  /** Ether's download grant URL is a capability link: no credential headers. */
+  readonly downloadCredentials = 'none' as const;
+
   async downloadsAvailable(): Promise<boolean> {
     const capabilities = await this.http.request<V.ServerCapabilities>('GET', '/capabilities', undefined, CACHED);
     return capabilities.features.downloads?.enabled === true;

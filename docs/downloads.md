@@ -172,11 +172,12 @@ desktop bridge when present, else OPFS, else none.
   (`Blob.slice`), with no fetch credentials and no media authorization.
   `permittedMediaURL` is unchanged, and server URLs still need an in-scope grant.
 - **Save file.** Through an Ether grant, it's a plain `<a download>` of the
-  capability URL, which carries no token. For header-authenticated servers (Plex,
-  Jellyfin, Emby), it streams `fetch` with headers into `showSaveFilePicker`
-  (Chromium). Where that API is missing (Safari, Firefox), Save file isn't offered
-  for those servers, and the reason is shown. Vela never puts a token into a link
-  the browser would remember.
+  capability URL, which carries no token, so it works in every browser, including
+  Safari and Firefox. For header-authenticated servers (Plex, Jellyfin, Emby), it
+  streams `fetch` with headers into `showSaveFilePicker` (Chromium). Where that API is
+  missing, only that path is unavailable, and the title says: “This browser can't save
+  videos from this server. Use the Vela app on your phone or computer to download it.”
+  Vela never puts a token into a link the browser would remember.
 - **The Downloads library always states:** “Downloads are kept in this browser's
   storage for this site. Clearing site data or uninstalling the app removes them.”
 - **Offline launch** uses the existing PWA service worker and the core's
@@ -190,6 +191,74 @@ available, and local storage is capped at 500 KB of `NSUserDefaults`.
 `velaDownloads` is `undefined` when `Platform.isTV`, so `downloads.supported` is
 false, and the title action, the Downloads entry and the offline routes never
 appear. A test pins this.
+
+### Desktop bridge (version 1)
+
+Both shells install `window.__VELA_DOWNLOADS__` before the page runs (Electron's preload over
+IPC to main, Windows by an injected script over `chrome.webview` messages), and only the
+trusted app frame may use it:
+
+```ts
+{ version: 1,
+  base: 'vela-app://app/vela-downloads/' | 'http://vela.localhost/vela-downloads/',
+  call(method, ...args): Promise<unknown>,  // readSnapshot, writeSnapshot, freeBytes, startTransfer,
+                                            // pauseTransfer, resumeTransfer, removeTitle, removeViewer,
+                                            // removeServer, reveal, exportCopy (DownloadsPort shapes)
+  subscribe(listener): () => void }         // DownloadTransferProgress events
+```
+
+`apps/vela/src/data/downloads-shell.ts` turns it into the page's `DownloadsPort`.
+
+### Local file routes
+
+Every route from a URL to a stored file goes through the same steps, with a test on each
+platform:
+
+1. Decode the URL.
+2. Refuse `..`, `.`, empty segments, backslashes, NULs and drive letters, and refuse encoded
+   separators before decoding.
+3. Join the result under the downloads root.
+4. Resolve symlinks (`realpath`, `Path.GetFullPath` plus a reparse-point check, Android
+   `File.canonicalPath`).
+5. Require the resolved path to stay inside the resolved root.
+
+These routes are the desktop shells' `/vela-downloads/` routes, the native hosts'
+URL-to-path mapping, and Android's `MediaScope` local allowance.
+
+## Viewers, sign-out and removed servers
+
+Downloads belong to the server and viewer that made them, as on iOS. Files sit under
+`<serverId>/<viewerId>/`. The library, `planFor`, `posterFor` and the offline routes
+see only the active `(serverId, viewerId)`. Another Plex Home profile, another Ether
+viewer or another server can't list, play or resolve them. All of this lives in core,
+so every platform behaves the same.
+
+Deletion is the same everywhere because core does it:
+
+| Event | What happens to files |
+| --- | --- |
+| Sign out | That viewer's downloads and pending progress on that server are deleted |
+| Remove a server | Every viewer's downloads for that server are deleted |
+| Server refuses the session (401, "session ended") | That viewer's downloads are deleted |
+| Switch profile or server | Nothing is deleted; the files are hidden until that viewer returns |
+
+The UI asks first. Sign out and Remove server say how many downloads on this device
+will be deleted and wait for confirmation. A refused session can't ask, because the
+server has already ended it.
+
+## Permission changes
+
+This follows iOS today:
+
+- A completed download stays playable offline after the server withdraws permission
+  (Plex `allowSync` turned off, Ether downloads disabled or a grant revoked). The
+  server allowed the copy when it was made, and Vela can't confirm a withdrawal while
+  offline.
+- Starting, resuming or replacing a download always asks the server again
+  (`downloadsAvailable`, then the grant or part request). A refusal (`downloadsAvailable`
+  false, or 401/403) ends the transfer as `failed`/`forbidden` with the server's
+  message, and it is never retried automatically.
+- Ending the viewer's session (401) deletes that viewer's downloads, as above.
 
 ## Servers and permissions
 
