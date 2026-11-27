@@ -124,8 +124,17 @@ test('a built-in page reads its vela.* sources through the active server, with l
   expect(record<NowPlayingRecord>('nowPlaying:current')).toMatchObject({ item: null, playing: false });
   expect(store.screens.localSources()!.following('vela.queue')).toBe(true);
 
+  // The whole list is not a pick; a row named in it is (a missing one says why rather than playing the next).
+  const asked: { picked?: boolean; index: number }[] = [];
+  const play = store.audio.play.bind(store.audio);
+  store.audio.play = request => { asked.push(request); play(request); };
+  await store.screens.action(handle.key, { name: 'vela.play', args: { context: 'tracks' } });
+  expect(asked.at(-1)).toMatchObject({ index: 0 });
+  expect(asked.at(-1)!.picked).toBeUndefined();
   // Play the album from its second track: the live records follow the audio store.
   await store.screens.action(handle.key, { name: 'vela.play', args: { context: 'tracks', item: `item:${tracks[1]!.id}` } });
+  expect(asked.at(-1)).toMatchObject({ index: 1, picked: true });
+  store.audio.play = play;
   await until(() => record<QueueRecord>('queue:current')?.current?.$record === `item:${tracks[1]!.id}`);
   expect(record<QueueRecord>('queue:current')).toMatchObject({ at: 1, source: { id: album.id, kind: 'title' } });
   expect(record<NowPlayingRecord>('nowPlaying:current').item).toEqual({ $record: `item:${tracks[1]!.id}` });

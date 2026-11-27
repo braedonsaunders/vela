@@ -163,7 +163,12 @@ export function AudioDock({ children }: { children: ReactNode }) {
     try { preferences.set(SOUND_PREFERENCE, JSON.stringify(sound)); } catch { /* Kept for this run only. */ }
   }, [sound]);
   // The viewer sees plain copy; the cause goes to the console for whoever is debugging.
-  useEffect(() => { if (audio.error) console.warn(`Vela audio: ${audio.error}`); }, [audio.error]);
+  useEffect(() => {
+    if (!audio.error) return;
+    // With the server's code, when it refused the start: the words alone do not say which refusal.
+    const code = store.getState().playback.errorCode;
+    console.warn(`Vela audio: ${audio.error}${code ? ` (${code})` : ''}`);
+  }, [audio.error, store]);
   useEffect(() => { if (!audio.queue) setOpen(false); }, [audio.queue]);
   const close = useCallback(() => setOpen(false), []);
   const back = useCallback(() => (router.canGoBack() ? router.back() : router.replace('/')), []);

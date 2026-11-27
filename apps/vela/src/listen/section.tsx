@@ -84,7 +84,7 @@ export function ListenSection({ libraryId, at }: { libraryId: string; at: string
     listening,
     place,
     go,
-    play: (items: Card[], index: number, source, shuffle, positionSeconds) => store.audio.play({ items, index: Math.max(0, index), source, shuffle, positionSeconds }),
+    play: (items: Card[], index: number, source, shuffle, positionSeconds, picked) => store.audio.play({ items, index: Math.max(0, index), source, shuffle, positionSeconds, picked }),
     playCard: (card: Card, shuffle?: boolean) => {
       if (isUnreleased(card.airDate)) return;
       const role = card.media?.role;

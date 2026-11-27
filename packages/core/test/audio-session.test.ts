@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { Audio, initialAudio, type AudioEngine, type AudioEngineEvent } from '../src/store/audio';
+import { Audio, initialAudio, MAX_SKIPPED, type AudioEngine, type AudioEngineEvent } from '../src/store/audio';
 import { Playback, initialPlayback } from '../src/store/playback';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
@@ -40,10 +40,10 @@ const preparing = () => new VelaError({ class: 'transient', code: 'preparation_p
 
 /**
  * `eagerPause`: the engine says 'paused' on every pause, at once, as the web's engines do.
- * `answer`: what the server says to the nth start (1-based) instead of a new session: an error it
- * throws, or the id of an earlier session it hands back.
+ * `answer`: what the server says to the nth start (1-based, with the title asked for) instead of a new
+ * session: an error it throws, or the id of an earlier session it hands back.
  */
-function harness({ eagerPause = false, answer }: { eagerPause?: boolean; answer?: (n: number) => Error | string | undefined } = {}) {
+function harness({ eagerPause = false, answer }: { eagerPause?: boolean; answer?: (n: number, titleId: string) => Error | string | undefined } = {}) {
   const starts: string[] = [], stops: string[] = [], loads: string[] = [];
   const lost = new Set<string>();
   const plan = (id: string, titleId: string): PlaybackPlan => ({
@@ -54,7 +54,7 @@ function harness({ eagerPause = false, answer }: { eagerPause?: boolean; answer?
   const adapter = {
     startPlayback: async (request: { titleId: string }) => {
       starts.push(request.titleId);
-      const scripted = answer?.(starts.length);
+      const scripted = answer?.(starts.length, request.titleId);
       if (scripted instanceof Error) throw scripted;
       return plan(scripted ?? `s${starts.length}`, request.titleId);
     },
@@ -265,4 +265,144 @@ test('a recovery answered twice with the stopped session fails the item instead 
   expect(h.box.get().playback.sessionId).toBe('');
   expect(h.box.get().audio.phase).toBe('failed');
   expect(h.isPlaying()).toBe(false);
+});
+
+/** Ether's answer for a title it has no copy of (frontends/vela, ErrNotAvailable), verbatim. */
+const notAvailable = () => new VelaError({ class: 'source', code: 'not_available', message: 'not available', retry: { allowed: false } }, 409);
+const missing = (...ids: string[]) => (_: number, id: string) => ids.includes(id) ? notAvailable() : undefined;
+
+test('an album the server holds only part of plays on past the track it has no copy of', async () => {
+  const h = harness({ answer: missing('t2') });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3')], index: 0 });
+  await settle();
+  expect(h.box.get().audio.phase).toBe('playing');
+  h.end();
+  await settle();
+  expect(h.starts).toEqual(['t1', 't2', 't3']);
+  expect(h.loads).toEqual(['/media/s1', '/media/s3']);
+  expect(h.box.get().audio).toMatchObject({ phase: 'playing', error: '', reason: '' });
+  expect(h.box.get().audio.queue?.at).toBe(2);
+});
+
+test('pressing play on an album whose first track the server lacks starts at the next one', async () => {
+  const h = harness({ answer: missing('t1') });
+  h.audio.play({ items: [track('t1'), track('t2')], index: 0 });
+  await settle();
+  expect(h.starts).toEqual(['t1', 't2']);
+  expect(h.loads).toEqual(['/media/s2']);
+  expect(h.box.get().audio.phase).toBe('playing');
+});
+
+test('a track the server has no copy of, with nothing after it, fails in plain words, not the server\'s code', async () => {
+  const h = harness({ answer: missing('t1') });
+  h.audio.play({ items: [track('t1')], index: 0 });
+  await settle();
+  expect(h.starts).toEqual(['t1']);
+  const audio = h.box.get().audio;
+  expect(audio.phase).toBe('failed');
+  expect(audio.reason).toBe('Your server doesn’t have a copy of this yet.');
+  expect(audio.error).toBe(audio.reason!);
+  expect(audio.error).not.toContain('not available');
+});
+
+test('an album the server has none of stops after a bounded run of tracks, and says why', async () => {
+  const ids = Array.from({ length: 10 }, (_, i) => `t${i + 1}`);
+  const h = harness({ answer: missing(...ids) });
+  h.audio.play({ items: ids.map(track), index: 0 });
+  await settle();
+  expect(h.starts).toEqual(ids.slice(0, MAX_SKIPPED + 1));
+  expect(h.loads).toEqual([]);
+  expect(h.box.get().audio).toMatchObject({ phase: 'failed', reason: 'Your server doesn’t have a copy of this yet.' });
+});
+
+test('passing over never comes back round a repeating queue to where it began', async () => {
+  const h = harness({ answer: missing('t1', 't2') });
+  h.audio.play({ items: [track('t1'), track('t2')], index: 0 });
+  h.audio.cycleRepeat();
+  expect(h.box.get().audio.queue?.repeat).toBe('all');
+  await settle();
+  expect(h.starts).toEqual(['t1', 't2']);
+  expect(h.box.get().audio.phase).toBe('failed');
+});
+
+test('a refusal other than no copy fails the item where it is', async () => {
+  const forbidden = () => new VelaError({ class: 'policy', code: 'forbidden', message: 'forbidden', retry: { allowed: false } }, 403);
+  const h = harness({ answer: (_, id) => id === 't1' ? forbidden() : undefined });
+  h.audio.play({ items: [track('t1'), track('t2')], index: 0 });
+  await settle();
+  expect(h.starts).toEqual(['t1']);
+  expect(h.box.get().audio).toMatchObject({ phase: 'failed', reason: 'Your profile isn’t allowed to play this.' });
+});
+
+// Passing over follows what the viewer asked for: Play, Shuffle and a queue moving on pass over a
+// track the server has no copy of; a track the viewer picked is never swapped for another.
+
+test('a track the viewer picks on its own, which the server lacks, says why and stays put', async () => {
+  const h = harness({ answer: missing('t1') });
+  h.audio.play({ items: [track('t1')], index: 0, picked: true });
+  await settle();
+  expect(h.starts).toEqual(['t1']);
+  expect(h.box.get().audio).toMatchObject({ phase: 'failed', reason: 'Your server doesn’t have a copy of this yet.' });
+  expect(h.box.get().audio.queue?.items[h.box.get().audio.queue!.order[h.box.get().audio.queue!.at]!]?.id).toBe('t1');
+});
+
+test('a track picked inside an album list, which the server lacks, says why and stays put: nothing after it plays instead', async () => {
+  const h = harness({ answer: missing('t2') });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3')], index: 1, picked: true });
+  await settle();
+  expect(h.starts).toEqual(['t2']);
+  expect(h.loads).toEqual([]);
+  expect(h.box.get().audio).toMatchObject({ phase: 'failed', reason: 'Your server doesn’t have a copy of this yet.' });
+  expect(h.box.get().audio.queue?.at).toBe(1);
+});
+
+test('the tracks after a picked one are passed over as the queue moves on', async () => {
+  const h = harness({ answer: missing('t3') });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3'), track('t4')], index: 1, picked: true });
+  await settle();
+  expect(h.box.get().audio.phase).toBe('playing');
+  h.end();
+  await settle();
+  expect(h.starts).toEqual(['t2', 't3', 't4']);
+  expect(h.loads).toEqual(['/media/s1', '/media/s3']);
+  expect(h.box.get().audio).toMatchObject({ phase: 'playing', reason: '' });
+});
+
+test('shuffle passes over a missing track even when it starts from a picked one', async () => {
+  const h = harness({ answer: (n: number) => n === 1 ? notAvailable() : undefined });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3')], index: 0, shuffle: true, picked: true });
+  await settle();
+  expect(h.starts).toHaveLength(2);
+  expect(h.box.get().audio.phase).toBe('playing');
+});
+
+test('a track picked from the queue, which the server lacks, says why and stays put', async () => {
+  const h = harness({ answer: missing('t3') });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3'), track('t4')], index: 0 });
+  await settle();
+  h.audio.jump(2);
+  await settle();
+  expect(h.starts).toEqual(['t1', 't3']);
+  expect(h.box.get().audio).toMatchObject({ phase: 'failed', reason: 'Your server doesn’t have a copy of this yet.' });
+  expect(h.box.get().audio.queue?.at).toBe(2);
+});
+
+test('Next onto a track the server lacks moves on to the one after', async () => {
+  const h = harness({ answer: missing('t2') });
+  h.audio.play({ items: [track('t1'), track('t2'), track('t3')], index: 0 });
+  await settle();
+  h.audio.next();
+  await settle();
+  expect(h.starts).toEqual(['t1', 't2', 't3']);
+  expect(h.box.get().audio.phase).toBe('playing');
+  expect(h.box.get().audio.queue?.at).toBe(2);
+});
+
+test('a track whose sources the server could not reach (502 source_unavailable) is passed over like a missing one', async () => {
+  const unreachable = () => new VelaError({ class: 'source', code: 'source_unavailable', message: 'source unavailable', retry: { allowed: false } }, 502);
+  const h = harness({ answer: (_, id) => id === 't1' ? unreachable() : undefined });
+  h.audio.play({ items: [track('t1'), track('t2')], index: 0 });
+  await settle();
+  expect(h.starts).toEqual(['t1', 't2']);
+  expect(h.box.get().audio.phase).toBe('playing');
 });

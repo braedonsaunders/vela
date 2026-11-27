@@ -25,7 +25,8 @@ export interface MusicApp {
   place: MusicPlace;
   go(place: MusicPlace): void;
   /** Play `items` from `index` (at `positionSeconds` in it: a chapter, a resume point), saying where they came from. */
-  play(items: Card[], index: number, source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' }, shuffle?: boolean, positionSeconds?: number): void;
+  /** `picked`: the viewer chose the item at `index` (a row in a list), not the list (AudioRequest.picked). */
+  play(items: Card[], index: number, source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' }, shuffle?: boolean, positionSeconds?: number, picked?: boolean): void;
   /** Play what a tile stands for: a track, an album's or a playlist's tracks, a book where the
    * viewer left it, a show's episode under way or its newest. */
   playCard(card: Card, shuffle?: boolean): void;

@@ -497,7 +497,7 @@ export function ItemList({ role, items, source }: { role: 'part' | 'episode'; it
           const current = nowId === item.id;
           // A book plays on from a part; an episode plays alone.
           const play = () => (current ? app.toggle() : role === 'part'
-            ? app.play(items, i, source, false, underway(item) ? item.progressSeconds : 0)
+            ? app.play(items, i, source, false, underway(item) ? item.progressSeconds : 0, true)
             : app.play([item], 0, source, false, underway(item) ? item.progressSeconds : 0));
           const state = item.played ? msg('listening.played') : leftLabel(item);
           return role === 'episode'

@@ -14,6 +14,8 @@ export interface MediaQueueRequest {
   shuffle?: boolean;
   /** What the queue came from, for Now Playing's "Playing from". */
   source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' };
+  /** The viewer picked the item at `index` (a row tapped in a list), not the list (AudioRequest.picked). */
+  picked?: boolean;
 }
 
 export interface MediaActions {
