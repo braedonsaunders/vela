@@ -48,12 +48,13 @@ export function lazyBatch(axis: 'x' | 'y', batch: number, moving: boolean, lite 
 }
 
 /** A grid's drawn count after its spacer was measured at window offset `y`: one batch more while
- * the spacer is within `reach` screen heights below the screen and cells are left to draw, and
- * only from the count that was measured (`at`), so many scroll events add one batch. A grid that
- * grew (a person's Show more taking 50 titles to 100) draws on from where it was. */
-export function gridDrawn(count: number, at: number, total: number, y: number, screenHeight: number, reach: number, batch: number): number {
+ * the spacer is within `reach` screen heights below the screen, or fewer than `wanted` cells are
+ * drawn (a Down press waiting for its row, grid-focus.ts), and cells are left to draw; only from the
+ * count that was measured (`at`), so many scroll events add one batch. A grid that grew (a person's
+ * Show more taking 50 titles to 100) draws on from where it was. */
+export function gridDrawn(count: number, at: number, total: number, y: number, screenHeight: number, reach: number, batch: number, wanted = 0): number {
   if (count !== at || count >= total) return count;
-  return y < screenHeight * (1 + reach) ? count + batch : count;
+  return y < screenHeight * (1 + reach) || count < wanted ? count + batch : count;
 }
 
 /** Which scroll a scroll box's movement tells: the route's (its own scroll, and any vertical box

@@ -3,7 +3,7 @@ import {
   analyzeLightPress, jsQuietMs, parseCpuSamples, parseFramestats, parseJsSamples, analyzePress, anchorPresses, cpuIn, jsSources, parseMarks, parseProbe, parseProbeJs, pressStarts, settlingMount, sumCounts, summarize,
   type TraceEvents,
 } from './tv-nav-analysis';
-import { deviceScript, formatComparison, lightScript, parseEvents, parseLabShell, runTotals, type RunReport } from './tv-nav';
+import { deviceScript, findRemote, focusScript, formatComparison, lightScript, parseEvents, parseFocused, parseLabShell, runTotals, type RunReport } from './tv-nav';
 
 const ms = (value: number) => value * 1e6;
 const span = (at: number, dur: number) => ({ ts: ms(at), dur: ms(dur) });
@@ -160,5 +160,54 @@ describe('tv-nav light mode (no kernel tracing)', () => {
     const script = lightScript([{ key: 'DPAD_DOWN', window: 2000 }], false);
     expect(script).toContain('log -t VELANAV 0\ncpu p 0\ninput keyevent KEYCODE_DPAD_DOWN\nlog -t VELAKEY 0\nwait_ 2000\ncpu e 0');
     expect(script).toContain('dumpsys gfxinfo app.ether.vela framestats');
+  });
+});
+
+describe('tv-nav focus mode', () => {
+  const dumpsys = `Event Hub State:
+  BuiltInKeyboardId: -2
+  Devices:
+    -1: Virtual
+      Path: <virtual>
+      KeyLayoutFile: /system/usr/keylayout/Generic.kl
+    1: sunxi-ir-uinput
+      Path: /dev/input/event2
+      KeyLayoutFile: /system/usr/keylayout/sunxi-ir-uinput.kl
+    2: sunxi-keyboard
+      Path: /dev/input/event0
+      KeyLayoutFile: /system/usr/keylayout/sunxi-keyboard.kl
+`;
+  const layouts: Record<string, string> = {
+    '/system/usr/keylayout/sunxi-ir-uinput.kl': 'key  4  BACK\nkey  19  DPAD_UP\nkey  20  DPAD_DOWN\nkey  23  DPAD_CENTER\n# key 108 DPAD_DOWN\n',
+    '/system/usr/keylayout/sunxi-keyboard.kl': 'key 116 POWER\n',
+  };
+
+  test('the remote is the first input device whose layout sends the D-pad, with its scan codes', () => {
+    expect(findRemote(dumpsys, file => layouts[file] ?? '')).toEqual({ path: '/dev/input/event2', scan: { BACK: 4, DPAD_UP: 19, DPAD_DOWN: 20, DPAD_CENTER: 23 } });
+    expect(findRemote(dumpsys, () => '')).toBeUndefined();
+  });
+
+  test('presses are the remote\'s key events, paced by the device; checkpoints keep the focused node', () => {
+    const script = focusScript([{ key: 'DPAD_DOWN', window: 500 }, { key: 'DPAD_DOWN', hold: 5000, window: 10000 }, { focus: 'after' }, { wait: 2000 }],
+      { path: '/dev/input/event2', scan: { DPAD_DOWN: 20 } });
+    expect(script).toContain('E=/dev/input/event2');
+    // On a timeline in centiseconds: down at 0, up 80 ms later, the held press from 500 ms to 5.5 s.
+    expect(script).toContain('at 0\ndown 20\nat 8\nup 20\nat 50\ndown 20\nat 550\nup 20\nat 1050\ndump /data/local/tmp/tv-nav-focus-0.txt');
+    // A checkpoint restarts the timeline: the wait after it ends 2 s after the dump.
+    expect(script.trimEnd().endsWith('B=$(now)\nat 200')).toBe(true);
+    expect(() => focusScript([{ key: 'DPAD_LEFT' }], { path: '/dev/input/event2', scan: {} })).toThrow();
+    // No writable remote: input keyevent, held for the press's hold.
+    expect(focusScript([{ key: 'DPAD_DOWN', hold: 5000, window: 10000 }], undefined)).toContain('at 0\ninput keyevent --duration 5000 KEYCODE_DPAD_DOWN\nat 1000');
+  });
+
+  test('a checkpoint names the focused view, or nothing when focus was lost', () => {
+    const node = '<node index="0" text="" resource-id="" class="android.widget.Button" package="app.ether.vela" content-desc="Open 5 to 7, 2014" focused="true" bounds="[51,399][233,720]" />';
+    expect(parseFocused(node)).toEqual([{ cls: 'Button', desc: 'Open 5 to 7, 2014', bounds: [51, 399, 233, 720] }]);
+    expect(parseFocused('')).toEqual([]);
+  });
+
+  test('the measuring scripts skip checkpoints', () => {
+    expect(deviceScript([{ focus: 'x' }, { wait: 1000 }])).toBe('#!/system/bin/sh\nsleep 1\n');
+    expect(lightScript([{ focus: 'x' }])).not.toContain('uiautomator');
   });
 });

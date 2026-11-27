@@ -10,6 +10,8 @@
 //     through the claimed device's `lab shell`; --settle <ms> and --buffer-mb for slow, small devices)
 //   --light: for a kernel without tracing (tx1-box): frames from framestats, CPU from schedstat (no focus
 //     or mount times); see lightScript and analyzeLightPress
+//   --focus: where focus is, not what it costs (scenarios grid05, grid10, grid16, gridhold, homefocus): presses at a remote's pace
+//     and held keys, through the device's own remote input device, and the focused view at checkpoints
 //
 // Scenarios start the app afresh (force-stop, launch, wait), so runs are comparable; the build decides
 // the server (a lab or mock sign-in build). Software-rendered emulators make renderMs and frame times
@@ -31,7 +33,9 @@ const MARK = 'VELANAV';
 /** A press (`key`, Android KEYCODE_ name without the prefix) or a pause. `window` is how long the
  * press is measured for (the next press waits that long); `burst` sends several keys back to back. */
 export type Step =
-  | { key: string; label?: string; window?: number; burst?: number }
+  | { key: string; label?: string; window?: number; burst?: number; hold?: number }
+  /** --focus: the focused view at this point (uiautomator), reported under `label`. */
+  | { focus: string }
   | { wait: number }
   /** Opens a deep link (an unmeasured jump to where the presses start) and waits `wait` ms. */
   | { link: string; wait: number }
@@ -45,6 +49,23 @@ const repeat = (key: string, label: string, count: number, window = 1200): Step[
 
 /** The lab's Movies library, in its grid view. */
 const MOVIES_GRID = 'vela://library/1?view=library';
+
+/** `count` presses of `key` `gap` ms apart, the next step after the last one's gap. */
+const quick = (key: string, label: string, count: number, gap: number): Step[] =>
+  Array.from({ length: count }, (_, i) => ({ key, label: `${label} ${i + 1}`, window: gap }));
+
+function gridFocusScenarios(): Record<string, { settle: number; setup: Step[]; steps: Step[] }> {
+  const runs = [['grid05', 500, 12], ['grid10', 1000, 10], ['grid16', 1600, 8]] as const;
+  return Object.fromEntries(runs.map(([name, gap, count]) => [name, {
+    settle: 15000,
+    setup: [{ link: MOVIES_GRID, wait: 8000 }],
+    steps: [
+      { focus: 'start' },
+      ...quick('DPAD_DOWN', `↓ ${gap / 1000} s`, count, gap), { wait: 8000 }, { focus: `after ${count} ↓ ${gap / 1000} s apart` },
+      ...quick('DPAD_UP', '↑', count, 2500), { wait: 3000 }, { focus: `after ${count} slow ↑ (the first card again)` },
+    ],
+  }]));
+}
 
 /** From Home on launch (focus on the hero's Play, or on search when the account has no hero):
  * up to the navigation bar, where further presses up do nothing, then Movies. */
@@ -97,6 +118,31 @@ export const SCENARIOS: Record<string, { settle: number; setup?: Step[]; steps: 
     settle: 15000,
     setup: [{ link: MOVIES_GRID, wait: 7000 }, ...repeat('DPAD_DOWN', 'grid ↓', 16, 900), { wait: 12000 }],
     steps: [...repeat('DPAD_UP', 'drawn ↑', 6), ...repeat('DPAD_DOWN', 'drawn ↓', 6), ...repeat('DPAD_RIGHT', 'drawn →', 4)],
+  },
+  /** --focus: Down presses quicker than a slow box draws grid rows (grid05: 0.5 s apart, grid10: 1 s,
+   * grid16: 1.6 s), then as many slow Up presses: focus is back on the first card when every press moved
+   * exactly one row, and on a card throughout. */
+  ...gridFocusScenarios(),
+  /** --focus: a held Down in the grid, then one slow Up and one Down: focus stays on a card in its column. */
+  gridhold: {
+    settle: 15000,
+    setup: [{ link: MOVIES_GRID, wait: 8000 }],
+    steps: [
+      { focus: 'start' },
+      { key: 'DPAD_DOWN', label: 'held ↓ 5 s', hold: 5000, window: 10000 }, { focus: 'after ↓ held 5 s' },
+      ...quick('DPAD_UP', '↑', 1, 2500), { focus: 'after 1 slow ↑' },
+      ...quick('DPAD_DOWN', '↓', 1, 2500), { focus: 'after 1 slow ↓' },
+    ],
+  },
+  /** --focus: Home's rows, drawn as they come within reach, with quick presses and a held Down. */
+  homefocus: {
+    settle: 20000,
+    steps: [
+      { focus: 'start' },
+      ...quick('DPAD_DOWN', '↓ 0.5 s', 10, 500), { wait: 8000 }, { focus: 'after 10 ↓ 0.5 s apart' },
+      { key: 'DPAD_DOWN', label: 'held ↓ 4 s', hold: 4000, window: 10000 }, { focus: 'after ↓ held 4 s' },
+      ...quick('DPAD_UP', '↑', 2, 2500), { focus: 'after 2 slow ↑' },
+    ],
   },
   title: {
     settle: 15000,
@@ -298,6 +344,7 @@ export function deviceScript(steps: Step[], hold = true): string {
   const lines = ['#!/system/bin/sh'];
   let press = 0;
   for (const step of steps) {
+    if ('focus' in step) continue;
     if ('link' in step) lines.push(`am start -a android.intent.action.VIEW -d '${step.link}' ${PACKAGE} >/dev/null 2>&1`, `sleep ${step.wait / 1000}`);
     else if ('wait' in step) lines.push(`sleep ${step.wait / 1000}`);
     else if ('launch' in step) {
@@ -337,6 +384,7 @@ export function lightScript(steps: Step[], hold = true): string {
   ];
   let press = 0;
   for (const step of steps) {
+    if ('focus' in step) continue;
     if ('link' in step) lines.push(`am start -a android.intent.action.VIEW -d '${step.link}' ${PACKAGE} >/dev/null 2>&1`, `sleep ${step.wait / 1000}`, 'threads');
     else if ('wait' in step) lines.push(`wait_ ${step.wait}`);
     else if ('launch' in step) {
@@ -351,6 +399,120 @@ export function lightScript(steps: Step[], hold = true): string {
     }
   }
   return lines.join('\n') + '\n';
+}
+
+/** A remote's input device: its event node and the scan code of each Android key it sends. */
+export interface Remote { path: string; scan: Record<string, number> }
+
+/** The device's remote, from `dumpsys input` and the key layout files it names: the first input device
+ * whose layout sends the D-pad (`key <scan> DPAD_DOWN`). `layout` reads a layout file. A real remote's
+ * events go through Android's own key repeat, so a held key repeats as a viewer's does; `input keyevent`
+ * cannot hold a key and on Android 10 takes a second or more to send each press. */
+export function findRemote(dumpsys: string, layout: (file: string) => string): Remote | undefined {
+  for (const block of dumpsys.split(/\n\s+\d+: /).slice(1)) {
+    const path = /Path: (\/dev\/input\/event\d+)/.exec(block)?.[1];
+    const file = /KeyLayoutFile: (\S+)/.exec(block)?.[1];
+    if (!path || !file) continue;
+    const scan: Record<string, number> = {};
+    for (const match of layout(file).matchAll(/^key\s+(\d+)\s+([A-Z_0-9]+)/gm)) scan[match[2]!] ??= Number(match[1]);
+    if (scan.DPAD_DOWN !== undefined && scan.DPAD_UP !== undefined) return { path, scan };
+  }
+  return undefined;
+}
+
+/** The focus-mode device script: presses as the remote's key events (`hold` ms down, else 80 ms) on a
+ * timeline kept against /proc/uptime (a slow box spends a tenth of a second starting each sendevent),
+ * and at each checkpoint the focused node of a uiautomator dump, to /data/local/tmp/tv-nav-focus-<n>.txt. */
+export function focusScript(steps: Step[], remote: Remote | undefined, shots = false): string {
+  const lines = ['#!/system/bin/sh', `E=${remote?.path ?? ''}`,
+    // Centiseconds of uptime: small enough for a 32-bit shell's arithmetic.
+    'now() { read u _ < /proc/uptime; echo ${u%.*}${u#*.}; }',
+    'at() { while [ $(now) -lt $(( B + $1 )) ]; do sleep 0.02; done; }',
+    'down() { sendevent $E 1 $1 1; sendevent $E 0 0 0; }',
+    // A busy app can keep uiautomator from finding the UI idle: one more try, else the failure is the record.
+    `dump() { for i in 1 2; do o=$(uiautomator dump /data/local/tmp/tv-nav-ui.xml 2>&1); case "$o" in *dumped*) grep -o '<node [^>]*focused="true"[^>]*>' /data/local/tmp/tv-nav-ui.xml > $1; return;; esac; sleep 1; done; echo "dump failed: $o" > $1; }`,
+    'up() { sendevent $E 1 $1 0; sendevent $E 0 0 0; }',
+    'B=$(now)'];
+  const cs = (ms: number) => Math.round(ms / 10);
+  let t = 0;
+  let check = 0;
+  for (const step of steps) {
+    if ('focus' in step) {
+      const file = `/data/local/tmp/tv-nav-focus-${check++}.txt`;
+      lines.push(`at ${cs(t)}`, ...(shots ? [`screencap -p ${file.replace(/\.txt$/, '.png')}`] : []), `dump ${file}`, 'B=$(now)');
+      t = 0;
+    } else if ('link' in step) {
+      lines.push(`at ${cs(t)}`, `am start -a android.intent.action.VIEW -d '${step.link}' ${PACKAGE} >/dev/null 2>&1`);
+      t += step.wait;
+    } else if ('wait' in step) t += step.wait;
+    else if ('launch' in step) {
+      lines.push(`at ${cs(t)}`, `am start -n ${PACKAGE}/.MainActivity >/dev/null 2>&1`);
+      t += step.window;
+    } else {
+      const scan = remote?.scan[step.key];
+      if (remote && scan === undefined) throw new Error(`the remote sends no ${step.key}`);
+      const hold = step.hold ?? 80;
+      const window = step.window ?? 1200;
+      const gap = window / (step.burst ?? 1);
+      for (let i = 0; i < (step.burst ?? 1); i++) {
+        lines.push(`at ${cs(t + i * gap)}`);
+        // Without a writable remote (an emulator's SELinux keeps the shell off /dev/input): input
+        // keyevent, held with --duration (Android 12+); a slow box cannot keep the pace this way.
+        if (!remote) lines.push(`input keyevent --duration ${Math.min(hold, gap)} KEYCODE_${step.key}`);
+        else lines.push(`down ${scan}`, `at ${cs(t + i * gap + Math.min(hold, gap))}`, `up ${scan}`);
+      }
+      t += window;
+    }
+  }
+  lines.push(`at ${cs(t)}`);
+  return lines.join('\n') + '\n';
+}
+
+export interface FocusCheck { label: string; focused: { cls: string; desc: string; bounds: [number, number, number, number] }[]; error?: string }
+
+/** The focused nodes of a checkpoint's grep of a uiautomator dump: none when focus was lost. */
+export function parseFocused(text: string): FocusCheck['focused'] {
+  return [...text.matchAll(/<node [^>]*>/g)].map(([node]) => {
+    const attr = (name: string) => new RegExp(`${name}="([^"]*)"`).exec(node)?.[1] ?? '';
+    const box = attr('bounds').match(/-?\d+/g)?.map(Number) ?? [];
+    return { cls: attr('class').replace(/^.*\./, ''), desc: attr('content-desc') || attr('text'), bounds: [box[0] ?? 0, box[1] ?? 0, box[2] ?? 0, box[3] ?? 0] as [number, number, number, number] };
+  });
+}
+
+export function formatFocus(name: string, label: string, serial: string, checks: FocusCheck[]): string {
+  const rows = checks.map(check => `| ${check.label} | ${check.error ? `(${check.error})` : check.focused.length ? check.focused.map(f => `${f.cls} "${f.desc}" [${f.bounds.join(',')}]`).join('; ') : '**nothing focused**'} |`);
+  return [`### ${name} focus (${label}, ${serial}, ${new Date().toISOString()})`, '', '| checkpoint | focused |', '| --- | --- |', ...rows].join('\n');
+}
+
+async function measureFocus(o: Options, name: string, label: string): Promise<FocusCheck[]> {
+  const scenario = SCENARIOS[name];
+  if (!scenario) throw new Error(`unknown scenario ${name}; have ${Object.keys(SCENARIOS).join(', ')}`);
+  const d = o.device;
+  const found = findRemote(d.shell('dumpsys input'), file => d.shell(`cat ${file}`));
+  const remote = found && d.shell(`sendevent ${found.path} 0 0 0 2>/dev/null && echo ok; true`).trim() === 'ok' ? found : undefined;
+  if (!remote && Number(d.shell('getprop ro.build.version.sdk').trim()) < 31) throw new Error('no writable remote input device, and input keyevent cannot hold keys before Android 12');
+  if (!remote) console.error('no writable remote input device: presses go through input keyevent');
+  const work = mkdtempSync(join(tmpdir(), 'tv-nav-'));
+  try {
+    d.shell(`am force-stop ${PACKAGE}`);
+    d.shell(`am start -n ${PACKAGE}/.MainActivity`);
+    await Bun.sleep(o.settle ?? scenario.settle);
+    d.shell('rm -f /data/local/tmp/tv-nav-focus-*.txt /data/local/tmp/tv-nav-focus-*.png /data/local/tmp/tv-nav-focus.sh.done');
+    writeFileSync(join(work, 'focus.sh'), focusScript([...(scenario.setup ?? []), ...scenario.steps], remote, !!o.keep));
+    d.push(join(work, 'focus.sh'), '/data/local/tmp/tv-nav-focus.sh');
+    d.shell(`(nohup sh -c 'sh /data/local/tmp/tv-nav-focus.sh; echo ok > /data/local/tmp/tv-nav-focus.sh.done' > /dev/null 2>&1 &)`);
+    while (d.shell('cat /data/local/tmp/tv-nav-focus.sh.done 2>/dev/null; true').trim() !== 'ok') await Bun.sleep(1500);
+    const labels = scenario.steps.flatMap(s => ('focus' in s ? [s.focus] : []));
+    // --keep: each checkpoint's screen beside the report, <scenario>-<label>-<n>.png.
+    if (o.keep) for (let i = 0; i < labels.length; i++) await d.pull(`/data/local/tmp/tv-nav-focus-${i}.png`, join(o.keep, `${name}-${label}-${i}.png`));
+    return labels.map((check, i) => {
+      const text = d.shell(`cat /data/local/tmp/tv-nav-focus-${i}.txt 2>/dev/null; true`);
+      const error = /^dump failed: (.*)/.exec(text.trim())?.[1];
+      return { label: check, focused: parseFocused(text), ...(error !== undefined ? { error: `uiautomator: ${error.trim() || 'no output'}` } : {}) };
+    });
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
 }
 
 async function measureLight(o: Options, name: string, label: string): Promise<RunReport> {
@@ -496,7 +658,7 @@ async function measure(o: Options, name: string, label: string): Promise<RunRepo
     const presses = scenario.steps.filter((s): s is Extract<Step, { key: string } | { launch: true }> => 'key' in s || 'launch' in s);
     // Slow devices take a second or more to start each `input`: the trace runs long and is stopped
     // when the script is done.
-    const seconds = 3 * scenario.steps.reduce((t, s) => t + ('key' in s ? (s.window ?? 1200) + 600 * (s.burst ?? 1) : 'launch' in s ? s.window : s.wait), 0) / 1000 + 30;
+    const seconds = 3 * scenario.steps.reduce((t, s) => t + ('key' in s ? (s.window ?? 1200) + 600 * (s.burst ?? 1) : 'launch' in s ? s.window : 'wait' in s ? s.wait : 0), 0) / 1000 + 30;
     const hold = Number(d.shell('getprop ro.build.version.sdk').trim()) >= 31;
     d.shell(`am force-stop ${PACKAGE}`);
     if (!scenario.cold) {
@@ -618,6 +780,7 @@ if (import.meta.main) {
       settle: { type: 'string' },
       'buffer-mb': { type: 'string', default: '96' },
       light: { type: 'boolean', default: false },
+      focus: { type: 'boolean', default: false },
       watch: { type: 'string' },
     },
     allowPositionals: true,
@@ -636,6 +799,15 @@ if (import.meta.main) {
       device, tp: values.tp!, quietMs: Number(values.quiet), keep: values.keep,
       settle: values.settle ? Number(values.settle) : undefined, bufferMb: Number(values['buffer-mb']), light: values.light, watch: values.watch,
     };
+    if (values.focus) {
+      const all: Record<string, FocusCheck[]> = {};
+      for (const name of values.scenario!.split(',')) {
+        all[name] = await measureFocus(options, name, values.label!);
+        console.log(formatFocus(name, values.label!, device.serial, all[name]!) + '\n');
+      }
+      if (values.out) writeFileSync(values.out, JSON.stringify(all, null, 2));
+      process.exit(0);
+    }
     const reports: RunReport[] = [];
     for (const name of values.scenario!.split(',')) {
       const report = await (options.light ? measureLight : measure)(options, name, values.label!);
