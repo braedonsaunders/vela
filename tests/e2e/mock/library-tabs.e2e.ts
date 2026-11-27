@@ -27,12 +27,18 @@ describe('Library tab strip layout release gate', () => {
     await expect.poll(async () => { const view = await geometry(); return view.search!.top >= view.strip!.bottom; }, { timeout: 10_000 }).toBe(true);
     // The strip scrolls the selected tab into view, smoothly on WebKit: wait until it has settled
     // wholly inside the strip and clear of the overflow arrows.
+    // The overflow arrows can appear a frame after the scroll ends, so the layout must hold across two
+    // reads half a second apart, and the assertions below use that settled read.
+    const clear = (view: Awaited<ReturnType<typeof geometry>>) => view.selected!.left >= view.strip!.left && view.selected!.right <= view.strip!.right
+      && view.arrows.every(arrow => arrow!.right <= view.selected!.left || arrow!.left >= view.selected!.right);
+    let phone = await geometry();
     await expect.poll(async () => {
-      const view = await geometry();
-      return view.selected!.left >= view.strip!.left && view.selected!.right <= view.strip!.right
-        && view.arrows.every(arrow => arrow!.right <= view.selected!.left || arrow!.left >= view.selected!.right);
-    }, { timeout: 10_000 }).toBe(true);
-    const phone = await geometry();
+      const first = await geometry();
+      if (!clear(first)) return false;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      phone = await geometry();
+      return clear(phone);
+    }, { timeout: 15_000 }).toBe(true);
     // The selected tab is wholly inside the strip and clear of its overflow arrows; the search fills the row below.
     expect(phone.selected!.width).toBeGreaterThan(60);
     expect(phone.selected!.left).toBeGreaterThanOrEqual(phone.strip!.left);
