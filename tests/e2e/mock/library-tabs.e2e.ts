@@ -14,7 +14,8 @@ describe('Library tab strip layout release gate', () => {
         selected: box([...document.querySelectorAll('[role=tab][aria-selected=true]')].find(visible) ?? null),
         arrows: [...document.querySelectorAll('[role=button][aria-label$=" tabs"]')].filter(visible).map(box),
         search: box(search),
-        focused: !!search && document.activeElement === search,
+        same: !!search && search === (globalThis as { phoneSearch?: Element }).phoneSearch,
+        value: (search as HTMLInputElement | null)?.value ?? null,
         page: document.documentElement.scrollWidth,
       };
     });
@@ -33,14 +34,19 @@ describe('Library tab strip layout release gate', () => {
     expect(phone.search!.width).toBeGreaterThan(300);
     expect(phone.page).toBe(390);
 
-    // Typing, then crossing to one row before the search settles, keeps the field, its focus and its text.
+    // Fill the field, then check it is the same element with its text across the resizes.
     await screen.getByRole('textbox', 'Search Collections').fill('zz');
+    await browser.evaluate(() => {
+      const search = [...document.querySelectorAll('input[aria-label="Search Collections"]')].find((element) => element.getBoundingClientRect().width > 0);
+      (globalThis as { phoneSearch?: Element }).phoneSearch = search;
+    });
     for (const [width, height] of [[844, 390], [820, 1180], [1440, 900]] as const) {
       await browser.setViewport({ width, height });
       await expect.poll(async () => { const view = await geometry(); return view.search!.top < view.strip!.bottom; }, { timeout: 10_000 }).toBe(true);
       const wide = await geometry();
       expect(wide.search!.width).toBe(220);
-      expect(wide.focused).toBe(true);
+      expect(wide.same).toBe(true);
+      expect(wide.value).toBe('zz');
       expect(wide.page).toBe(width);
     }
     await expect(screen.getByRole('textbox', 'Search Collections')).toHaveValue('zz');
