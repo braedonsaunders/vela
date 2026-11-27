@@ -48,7 +48,7 @@ function SectionsContent() {
   // and each press would otherwise start a slide over the last one.
   const [reducedMotionSetting, setReducedMotion] = useState(false);
   const reducedMotion = reducedMotionSetting || Platform.isTV;
-  const libraries = host?.env.libraries ?? [];
+  const libraries = host?.env.navigation ?? [];
   const key = `${section.current.route}:${section.current.entry}`;
   const order = section.current.route === 'home'
     ? 0
@@ -56,7 +56,8 @@ function SectionsContent() {
       ? libraries.findIndex(library => library.kind === 'live') + 1 || libraries.length + 1
       : section.current.route === 'screen'
         ? libraries.findIndex(library => library.id === screenDestinationId(section.current.entry)) + 1 || libraries.length + 2
-        : libraries.findIndex(library => library.id === section.current.entry) + 1;
+        // A library hidden from the navigation sorts after the listed ones, so Home is still back.
+        : libraries.findIndex(library => library.id === section.current.entry) + 1 || libraries.length + 1;
   const previousOrder = useRef(order);
   const transition = useRef<{ key: string; direction: SectionDirection; animated: boolean }>({ key, direction: 1, animated: false });
   if (transition.current.key !== key) {

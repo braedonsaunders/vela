@@ -82,9 +82,10 @@ test('Mochi has one navigation set across the compact breakpoint and selected st
   type Env = import('../src/vocabulary').Env;
   type Ctx = import('../src/vocabulary').Ctx;
   const doc = documents.find(([name]) => name === 'mochi')![1];
+  const libraries = [{ id: 'movies', name: 'Movies', kind: 'movies', backdrop: '' }, { id: 'live', name: 'Live TV', kind: 'live', backdrop: '' }];
   for (const width of [390, 719, 720, 1280]) for (const section of ['home', 'live', 'movies']) {
     const env = { width, small: width < 640, section, viewer: 'Demo', canLive: true, still: true, flags: [],
-      libraries: [{ id: 'movies', name: 'Movies', kind: 'movies', backdrop: '' }, { id: 'live', name: 'Live TV', kind: 'live', backdrop: '' }],
+      libraries, navigation: libraries,
     } as unknown as Env;
     const names: string[] = [];
     const walk = (node: RNode, ctx: Ctx) => {

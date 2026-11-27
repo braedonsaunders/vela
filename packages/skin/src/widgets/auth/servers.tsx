@@ -12,6 +12,8 @@ export interface ServerSwitch {
   /** Open Connect a server, to add one. */
   openConnect(): void;
   openDownloads?(): void;
+  /** Open Manage libraries: the viewer's order and hidden libraries for the navigation. */
+  openLibraries?(): void;
   /** Validated same-host HTTP(S) return address supplied by the web host. */
   consoleUrl?: string;
 }

@@ -73,6 +73,10 @@ export function ServerSwitcher({ params }: WidgetProps) {
         host.setFlag('menu', false);
         switcher.openDownloads?.();
       }} disabled={busy} /> : null}
+      {switcher.openLibraries ? <Row label="Manage libraries" testID="server-libraries" icon="library" onPress={() => {
+        host.setFlag('menu', false);
+        switcher.openLibraries?.();
+      }} disabled={busy} /> : null}
       <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' }} style={{ paddingVertical: 4 }}>
         {title}
       </Words>

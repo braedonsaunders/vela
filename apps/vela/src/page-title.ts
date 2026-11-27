@@ -22,6 +22,7 @@ function pagePart(pathname: string, query: URLSearchParams, state: Titles): stri
     case 'live': return msg('ui.live');
     case 'screen': return state.home?.value?.screens.find(screen => screen.id === id)?.title ?? '';
     case 'playlists': return msg('page.playlists');
+    case 'libraries': return msg('page.libraries');
     case 'multiview': return msg('multiview.title');
     // A game's names live in the live event store; the server's name stands until then.
     case 'game': return '';

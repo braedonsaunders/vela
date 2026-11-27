@@ -329,6 +329,7 @@
   "page.title": "{page} – {server}",
   "page.searchFor": "Search: {query}",
   "page.playlists": "Playlists",
+  "page.libraries": "Manage libraries",
   "page.notFound": "Page not found",
   "page.notFoundHeading": "This page drifted out of range.",
   "page.notFoundCopy": "The address doesn’t match anything on {server}.",

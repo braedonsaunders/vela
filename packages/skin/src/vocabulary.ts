@@ -61,6 +61,9 @@ export interface Env {
   home?: HomeModel;
   heroIndex: number;
   libraries: Destination[];
+  /** The destinations the shell's navigation lists (nav.destinations): the libraries in the
+   * viewer's order without the ones they hid, and the plugin screens. */
+  navigation: Destination[];
   skinCount: number;
   skinName: string;
   /** The About line's facts: this build, where it runs, the connected server (about.ts). */
@@ -390,7 +393,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.serverVersion': (_, e) => e.about?.serverVersion ?? '',
   'env.aboutLine': (_, e) => aboutLine(e.about),
   'env.aboutLabel': (_, e) => aboutLabel(e.about),
-  'env.libraryCount': (_, e) => String(e.libraries.length),
+  'env.libraryCount': (_, e) => String(e.navigation.length),
   'env.homeMoreLoading': (_, e) => yes(e.homeLoading),
   'env.homeSlow': (_, e) => yes(e.homeSlow),
   'env.homeHasMore': (_, e) => (e.home ? yes(e.home.nextCursor !== '') : ''),
@@ -516,7 +519,7 @@ export function collection(over: string, c: Ctx, e: Env, limit: number): Ctx[] {
       const hero = e.home?.hero[e.heroIndex];
       return hero ? [{ ...c, hero, heroAct: heroAct(hero.id), index: e.heroIndex }] : [];
     }
-    case 'nav.destinations': return at(e.libraries, dest => ({ dest }));
+    case 'nav.destinations': return at(e.navigation, dest => ({ dest }));
     case 'hero.genres': return at(c.hero?.genres ?? [], fact => ({ fact }));
     case 'detail.seasons': return at(d?.seasons ?? [], card => ({ card, seasonLabel: seasonDisplayName(card) }));
     case 'detail.episodes': return at(seasonEpisodes(d, e.season), card => ({ card }));

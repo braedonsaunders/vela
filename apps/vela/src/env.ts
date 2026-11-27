@@ -2,11 +2,12 @@ import { searchServers } from '@vela/core';
 // The view state a document reads (env) for one route, from the store's state and the app's own
 // view state. A value the store has not read yet is honest about it: loading, or absent.
 import { Platform } from 'react-native';
-import { detailDateDisplay, type VelaState } from '@vela/core';
+import { detailDateDisplay, viewerLibraryOrder, type VelaState } from '@vela/core';
 import { aboutOf, searchView, type About, type Env, type RouteName } from '@vela/skin';
 import type { LiveView } from '@vela/skin/src/widgets/guide';
 import { waitForResumeSeason, detailSeason, selectedDetailSeason } from './detail-season';
 import { screenDestinationId, withScreens } from './plugin-screens';
+import { navigationOf } from './navigation';
 import type { ViewState } from './view-state';
 import { sameDestinations, sameFields } from './env-identity';
 
@@ -57,6 +58,7 @@ export function environment({ state, view, live, route, entry, library, width, s
     home: home.value,
     heroIndex: home.value ? view.heroIndex % Math.max(1, home.value.hero.length) : 0,
     libraries: withScreens(state.libraries.value ?? [], home.value?.screens),
+    navigation: navigationOf(state),
     skinCount,
     skinName,
     about: aboutOf(state, app),
@@ -96,7 +98,8 @@ export function createEnvironmentReader() {
       state.auth.crossServerSearch, state.auth.phase, state.servers,
       route === 'home' || route === 'search' ? state.search : undefined, title, state.titles[season],
       view.season, view.flags, view.heroIndex, view.still,
-      input.live, input.width, input.skinCount, input.skinName, input.app, state.auth.serverName, state.auth.serverVersion, state.servers.list.find(item => item.selected)?.kindLabel, library, state.previews.cardId, route === 'home' ? state.previews.heroId : '', input.canVisualize];
+      input.live, input.width, input.skinCount, input.skinName, input.app, state.auth.serverName, state.auth.serverVersion, state.servers.list.find(item => item.selected)?.kindLabel, library, state.previews.cardId, route === 'home' ? state.previews.heroId : '', input.canVisualize,
+      state.auth.serverId, state.auth.viewerId, viewerLibraryOrder(state)];
     const key = `${route}:${entry}:${library ?? ''}`, previous = routes.get(key);
     if (previous && inputs.every((v, i) => v === previous.inputs[i])) return previous.env;
     const env = environment({ ...input, view: { ...view, season: selection || season } });
@@ -108,6 +111,7 @@ export function createEnvironmentReader() {
     // Values rebuilt on every read keep their identity while they say the same: nodes redraw when
     // what they read changes (TrackedHost), and the shell's navigation reads the libraries.
     if (previous && sameDestinations(previous.env.libraries, env.libraries)) env.libraries = previous.env.libraries;
+    if (previous && sameDestinations(previous.env.navigation, env.navigation)) env.navigation = previous.env.navigation;
     if (previous && sameFields(previous.env.about, env.about)) env.about = previous.env.about;
     routes.set(key, { inputs, env, title, seasonTitle: state.titles[season], search: state.search });
     return env;
