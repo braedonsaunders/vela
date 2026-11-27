@@ -52,7 +52,7 @@ test('older Ether falls back to its own sign-in without exchanging or storing Pl
   expect(seen.some(r => r.url.pathname === '/vela/v0/auth/plex')).toBe(false);
   expect(link.servers('123', true)).toEqual([]);
 });
-for (const [status, message] of [[401, 'Link Plex again'], [403, 'share this server'], [429, 'Wait'], [503, 'temporarily unavailable']] as const) {
+for (const [status, message] of [[401, 'Link Plex again'], [403, 'have access to this server'], [429, 'Wait'], [503, 'temporarily unavailable']] as const) {
   test(`exchange ${status} stays in server choice with an actionable error`, async () => {
     const { link } = await linked({ exchange: new Response('private diagnostic', { status }) });
     await expect(link.choose('123', 'machine', true, signIn)).rejects.toThrow(message);
