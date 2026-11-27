@@ -268,6 +268,27 @@ This follows iOS today:
 | Plex | per-account root `allowSync` and per-title `allowSync`; the server enforces it on `?download=1` | `Part.key?download=1` with Plex headers | `/:/timeline` and scrobble (existing) |
 | Jellyfin, Emby | `Policy.EnableContentDownloading` from `GET /Users/{id}`; the server enforces it on `/Items/{id}/Download` | `/Items/{id}/Download` with `X-Emby-Authorization` (never `api_key` in the URL); size and source from `MediaSources[0]` | user data `PlaybackPositionTicks` / `Played` (new) |
 
+**Jellyfin and Emby, live status (2026-11-27).** The adapter was checked against the lab
+Ether's Jellyfin- and Emby-compatible APIs (`/jellyfin`, `/emby`) with the lab viewer:
+
+| Check | Result |
+| --- | --- |
+| Policy | `Policy.EnableContentDownloading` read |
+| Download URL | header-only, no token |
+| Range resume | 206 |
+| Request without credentials | 401 |
+
+- **File length.** The resolution takes it from a HEAD of the download. The Jellyfin-compatible
+  `MediaSource.Size` there is an estimate, and every engine checks the finished file against
+  this length.
+- **Progress replay.** It writes user data (`POST /UserItems/{id}/UserData`, or the per-user route
+  on Emby). Where a server lacks that write, Vela falls back to a `Sessions/Playing/Stopped`
+  report plus `PlayedItems`.
+  - On the lab's Jellyfin API, the fallback replay landed and was restored.
+  - Emby's position fallback isn't stored by the lab yet. Ether is adding the user-data write
+    (W497).
+- **Not yet tested:** real Jellyfin and Emby servers.
+
 Every platform asks the same adapter, so permissions are identical everywhere.
 `downloadOffer` hides Download when the server says no. A 401/403 during a transfer
 fails it as `forbidden` with the server's message, and a 401 that ends the session

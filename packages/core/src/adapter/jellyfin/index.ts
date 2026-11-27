@@ -890,22 +890,45 @@ export class JellyfinAdapter
         const title = this.title({ ...item, RunTimeTicks: source.RunTimeTicks ?? item.RunTimeTicks });
         const posterUrl = title.artwork.find(a => a.kind === 'poster')?.sizes[0]?.url ?? title.artwork[0]?.sizes[0]?.url;
         const video = streams.find(s => s.Type === 'Video');
+        const headers = this.authorization(tokens);
         // Resume uses the byte response's validator. The metadata ETag describes the server item.
         return {
-            title, url, headers: this.authorization(tokens), container, mimeType: source.MimeType || videoMime(container),
-            byteLength: source.Size, sourceId: source.Id, versionId: source.Id, versionLabel: source.Name,
+            title, url, headers, container, mimeType: source.MimeType || videoMime(container),
+            byteLength: await this.downloadLength(url, headers, source.Size), sourceId: source.Id, versionId: source.Id, versionLabel: source.Name,
             originalVideo: video && { codec: video.Codec, width: video.Width, height: video.Height, bitDepth: video.BitDepth, colorTransfer: video.ColorTransfer },
             audioTracks, subtitleTracks, sidecars, chapters: this.chapters(item), posterUrl,
             selectedAudioTrackId: audioTracks.find(t => t.default)?.id ?? audioTracks[0]?.id,
             selectedSubtitleTrackId: subtitleTracks.find(t => t.default)?.id ?? null
         };
     }
+    /** The file's real length, which every engine checks the finished file against: a HEAD of the
+     * download (no body, so a server counting downloads by transfer doesn't count it). Some compatible
+     * servers estimate MediaSource.Size; that is only the fallback when HEAD isn't answered. */
+    private async downloadLength(url: string, headers: Record<string, string>, size?: number): Promise<number | undefined> {
+        try {
+            const response = await fetch(url, { method: 'HEAD', headers, redirect: 'error' });
+            const total = Number(response.headers.get('content-length'));
+            if (response.status === 401 || response.status === 403) throw this.error('policy', 'download_not_allowed', 'Downloads are not allowed for this title or account', 403);
+            if (response.status === 200 && Number.isSafeInteger(total) && total > 0) return total;
+        } catch (error) {
+            if (error instanceof VelaError) throw error;
+        }
+        return size && size > 0 ? size : undefined;
+    }
     async replayWatchProgress(id: string, entry: OfflineProgressEntry): Promise<V.Ack> {
-        await this.writeUserData(id, {
+        const body = {
             PlaybackPositionTicks: ticks(entry.positionSeconds),
             ...(entry.completed ? { Played: true } : {}),
             LastPlayedDate: entry.observedAt
-        });
+        };
+        try {
+            await this.writeUserData(id, body);
+        } catch (error) {
+            // Servers without the user-data write (some compatible servers) take a stopped playback report.
+            if (!(error instanceof VelaError) || (error.status !== 404 && error.status !== 405)) throw error;
+            await this.request('POST', 'Sessions/Playing/Stopped', { ItemId: id, PositionTicks: entry.completed ? 0 : body.PlaybackPositionTicks });
+            if (entry.completed) await this.request('POST', `${await this.userPath()}/PlayedItems/${e(id)}`);
+        }
         return { accepted: true };
     }
     /** A book's file, as the server's own download. The reader fetches it without headers, so the

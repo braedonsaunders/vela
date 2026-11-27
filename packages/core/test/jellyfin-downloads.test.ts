@@ -181,3 +181,24 @@ test('Emby replays completed progress through the per-user route', async () => {
   expect(seen.filter(r => r.method === 'POST').map(r => r.url.pathname)).toEqual([legacy.slice(5)]);
   expect(seen[1]!.body).toEqual({ ...userData, Played: true });
 });
+
+test('the file length comes from a HEAD of the download, not an estimated MediaSource.Size', async () => {
+  const seen = routeFetch({
+    [infoRoute]: jellyfin, [userRoute]: user, [itemRoute]: movie,
+    'HEAD /server/Items/title/Download': new Response(null, { status: 200, headers: { 'Content-Length': '1910724609' } }),
+  });
+  const adapter = new JellyfinAdapter(base, new FakeCredentials());
+  expect((await adapter.resolveDownload('title')).byteLength).toBe(1_910_724_609);
+  const probe = seen.find(r => r.url.pathname === '/server/Items/title/Download')!;
+  expect(probe.headers.get('X-Emby-Token')).toBe('token-1');
+  expect(probe.url.search).toBe('');
+});
+
+test('a server without the user-data write takes the replay as a stopped playback report', async () => {
+  const seen = routeFetch({ [infoRoute]: jellyfin, 'POST /server/Sessions/Playing/Stopped': {}, 'POST /server/Users/viewer-1/PlayedItems/title': {} });
+  const adapter = new JellyfinAdapter(base, new FakeCredentials());
+  expect(await adapter.replayWatchProgress('title', entry)).toEqual({ accepted: true });
+  expect(seen.at(-1)).toMatchObject({ url: new URL(`${base}/Sessions/Playing/Stopped`), body: { ItemId: 'title', PositionTicks: 122_500_000 } });
+  await adapter.replayWatchProgress('title', { ...entry, completed: true });
+  expect(seen.at(-1)!.url.pathname).toBe('/server/Users/viewer-1/PlayedItems/title');
+});
