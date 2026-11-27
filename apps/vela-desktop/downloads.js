@@ -413,6 +413,7 @@ class Downloads {
         return this.noSpace(transfer, written);
       }
       if (error?.downloadCode === 'no_space') return this.noSpace(transfer, error.bytesWritten ?? 0);
+      if (error?.downloadCode === 'stale') { transfer.attempts = RETRIES; return this.retry(transfer); }
       if ((error?.downloadCode === 'network' && !error.final) || (error?.downloadCode === undefined && isNetworkError(error))) return this.retry(transfer);
       const code = error?.downloadCode ?? 'unknown';
       const message = error?.downloadCode ? error.message : 'The download could not be saved';
@@ -494,6 +495,9 @@ class Downloads {
     if (status === 401 || status === 403) { discard(response); throw fail('forbidden', 'Downloads are not allowed for this title or account'); }
     if (status === 429) { discard(response); throw fail('rate_limited', 'Download limit reached; please try again later'); }
     if (status === 408 || status >= 500) { discard(response); throw fail('network', `Server answered with HTTP ${status}`); }
+    // A capability link that vanished while we waited for the network (the server restarted, or the
+    // ticket ended): the core mints a fresh one when it resumes an interrupted transfer.
+    if ((status === 404 || status === 410) && transfer.attempts > 0) { discard(response); throw fail('stale', 'stale'); }
     if (status !== 200 && status !== 206) { discard(response); throw fail('network', `Server answered with HTTP ${status}`, { final: true }); }
     const etag = header(response, 'etag');
     const lastModified = header(response, 'last-modified');

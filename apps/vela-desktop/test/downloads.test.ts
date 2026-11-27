@@ -164,6 +164,18 @@ test('a dropped connection backs off, reports interrupted, and resumes with Rang
   expect(resumed.headers['x-plex-token']).toBe(TOKEN);
 });
 
+test('a link that vanished while waiting for the network leaves the transfer interrupted for a fresh grant', async () => {
+  reset();
+  Object.assign(behaviour, { cutAt: 40_000, cuts: 1 });
+  const { downloads, next, events } = engine({ delay: () => 30 });
+  await downloads.startTransfer(request());
+  await next(e => e.status === 'paused');
+  behaviour.status = 404;
+  const final = await next(e => e.status === 'paused' && /online/.test(e.error ?? ''));
+  expect(final).toMatchObject({ errorCode: 'interrupted', bytesWritten: 40_000 });
+  expect(events.some(e => e.status === 'failed')).toBe(false);
+});
+
 test('a changed original restarts from the first byte instead of splicing two versions', async () => {
   reset();
   Object.assign(behaviour, { cutAt: 50_000, cuts: 1 });
