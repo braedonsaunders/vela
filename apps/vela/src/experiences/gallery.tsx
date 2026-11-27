@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router } from '../router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform, View } from 'react-native';
 import { msg } from '@vela/core';

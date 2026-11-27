@@ -1,7 +1,7 @@
 // The listen experience's non-visual behaviour beside its documents (ExperienceView draws the pages):
 // the keyboard with its `?` sheet, and the TV Menu/Back hold. Mount it once with the library route
 // that shows the experience; it is the same module the music widgets use (./keys.tsx).
-import { router } from 'expo-router';
+import { router } from '../router';
 import { useMemo } from 'react';
 import type { Vela as Store } from '@vela/core';
 import { useVelaState } from '@vela/core/react';

@@ -6,7 +6,8 @@
 //
 // Menu steps back: from the results to the keyboard (natively), from the keyboard out of search
 // (onLeave). A Back pill at the top left of the results is the visible way out.
-import { router, useIsFocused, useNavigation } from 'expo-router';
+import { useIsFocused, useNavigation } from 'expo-router';
+import { router } from './router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { msg } from '@vela/core';

@@ -2,7 +2,8 @@
 // (the screen actions, and `watch`: tune a channel, or the primary target of an event the surface
 // shows), the remote's play/pause for a standing toast, and the toast stack over every screen. The
 // player draws its own overlays and toasts (packages/skin/src/surfaces).
-import { router, usePathname } from 'expo-router';
+import { usePathname } from 'expo-router';
+import { router } from './router';
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { useVela as useCore } from '@vela/core/react';
 import { HostContext } from '@vela/skin/src/host';

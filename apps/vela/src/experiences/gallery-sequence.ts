@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { router } from '../router';
 import { Image } from 'expo-image';
 import type { Card, Vela } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';

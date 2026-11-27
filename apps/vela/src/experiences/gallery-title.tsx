@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { router } from 'expo-router';
+import { router } from '../router';
 import { View, type LayoutChangeEvent } from 'react-native';
 import { useVelaState } from '@vela/core/react';
 import { ScreenActive, type SkinHost } from '@vela/skin';

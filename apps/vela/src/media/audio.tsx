@@ -1,6 +1,7 @@
 // The app's audio: the platform engine attached to the store's queue, the system's media
 // session kept in step, and the mini player and Now Playing drawn over every route.
-import { router, usePathname } from 'expo-router';
+import { usePathname } from 'expo-router';
+import { router } from '../router';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ComponentType, type ReactNode, type Ref } from 'react';
 import { Platform, StyleSheet, TVFocusGuideView, View } from 'react-native';
 import { FullWindowOverlay } from 'react-native-screens';

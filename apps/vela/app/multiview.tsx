@@ -2,7 +2,8 @@
 // `?add=<channelId>` adds a channel on arrival; `?channels=a,b,c&layout=grid&focus=1` sets the
 // whole screen (a deep link, and how a device check opens a known screen); `&full=1` shows that
 // tile full screen and `&full=-1` returns to the grid.
-import { router, useIsFocused, useLocalSearchParams, useNavigation, usePreventRemove } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useNavigation, usePreventRemove } from 'expo-router';
+import { router } from '../src/router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { VelaPlayerView } from '@vela/player';

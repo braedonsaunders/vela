@@ -5,7 +5,8 @@ import type { SkinDocument } from '../../../packages/protocol/skin';
 // live TV) under core's provider, the built-in skin documents, and the host each route draws
 // with (the active document, the view state documents read, and what presses do). A signed-out
 // server sends the viewer to /sign-in.
-import { router, usePathname } from 'expo-router';
+import { usePathname } from 'expo-router';
+import { router } from './router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

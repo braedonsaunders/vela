@@ -3,7 +3,8 @@ import { isPlayableDownload } from '@vela/core';
 // sign-in state, or Connect for a signed-out Plex server. Once signed in, home.
 import { useVela as useSession, useVelaState } from '@vela/core/react';
 import { SignedOut } from '@vela/skin/src/widgets/auth';
-import { router, Redirect, useLocalSearchParams, type Href } from 'expo-router';
+import { Redirect, useLocalSearchParams, type Href } from 'expo-router';
+import { router } from '../../src/router';
 import { View } from 'react-native';
 import { useVela } from '../../src/vela';
 import { safeReturnTo } from '../../src/return-to';

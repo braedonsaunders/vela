@@ -1,4 +1,5 @@
-import { router, useFocusEffect, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { useFocusEffect, useIsFocused, useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { router } from '../../src/router';
 import { useCallback, useEffect } from 'react';
 import { BackHandler, Platform } from 'react-native';
 import { TitleChromeLayout } from '@vela/skin/src/blocks/media/viewport';

@@ -1,7 +1,7 @@
 // Live TV for the signed-in server: one live controller (listings, the preview tile, zapping)
 // per server and viewer with live TV, disposed when either changes. Full watch of a channel opens
 // the watch route with `kind=channel`.
-import { router } from 'expo-router';
+import { router } from './router';
 import { useEffect, useState } from 'react';
 import type { ArchiveRange, Vela as Store } from '@vela/core';
 import { sampleUIFrames } from '@vela/player';
