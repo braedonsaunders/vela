@@ -16,6 +16,7 @@ import { backFromNavigation, episodeLabel, useBackHeld, useNextEpisode, usePlayb
 import { playerUsesHandheldGeometry } from '@vela/skin/src/widgets/player/look';
 import { phoneControlLayout, watchSideInsets } from '@vela/skin/src/widgets/player/phone-layout';
 import { startPosition } from '../../src/play-action';
+import { watchAllowed } from '../../src/watch-gate';
 import { useVela } from '../../src/vela';
 
 /** "S1 · E2 · Name" for an episode, the name otherwise. */
@@ -45,10 +46,11 @@ function targetOf(kind: string | undefined, id: string, libraryId?: string, tab?
 
 export default function Watch() {
   const { id, kind } = useLocalSearchParams<{ id: string; kind?: string }>();
-  const { store } = useVela();
   const phase = useVelaState(state => state.auth.phase);
   const hydrated = useVelaState(state => state.downloads.hydrated);
-  if (phase !== 'signed-in' && !(phase === 'offline' && hydrated && !kind && store.downloads.isPlayable(id))) {
+  // The active viewer's download (or, signed out after a refused session, the one kept for them).
+  const record = useVelaState(state => state.downloads.items.find(item => item.titleId === id));
+  if (!watchAllowed(phase, hydrated, kind, record)) {
     return <View style={styles.stage} />;
   }
   return <WatchPlayer />;
