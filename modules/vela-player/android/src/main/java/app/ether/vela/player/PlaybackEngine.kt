@@ -50,10 +50,10 @@ internal interface PlaybackEngine {
 /** `shared`: a multiview tile playing beside others. It never takes audio focus or a tunneled decoder
  * (most TVs have one), and buffers like a live preview so four fit in memory. */
 internal class Media3Engine(
-  context: Context,
+  private val context: Context,
   private val preview: Boolean,
   live: Boolean = false,
-  shared: Boolean = false,
+  private val shared: Boolean = false,
   output: OutputPreferences = OutputPreferences(),
 ) : PlaybackEngine {
   override val state = PlayerState()
@@ -97,6 +97,9 @@ internal class Media3Engine(
   private val extractors: ExtractorsFactory =
     if (preview) DefaultExtractorsFactory() else TappedExtractorsFactory(DefaultExtractorsFactory(), taps)
   private val displayHdr = PlayerCapabilities.displayHdr(context)
+  /** Decoded PCM shaped for a low-RAM device or an unknown sink (PcmFit.kt); previews carry no audio. */
+  private val pcmLimit = if (preview) null else runCatching { AudioRoute.pcmLimit(context) }.getOrNull()
+  private val bitstreamStall = BitstreamStall()
   private val player = ExoPlayer.Builder(context,
     VelaRenderersFactory(context,
       // A preview's TextureView is always SDR; a full-screen surface is SDR where the display has no such HDR.
@@ -111,6 +114,8 @@ internal class Media3Engine(
       },
       subtitleDelay = subtitleDelay.takeIf { !preview },
       decodeAll = output.decodeAll && !preview,
+      takesBitstream = { AudioRoute.takesBitstream(context) },
+      pcmLimit = pcmLimit,
     ).setEnableDecoderFallback(true)
       // Float PCM keeps 24-bit lossless sources (FLAC, ALAC, FFmpeg-decoded TrueHD and DTS-HD MA) whole;
       // without it DefaultAudioSink truncates every high-resolution stream to 16 bits.
@@ -147,7 +152,7 @@ internal class Media3Engine(
   init {
     ass?.onFirstTrack = { main.post(::loadAttachedFonts) }
     if (!preview) Log.i("vela-media3", "dolby vision decoder profiles 0x${Integer.toHexString(taps.dolbyVisionDecoderProfiles.fold(0) { a, b -> a or b })}; " +
-      "profile 7 conversion ${taps.convertsDolbyVision}; float output ${!shared}")
+      "profile 7 conversion ${taps.convertsDolbyVision}; float output ${!shared && pcmLimit == null}; pcm limit $pcmLimit")
     player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), !preview && !shared)
     player.setHandleAudioBecomingNoisy(!preview && !shared)
     // Media3's renderer handles Surface frame-rate hints. Never let previews write them.
@@ -338,6 +343,7 @@ internal class Media3Engine(
     state.speed = player.playbackParameters.speed.toDouble()
     state.duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 }?.div(1000.0)?.let { windowStart?.plus(it) ?: timeline.titleTime(it) }
     state.cacheAhead = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0) / 1000.0
+    checkBitstreamStall()
     state.receivedBytes = received.get()
     player.videoDecoderCounters?.let { counters ->
       counters.ensureUpdated()
@@ -377,6 +383,23 @@ internal class Media3Engine(
   }
 
   override fun attach(surface: Surface?) { player.setVideoSurface(surface) }
+  /** A passthrough track that never starts holds the picture still: decode instead, from where it stands. */
+  private fun checkBitstreamStall() {
+    if (preview || shared) return
+    val track = state.format.audioTrack
+    val bitstream = track != null && !androidx.media3.common.util.Util.isEncodingLinearPcm(track.encoding)
+    val playing = player.playbackState == Player.STATE_READY && player.playWhenReady &&
+      player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE
+    if (!bitstreamStall.check(bitstream, playing, player.currentPosition, android.os.SystemClock.elapsedRealtime())) return
+    Log.w("vela-media3", "bitstream output ${track?.encoding} never started; decoding from ${player.currentPosition} ms")
+    AudioRoute.markBitstreamStalled(context)
+    // A fresh preparation selects tracks again, and the sink now declines every bitstream.
+    val position = player.currentPosition
+    player.stop()
+    player.seekTo(position)
+    player.prepare()
+  }
+
   override fun play(playing: Boolean) { player.playWhenReady = playing }
   override fun volume(value: Float) { player.volume = value }
   override fun subtitleOffset(seconds: Double) { subtitleDelay.set(seconds) }
