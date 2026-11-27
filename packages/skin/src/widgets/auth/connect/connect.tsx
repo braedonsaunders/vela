@@ -4,7 +4,6 @@
 // makes room for each, and the Back control lives in the stage's corner.
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { Linking, Platform, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 import { authFlow, initialAuthFlow, selectedAuthFlow, type AuthFlow } from '@vela/core';
 import { holdBack } from '../../../menu-key';
 import { Alert, CodeTiles, Pill, Waiting, Words } from '../../common/controls';
@@ -14,12 +13,14 @@ import { useStage } from '../stage';
 import { Rise, StepFrame, Steps, useStepIndex } from '../step';
 import type { AuthActions, SessionAuth } from '../signed-out';
 import { AddressStep, foundName } from './address';
-import { Credentials } from './credentials';
 import type { ServerActions, ServerProbe, ServersView } from './model';
 import { PlexStep } from './plex';
+import { PlexMark } from './plex-mark';
+export { PlexMark } from './plex-mark';
+import { ServerSignIn } from './server-sign-in';
 import { Reconnecting } from './reconnecting';
 import { ServerRow } from './server-row';
-import { plexDetail, stepCopy, stepDirection, stepKey } from './steps';
+import { kindLabel, plexDetail, serverAddress, stepCopy, stepDirection, stepKey } from './steps';
 import { TextAction } from './text-action';
 
 export interface ConnectProps {
@@ -48,9 +49,12 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
+  // The viewer chose to sign in with a username and password rather than Plex.
+  const [typing, setTyping] = useState(false);
   const [added, setAdded] = useState<{id: string; name: string; kind: string} | null>(null);
   const step = flow.step;
   const target = 'serverId' in step ? step.serverId : '';
+  useEffect(() => setTyping(false), [target]);
   const record = servers.list.find(s => s.id === target) ?? (added?.id === target ? added : undefined);
   const kind = record?.kind ?? auth?.serverKind;
   const branded = !!brandingName && (target === servers.selectedId || target === auth?.serverId);
@@ -119,12 +123,12 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
   const connecting = step.page === 'signin' && (auth?.phase === 'starting' || auth?.phase === 'redeeming') && target === auth?.serverId;
   const plexPage = step.page === 'plex' || step.page === 'server-plex' || (step.page === 'signin' && kind === 'plex' && !offline);
   const plexLinkState = step.page === 'server-plex' ? auth?.plex ?? null : servers.plex;
-  const detail = plexPage ? plexDetail(plexLinkState, busy && !plexLinkState) : offline ? 'offline' : connecting ? 'connecting' : '';
+  const detail = plexPage ? plexDetail(plexLinkState, busy && !plexLinkState, step.page === 'server-plex' ? auth?.error ?? '' : error) : offline ? 'offline' : connecting ? 'connecting' : '';
   const key = stepKey(step, detail);
   // The way the flow moved, kept until the next step so a re-render does not flip it.
   const depth = useRef({ key, history: flow.history.length, direction: 'forward' as ReturnType<typeof stepDirection> });
   if (depth.current.key !== key) depth.current = { key, history: flow.history.length, direction: stepDirection(depth.current.history, flow.history.length) };
-  const copy = stepCopy({ page: plexPage && step.page === 'signin' ? 'plex' : step.page, first: !flow.history.length && !onClose, name, savedOffline, plex: detail });
+  const copy = stepCopy({ page: plexPage && step.page === 'signin' ? 'plex' : step.page, first: !flow.history.length && !onClose, name, savedOffline, plex: detail, quickExpired: step.page === 'code' && (quick?.status === 'expired' || quick?.status === 'denied') });
   // Fabric ignores the no-common-ligatures font variant. Non-joiners keep the ffl glyphs distinct.
   const title = savedOffline ? copy.title.replace('ffl', 'f‌f‌l') : copy.title;
   const titleLabel = savedOffline ? copy.title : undefined;
@@ -134,9 +138,6 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
   useEffect(() => { stage?.setDeep(flow.history.length > 0 || plexPage || step.page === 'code'); }, [flow.history.length, plexPage, step.page]);
   useEffect(() => () => stage?.setWaiting(false), []);
   const controlHeight = layout?.controlHeight ?? 56;
-  const serverPlex = step.page === 'signin' && target === auth?.serverId && auth.plexAvailable
-    ? <Pill primary={!auth.passwordAvailable} label="Sign in with Plex" testID="server-plex" height={auth.passwordAvailable ? controlHeight - 6 : controlHeight} disabled={busy} onPress={() => { send({type: 'server-plex'}); void run(() => authActions!.startPlex()); }}><PlexMark /></Pill>
-    : null;
   const failure = error || (step.page === 'signin' && auth?.phase !== 'offline' && auth?.error) || '';
   const extras = <>
     {auth?.secureOrigin && step.page === 'signin' ? <Pill label="Use secure connection" height={48} onPress={() => void run(async () => { const result = await authActions?.secureSwitch(); if (result?.error) return result; if (result?.url) { if (Platform.OS === 'web') window.location.assign(result.url); else await Linking.openURL(result.url); } })} /> : null}
@@ -166,7 +167,8 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
       body={<><ServerList servers={servers} brandingName={brandingName} busy={busy} onSelect={select} onRemove={id => void run(() => actions.remove(id))} />{alert}</>}
       actions={<Pill label="Add a server" testID="auth-add" height={controlHeight} onPress={() => send({type: 'add'})} />} />;
   } else if (step.page === 'server-plex') {
-    page = <PlexStep title={copy.title} subtitle={copy.subtitle} link={auth?.plex ?? null} busy={busy} starting={busy && !auth?.plex} error={auth?.error ?? ''} onStart={() => void run(() => authActions!.startPlex())} onChoose={() => {}} onChooseProfile={(id, pin) => void run(() => authActions!.choosePlexProfile(id, pin))} onCancel={back} />;
+    page = <PlexStep title={copy.title} subtitle={copy.subtitle} link={auth?.plex ?? null} busy={busy} starting={busy && !auth?.plex} error={auth?.error ?? ''} onStart={() => void run(() => authActions!.startPlex())} onChoose={() => {}} onChooseProfile={(id, pin) => void run(() => authActions!.choosePlexProfile(id, pin))} onCancel={back}
+      onPassword={auth?.passwordAvailable ? () => { setTyping(true); back(); } : undefined} />;
   } else if (offline) {
     page = <StepFrame title={savedOffline ? title : `Reconnecting to ${name}`}
       body={<Reconnecting name={name} auth={auth!} busy={busy} onDownloads={onDownloads} onRetry={() => void run(() => authActions?.retry?.() ?? Promise.resolve())} onSignInAgain={authActions?.signInAgain ? () => void run(() => authActions.signInAgain!()) : undefined} />} />;
@@ -175,23 +177,27 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
     page = <PlexStep title={copy.title} subtitle={copy.subtitle} link={servers.plex} busy={busy} starting={busy && !servers.plex} error={error} onStart={() => void run(() => actions.plexStart())} onChoose={id => void run(async () => { const result = await actions.plexChoose(id); if (!result.error && result.id) { setNote(result.note ?? ''); setAdded({id: result.id, name: 'server', kind: result.note ? 'ether' : 'plex'}); send({type: 'server', serverId: result.id}); } return result; })} onChooseProfile={(id, pin) => void run(() => actions.plexChooseProfile(id, pin))} onCancel={back} />;
   } else if (step.page === 'code') {
     const ended = quick?.status === 'expired' || quick?.status === 'denied';
-    page = <StepFrame title={copy.title} align="centre" subtitle={quick?.code ? 'Open Quick Connect on a signed-in\ndevice and enter this code.' : ''}
+    page = <StepFrame title={copy.title} align="centre" subtitle={quick?.code && !ended ? 'Open Quick Connect on a signed-in\ndevice and enter this code.' : ''}
       body={<View style={{ gap: layout?.gap ?? 16, alignItems: 'center' }}>
-        <Rise index={2} style={{ width: '100%' }}>{quick?.code ? <CodeTiles code={quick.code} testID="connect-code" large /> : <Waiting>Requesting a code…</Waiting>}</Rise>
-        {ended ? <Alert>{quick!.status === 'expired' ? 'Code expired. Go back to request another.' : 'Code rejected. Try again.'}</Alert> : quick?.code ? <Rise index={3}><Waiting>Waiting for approval…</Waiting></Rise> : null}
-        {quick?.expiresLabel ? <Words rows={{ 'font-size': '13px', color: '$ui.inkQuiet' }}>{`Code expires at ${quick.expiresLabel}.`}</Words> : null}
-      </View>} />;
+        {ended ? null : <Rise index={2} style={{ width: '100%' }}>{quick?.code ? <CodeTiles code={quick.code} testID="connect-code" large /> : <Waiting>Requesting a code…</Waiting>}</Rise>}
+        {ended ? <Alert>{quick!.status === 'expired' ? 'This code expired before it was approved.' : 'This code was turned down on the server.'}</Alert> : quick?.code ? <Rise index={3}><Waiting>Waiting for approval…</Waiting></Rise> : null}
+        {quick?.expiresLabel && !ended ? <Words rows={{ 'font-size': '13px', color: '$ui.inkQuiet' }}>{`Code expires at ${quick.expiresLabel}.`}</Words> : null}
+      </View>} actions={ended ? <Pill primary label="Get a new code" testID="connect-quick-again" height={controlHeight} disabled={busy}
+        onPress={() => void run(async () => { if (kind === 'ether' && authActions) { await authActions.cancelQuick(); await authActions.startQuick(); } else await actions.jellyfinQuickStart(target); })} /> : undefined} />;
   } else if (connecting) {
     page = <StepFrame title={copy.title} align="centre" body={<Rise index={1} style={{ alignItems: 'center' }}><Waiting>{auth!.phase === 'redeeming' ? `Signing in to ${name}…` : `Connecting to ${name}…`}</Waiting></Rise>} />;
-  } else if (target === auth?.serverId && auth.plexAvailable && !auth.passwordAvailable && !auth.quickAvailable) {
-    page = <StepFrame title={copy.title} body={<>{extras}{alert}</>} actions={serverPlex} />;
   } else {
-    page = <StepFrame title={copy.title} body={<>
-      <Credentials error={failure} secondary={serverPlex} busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.minimal}
-        onSignIn={(username, password) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, password) : actions.jellyfinSignIn(target, username, password))}
-        onQuick={() => void run(async () => { if (kind === 'ether' && authActions) await authActions.startQuick(); else await actions.jellyfinQuickStart(target); send({type: 'code'}); })} />
-      {extras}
-    </>} />;
+    const own = target === auth?.serverId;
+    const option = servers.list.find(s => s.id === target);
+    const identity = { name, kindLabel: kindLabel(kind, option?.kindLabel), address: serverAddress(option?.origin, option?.basePath) };
+    const plex = own && !!auth.plexAvailable, password = own ? auth.passwordAvailable : true, quickOffered = own ? auth.quickAvailable : true;
+    page = <ServerSignIn typing={typing} onTyping={() => setTyping(true)} server={identity} plex={plex} password={password} quick={quickOffered} busy={busy} minimal={layout?.minimal}
+      error={failure || (!plex && !password && !quickOffered ? 'No sign-in methods are available. Use a different server.' : '')}
+      extras={extras}
+      onPlex={() => { send({type: 'server-plex'}); void run(() => authActions!.startPlex()); }}
+      onSignIn={(username, secret) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, secret) : actions.jellyfinSignIn(target, username, secret))}
+      onQuick={() => void run(async () => { if (kind === 'ether' && authActions) await authActions.startQuick(); else await actions.jellyfinQuickStart(target); send({type: 'code'}); })}
+      onChangeServer={() => { setError(''); send({type: 'add'}); }} />;
   }
   return <Steps id={key} direction={depth.current.direction}>{page}</Steps>;
 }
@@ -217,9 +223,3 @@ function ServerList({ servers, brandingName, busy, onSelect, onRemove }: { serve
   </View>;
 }
 
-/** Plex's familiar gold chevron, decorative because the button already has a complete label. */
-export function PlexMark() {
-  return <Svg width={17} height={22} viewBox="0 0 17 22">
-    <Path fill="#E5A00D" d="M0 0h6.2L17 11 6.2 22H0l10.8-11z" />
-  </Svg>;
-}

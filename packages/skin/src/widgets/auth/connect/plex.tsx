@@ -6,6 +6,7 @@ import { animation } from '../../../motion';
 import { HORIZON_MOTION } from '../horizon-motion';
 import { useAuthLayout } from '../layout-context';
 import { Rise, StepFrame, useStepIndex } from '../step';
+import { PlexMark } from './plex-mark';
 // Linking a Plex server: a PIN entered at plex.tv/link (one tile per character), then the
 // account's servers to choose from, the recommended one marked. Only the chosen server's own
 // token is kept (the session store's concern); this view only starts, chooses and cancels.
@@ -40,6 +41,7 @@ export function PlexStep({
   onStart,
   onChoose,
   onChooseProfile,
+  onPassword,
 }: {
   title: string;
   subtitle: string;
@@ -52,10 +54,19 @@ export function PlexStep({
   onChoose(id: string): void;
   onChooseProfile?(id: string, pin?: string): void;
   onCancel(): void;
+  /** After a refusal: sign in to this server with a username and password instead. */
+  onPassword?(): void;
 }) {
   const layout = useAuthLayout();
   const waiting = starting || link?.state === 'waiting';
   const failure = error ? <Alert>{error}</Alert> : null;
+  if (waiting && !starting && link && !link.code) {
+    // A browser signs in through Plex's own window (no code to type): say where the viewer is needed.
+    return <StepFrame title={title} align="centre" body={<View style={{ gap: layout?.tight ? 14 : 20, alignItems: 'center' }}>
+      <Rise index={2}><Words rows={{ 'font-size': '17px', 'line-height': '1.45', color: '$ui.inkSecondary' }} style={{ textAlign: 'center' }}>{'Approve Vela in the Plex window that opened.\nThis page carries on by itself.'}</Words></Rise>
+      <Rise index={3}><Waiting>{msg('connect.plex.waiting')}</Waiting></Rise>
+    </View>} actions={<Pill label="Open the Plex window again" testID="plex-reopen" height={(layout?.controlHeight ?? 56) - 6} onPress={onStart} />} />;
+  }
   if (waiting) {
     // The code is the page: large tiles over a pool of light, the address to enter it at, and
     // the horizon's light travelling while Plex is asked.
@@ -78,11 +89,17 @@ export function PlexStep({
       {failure}
     </>} />;
   }
-  return <StepFrame title={title} subtitle={subtitle} body={<>
-    {link?.state === 'expired' ? <Alert>{msg('connect.plex.expired')}</Alert> : null}
-    {link?.state === 'failed' ? <Alert>{msg('connect.plex.failed')}</Alert> : null}
-    {failure}
-  </>} actions={<Pill primary label={msg('connect.plex.start')} onPress={onStart} disabled={busy} busy={busy} testID="plex-start" height={layout?.controlHeight ?? 56} />} />;
+  const height = layout?.controlHeight ?? 56;
+  if (link?.state === 'expired' || link?.state === 'failed' || error) {
+    // A failure is its own step: what happened, in words, and the ways on from it.
+    const why = error || (link?.state === 'expired' ? msg('connect.plex.expired') : msg('connect.plex.failed'));
+    // An expired code is said by the title and its line; anything else needs its own words.
+    return <StepFrame title={title} subtitle={subtitle} align="centre" body={link?.state === 'expired' && !error ? undefined : <Alert>{why}</Alert>} actions={<>
+      <Pill primary label={link?.state === 'expired' ? 'Get a new code' : 'Try Plex again'} onPress={onStart} disabled={busy} busy={busy} testID="plex-start" height={height}><PlexMark /></Pill>
+      {onPassword ? <Pill label="Sign in with a username instead" testID="plex-use-password" height={height - 6} disabled={busy} onPress={onPassword} /> : null}
+    </>} />;
+  }
+  return <StepFrame title={title} subtitle={subtitle} actions={<Pill primary label={msg('connect.plex.start')} onPress={onStart} disabled={busy} busy={busy} testID="plex-start" height={height} />} />;
 }
 
 /** A pool of light under the code, breathing while it waits to be entered. */

@@ -14,10 +14,13 @@ export function stepKey(step: AuthStep, detail = ''): string {
 }
 
 /** Plex's states that change what the page is about (a code to enter, servers, profiles). */
-export function plexDetail(link: PlexLink | null, starting: boolean): string {
+export function plexDetail(link: PlexLink | null, starting: boolean, error = ''): string {
   if (starting || link?.state === 'waiting') return 'link';
   if (link?.state === 'linked') return 'servers';
   if (link?.state === 'profiles') return 'profiles';
+  // A refusal, an expired code or a network failure is a step of its own, never the start again.
+  if (link?.state === 'expired') return 'expired';
+  if (link?.state === 'failed' || error) return 'failed';
   return 'start';
 }
 
@@ -80,6 +83,8 @@ export function stepCopy(args: {
       return { title: 'Your server', subtitle: 'Ether, Jellyfin, Emby or Plex:\ntype its address.' };
     case 'plex':
     case 'server-plex':
+      if (plex === 'failed') return { title: 'Plex sign-in didn’t work', subtitle: '' };
+      if (plex === 'expired') return { title: 'That code expired', subtitle: 'Plex codes last a few minutes. Get a new one to try again.' };
       return plex === 'servers'
         ? { title: 'Choose a server', subtitle: 'The servers on your Plex account.' }
         : plex === 'profiles'
@@ -88,8 +93,33 @@ export function stepCopy(args: {
             ? { title: 'Sign in with Plex', subtitle: '' }
             : { title: 'Sign in with Plex', subtitle: 'Link this device to your Plex account.' };
     case 'code':
-      return { title: 'Use a code', subtitle: '' };
+      return args.quickExpired ? { title: 'That code ended', subtitle: '' } : { title: 'Use a code', subtitle: '' };
     case 'signin':
       return { title: `Sign in to ${name}`, subtitle: '' };
   }
+}
+
+/** A server's address as the viewer would type it: no scheme, and its path only when it has one. */
+export function serverAddress(origin = '', basePath = ''): string {
+  const host = origin.replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, '');
+  const path = basePath && basePath !== '/' ? `/${basePath.replace(/^\/+|\/+$/g, '')}` : '';
+  return host ? `${host}${path}` : '';
+}
+
+const KINDS: Record<string, string> = { ether: 'Ether', jellyfin: 'Jellyfin', emby: 'Emby', plex: 'Plex' };
+export const kindLabel = (kind = '', label = '') => label || KINDS[kind] || '';
+
+/** How a server's sign-in is offered: Plex first wherever the server has it, a username and
+ * password behind a choice when Plex is there too (open at once when it is not), a code last. */
+export function signInOptions({ plex, password, quick, typing }: { plex: boolean; password: boolean; quick: boolean; typing: boolean }) {
+  const fields = password && (!plex || typing);
+  return {
+    plex,
+    /** Plex is the main action unless the viewer chose to type a password. */
+    plexPrimary: plex && !fields,
+    fields,
+    /** "Sign in with a username instead": offered while the fields are still closed. */
+    offerFields: password && plex && !fields,
+    quick,
+  };
 }

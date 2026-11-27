@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { blockEntrance, plexDetail, stepCopy, stepDirection, stepKey } from '../src/widgets/auth/connect/steps';
+import { blockEntrance, kindLabel, plexDetail, serverAddress, signInOptions, stepCopy, stepDirection, stepKey } from '../src/widgets/auth/connect/steps';
 
 describe('auth step choreography', () => {
   test('the key changes with the page, the server and what the page shows', () => {
@@ -14,7 +14,11 @@ describe('auth step choreography', () => {
     expect(plexDetail({ ...link, state: 'waiting' }, false)).toBe('link');
     expect(plexDetail({ ...link, state: 'linked' }, false)).toBe('servers');
     expect(plexDetail({ ...link, state: 'profiles' }, false)).toBe('profiles');
-    expect(plexDetail({ ...link, state: 'expired' }, false)).toBe('start');
+    expect(plexDetail({ ...link, state: 'expired' }, false)).toBe('expired');
+    expect(plexDetail({ ...link, state: 'failed' }, false)).toBe('failed');
+    // A refusal after approval (no link left, an error) is a failure, never the start again.
+    expect(plexDetail(null, false, 'This Plex account doesn\'t have access to this server.')).toBe('failed');
+    expect(plexDetail(null, true, 'old error')).toBe('link');
   });
   test('returning through history is back; deeper or the same depth is forward', () => {
     expect(stepDirection(2, 1)).toBe('back');
@@ -54,4 +58,35 @@ describe('auth step choreography', () => {
 test('blocks arriving into a showing step come at once, in turn', () => {
   expect(blockEntrance(0, 'forward', false, true).delay!).toBeLessThan(blockEntrance(0, 'forward').delay!);
   expect(blockEntrance(1, 'forward', false, true).delay! - blockEntrance(0, 'forward', false, true).delay!).toBe(70);
+});
+
+describe('server sign-in', () => {
+  test('Plex comes first wherever the server offers it; a password is a choice', () => {
+    const both = signInOptions({ plex: true, password: true, quick: true, typing: false });
+    expect(both).toMatchObject({ plexPrimary: true, fields: false, offerFields: true, quick: true });
+    const chose = signInOptions({ plex: true, password: true, quick: true, typing: true });
+    expect(chose).toMatchObject({ plexPrimary: false, fields: true, offerFields: false });
+  });
+  test('a password-only server opens its fields at once', () => {
+    expect(signInOptions({ plex: false, password: true, quick: false, typing: false })).toMatchObject({ plex: false, fields: true, offerFields: false });
+  });
+  test('Plex alone is the only action', () => {
+    expect(signInOptions({ plex: true, password: false, quick: false, typing: false })).toMatchObject({ plexPrimary: true, fields: false, offerFields: false, quick: false });
+  });
+  test('the address reads as typed: no scheme, the path only when there is one', () => {
+    expect(serverAddress('https://den.example.net', '/')).toBe('den.example.net');
+    expect(serverAddress('http://192.168.1.20:8096/')).toBe('192.168.1.20:8096');
+    expect(serverAddress('https://example.org', '/vela/')).toBe('example.org/vela');
+    expect(serverAddress('')).toBe('');
+  });
+  test('the kind is always named', () => {
+    expect(kindLabel('jellyfin')).toBe('Jellyfin');
+    expect(kindLabel('ether', 'Ether')).toBe('Ether');
+    expect(kindLabel('unknown')).toBe('');
+  });
+  test('the expired and refused steps say so in their titles', () => {
+    expect(stepCopy({ page: 'server-plex', first: false, name: '', plex: 'failed' }).title).toBe('Plex sign-in didn’t work');
+    expect(stepCopy({ page: 'plex', first: false, name: '', plex: 'expired' }).title).toBe('That code expired');
+    expect(stepCopy({ page: 'code', first: false, name: '', quickExpired: true }).title).toBe('That code ended');
+  });
 });

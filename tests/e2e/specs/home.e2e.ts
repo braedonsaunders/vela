@@ -3,6 +3,8 @@ import { describe, test } from '@e2e-dev/web';
 
 test.setup('Home release gate: a fresh sign-in opens Home', { sessions: ['lab-viewer'] }, async ({ app, browser, screen, session }) => {
   await app.clearState();
+  // The lab offers Plex first; a username and password are the viewer's choice.
+  await screen.getByRole('button', 'Sign in with a username instead').tap();
   await screen.getByRole('textbox', 'Username').fill(secrets.get('viewerUsername'));
   await screen.getByRole('textbox', 'Password').fill(secrets.get('viewerPassword'));
   await screen.getByRole('button', 'Sign in').tap();

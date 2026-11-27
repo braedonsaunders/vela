@@ -40,6 +40,8 @@ test('Home and detail are ready on the native release build', async ({ app, devi
     await app.restart();
   }
 
+  // The lab offers Plex first; a username and password are the viewer's choice.
+  await screen.getByTestId('connect-use-password').tap();
   if (process.env.VELA_E2E_NATIVE_TARGET === 'android-tv') {
     await screen.getByTestId('connect-username').tap();
     await device.unstable_raw.client.command.tvRemote({ button: 'select' });

@@ -133,14 +133,25 @@ export function Label({ children }: { children: string }) {
   return <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' }}>{children}</Words>;
 }
 
-/** A failure the viewer should read: announced, in the accent ink. */
+/** A failure the viewer should read: announced, in the accent ink. On the signed-out stage it is
+ * a card of its own, with the alert mark, so a refusal never reads as an ordinary line of text. */
 export function Alert({ children }: { children: string }) {
-  // On the signed-out stage everything is centred, failures too.
   const centred = !!useAuthLayout();
+  const look = useLook();
+  if (!centred) {
+    return (
+      <Words rows={{ 'font-size': '14px', 'line-height': '1.5', color: '$ui.accent' }} accessibilityRole="alert">
+        {children}
+      </Words>
+    );
+  }
   return (
-    <Words rows={{ 'font-size': centred ? '15px' : '14px', 'line-height': '1.5', color: '$ui.accent' }} accessibilityRole="alert" style={centred ? { textAlign: 'center' } : undefined}>
-      {children}
-    </Words>
+    <View accessibilityRole="alert" accessibilityLiveRegion="assertive" testID="auth-alert"
+      style={[look.box({ 'flex-direction': 'row', gap: '12px', 'align-items': 'flex-start', padding: '14px 16px', 'border-radius': '16px',
+        'background-color': '$ui.alert', border: '1px solid $ui.accent' }), { borderColor: `${look.ui.accent}66` }]}>
+      <View style={{ paddingTop: 1 }}><Glyph symbol="alert" size={20} color={look.ui.accent} /></View>
+      <Words rows={{ 'font-size': '15px', 'line-height': '1.45', color: '$ui.ink' }} style={{ flex: 1 }}>{children}</Words>
+    </View>
   );
 }
 
