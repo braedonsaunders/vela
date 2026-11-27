@@ -79,6 +79,12 @@ interface NativeDownloadsModule {
   addListener?(event: 'onDownload', listener: (event: NativeDownloadTransferProgress) => void): { remove(): void };
 }
 
+/** Plain JSON data: Android's bridge refuses `undefined` fields (optional record and request fields), which
+ * JSON drops as iOS's bridge does. */
+function plain<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 function createVelaDownloads(): VelaDownloadsPort | undefined {
   if (!nativeDownloadsSupported(Platform.OS, !!Platform.isTV)) return undefined;
   let mod: NativeDownloadsModule | undefined;
@@ -100,20 +106,20 @@ function createVelaDownloads(): VelaDownloadsPort | undefined {
       };
     },
     writeSnapshot: async (snapshot) => {
-      await native.downloadsWriteSnapshot?.({
+      await native.downloadsWriteSnapshot?.(plain({
         items: Array.isArray(snapshot?.items) ? snapshot.items : [],
         outbox: Array.isArray(snapshot?.outbox) ? snapshot.outbox : [],
-      });
+      }));
     },
     freeBytes: async () => (await native.downloadsFreeBytes?.()) ?? null,
     startTransfer: async (request) => {
-      await native.downloadsStartTransfer?.(request);
+      await native.downloadsStartTransfer?.(plain(request));
     },
     pauseTransfer: async (serverId, viewerId, titleId) => {
       await native.downloadsPauseTransfer?.(serverId, viewerId, titleId);
     },
     resumeTransfer: async (request) => {
-      await native.downloadsResumeTransfer?.(request);
+      await native.downloadsResumeTransfer?.(plain(request));
     },
     removeTitle: async (serverId, viewerId, titleId) => {
       await native.downloadsRemoveTitle?.(serverId, viewerId, titleId);
