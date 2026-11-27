@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Destination } from '@vela/core';
-import { screenDestinationId, screenOf, screenPath, withScreens } from '../../../apps/vela/src/plugin-screens';
+import { screenDestinationId, screenLandingHref, screenOf, screenPath, withScreens } from '../../../apps/vela/src/plugin-screens';
 import { sectionPathVisible, sectionRoute } from '../../../apps/vela/src/section-route';
 
 const library = (id: string, kind = 'movies'): Destination => ({ id, name: id, kind, dateDisplay: 'year', backdrop: '' });
@@ -22,4 +22,16 @@ test('a screen destination is told from a library and routed as a section', () =
   expect(sectionRoute('screen/[id]', 'sports')).toEqual({ route: 'screen', entry: 'sports' });
   expect(sectionPathVisible('/screen/sports')).toBe(true);
   expect(sectionPathVisible('/game/x')).toBe(false);
+});
+
+test('only the advertised landing page uses the section address and keeps its query', () => {
+  const sports = { id: 'sports', title: 'Sports', icon: '', page: 'index', document };
+  const landing = screenLandingHref(sports, 'index', { teamsLeague: 'nfl' });
+  expect(landing).toMatchObject({ pathname: '/screen/[id]', params: { id: 'sports' } });
+  expect(landing?.params).toHaveProperty('teamsLeague', 'nfl');
+  expect(screenLandingHref(sports, 'game', { event: 'event:1' })).toBeNull();
+  const news = { ...sports, id: 'news', page: 'front' };
+  expect(screenLandingHref(news, 'index', {})).toBeNull();
+  expect(screenLandingHref(news, 'front', {})).toEqual({ pathname: '/screen/[id]', params: { id: 'news' } });
+  expect(screenLandingHref(undefined, 'index', {})).toBeNull();
 });
