@@ -167,7 +167,9 @@ test('a dropped connection backs off, reports interrupted, and resumes with Rang
 test('a link that vanished while waiting for the network leaves the transfer interrupted for a fresh grant', async () => {
   reset();
   Object.assign(behaviour, { cutAt: 40_000, cuts: 1 });
-  const { downloads, next, events } = engine({ delay: () => 30 });
+  // The retry waits long enough that the link is gone before it runs, even on a slow CI runner:
+  // with a 30 ms backoff the retry could resume the original before the 404 was in place.
+  const { downloads, next, events } = engine({ delay: () => 400 });
   await downloads.startTransfer(request());
   await next(e => e.status === 'paused');
   behaviour.status = 404;
