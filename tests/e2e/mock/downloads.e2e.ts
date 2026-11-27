@@ -223,7 +223,8 @@ test('denied persistence offers Save file and saves an Ether grant through the b
   await expect(action).toHaveAttribute('aria-label', 'Save file');
   await app.screenshot('save-file');
   const saved = await browser.waitForDownload(() => action.press('Enter'), { timeout: 60_000 });
-  expect(saved.suggestedFilename).toBe('The Last Observatory (2012).mp4');
+  // Linux WebKitGTK replaces spaces in a suggested download name with underscores; the name is otherwise exact.
+  expect(saved.suggestedFilename.replace(/_/g, ' ')).toBe('The Last Observatory (2012).mp4');
   await app.open('/vela/downloads');
   await expect(screen.getByTestId(`download-${titleId}`)).toHaveCount(0);
 });
