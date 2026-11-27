@@ -5,6 +5,9 @@
   <!-- The media session's service runs in the foreground while something plays (Android 14+ needs the type). -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <!-- Offline downloads: a data-sync foreground service with a progress notification (DownloadService). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <application>
     <service
       android:name="app.ether.vela.player.VelaAudioService"
@@ -14,5 +17,9 @@
         <action android:name="androidx.media3.session.MediaSessionService" />
       </intent-filter>
     </service>
+    <service
+      android:name="app.ether.vela.player.DownloadService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
   </application>
 </manifest>

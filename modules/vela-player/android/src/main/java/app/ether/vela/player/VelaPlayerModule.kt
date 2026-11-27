@@ -13,8 +13,29 @@ class VelaPlayerModule : Module() {
     return AudioPlayback
   }
 
+  /** The offline downloads engine, reporting to this module's JavaScript (onDownload). */
+  private fun downloads(): OfflineDownloads {
+    val context = appContext.reactContext ?: throw IllegalStateException("Downloads context unavailable")
+    return OfflineDownloads.start(context).also { it.emit = { body -> sendEvent("onDownload", body) } }
+  }
+
+  /** Android 13+: ask once, at the first download, to show its progress notification. Downloads go on
+   * whatever the answer (without a notification when it is denied). */
+  private fun askForDownloadNotifications() {
+    if (!OfflineDownloads.shouldAskForNotifications()) return
+    val context = appContext.reactContext ?: return
+    val permission = "android.permission.POST_NOTIFICATIONS"
+    if (context.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) return
+    try { appContext.permissions?.askForPermissions({ }, permission) } catch (_: Exception) { }
+  }
+
   override fun definition() = ModuleDefinition {
     Name("VelaPlayer")
+
+    // Local playback of downloads needs the downloads root's scope even before any downloads call.
+    OnCreate {
+      appContext.reactContext?.let { OfflineDownloads.start(it) }
+    }
 
     // The trusted playback controller's media access; null clears it.
     Function("setMediaAccess") { access: Map<String, Any?>? ->
@@ -53,7 +74,8 @@ class VelaPlayerModule : Module() {
     // Music, audiobooks and podcasts: one Media3 player for the app in the media session
     // (modules/vela-player/src/audio.ts). Its status and the system's media commands arrive as onAudio.
     // onNetwork: the network became metered or unmetered (NetworkMetering), for the streaming cap.
-    Events("onAudio", "onNetwork")
+    // onDownload: offline transfer progress, pauses, completion and failure (OfflineDownloads).
+    Events("onAudio", "onNetwork", "onDownload")
     Function("networkMetered") {
       NetworkMetering.changed = { metered -> sendEvent("onNetwork", mapOf("metered" to metered)) }
       NetworkMetering.metered(appContext.reactContext)
@@ -101,6 +123,28 @@ class VelaPlayerModule : Module() {
       audio().setNowPlaying(info?.let { SessionInfo(it["title"] as? String ?: "", it["artist"] as? String ?: "", it["album"] as? String ?: "", artwork) },
         info?.get("spoken") as? Boolean ?: false)
     }.runOnQueue(Queues.MAIN)
+
+    // Offline original-file downloads on Android phones, tablets and TVs (OfflineDownloads, DownloadService).
+    Function("downloadsBaseDirectoryUrl") { downloads().baseDirectoryUrl() }
+    AsyncFunction("downloadsFreeBytes") { downloads().freeBytes()?.toDouble() }
+    AsyncFunction("downloadsReadSnapshot") { downloads().readSnapshot() }
+    AsyncFunction("downloadsWriteSnapshot") { snapshot: Map<String, Any?> -> downloads().writeSnapshot(snapshot) }
+    AsyncFunction("downloadsStartTransfer") { request: Map<String, Any?> ->
+      val parsed = DownloadRequest.from(request)
+      askForDownloadNotifications()
+      downloads().startTransfer(parsed)
+    }
+    AsyncFunction("downloadsResumeTransfer") { request: Map<String, Any?> ->
+      downloads().resumeTransfer(DownloadRequest.from(request))
+    }
+    AsyncFunction("downloadsPauseTransfer") { serverId: String, viewerId: String, titleId: String ->
+      downloads().pauseTransfer(serverId, viewerId, titleId)
+    }
+    AsyncFunction("downloadsRemoveTitle") { serverId: String, viewerId: String, titleId: String ->
+      downloads().removeTitle(serverId, viewerId, titleId)
+    }
+    AsyncFunction("downloadsRemoveViewer") { serverId: String, viewerId: String -> downloads().removeViewer(serverId, viewerId) }
+    AsyncFunction("downloadsRemoveServer") { serverId: String -> downloads().removeServer(serverId) }
 
     // The viewer left the app: playing views pause, previews stop with their windows.
     OnActivityEntersBackground {
