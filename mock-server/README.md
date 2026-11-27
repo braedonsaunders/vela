@@ -19,6 +19,8 @@ Optional `VELA_MOCK_LONG_HEROES=1` gives the featured titles names long enough t
 Optional `VELA_MOCK_TOKEN=dev-token` seeds that fixed bearer/device for development.
 Optional `VELA_MOCK_PLEX_HOME=1` advertises Plex Home selection; after signing out, Vela's Plex
 button opens mock profiles directly (the protected owner profile uses PIN `1234`).
+Optional `VELA_MOCK_PLEX_ANY=1` (hosted design previews) lets any Plex account that completed a real
+plex.tv link sign in as the demo viewer, so the whole Plex flow can be walked with a real account.
 Optional `VELA_MOCK_COLD=1` makes each title's first detail read partial (`pending: ["extras"]`,
 `refreshAfterMs: 2000`, `Cache-Control: private, no-store`), as Ether answers a title it is still filling.
 Subtitle search (`features.subtitleSearch`) offers three fictional subtitle-site files per

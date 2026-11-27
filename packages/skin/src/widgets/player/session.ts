@@ -10,7 +10,7 @@ import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
 import type { ChromeTarget, CommandInput, PlayerChromeState, StartRetrying } from './context';
-import { belongs, planSource, qualityReached, settlePick, viewCommand, type PendingPick } from './present';
+import { belongs, planSource, presentedAfter, qualityReached, restartAt, settlePick, viewCommand, type PendingPick } from './present';
 import { paceSnapshot, type Paced } from './snapshot-pace';
 import { liveReturnsToEdge, stopsInBackground } from './background';
 import { ownedStartFailure, startFailure, startRetrying } from './start-failure';
@@ -73,6 +73,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const versionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const position = useRef(0);
   const paused = useRef(false);
+  const presented = useRef(false);
+  const reported = useRef<Snapshot | null>(null);
   const { kind, id } = target;
   const ownerRef = useRef(owner);
   ownerRef.current = owner;
@@ -108,11 +110,20 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       setPendingQualityId(undefined);
       pendingAudio.current = null;
       pendingSubtitle.current = null;
+      // A start at the item's own position (a new request for it) is not where the last session presented.
+      if (positionSeconds === undefined) presented.current = false;
       const from = (kind === 'title' || kind === 'programme') && positionSeconds !== undefined ? { positionSeconds } : {};
       void vela.playback.start({ ...target, ...from } as PlaybackTarget);
     },
     [vela, kind, id, target.kind === 'title' ? target.positionSeconds : undefined, target.kind === 'title' ? target.mediaSourceId : undefined, target.kind === 'title' ? target.audioTrackId : undefined],
   );
+
+  // A position belongs to the item it was reported for: another item (Next Episode) starts without it.
+  useEffect(() => {
+    presented.current = false;
+    position.current = 0;
+    reported.current = null;
+  }, [kind, id]);
 
   useEffect(() => {
     if (!id || external) return;
@@ -136,7 +147,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
         void vela.playback.stop();
       } else if (state === 'active' && away.current) {
         away.current = false;
-        begin(position.current > 0 ? position.current : undefined);
+        begin(restartAt(position.current, presented.current));
       }
     });
     return () => subscription.remove();
@@ -193,6 +204,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
         : null;
       if (transport) {
         setRefused('');
+        if (transport.kind === 'seek') presented.current = false;
         void vela.playback.liveTransport(current.sessionId, transport).then(accepted => {
           if (!accepted || current.sessionId !== sessionIdRef.current || transport.kind === 'seek') return;
           viewerPaused.current = transport.kind === 'pause';
@@ -205,6 +217,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     setRefused('');
     if (input.type === 'pause') viewerPaused.current = true;
     else if (input.type === 'play' || input.type === 'catchUp') viewerPaused.current = false;
+    // A seek leaves the presented place; the player's next presenting report says where it is.
+    if (input.type === 'seek' || input.type === 'seekBy') presented.current = false;
     if (input.type === 'quality') { pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }
     if (input.type === 'audio' && sessionIdRef.current) {
       pendingAudio.current = { commandId: nextId.current, sessionId: sessionIdRef.current, source: sourceRef.current, trackId: input.trackId };
@@ -240,7 +254,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       return;
     }
     if (external) ownerRef.current?.retry();
-    else begin(position.current > 0 ? position.current : undefined);
+    else begin(restartAt(position.current, presented.current));
   }, [failure, playback.plan, send, begin, external]);
 
   useEffect(() => {
@@ -335,6 +349,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
         setSnapshot(next);
       }
       if (belongs(next, plan)) {
+        presented.current = presentedAfter(presented.current, reported.current, next);
+        reported.current = next;
         position.current = next.position;
         paused.current = next.state === 'paused';
         for (const [track, pending] of [['audio', pendingAudio], ['subtitle', pendingSubtitle]] as const) {
@@ -377,7 +393,9 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     onSessionCommand: event => {
       // A switch the engine chose on its own (automatic quality, recovery) is dropped if it goes
       // stale; the viewer's pending quality pick is sent again at the newer generations.
-      if (event.sessionId === sessionId) void vela.playback.command(event.sessionId, event.command, commandOrigin(event.command, qualityPick.current));
+      if (event.sessionId !== sessionId) return;
+      if (event.command.kind === 'seek') presented.current = false;
+      void vela.playback.command(event.sessionId, event.command, commandOrigin(event.command, qualityPick.current));
     },
     // The viewer closed the picture-in-picture window of an app in the background: the watch stops as it does
     // when the app leaves the foreground, and starts again where it was when the app returns.

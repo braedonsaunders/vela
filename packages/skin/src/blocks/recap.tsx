@@ -76,7 +76,7 @@ export interface RecapBlockProps {
   period?: HistoryRecapPeriod;
   onPeriodChange?(period: HistoryRecapPeriod): void;
   onSelectCard?(card: Card): void;
-  onPlayCards?(cards: Card[], index: number): void;
+  onPlayCards?(cards: Card[], index: number, picked?: boolean): void;
 }
 
 /** Self-contained listening recap rich block: period pills, stats grid, daily minutes chart, top lists and share card modal. */
@@ -334,7 +334,7 @@ export function RecapRankedSection({
   round: boolean;
   playableList?: boolean;
   onSelectCard?(card: Card): void;
-  onPlayCards?(cards: Card[], index: number): void;
+  onPlayCards?(cards: Card[], index: number, picked?: boolean): void;
 }) {
   const m = useMediaLook();
   const cards = useMemo(() => entries.map(e => e.card), [entries]);
@@ -357,7 +357,7 @@ export function RecapRankedSection({
             round={round}
             onPress={() => {
               if (playableList && entry.card.media?.audio && onPlayCards) {
-                onPlayCards(audioCards, idx);
+                onPlayCards(audioCards, idx, true);
               } else {
                 onSelectCard?.(entry.card);
               }

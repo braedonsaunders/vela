@@ -12,6 +12,7 @@ import { focusElement, focusTarget } from '../../escape';
 import { useHost } from '../../host';
 import { NO_RING, useInteraction } from '../common/controls';
 import { useMediaActions } from './context';
+import { miniScrubPosition, miniScrubResult, type MiniScrub } from './mini-scrub';
 import { MediaGlyph } from './icons';
 import { alpha, Cover, ListRow, RoundButton, TextLink, useMediaLook } from './parts';
 import { Arrive, MOTION, Presence, useLast } from '../../presence';
@@ -38,8 +39,11 @@ function spoken(item: Card | undefined): boolean {
 
 function useAudio(): AudioState { return useVelaState(state => state.audio); }
 
-/** The mini player's height, px: where Now Playing rises from. */
-export const MINI_PLAYER_HEIGHT = 62;
+const MINI_COVER_SIZE = 46;
+const MINI_ROW_PADDING = 8;
+const MINI_TITLE_PADDING = 4;
+/** Height of the mini player, including the cover and its surrounding padding. */
+export const MINI_PLAYER_HEIGHT = MINI_COVER_SIZE + 2 * (MINI_ROW_PADDING + MINI_TITLE_PADDING);
 
 /** The floating bar over every page while something is queued. While it leaves (the queue
  * stopped) it keeps showing what was playing. */
@@ -64,15 +68,15 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
   return (
     <View style={[shell.style, { position: 'absolute', bottom, left: (m.width - width) / 2, width, borderRadius: Math.min(22, Number(m.ui.radiusPanel) || 18), overflow: 'hidden' }, rootPart]}
       testID="mini-player" accessibilityRole="toolbar" accessibilityLabel={msg('media.player.nowPlaying')}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, padding: 8, paddingRight: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, padding: MINI_ROW_PADDING, paddingRight: 10 }}>
         <Pressable {...open.handlers} onPress={onOpen} testID="mini-player-open" accessibilityRole="button" accessibilityLabel={`${msg('media.player.open')}: ${item.name}`}
-          style={[NO_RING, { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, padding: 4,
+          style={[NO_RING, { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, padding: MINI_TITLE_PADDING,
             backgroundColor: open.state.hover || open.state.focus ? m.ui.control : 'transparent' }]}>
-          <Cover uri={item.poster} shape={item.shape === 'book' ? 'book' : 'square'} size={item.shape === 'book' ? 34 : 46} title={item.name} accent={item.accent} lift={0.4} />
+          <Cover uri={item.poster} shape={item.shape === 'book' ? 'book' : 'square'} size={item.shape === 'book' ? 34 : MINI_COVER_SIZE} title={item.name} accent={item.accent} lift={0.4} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} style={[m.text({ 'font-size': '15px', 'font-weight': '650' }), titlePart]}>{item.name}</Text>
             <Text numberOfLines={1} style={[m.text({ 'font-size': '13px', color: '$ui.inkSecondary' }), bylinePart]}>
-              {preview !== null ? `${clock(preview)} / ${clock(audio.durationSeconds)}` : audio.phase === 'failed' ? (audio.unreleased ? audio.error : msg('media.player.failed')) : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
+              {preview !== null ? `${clock(preview)} / ${clock(audio.durationSeconds)}` : audio.phase === 'failed' ? (audio.unreleased ? audio.error : audio.reason || msg('media.player.failed')) : audio.unsupported ? msg('media.player.unsupported') : [item.media?.byline, item.media?.parent?.name].filter(Boolean).join(' — ')}
             </Text>
           </View>
         </Pressable>
@@ -97,20 +101,35 @@ export function MiniPlayer({ onOpen, bottom }: { onOpen(): void; bottom: number 
 function MiniScrubber({ position, duration, onSeek, onPreview }: { position: number; duration: number; onSeek(seconds: number): void; onPreview(seconds: number | null): void }) {
   const m = useMediaLook();
   const ref = useRef<ComponentRef<typeof View>>(null);
-  const bounds = useRef({ x: 0, width: 1 });
+  const gesture = useRef<MiniScrub | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   const live = duration > 0;
   const shown = drag ?? position;
   const fraction = live ? Math.min(1, Math.max(0, shown / duration)) : 0;
-  const at = (pageX: number) => Math.min(1, Math.max(0, (pageX - bounds.current.x) / Math.max(1, bounds.current.width))) * duration;
-  const measure = (then: () => void) => ref.current?.measureInWindow((x: number, _y: number, width: number) => { bounds.current = { x, width }; then(); });
   const active = drag !== null || hover !== null;
   const preview = drag ?? hover;
   useEffect(() => { onPreview(preview); }, [preview, onPreview]);
+  useEffect(() => {
+    if (live) return;
+    gesture.current = null;
+    setDrag(null);
+    setHover(null);
+  }, [live]);
+  const update = (press: MiniScrub) => {
+    const result = miniScrubResult(press, duration);
+    setDrag(result.preview);
+    if (result.seek === null) return;
+    gesture.current = null;
+    onSeek(result.seek);
+  };
+  const previewPointer = (event: { currentTarget: HTMLElement; clientX: number }) => {
+    const { x, width } = event.currentTarget.getBoundingClientRect();
+    setHover(miniScrubPosition(event.clientX, { x, width }, duration));
+  };
   const pointer = web ? {
-    onMouseEnter: (event: { nativeEvent: { pageX: number } }) => { const x = event.nativeEvent.pageX; measure(() => setHover(at(x))); },
-    onMouseMove: (event: { nativeEvent: { pageX: number } }) => setHover(at(event.nativeEvent.pageX)),
+    onMouseEnter: previewPointer,
+    onMouseMove: previewPointer,
     onMouseLeave: () => setHover(null),
   } : {};
   if (!live) return (
@@ -122,10 +141,30 @@ function MiniScrubber({ position, duration, onSeek, onPreview }: { position: num
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={event => onSeek(position + (event.nativeEvent.actionName === 'increment' ? 10 : -10))}
       onStartShouldSetResponder={() => true} onMoveShouldSetResponder={() => true}
-      onResponderGrant={event => { const x = event.nativeEvent.pageX; measure(() => setDrag(at(x))); }}
-      onResponderMove={event => setDrag(at(event.nativeEvent.pageX))}
-      onResponderRelease={event => { const to = at(event.nativeEvent.pageX); setDrag(null); onSeek(to); }}
-      onResponderTerminate={() => setDrag(null)}
+      onResponderGrant={event => {
+        const press: MiniScrub = { pageX: event.nativeEvent.pageX, released: false };
+        gesture.current = press;
+        ref.current?.measureInWindow((x: number, _y: number, width: number) => {
+          if (gesture.current !== press) return;
+          press.bounds = { x, width };
+          update(press);
+        });
+      }}
+      onResponderMove={event => {
+        const press = gesture.current;
+        if (!press || press.released) return;
+        press.pageX = event.nativeEvent.pageX;
+        update(press);
+      }}
+      onResponderRelease={event => {
+        setHover(null);
+        const press = gesture.current;
+        if (!press) return;
+        press.pageX = event.nativeEvent.pageX;
+        press.released = true;
+        update(press);
+      }}
+      onResponderTerminate={() => { gesture.current = null; setDrag(null); setHover(null); }}
       {...(pointer as object)}
       style={[{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 10, justifyContent: 'flex-end' }, web ? ({ cursor: 'pointer' } as ViewStyle) : {}]}>
       <View style={{ height: active ? 6 : 3, backgroundColor: m.ui.track }}>
@@ -367,7 +406,7 @@ export function NowPlaying({ onClose, panel: opening, onOpenVisualizer, visualiz
         </View>
       </View>
       <Scrubber position={audio.positionSeconds} duration={audio.durationSeconds} onSeek={s => store.audio.seek(s)} chapters={book ? audio.chapters : []} />
-      {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : audio.unreleased ? audio.error : msg('media.player.failed')}</Text></Arrive> : null}
+      {audio.phase === 'failed' || audio.unsupported ? <Arrive still={m.look.still}><Text accessibilityRole="alert" style={m.text({ 'font-size': '14px', color: '$ui.inkSecondary' })}>{audio.unsupported ? msg('media.player.unsupported') : audio.unreleased ? audio.error : audio.reason || msg('media.player.failed')}</Text></Arrive> : null}
       <View style={{ zIndex: 3 }}>
         <Guide {...guided} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           {book

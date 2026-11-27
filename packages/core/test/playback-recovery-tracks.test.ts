@@ -11,8 +11,9 @@ import type { SeriesTracks } from '../src/store/series-tracks';
 const audio = (id: string, language: string, more: Partial<Track> = {}): Track => ({ id, kind: 'audio', language, name: '', codec: 'aac', ...more });
 const subtitle = (id: string, language: string, more: Partial<Track> = {}): Track => ({ id, kind: 'subtitle', language, name: '', codec: 'srt', ...more });
 
-/** `ether`: as on Ether, a track command must name the file's current generations and advances both. */
-interface File { source?: string; version?: string; generation?: number; seek?: number; revision?: number; position?: number; ether?: boolean; transcode?: boolean; audioTracks: Track[]; subtitleTracks: Track[]; selectedAudioTrackId?: string; selectedSubtitleTrackId?: string | null }
+/** `ether`: as on Ether, a track command must name the file's current generations and advances both. `unavailable`: the plan shows
+ * its version as `version_unavailable`. */
+interface File { source?: string; version?: string; generation?: number; seek?: number; revision?: number; position?: number; ether?: boolean; transcode?: boolean; unavailable?: boolean; audioTracks: Track[]; subtitleTracks: Track[]; selectedAudioTrackId?: string; selectedSubtitleTrackId?: string | null }
 
 const stale = (file: File) => new VelaError({ class: 'conflict', code: 'stale_generation', message: 'stale generation',
   currentGenerations: { sourceGeneration: file.generation ?? 0, seekGeneration: file.seek ?? 0 }, retry: { allowed: false } } as never, 409);
@@ -22,7 +23,7 @@ const planOf = (sessionId: string, file: File): PlaybackPlan => ({
   paths: [{ id: 'p', ...(file.transcode ? { kind: 'transcode', transport: 'hls', mimeType: 'application/vnd.apple.mpegurl' } as const : { kind: 'direct', transport: 'file', mimeType: 'video/mp4' } as const), readiness: 'ready', url: 'https://media.test/f', qualities: [], boundaries: [], ...(file.source ? { sourceId: file.source } : {}) }],
   selectedPathId: 'p', audioTracks: file.audioTracks, subtitleTracks: file.subtitleTracks,
   ...(file.selectedAudioTrackId ? { selectedAudioTrackId: file.selectedAudioTrackId } : {}), selectedSubtitleTrackId: file.selectedSubtitleTrackId ?? null,
-  ...(file.version ? { selectedVersionId: file.version } : {}),
+  ...(file.version ? { selectedVersionId: file.version } : {}), ...(file.unavailable ? { sourceFailure: 'version_unavailable' } as const : {}),
 });
 
 interface Lab {
@@ -1206,7 +1207,8 @@ test('a plan of an older source generation does not confirm a pending track comm
     const pick = playback.command('s1', { kind: 'tracks', subtitleTrackId: '3', sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'pick' });
     files.set('s1', a);
     expect(await playback.refresh('s1')).toBe(true);
-    expect(box.get().playback.plan?.sourceGeneration).toBe(0);
+    // A read behind the newest plan heard is not shown: generation 1 stays.
+    expect(box.get().playback.plan?.sourceGeneration).toBe(1);
     files.set('s1', taken);
     await run(5000);
     expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
@@ -3329,8 +3331,9 @@ test('a report of subtitles off that repeats an accepted off does not keep a pic
 });
 
 test('a track reply released after a seek keeps the plan shown', async () => {
-  // Off is accepted at the same generation and its reply held; the viewer seeks to 110 seconds; Off's reply from before the seek is
-  // released, older or newer on revision than the plan shown: the plan shown stays at 110 seconds on the seek's generation, with Off.
+  // Off is accepted at the same generation and its reply held; the viewer seeks to 110 seconds and the seek's plan still shows the
+  // forced 104; Off's reply from before the seek is released, older or newer on revision than the plan shown: the plan shown stays
+  // at 110 seconds on the seek's generation, with Off.
   for (const revision of [2, 4]) {
     let release = () => {};
     const reply = new Promise<File>(resolve => { release = () => resolve({ ...plexForced, revision, selectedSubtitleTrackId: null }); });
@@ -3338,7 +3341,7 @@ test('a track reply released after a seek keeps the plan shown', async () => {
       await playback.start({ kind: 'title', id: 'movie' });
       const off = playback.command('s1', offCommand);
       for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is taken.
-      files.set('s1', { ...files.get('s1')!, seek: 1, position: 110, revision: 3 });
+      files.set('s1', { ...files.get('s1')!, seek: 1, position: 110, revision: 3, selectedSubtitleTrackId: '104' });
       expect(await playback.command('s1', { kind: 'seek', positionSeconds: 110, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'seek' })).toBe(true);
       release();
       expect(await off).toBe(true);
@@ -3346,4 +3349,240 @@ test('a track reply released after a seek keeps the plan shown', async () => {
       expect([shown.seekGeneration, shown.positionSeconds, shown.revision, shown.selectedSubtitleTrackId]).toEqual([1, 110, 3, null]);
     }, () => false, c => c.idempotencyKey === 'off' ? reply : undefined);
   }
+});
+
+test('a switch reply behind a plan that shows a later switch\'s version unavailable still takes its version', async () => {
+  // Pinned to version A, both restarts are spent; B's reply is held; C is sent and the session publishes C as version_unavailable
+  // at a later source; B's reply comes in, C is refused and the session fails: a replacement starts on B with a fresh budget.
+  // (A server that takes overlapping switches.)
+  const a: File = { source: 'a', version: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' };
+  const b: File = { ...a, source: 'b', version: 'b', generation: 1, seek: 1 };
+  const c: File = { ...a, source: 'c', version: 'c', generation: 2, seek: 2, unavailable: true };
+  let releaseB = () => {}, refuseC = () => {};
+  const toC = new Promise<never>((_, reject) => { refuseC = () => reject(invalidVersion()); });
+  toC.catch(() => undefined);
+  await lab([a, a, a, { ...b, generation: 0, seek: 0 }], async ({ playback, box, starts, files, holdSwitch, run }) => {
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'a' });
+    for (const session of ['s1', 's2']) {
+      playback.recover(session);
+      await run();
+    }
+    expect(box.get().playback.sessionId).toBe('s3');
+    holdSwitch(new Promise<void>(resolve => { releaseB = resolve; }));
+    const switching = playback.switchVersion('s3', 'b');
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The switch is taken.
+    const refused = playback.switchVersion('s3', 'c').catch(() => 'refused');
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    files.set('s3', c);
+    await run(5000);
+    expect([box.get().playback.plan?.selectedVersionId, box.get().playback.plan?.sourceFailure]).toEqual(['c', 'version_unavailable']);
+    releaseB();
+    await switching;
+    refuseC();
+    expect(await refused).toBe('refused');
+    playback.recover('s3');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s4');
+    expect(starts.map(request => request.versionId)).toEqual(['a', 'a', 'a', 'b']);
+  }, command => command.kind === 'version' && command.versionId === 'c' ? toC : false, () => undefined, undefined, { b, c });
+});
+
+test('a switch reply behind a newer plan of its own version, asked again, still takes its version once', async () => {
+  // Pinned to version B, both restarts are spent; B is asked for again with its reply held, and the session publishes B at source
+  // generation 1; B is asked for once more and the session publishes B at generation 2; the first reply comes in, the second
+  // request is refused as stale and the session fails: a replacement starts on B with a fresh budget.
+  const b: File = { source: 'b', version: 'b', audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' };
+  const later: File = { ...b, generation: 1, seek: 1, revision: 2 };
+  let releaseB = () => {}, refuseAgain = () => {}, asked = 0;
+  const again = new Promise<never>((_, reject) => { refuseAgain = () => reject(stale({ ...later, generation: 2, seek: 2 })); });
+  again.catch(() => undefined);
+  await lab([b, b, b, b], async ({ playback, box, starts, files, holdSwitch, run }) => {
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'b' });
+    for (const session of ['s1', 's2']) {
+      playback.recover(session);
+      await run();
+    }
+    expect(box.get().playback.sessionId).toBe('s3');
+    holdSwitch(new Promise<void>(resolve => { releaseB = resolve; }));
+    const switching = playback.switchVersion('s3', 'b');
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The switch is taken.
+    await run(5000);
+    expect(box.get().playback.plan?.sourceGeneration).toBe(1);
+    const refused = playback.switchVersion('s3', 'b').catch(() => 'refused');
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    files.set('s3', { ...later, generation: 2, seek: 2, revision: 3 });
+    await run(5000);
+    expect(box.get().playback.plan?.sourceGeneration).toBe(2);
+    releaseB();
+    await switching;
+    refuseAgain();
+    expect(await refused).toBe('refused');
+    playback.recover('s3');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s4');
+    expect(starts.map(request => request.versionId)).toEqual(['b', 'b', 'b', 'b']);
+  }, command => command.kind === 'version' && ++asked === 2 ? again : false, () => undefined, undefined, { b: later });
+});
+
+test('a switch reply that comes in while the session is recovered from behind a plan showing its version unavailable is not taken', async () => {
+  // Pinned to version A, B's reply (usable) is held; the session then publishes B as version_unavailable at a later source and
+  // fails; B's reply comes in during the backoff; the replacement fails too: recovery still asks for A.
+  const a: File = { source: 'a', version: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' };
+  const b: File = { ...a, source: 'b', version: 'b', generation: 1, seek: 1 };
+  let release = () => {};
+  await lab([a, a, a], async ({ playback, box, starts, files, holdSwitch, run }) => {
+    holdSwitch(new Promise<void>(resolve => { release = resolve; }));
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'a' });
+    const switching = playback.switchVersion('s1', 'b');
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The switch is taken.
+    files.set('s1', { ...b, generation: 2, seek: 2, unavailable: true });
+    await run(5000);
+    expect([box.get().playback.plan?.selectedVersionId, box.get().playback.plan?.sourceFailure]).toEqual(['b', 'version_unavailable']);
+    playback.recover('s1');
+    release();
+    await switching;
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    playback.recover('s2');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s3');
+    expect(starts.map(request => request.versionId)).toEqual(['a', 'a', 'a']);
+  }, () => false, () => undefined, undefined, { b });
+});
+
+test('the reply of a second switch to a version already published keeps a track pick made on it', async () => {
+  // Pinned to version A, the switch to B times out and B is asked for again with its reply held; the session publishes B, which
+  // takes the first switch; the viewer picks French 2 on B with its reply held; the second switch's reply comes in at the plan
+  // shown's generations and revision, then French's reply; B fails: recovery carries French.
+  const a: File = { source: 'a', version: 'a', audioTracks: [audio('1', 'eng'), audio('2', 'fra')], subtitleTracks: [], selectedAudioTrackId: '1' };
+  const b: File = { ...a, source: 'b', version: 'b', generation: 1, seek: 1 };
+  const timeout = Promise.reject(new DOMException('The operation timed out.', 'TimeoutError'));
+  timeout.catch(() => undefined);
+  let releaseB = () => {}, releaseFrench = () => {};
+  const french = new Promise<void>(resolve => { releaseFrench = resolve; });
+  await lab([a, { ...b, generation: 0, seek: 0 }], async ({ playback, box, commands, starts, holdSwitch, run }) => {
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'a' });
+    holdSwitch(timeout);
+    expect(await playback.switchVersion('s1', 'b').catch(() => 'timed out')).toBe('timed out');
+    holdSwitch(new Promise<void>(resolve => { releaseB = resolve; }));
+    const again = playback.switchVersion('s1', 'b');
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The switch is taken.
+    await run(5000);
+    expect([box.get().playback.plan?.selectedVersionId, box.get().playback.plan?.revision]).toEqual(['b', 1]);
+    const pick = playback.command('s1', { kind: 'tracks', audioTrackId: '2', sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'french' });
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is taken.
+    releaseB();
+    await again;
+    releaseFrench();
+    expect(await pick).toBe(true);
+    expect(box.get().playback.plan?.selectedAudioTrackId).toBe('2');
+    const sent = commands.length;
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(starts.at(-1).versionId).toBe('b');
+    expect(commands.slice(sent).filter(c => c.kind === 'tracks').at(-1)?.audioTrackId).toBe('2');
+  }, () => false, c => c.idempotencyKey === 'french' ? french : undefined, undefined, { b });
+});
+
+test('a track reply that brings the version a switch waits for shows that version\'s own subtitles', async () => {
+  // Pinned to version A, French 2 is accepted with its reply held; Off is accepted and answered; the switch to B is sent and its
+  // reply held; French's reply is the first to bring B, with its forced 5: B shows forced 5, not A's Off.
+  const a: File = { source: 'a', version: 'a', audioTracks: [audio('1', 'eng'), audio('2', 'fra')], subtitleTracks: [subtitle('4', 'eng', { forced: true })],
+    selectedAudioTrackId: '1', selectedSubtitleTrackId: '4' };
+  const b: File = { ...a, source: 'b', version: 'b', generation: 1, seek: 1, subtitleTracks: [subtitle('5', 'eng', { forced: true })], selectedAudioTrackId: '2', selectedSubtitleTrackId: '5' };
+  let releaseFrench = () => {};
+  const french = new Promise<File>(resolve => { releaseFrench = () => resolve(b); });
+  await lab([a, { ...b, generation: 0, seek: 0 }], async ({ playback, box, holdSwitch }) => {
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'a' });
+    const pick = playback.command('s1', { kind: 'tracks', audioTrackId: '2', sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'french' });
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is taken.
+    expect(await playback.command('s1', offCommand)).toBe(true);
+    expect(box.get().playback.plan?.selectedSubtitleTrackId).toBeNull();
+    holdSwitch(new Promise<void>(() => {}));
+    void playback.switchVersion('s1', 'b');
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The switch is taken.
+    releaseFrench();
+    expect(await pick).toBe(true);
+    const shown = box.get().playback.plan!;
+    expect([shown.selectedVersionId, shown.selectedAudioTrackId, shown.selectedSubtitleTrackId]).toEqual(['b', '2', '5']);
+  }, () => false, c => c.idempotencyKey === 'french' ? french : undefined, undefined, { b });
+});
+
+test('a switch reply for a version shown but not taken on its source generation sets that version\'s tracks', async () => {
+  // Pinned to version A, the player reports English 1; the switch to B is sent with its reply held. Either the session publishes B
+  // with French 2 at the source generation the switch was sent from, which does not take it, and the reply comes in there; or B is
+  // asked for twice, the session publishes B with English 1 at a later source, which takes the first switch, then B with French 2
+  // at the next source, and the replies come in, the second at that source. B shows French and a recovery carries French.
+  const a: File = { source: 'a', version: 'a', audioTracks: [audio('1', 'eng'), audio('2', 'fra')], subtitleTracks: [], selectedAudioTrackId: '1' };
+  const french: File = { ...a, source: 'b', version: 'b', generation: 2, seek: 2, selectedAudioTrackId: '2' };
+  for (const twice of [false, true]) {
+    const versions: Record<string, File> = { b: twice ? { ...french, generation: 1, seek: 1, selectedAudioTrackId: '1' } : { ...french, generation: 0, seek: 0, revision: 2 } };
+    await lab([a, { ...french, generation: 0, seek: 0, selectedAudioTrackId: '1' }], async ({ playback, box, files, starts, holdSwitch, run }) => {
+      await playback.start({ kind: 'title', id: 'movie', versionId: 'a' });
+      playback.snapshot({ sessionId: 's1', live: null, position: 10, state: 'playing', sourceGeneration: 0, audioTrackId: '1' });
+      let releaseFirst = () => {}, releaseSecond = () => {};
+      holdSwitch(new Promise<void>(resolve => { releaseFirst = resolve; }));
+      const first = playback.switchVersion('s1', 'b');
+      for (let i = 0; i < 5; i++) await Promise.resolve(); // The switch is taken.
+      if (twice) {
+        const english = files.get('s1')!;
+        versions.b = french;
+        holdSwitch(new Promise<void>(resolve => { releaseSecond = resolve; }));
+        const second = playback.switchVersion('s1', 'b');
+        for (let i = 0; i < 5; i++) await Promise.resolve(); // The switch is taken.
+        files.set('s1', english);
+        await run(5000);
+        expect([box.get().playback.plan?.sourceGeneration, box.get().playback.plan?.selectedAudioTrackId]).toEqual([1, '1']);
+        releaseFirst();
+        await first;
+        files.set('s1', french);
+        await run(5000);
+        releaseSecond();
+        await second;
+      } else {
+        await run(5000);
+        expect([box.get().playback.plan?.selectedVersionId, box.get().playback.plan?.sourceGeneration]).toEqual(['b', 0]);
+        releaseFirst();
+        await first;
+      }
+      expect(box.get().playback.plan?.selectedAudioTrackId).toBe('2');
+      playback.recover('s1');
+      await run();
+      expect(box.get().playback.sessionId).toBe('s2');
+      expect(starts.at(-1).versionId).toBe('b');
+      expect(box.get().playback.plan?.selectedAudioTrackId).toBe('2');
+    }, () => false, () => undefined, undefined, versions);
+  }
+});
+
+test('a switch reply that comes in while the session is recovered from a newer source than a plan showing its version unavailable is taken', async () => {
+  // Pinned to version A, the switch to B is held on its way; the session publishes B as version_unavailable at revision 2, then the
+  // switch reaches the server, which takes it at a later source; the session fails and B's reply comes in during the backoff; the
+  // replacement fails too: recovery asks for B.
+  const a: File = { source: 'a', version: 'a', audioTracks: [audio('1', 'eng')], subtitleTracks: [], selectedAudioTrackId: '1' };
+  const b: File = { ...a, source: 'b', version: 'b', generation: 1, seek: 1, revision: 3 };
+  let deliver = () => {}, release = () => {};
+  const onItsWay = new Promise<string>(resolve => { deliver = () => resolve('deliver'); });
+  await lab([a, a, { ...b, generation: 0, seek: 0 }], async ({ playback, box, starts, files, holdSwitch, run }) => {
+    holdSwitch(new Promise<void>(resolve => { release = resolve; }));
+    await playback.start({ kind: 'title', id: 'movie', versionId: 'a' });
+    const switching = playback.switchVersion('s1', 'b');
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    files.set('s1', { ...a, version: 'b', unavailable: true, revision: 2 });
+    await run(5000);
+    expect([box.get().playback.plan?.selectedVersionId, box.get().playback.plan?.sourceFailure]).toEqual(['b', 'version_unavailable']);
+    deliver();
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The switch is taken.
+    expect(files.get('s1')?.source).toBe('b');
+    playback.recover('s1');
+    release();
+    await switching;
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    playback.recover('s2');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s3');
+    expect(starts.map(request => request.versionId)).toEqual(['a', 'a', 'b']);
+  }, command => command.kind === 'version' ? onItsWay : false, () => undefined, undefined, { b });
 });

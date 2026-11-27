@@ -124,4 +124,23 @@ describe('Film deterministic release gate', { session: 'mock-film' }, () => {
       await admin(browser, 'sidecar', { enabled: false });
     }
   });
+  test('a title Ether is still preparing waits in the server\'s words past five attempts, then plays', async ({ app, browser, screen }) => {
+    await app.open('/vela/title/title-1-1');
+    await expect(screen.getByRole('heading', 'The Last Observatory')).toBeVisible({ timeout: 30_000 });
+    // Seven `preparing` answers a second apart: six download-queue positions, then finding a source.
+    expect(await admin(browser, 'faults', { videoStartPreparing: 7 })).toBe(200);
+    try {
+      await app.open('/vela/watch/title-1-1?positionSeconds=0');
+      await expect(screen.getByTestId('player-preparing')).toBeVisible({ timeout: 30_000 });
+      await expect(screen.getByTestId('player-preparing')).toHaveText(/queued at TorBox behind \d active downloads/);
+      await expect(screen.getByText('Finding a source…')).toBeVisible({ timeout: 30_000 });
+      await expect(screen.getByTestId('player-retrying')).toBeHidden();
+      await waitForVideoReady(browser, screen);
+      await expect(screen.getByTestId('player-preparing')).toBeHidden();
+      expect(await browser.evaluate(async () => ((await (await fetch('/__admin/faults')).json()) as { videoStartPreparing: number }).videoStartPreparing)).toBe(0);
+      await screen.getByRole('button', 'Close player').tap();
+    } finally {
+      await admin(browser, 'faults', { videoStartPreparing: 0 });
+    }
+  });
 });

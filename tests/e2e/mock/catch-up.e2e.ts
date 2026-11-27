@@ -190,8 +190,12 @@ describe('Live TV catch-up release gate', () => {
       const archiveSeek = await recoverWatch(true, undefined, true);
       const firstFrame = () => browser.evaluate(() => Number(document.querySelector<HTMLElement>('[data-testid="watch-stage"]')?.dataset.recoveredFrame));
       await expect.poll(firstFrame).toBeGreaterThan(0);
-      expect(Math.abs(await firstFrame() - playingArchivePosition)).toBeLessThan(2);
-      expect(Math.abs(archiveSeek.position! - playingArchivePosition)).toBeLessThan(2);
+      // The archive kept playing while the session was lost and reopened, so the recovered frame may
+      // be a little ahead of the position read at the failure, never behind it.
+      expect(await firstFrame() - playingArchivePosition).toBeGreaterThan(-1);
+      expect(await firstFrame() - playingArchivePosition).toBeLessThan(3);
+      expect(archiveSeek.position! - playingArchivePosition).toBeGreaterThan(-1);
+      expect(archiveSeek.position! - playingArchivePosition).toBeLessThan(3);
       expect(archiveSeek.start.channelId).toBe('channel-1');
       expect(archiveSeek.start.startAt).toBe(guide.programmes[0]!.start);
       expect(archiveSeek.start.durationSeconds).toBe((Date.parse(guide.programmes[0]!.end) - Date.parse(guide.programmes[0]!.start)) / 1000);

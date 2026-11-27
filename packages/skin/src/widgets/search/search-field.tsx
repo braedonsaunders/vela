@@ -7,7 +7,7 @@ import { Pressable as PlainPressable } from 'react-native';
 import { msg } from '@vela/core';
 import { BlurView } from 'expo-blur';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, View, type TextStyle, type ViewStyle } from 'react-native';
+import { PixelRatio, Platform, StyleSheet, View, type TextStyle, type ViewStyle } from 'react-native';
 import { TextField } from '../common/text-field';
 import { ownKeyboard, TvKeyboard } from '../common/tv-keyboard';
 import Svg, { Path } from 'react-native-svg';
@@ -46,25 +46,37 @@ export function SearchField({ ctx }: WidgetProps) {
   const clearLit = Platform.isTV && clearFocus;
   // Typed text in the body size and ink; while empty the field draws its placeholder as the
   // document's secondary text (placeholder-text.ts).
+  // A phone draws the field at the compact scale (look.ts `phone`): 44pt, with 16pt type (an
+  // input any smaller makes iOS Safari zoom the page when it takes focus).
+  const compact = !!host.env.small && !Platform.isTV;
+  // Taller rather than clipped when the viewer's text size (Dynamic Type) outgrows 44pt.
+  const fontScale = PixelRatio.getFontScale();
+  const size = useMemo(() => compact
+    ? { ...COMPACT, height: Math.max(COMPACT.height, Math.ceil(COMPACT.font * fontScale * 1.3 + 16)) }
+    : REGULAR, [compact, fontScale]);
   const { text, quiet } = useMemo(() => {
-    const rows = { 'font-family': ui.font, 'font-size': '17px', color: ui.ink };
-    const m = measure(host.viewport, 17);
-    const hint = placeholderRows(rows, fontSizeOf(rows['font-size'], 17, m), fontSizeOf('100px', 17, m) / 100);
+    const rows = { 'font-family': ui.font, 'font-size': `${size.font}px`, color: ui.ink };
+    const m = measure(host.viewport, size.font);
+    const hint = placeholderRows(rows, fontSizeOf(rows['font-size'], size.font, m), fontSizeOf('100px', size.font, m) / 100);
     return {
-      text: textStyle(rows, measure(host.viewport, 17)).style,
+      text: textStyle(rows, measure(host.viewport, size.font)).style,
       quiet: textStyle(hint.rows, measure(host.viewport, hint.fontSize)).style,
     };
-  }, [ui, host.viewport]);
+  }, [ui, host.viewport, size]);
 
   // The document's control corners: a pill by default, square for square-control documents.
-  const radius = Math.min(ui.radiusControl, FIELD_HEIGHT / 2);
+  const radius = Math.min(ui.radiusControl, size.height / 2);
   const field: ViewStyle = {
     borderRadius: radius,
     backgroundColor: ui.glass,
     borderColor: focused ? ui.glassEdgeStrong : ui.glassEdge,
-    boxShadow: focused
-      ? `0px 26px 70px #00000040, 0px 0px 0px 3px ${ui.focusHalo}, inset 0px 1px 0px ${ui.glassEdge}`
-      : `0px 18px 50px #00000040, inset 0px 1px 0px ${ui.glassEdge}`,
+    boxShadow: compact
+      ? (focused ? `0px 0px 0px 3px ${ui.focusHalo}, inset 0px 1px 0px ${ui.glassEdge}` : `inset 0px 1px 0px ${ui.glassEdge}`)
+      : focused
+        ? `0px 26px 70px #00000040, 0px 0px 0px 3px ${ui.focusHalo}, inset 0px 1px 0px ${ui.glassEdge}`
+        : `0px 18px 50px #00000040, inset 0px 1px 0px ${ui.glassEdge}`,
+    height: size.height,
+    ...(compact ? { paddingLeft: 14, paddingRight: 4, gap: 10 } : null),
   };
   // On TV, the field taking focus settles the route's first focus (results drawn as the viewer
   // types never take it from the field), and on Android TV it is kept below the shell's bar.
@@ -146,7 +158,7 @@ export function SearchField({ ctx }: WidgetProps) {
       {/* Android has no blur target here; its dark fallback tint hides light skins' glass. */}
       {Platform.OS !== 'android' && <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />}
       <Frame ref={frame as never} style={styles.entry} {...tvProps}>
-        <Glyph symbol="search" size={20} color={focused ? ui.ink : ui.inkSecondary} />
+        <Glyph symbol="search" size={size.glyph} color={focused ? ui.ink : ui.inkSecondary} />
         <TextField
           ref={input}
           value={query.text}
@@ -176,20 +188,23 @@ export function SearchField({ ctx }: WidgetProps) {
           }}
           accessibilityRole="button"
           accessibilityLabel={msg('ui.clearSearch')}
+          // A 44pt target around the 36pt mark, inside the field's own bounds.
+          hitSlop={compact ? 4 : undefined}
           onHoverIn={() => setClearHover(true)}
           onHoverOut={() => setClearHover(false)}
           onFocus={() => setClearFocus(true)}
           onBlur={() => setClearFocus(false)}
           style={[
             styles.clear,
+            compact ? { width: size.clear, height: size.clear } : null,
             {
               // Concentric with the field: its corner less the clear button's inset.
-              borderRadius: Math.max(0, radius - (FIELD_HEIGHT - CLEAR_SIZE) / 2),
+              borderRadius: Math.max(0, radius - (size.height - size.clear) / 2),
               backgroundColor: clearLit ? ui.ink : clearHover || clearFocus ? ui.controlHover : ui.control,
             },
           ]}
         >
-          <Glyph symbol="close" size={16} color={clearLit ? ui.inkInverse : ui.ink} />
+          <Glyph symbol="close" size={compact ? 14 : 16} color={clearLit ? ui.inkInverse : ui.ink} />
         </Pressable>
       ) : null}
       {typing ? (
@@ -216,13 +231,15 @@ const OWN_KEYBOARD = ownKeyboard(Platform.OS, Platform.isTV);
 const SETTLE_MS = 250;
 const FIELD_HEIGHT = 60;
 const CLEAR_SIZE = 44;
+const REGULAR = { height: FIELD_HEIGHT, clear: CLEAR_SIZE, font: 17, glyph: 20 };
+// The clear button is drawn at 36pt; the field's 44pt height is its touch target.
+const COMPACT = { height: 44, clear: 36, font: 16, glyph: 18 };
 
 const styles = StyleSheet.create({
   field: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    height: FIELD_HEIGHT,
     paddingLeft: 22,
     paddingRight: 8,
     borderWidth: 1,

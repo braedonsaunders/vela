@@ -17,6 +17,9 @@ import { Glyph, Line, Press, type Interaction } from './parts';
 import { holdBack } from '../../menu-key';
 import { GuideRegion } from './focus';
 
+/** The compact scale on a phone (vela-base/look.ts `phone`): 36pt controls whose touch reaches 44pt. */
+export const COMPACT = { size: 36, slop: { top: 4, bottom: 4, left: 4, right: 4 } } as const;
+
 const ring = (look: GuideLook, focused: boolean) =>
   focused ? `0px 0px 0px 2px ${look.page}, 0px 0px 0px 4px ${look.accent}` : undefined;
 
@@ -29,6 +32,7 @@ export function Chip({
   children,
   height = 44,
   nativeID,
+  compact = false,
 }: {
   look: GuideLook;
   label: string;
@@ -37,7 +41,10 @@ export function Chip({
   children: React.ReactNode;
   height?: number;
   nativeID?: string;
+  /** A phone's chip: drawn 36pt tall, reaching the 44pt touch target (COMPACT). */
+  compact?: boolean;
 }) {
+  if (compact) height = COMPACT.size;
   return (
     <Press
       lift
@@ -45,6 +52,7 @@ export function Chip({
       label={label}
       selected={on}
       onPress={onPress}
+      hitSlop={compact ? COMPACT.slop : undefined}
       style={({ hovered, focused, pressed }: Interaction) => ({
         flexDirection: 'row',
         alignItems: 'center',
@@ -72,6 +80,7 @@ export function IconButton({
   onPress,
   on,
   color,
+  compact = false,
 }: {
   look: GuideLook;
   label: string;
@@ -79,7 +88,9 @@ export function IconButton({
   onPress(): void;
   on?: boolean;
   color?: string;
+  compact?: boolean;
 }) {
+  const size = compact ? COMPACT.size : 44;
   return (
     <Press
       lift
@@ -87,9 +98,10 @@ export function IconButton({
       toggled={on}
       role="button"
       onPress={onPress}
+      hitSlop={compact ? COMPACT.slop : undefined}
       style={({ hovered, focused, pressed }) => ({
-        width: 44,
-        height: 44,
+        width: size,
+        height: size,
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
@@ -101,7 +113,7 @@ export function IconButton({
         boxShadow: focused ? `0px 0px 0px 2px ${look.accent}` : undefined,
       })}
     >
-      <Glyph name={glyph} size={16} color={color ?? look.ink} />
+      <Glyph name={glyph} size={compact ? 15 : 16} color={color ?? look.ink} />
     </Press>
   );
 }
@@ -111,11 +123,13 @@ export function DayChips({
   model,
   onPick,
   side,
+  compact = false,
 }: {
   look: GuideLook;
   model: GuideModel;
   onPick(day: number): void;
   side: number;
+  compact?: boolean;
 }) {
   return (
     <ScrollView
@@ -123,13 +137,14 @@ export function DayChips({
       scrollsToTop={false}
       showsHorizontalScrollIndicator={false}
       style={{ flexGrow: 0, flexShrink: 1 }}
-      contentContainerStyle={{ gap: 6, alignItems: 'center', paddingHorizontal: side }}
+      // A compact chip's touch reaches past its edge: the strip holds that reach, so it is not clipped.
+      contentContainerStyle={{ gap: 6, alignItems: 'center', paddingHorizontal: side, paddingVertical: compact ? COMPACT.slop.top : 0 }}
       accessibilityLabel={msg('live.day')}
     >
       {model.days.map(d => {
         const on = d.offset === model.day;
         return (
-          <Chip key={d.offset} look={look} label={`${d.label} ${d.date}`} on={on} onPress={() => onPick(d.offset)}>
+          <Chip key={d.offset} look={look} label={`${d.label} ${d.date}`} on={on} onPress={() => onPick(d.offset)} compact={compact}>
             <Line look={look} size={13} weight={650} color={on ? look.inkInverse : look.ink}>
               {d.label}
             </Line>
@@ -146,7 +161,7 @@ export function DayChips({
 }
 
 /** "Now", with a pulsing dot unless motion is reduced. */
-export function NowChip({ look, still, onPress }: { look: GuideLook; still: boolean; onPress(): void }) {
+export function NowChip({ look, still, onPress, compact = false }: { look: GuideLook; still: boolean; onPress(): void; compact?: boolean }) {
   const pulse = useSharedValue(0);
   useEffect(() => {
     if (still) return;
@@ -158,7 +173,7 @@ export function NowChip({ look, still, onPress }: { look: GuideLook; still: bool
     transform: [{ scale: 1 + Math.min(1, pulse.value / 0.7) * 1.6 }],
   }));
   return (
-    <Chip nativeID="guide-toolbar-now" look={look} label={msg('live.jumpToNow')} onPress={onPress} height={44}>
+    <Chip nativeID="guide-toolbar-now" look={look} label={msg('live.jumpToNow')} onPress={onPress} height={44} compact={compact}>
       <View style={{ width: 8, height: 8 }}>
         {!still ? (
           <Animated.View
@@ -181,12 +196,15 @@ export function Segments<T extends string | number>({
   value,
   onPick,
   label,
+  compact = false,
 }: {
   look: GuideLook;
   options: { value: T; label: string; name: string }[];
   value: T;
   onPick(value: T): void;
   label: string;
+  /** A phone's switch: 44pt overall, each segment 36pt reaching the switch's full height. */
+  compact?: boolean;
 }) {
   return (
     <View
@@ -212,8 +230,9 @@ export function Segments<T extends string | number>({
             selected={on}
             role="tab"
             onPress={() => onPick(o.value)}
+            hitSlop={compact ? { top: 4, bottom: 4 } : undefined}
             style={({ focused }) => ({
-              height: 44,
+              height: compact ? COMPACT.size : 44,
               paddingHorizontal: 12,
               justifyContent: 'center',
               borderRadius: look.radiusControl,

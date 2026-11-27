@@ -48,6 +48,50 @@ export const pill = (primary: boolean, height = 56): Style =>
     transition: 'background-color 180ms linear, scale 360ms cubic-bezier(0.16, 1, 0.3, 1)',
   }) as Style;
 
+// The compact scale: how every phone (`small`) control draws, as one set of sizes rather than
+// per-screen tweaks. A labelled button is 44pt; the chrome's round icon buttons, its section pill
+// and the toolbar chips draw at 36pt inside a 44pt touch target; the top bar is 48pt.
+export const phone = { bar: 48, button: 44, chrome: 36, target: 44 } as const;
+// Where content starts below the phone bar (the safe area above it).
+export const belowBar = (extra = 0): string => `calc(${phone.bar + extra}px + env(safe-area-inset-top))`;
+// A labelled pill at the compact scale: 44pt, and taller rather than clipped when the viewer's
+// text size grows (Dynamic Type), so it holds a minimum height, not a fixed one.
+export const pillSmall = (primary: boolean): Style =>
+  ({
+    height: 'auto',
+    'min-height': `${phone.button}px`,
+    'padding-top': '5px',
+    'padding-bottom': '5px',
+    'padding-left': primary ? '18px' : '16px',
+    'padding-right': primary ? '20px' : '18px',
+    'justify-content': 'center',
+  }) as Style;
+// A round icon button at the compact scale: drawn at `size` inside a 44pt target. The target is
+// the pressable box; the circle is its child (`chromeDisc`), lit by the box's group hover and focus.
+export const chromeTarget: Style = {
+  position: 'relative',
+  width: `${phone.target}px`,
+  height: `${phone.target}px`,
+  display: 'flex',
+  'align-items': 'center',
+  'justify-content': 'center',
+  'flex-shrink': '0',
+} as Style;
+export const chromeDisc = (size: number = phone.chrome): Style =>
+  ({
+    width: `${size}px`,
+    height: `${size}px`,
+    'box-sizing': 'border-box',
+    display: 'flex',
+    'align-items': 'center',
+    'justify-content': 'center',
+    'border-radius': '$ui.radiusControl',
+    border: '1px solid $ui.glassEdge',
+    'background-color': '$ui.control',
+    'backdrop-filter': 'blur(20px) saturate(1.3)',
+    transition: 'background-color 180ms linear',
+  }) as Style;
+
 // The brand lockup (apps/vela/assets/brand, two-tone), one image node.
 export const markSize = (size: number): Style => ({
   width: `${+(size * 2.629).toFixed(3)}px`,

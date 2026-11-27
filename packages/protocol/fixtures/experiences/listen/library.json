@@ -45,24 +45,7 @@
   "tv": {
    "padding-bottom": "48pt",
    "padding-right": "32pt"
-  },
-  "states": [
-   {
-    "when": [
-     {
-      "test": "env.form",
-      "is": "eq",
-      "value": "small"
-     },
-     {
-      "test": "src.queue.current"
-     }
-    ],
-    "style": {
-     "padding-bottom": "110px"
-    }
-   }
-  ]
+  }
  },
  "forms": {
   "wide": {
@@ -175,23 +158,6 @@
        "type": "spokenHome"
       }
      ]
-    }
-   ],
-   "states": [
-    {
-     "when": [
-      {
-       "test": "env.form",
-       "is": "eq",
-       "value": "small"
-      },
-      {
-       "test": "src.queue.current"
-      }
-     ],
-     "style": {
-      "padding-bottom": "110px"
-     }
     }
    ]
   }

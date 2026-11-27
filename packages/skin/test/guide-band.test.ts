@@ -29,6 +29,12 @@ test('portrait stacks a wider preview with copy space and keeps controls/grid be
   expect(852 - 170 - band.height).toBeGreaterThan(350);
 });
 
+test('a short phone keeps the stacked copy clear of the picture', () => {
+  const band = guideBand(375, 667, guideTop(false, true, 0), 16);
+  expect(band.stacked).toBe(true);
+  expect(band.height - band.pictureHeight - band.gap).toBeGreaterThanOrEqual(112);
+});
+
 test('Cinematic opts in through its guide document; other documents retain compact proportions', () => {
   expect(resolveDocument(cinematicDoc, 1440).guideLayout).toBe('cinematic');
   expect(resolveDocument({ ...cinematicDoc, id: 'other', routes: undefined }, 1440).guideLayout).toBeUndefined();

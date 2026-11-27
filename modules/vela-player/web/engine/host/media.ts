@@ -10,6 +10,7 @@ import type { HostContext } from './state';
 import { releaseOverlay, applySubtitle } from './subtitles';
 import { resetProgress, recordPlaybackProgress } from './watchdog';
 import { bindMedia } from './native-events';
+import { readPosition } from './position';
 import { publishHostState, emitHostEvent } from './events';
 import { usesPacketRuntime, backendFor } from './quality';
 import { recoverPlayback } from './recovery';
@@ -184,8 +185,14 @@ export async function activateSource(
     applySubtitle(context);
     applyNativeAudio(context);
     context.playback.status = context.playback.wantsPlay ? 'loading' : 'paused';
+    // Media already at an authorized seek's target is not sought again (above, and the segment pipeline's
+    // first position), so no `seeked` ends that seek: a paused open ends it here and reports it at once.
+    const pending = context.session.pendingSeek;
+    const landed = !!pending?.authorized && context.playback.status === 'paused' && !context.surface.video.seeking &&
+      Math.abs(readPosition(context) - pending.position) < 0.001;
+    if (landed) context.session.pendingSeek = undefined;
     if (context.playback.wantsPlay) await playMedia(context);
-    publishHostState(context);
+    publishHostState(context, landed);
   } catch (e) {
     if (context.session.controller.current(token) && !(e instanceof DOMException && e.name === 'AbortError')) await recoverPlayback(context, e, token);
   }

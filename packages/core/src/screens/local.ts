@@ -766,7 +766,8 @@ export class LocalSources {
           return { answer: {} };
         }
         const index = Math.max(0, items.findIndex(card => card.id === itemId(start)));
-        stores.audio.play({ items, index, shuffle, positionSeconds: resumePoint(items[index]!), ...(source ? { source } : {}) });
+        // An item named in a list is the viewer's pick: it is not passed over for the next (AudioRequest.picked).
+        stores.audio.play({ items, index, shuffle, picked: true, positionSeconds: resumePoint(items[index]!), ...(source ? { source } : {}) });
         return { answer: {} };
       }
       case 'vela.playNext':

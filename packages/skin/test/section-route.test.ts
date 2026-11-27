@@ -16,8 +16,8 @@ test('incomplete or unrelated routes cannot select a bogus library section', () 
 });
 
 test('a modal releases retained section activity on touch devices and TV', () => {
-  for (const path of ['/', '/live', '/library/movies', '/library/a%20b']) expect(sectionPathVisible(path)).toBe(true);
-  for (const path of ['/watch/channel', '/title/movie', '/person', '/connect', '/sign-in']) expect(sectionPathVisible(path)).toBe(false);
+  for (const path of ['/', '/live', '/library/movies', '/library/a%20b', '/screen/sports', '/screen/news/']) expect(sectionPathVisible(path)).toBe(true);
+  for (const path of ['/watch/channel', '/title/movie', '/person', '/connect', '/sign-in', '/screen/sports/game', '/screen/news/front']) expect(sectionPathVisible(path)).toBe(false);
 });
 
 test('direct touch sections follow their path while TV retains native focus gating', () => {

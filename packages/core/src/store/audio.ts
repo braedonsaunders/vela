@@ -13,6 +13,7 @@ import type { Session } from './session';
 import type { StateBox } from './state';
 import type { VelaState } from './index';
 import { AWAKE, holdsNext, sleepDue, sleepFrom, type Sleep, type SleepMode } from '../sleep';
+import { noPlayableCopy, refusalWords } from './start-retry';
 
 export type AudioEngineEvent = 'time' | 'playing' | 'paused' | 'waiting' | 'ended' | 'error' | 'duration' | 'advanced';
 
@@ -65,6 +66,9 @@ export interface AudioState {
   sleep: Sleep;
   chapters: V.Chapter[];
   error: string;
+  /** Why the item failed in the viewer's words, when the server said why (a known refusal: no copy of
+   * the title on the server, say); '' or absent for a plain failure, shown as such. */
+  reason?: string;
   unreleased?: boolean;
   /** No engine on this platform yet (native audio is device work). */
   unsupported: boolean;
@@ -86,6 +90,10 @@ export interface AudioRequest {
   positionSeconds?: number;
   shuffle?: boolean;
   source?: { id: string; name: string; kind?: 'title' | 'playlist' | 'favorites' };
+  /** The viewer picked the item at `index` itself (a track tapped in a list), not the list: if the
+   * server has no copy of it, it says so and stays; only the items after it are passed over. Play,
+   * Shuffle and a queue moving on leave it unset. Ignored with `shuffle`. */
+  picked?: boolean;
 }
 
 /** An engine length this much shorter than the plan's is of a stream still arriving, seconds. */
@@ -116,6 +124,13 @@ const OBSERVE_EVERY_MS = 10_000;
 export function preloadLead(durationSeconds: number, spoken = false): number {
   return Math.min(spoken ? 6 : 20, Math.max(4, durationSeconds / 2));
 }
+/**
+ * How many items in a row a queue passes over because the server has no copy of them (Ether's 409
+ * `not_available`: not in the library, and nothing found) before it stops and says so. An album the
+ * server holds only part of plays the tracks it has; one it holds none of fails after a few, not
+ * after asking for every track.
+ */
+export const MAX_SKIPPED = 3;
 /** With this little left the next plan is asked for even if the engine has not buffered to the end. */
 const PRELOAD_LAST_CALL = 5;
 /** A prepared item is given back when the viewer seeks this much further from the end than the lead. */
@@ -168,6 +183,12 @@ export class Audio {
   private retried = '';
   /** The playing item's loudness: its plan's (measured on the file playing), else its card's. */
   private loudness: V.Loudness | undefined;
+  /** Items passed over in a row because the server has no copy of them (`MAX_SKIPPED`), and the play
+   * position the run started at (it never comes round to that item again). */
+  private skipped = 0;
+  private skipStart = -1;
+  /** The queue item the viewer picked themselves (`itemKey`), until it plays: never passed over. */
+  private pinned = '';
 
   constructor(
     private readonly box: StateBox<VelaState>,
@@ -221,7 +242,9 @@ export class Audio {
     const items = request.items.filter(Boolean);
     if (!items.length) return;
     const queue = createQueue(items, request.index, { shuffle: request.shuffle, repeat: this.state.queue?.repeat, source: request.source }, this.random);
+    this.skipped = 0;
     this.patch({ queue, error: '', chapters: [] });
+    this.pinned = request.picked && !request.shuffle ? this.itemKey() : '';
     void this.load(request.shuffle ? 0 : request.positionSeconds ?? 0);
   }
 
@@ -250,6 +273,8 @@ export class Audio {
   next(): void {
     const queue = this.state.queue && next(this.state.queue);
     if (!queue) return;
+    this.skipped = 0;
+    this.pinned = '';
     this.patch({ queue, chapters: [] });
     void this.load(0);
   }
@@ -258,14 +283,19 @@ export class Audio {
     if (!this.state.queue) return;
     const { queue, restart } = previous(this.state.queue, this.state.positionSeconds);
     if (restart) { this.seek(0); return; }
+    this.skipped = 0;
     this.patch({ queue, chapters: [] });
+    // Back to the item before: the viewer asked for that one, it is not passed over (forward).
+    this.pinned = this.itemKey();
     void this.load(0);
   }
 
   /** Play the queue's item at `itemIndex` (an index into queue.items). */
   jump(itemIndex: number): void {
     if (!this.state.queue) return;
+    this.skipped = 0;
     this.patch({ queue: jumpTo(this.state.queue, itemIndex), chapters: [] });
+    this.pinned = this.itemKey();
     void this.load(0);
   }
 
@@ -401,7 +431,7 @@ export class Audio {
     this.autoplay = true;
     this.engine?.unload();
     this.sessionId = ''; this.url = '';
-    this.patch({ phase: this.engine ? 'loading' : 'failed', positionSeconds: startSeconds, durationSeconds: item.durationSeconds, error: '', unreleased: false });
+    this.patch({ phase: this.engine ? 'loading' : 'failed', positionSeconds: startSeconds, durationSeconds: item.durationSeconds, error: '', reason: '', unreleased: false });
     if (!this.engine) { if (prepared?.plan) this.playback.release(prepared.plan); return; }
     if (prepared?.plan) {
       this.loadToken = undefined;
@@ -434,8 +464,28 @@ export class Audio {
       this.begin(playback.plan, starting.startSeconds);
       return;
     }
-    this.patch({ phase: 'failed', error: playback.error || 'This item could not be played',
-      unreleased: mine && playback.errorCode === 'title_unreleased' });
+    const code = mine ? playback.errorCode : '';
+    if (noPlayableCopy(code) && this.passOver()) return;
+    this.patch({ phase: 'failed', error: playback.error || 'This item could not be played', reason: refusalWords(code),
+      unreleased: mine && code === 'title_unreleased' });
+  }
+
+  /**
+   * The server has no copy of the item (`noPlayableCopy`): go on to the next one in the queue, as the end of
+   * the item would have, unless the viewer picked this item themselves (`pinned`: it says why and
+   * stays), that comes back round to where the passing over began, or `MAX_SKIPPED` items in a row
+   * have been passed over already. False when nothing was passed over.
+   */
+  private passOver(): boolean {
+    const queue = this.state.queue;
+    const after = queue && next(queue);
+    if (!queue || !after || this.skipped >= MAX_SKIPPED || this.pinned === this.itemKey()) return false;
+    if (this.skipped === 0) this.skipStart = queue.at;
+    if (after.at === queue.at || after.at === this.skipStart) return false;
+    this.skipped++;
+    this.patch({ queue: after, chapters: [] });
+    void this.load(0);
+    return true;
   }
 
   /** The playback target for a queue item: a title, with the queue's source as its play context
@@ -456,6 +506,8 @@ export class Audio {
     }
     this.sessionId = plan.sessionId;
     this.url = path;
+    this.skipped = 0;
+    this.pinned = '';
     this.sequence = 0;
     this.lastObservation = 0;
     this.loudness = loudnessOf(plan.loudness) ?? current(this.state.queue)?.media?.loudness;

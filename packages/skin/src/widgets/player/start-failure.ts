@@ -40,5 +40,5 @@ export function ownedStartFailure(ownerFailure: StartRefusal | null, playback: P
 /** A refused start core asks again for, on the server's terms. */
 export function startRetrying(playback: PlaybackState): StartRetrying | null {
   if (playback.phase !== 'failed' || playback.retryAfterSeconds <= 0) return null;
-  return { seconds: playback.retryAfterSeconds, message: playback.error };
+  return { seconds: playback.retryAfterSeconds, message: playback.error, preparing: playback.errorCode === 'preparing' };
 }

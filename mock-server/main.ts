@@ -77,7 +77,7 @@ const viewer: V.Viewer = { id: 'viewer-demo', name: 'Demo Viewer', policyRevisio
   avatar: { id: 'viewer-demo', kind: 'person', tag: '1', sizes: [{ width: 240, height: 240, url: '/vela/v0/images/plexavatar-viewer-demo' }] } };
 let viewerRevision = 1;
 const yes = { available: true }, no = { available: false, reason: 'Not implemented by this mock' };
-const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Vela Studio', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', plexHomeProfiles: process.env.VELA_MOCK_PLEX_HOME === '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, ...(process.env.VELA_MOCK_UNIFIED_SEARCH === '1' ? { unifiedSearch: yes } : {}), aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes, playlists: { available: true, maxEntries: 5000 } } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
+const capabilities: V.ServerCapabilities = { searchLibraries: true, searchKinds: [{ id: 'movie', label: 'Movies' }, { id: 'show', label: 'Shows' }, { id: 'game', label: 'Video games' }], searchSorts: [{ id: 'relevance', directions: [] }, ...(['title', 'released'] as const).map(id => ({ id, directions: ['asc', 'desc'] as V.SearchDirection[] }))], protocolVersion: 0, compatibleClientBuilds: { minInclusive: '0.1.0', maxExclusive: '0.3.0' }, server: { id: 'ether-mock', name: 'Demo Server', version: 'mock-v0' }, plexAccountSignIn: process.env.VELA_MOCK_NO_PLEX !== '1', plexHomeProfiles: process.env.VELA_MOCK_PLEX_HOME === '1', features: { passwordSignIn: yes, deviceGrant: yes, quickConnect: yes, descriptiveSearch: yes, ...(process.env.VELA_MOCK_UNIFIED_SEARCH === '1' ? { unifiedSearch: yes } : {}), aiSearch: no, proactiveFallback: no, liveTV: yes, ...(process.env.VELA_MOCK_OLD !== '1' ? { libraryLive: yes, removeFromContinue: yes, versions: yes, playlists: { available: true, maxEntries: 5000 } } : {}), extras: yes, trailerPreview: yes, initialTrackSelection: no, sessionTrackChanges: no, extraPlayback: yes }, skins: [{ id: 'cinematic', name: 'Cinematic' }, { id: 'editorial', name: 'Editorial' }], defaultSkinId: 'cinematic' };
 // Music, books and audiobooks (docs/media-kinds.md). VELA_MOCK_OLD=1 is a server from before them,
 // and the VELA_MOCK_LAB=1 preset mirrors a lab server's video-only libraries.
 const mediaEnabled = process.env.VELA_MOCK_OLD !== '1' && process.env.VELA_MOCK_LAB !== '1';
@@ -199,6 +199,12 @@ const lastStopped = new Map<string, string>();
  */
 function startFault(g: Grant, body: V.PlaybackRequest, pending: 'audioStartPending' | 'videoStartPending'): V.PlaybackPlan | undefined {
   if (body.queued) return undefined;
+  if (pending === 'videoStartPending' && faults.videoStartPreparing > 0) {
+    const ahead = --faults.videoStartPreparing;
+    const message = ahead > 0 ? `Waiting for the download service (queued at TorBox behind ${ahead} active downloads)…` : 'Finding a source…';
+    throw Response.json({ error: { class: 'source', code: 'preparing', message, retry: { allowed: true, afterSeconds: 1, maxAttempts: 40 } } } satisfies V.ErrorResponse,
+      { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '1', 'X-Ether-Media-Error': 'preparing' } });
+  }
   if (faults[pending] > 0) {
     faults[pending]--;
     throw Response.json({ error: { class: 'transient', code: 'preparation_pending', message: 'Playback is being prepared', retry: { allowed: true, afterSeconds: 1 } } } satisfies V.ErrorResponse,
@@ -510,7 +516,10 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   if (method === 'GET' && path === '/appearance') return cached(req, appearance(), 'public');
   if (method === 'POST' && path === '/auth/plex') {
-    if (body.plexToken !== 'mock-plex-approved') return Response.json({ error: 'not_shared' }, {status: 403});
+    // VELA_MOCK_PLEX_ANY=1 (a hosted design preview): any Plex account that completed a real plex.tv
+    // link signs in as the demo viewer, so the whole Plex flow can be walked with a real account.
+    const approved = body.plexToken === 'mock-plex-approved' || (process.env.VELA_MOCK_PLEX_ANY === '1' && typeof body.plexToken === 'string' && body.plexToken.length > 0);
+    if (!approved) return Response.json({ error: 'not_shared' }, {status: 403});
     if (capabilities.plexHomeProfiles && body.selectProfile === true) return json(plexSelection(body.device?.id));
     return json(issue(body.device));
   }

@@ -24,6 +24,8 @@ export interface StartRetrying {
   seconds: number;
   /** Why the last attempt was refused, in the server's words ("" when it gave none). */
   message: string;
+  /** The server is still preparing the title (finding a source, a download queued): a wait, not a refusal. */
+  preparing?: boolean;
 }
 
 /** What the route asked to play: a channel or a live library plays live before (or without) a plan. */

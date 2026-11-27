@@ -7,6 +7,7 @@ import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HostContext } from '@vela/skin/src/host';
 import { MediaActionsContext } from '@vela/skin/src/widgets/media';
+import { MiniPlayerInset } from '@vela/skin/src/widgets/media/mini-player-inset';
 import { MINI_PLAYER_HEIGHT, MiniPlayer } from '@vela/skin/src/widgets/media/player';
 import { NOW_PLAYING_PLAY, nowPlayingDockFocus } from '@vela/skin/src/widgets/media/now-playing-focus';
 import { MOTION, Presence } from '@vela/skin/src/presence';
@@ -163,7 +164,12 @@ export function AudioDock({ children }: { children: ReactNode }) {
     try { preferences.set(SOUND_PREFERENCE, JSON.stringify(sound)); } catch { /* Kept for this run only. */ }
   }, [sound]);
   // The viewer sees plain copy; the cause goes to the console for whoever is debugging.
-  useEffect(() => { if (audio.error) console.warn(`Vela audio: ${audio.error}`); }, [audio.error]);
+  useEffect(() => {
+    if (!audio.error) return;
+    // With the server's code, when it refused the start: the words alone do not say which refusal.
+    const code = store.getState().playback.errorCode;
+    console.warn(`Vela audio: ${audio.error}${code ? ` (${code})` : ''}`);
+  }, [audio.error, store]);
   useEffect(() => { if (!audio.queue) setOpen(false); }, [audio.queue]);
   const close = useCallback(() => setOpen(false), []);
   const back = useCallback(() => (router.canGoBack() ? router.back() : router.replace('/')), []);
@@ -252,6 +258,7 @@ export function AudioDock({ children }: { children: ReactNode }) {
     : children;
   if (!host || !nowPlayingHost) return <>{screens}</>;
   const bottom = Math.max(14, safeBottom + 10);
+  const miniPlayerShown = playing && !open && !inMusicShell;
   const still = host.env.still;
   // Now Playing rises out of the mini player and sinks back into it: its top starts and ends at the
   // bar's top edge while the bar fades out under it, then in again (presence.tsx).
@@ -277,7 +284,9 @@ export function AudioDock({ children }: { children: ReactNode }) {
   );
   return (
     <>
-      {screens}
+      <MiniPlayerInset.Provider value={miniPlayerShown ? bottom + MINI_PLAYER_HEIGHT : 0}>
+        {screens}
+      </MiniPlayerInset.Provider>
       <HostContext.Provider value={host}>
         <MediaActionsContext.Provider value={actions}>
           <Above>
@@ -286,7 +295,7 @@ export function AudioDock({ children }: { children: ReactNode }) {
                 the remote from leaving it, or a page, for any of them. On a TV the mini player's layer
                 is only as tall as the bar, and Now Playing has a layer of its own while it is open. */}
             <View pointerEvents="box-none" style={Platform.isTV ? [dockStrip, { height: bottom + MINI_PLAYER_HEIGHT }] : fill}>
-              <Presence shown={playing && !open && !inMusicShell} still={still} offstage={{ y: 18, scale: 0.98 }} exitMs={MOTION.quick} style={fill}>
+              <Presence shown={miniPlayerShown} still={still} offstage={{ y: 18, scale: 0.98 }} exitMs={MOTION.quick} style={fill}>
                 <MiniPlayer onOpen={() => setOpen(true)} bottom={bottom} />
               </Presence>
               {Platform.isTV ? null : nowPlaying}

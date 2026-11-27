@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { VelaError } from '../src/adapter/errors';
 import { Playback, initialPlayback } from '../src/store/playback';
-import { finalRefusal, startRefusal, startRetry } from '../src/store/start-retry';
+import { codeOnlyMessage, finalRefusal, noPlayableCopy, refusalWords, startRefusal, startRetry } from '../src/store/start-retry';
 import { StateBox } from '../src/store/state';
 import type { VelaState } from '../src/store';
 import type { Session } from '../src/store/session';
@@ -100,19 +100,80 @@ test('startRetry follows retry.allowed, afterSeconds, Retry-After and maxAttempt
   expect(startRetry(refused({ allowed: true, afterSeconds: 120 }), 0)).toBe(0);
 });
 
+const preparing = (message: string, retry: ProtocolError['retry'], header: string | null = null) =>
+  new VelaError({ class: 'source', code: 'preparing', message, retry }, 503, header);
+
+test('Ether still preparing a title is waited out on its own attempt count and waits, not ended as a failure', () => {
+  // Its maxAttempts is honoured past the five a refusal gets: forty attempts, thirty-nine waits.
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 30, maxAttempts: 40 }), 4)).toBe(30);
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 30, maxAttempts: 40 }), 38)).toBe(30);
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 30, maxAttempts: 40 }), 39)).toBe(0);
+  // The server's wait, not a doubling backoff; a long one is waited a minute at a time, not final.
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 2, maxAttempts: 40 }), 10)).toBe(2);
+  expect(startRetry(preparing('Waiting for the download service…', { allowed: true, afterSeconds: 300, maxAttempts: 3 }), 0)).toBe(60);
+  expect(startRetry(preparing('Finding a source…', { allowed: true, maxAttempts: 40 }, '12'), 0)).toBe(12);
+  // Bounded however many the server allows, and never when it forbids asking again.
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 1, maxAttempts: 10_000 }), 118)).toBe(1);
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 1, maxAttempts: 10_000 }), 119)).toBe(0);
+  expect(startRetry(preparing('Finding a source…', { allowed: false, afterSeconds: 5 }), 0)).toBe(0);
+});
+
+test('a title Ether is still preparing keeps waiting with each answer\'s message, then plays', async () => {
+  const { box, playback, requests } = harness([
+    async () => { throw preparing('Finding a source…', { allowed: true, afterSeconds: 1, maxAttempts: 40 }, '1'); },
+    async () => { throw preparing('Waiting for the download service (queued at TorBox behind 3 active downloads)…', { allowed: true, afterSeconds: 1, maxAttempts: 40 }, '1'); },
+    async () => { throw preparing('Waiting for the download service (queued at TorBox behind 2 active downloads)…', { allowed: true, afterSeconds: 1, maxAttempts: 40 }, '1'); },
+    async () => { throw preparing('Waiting for the download service (queued at TorBox behind 1 active downloads)…', { allowed: true, afterSeconds: 1, maxAttempts: 40 }, '1'); },
+    async () => { throw preparing('Waiting for the download service…', { allowed: true, afterSeconds: 1, maxAttempts: 40 }, '1'); },
+    async () => titlePlan('s6'),
+  ]);
+  await playback.start({ kind: 'title', id: 'movie' });
+  expect(box.get().playback).toMatchObject({ phase: 'failed', errorCode: 'preparing', retryAfterSeconds: 1, error: 'Finding a source…' });
+  await wait(1100);
+  expect(box.get().playback.error).toBe('Waiting for the download service (queued at TorBox behind 3 active downloads)…');
+  // Past the five attempts a plain refusal gets, still waiting rather than failed.
+  await wait(3300);
+  expect(requests()).toBe(5);
+  expect(box.get().playback).toMatchObject({ phase: 'failed', errorCode: 'preparing', retryAfterSeconds: 1, retryAttempt: 5 });
+  await wait(1100);
+  expect(requests()).toBe(6);
+  expect(box.get().playback).toMatchObject({ phase: 'playing', sessionId: 's6', error: '', errorCode: '' });
+  await playback.stop();
+}, 10_000);
+
 test('startRefusal carries the server\'s message and class, or a fallback', () => {
   expect(startRefusal(refused({ allowed: false }))).toEqual({ message: 'The connection to the Live TV provider failed.', code: 'network', errorClass: 'source' });
   expect(startRefusal(new Error('boom'), 'x')).toEqual({ message: 'boom', code: '', errorClass: '' });
   expect(startRefusal('weird', 'Playback failed').message).toBe('Playback failed');
 });
 
+test('a refusal worded as nothing but its code never reaches the viewer as such', () => {
+  const ether = (code: string, message = code.replace(/_/g, ' ')) => new VelaError({ class: 'source', code, message, retry: { allowed: false } }, 409);
+  // Known codes have the viewer's words.
+  expect(startRefusal(ether('not_available'), 'Playback failed')).toEqual({ message: 'Your server doesn’t have a copy of this yet.', code: 'not_available', errorClass: 'source' });
+  expect(startRefusal(ether('source_unavailable'), 'Playback failed').message).toBe('The server couldn’t reach this title’s source. Try again in a moment.');
+  // An unknown code spelt out is a diagnostic: the fallback is shown instead.
+  expect(startRefusal(ether('mystery_state'), 'Playback failed').message).toBe('Playback failed');
+  expect(startRefusal(ether('mystery_state', ''), 'Playback failed').message).toBe('Playback failed');
+  // A server's own sentence stands.
+  expect(startRefusal(ether('mystery_state', 'All encoders are busy. Try again in a minute.'), 'x').message).toBe('All encoders are busy. Try again in a minute.');
+  expect(codeOnlyMessage('Not Available', 'not_available')).toBe(true);
+  expect(codeOnlyMessage('not-available', 'not_available')).toBe(true);
+  expect(codeOnlyMessage('This title is not available here.', 'not_available')).toBe(false);
+  expect(refusalWords('title_unreleased')).toBe('');
+  expect(noPlayableCopy('not_available')).toBe(true);
+  expect(noPlayableCopy('source_unavailable')).toBe(true);
+  expect(noPlayableCopy('forbidden')).toBe(false);
+  expect(noPlayableCopy('playback_capacity')).toBe(false);
+});
+
 // Ether's answer for a title with no source at all (frontends/vela: ErrNotAvailable), verbatim.
 const notAvailable = () => new VelaError({ class: 'source', code: 'not_available', message: 'not available', retry: { allowed: false } }, 409, null);
 
-test('Ether\'s terminal 409 not_available fails at once with its message after exactly one request', async () => {
+test('Ether\'s terminal 409 not_available fails at once, in the viewer\'s words, after exactly one request', async () => {
   const { box, playback, requests } = harness([async () => { throw notAvailable(); }]);
   await playback.start({ kind: 'title', id: 'plugin-item' });
-  expect(box.get().playback).toMatchObject({ phase: 'failed', error: 'not available', errorCode: 'not_available', errorClass: 'source', retryAfterSeconds: 0, retryAttempt: 0 });
+  expect(box.get().playback).toMatchObject({ phase: 'failed', error: 'Your server doesn’t have a copy of this yet.', errorCode: 'not_available', errorClass: 'source', retryAfterSeconds: 0, retryAttempt: 0 });
   // Engine and stale view reports cannot turn a refused first start into a recovery.
   playback.recover('');
   playback.recover(box.get().playback.sessionId);
@@ -168,7 +229,7 @@ test('a terminal refusal while recovering a session ends recovery in the failed 
     expect(box.get().playback.phase).toBe('preparing');
     await clock.run(1000);
     expect(requests).toHaveLength(2);
-    expect(box.get().playback).toMatchObject({ phase: 'failed', error: 'not available', errorClass: 'source', retryAfterSeconds: 0 });
+    expect(box.get().playback).toMatchObject({ phase: 'failed', error: 'Your server doesn’t have a copy of this yet.', errorClass: 'source', retryAfterSeconds: 0 });
     // No backoff left behind, and a late engine report for the old session starts nothing.
     expect(clock.pending(2000)).toBe(false);
     playback.recover('s1');

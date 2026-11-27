@@ -8,7 +8,10 @@ import {
   gutter,
   gutterSmall,
   is,
+  belowBar,
+  phone,
   pill,
+  pillSmall,
   ready,
   rowSkeleton,
   small,
@@ -138,13 +141,17 @@ export const stage: Node = {
   },
 };
 
-// The first featured title's primary pill carries a warm halo.
-export const firstHeroHalo = (base: Style) => [
-  {
-    when: [{ test: 'env.heroIndex', is: 'eq', value: '0' }] as Condition[],
-    style: { ...base, 'box-shadow': '0px 14px 44px $ui.focusHalo, 0px 0px 0px 1px $ui.glassEdgeStrong' },
-  },
+// The first featured title's primary pill carries a warm halo, closer and softer on a phone. A state
+// layers over the node's own style at this width (its phone overlay included), so it carries only
+// the halo: repeating the wide pill here put the 56px pill back on a phone.
+const firstHero: Condition = { test: 'env.heroIndex', is: 'eq', value: '0' };
+export const firstHeroHalo = [
+  { when: [firstHero, small], style: { 'box-shadow': '0px 8px 24px $ui.focusHalo, 0px 0px 0px 1px $ui.glassEdgeStrong' } },
+  { when: [firstHero], style: { 'box-shadow': '0px 14px 44px $ui.focusHalo, 0px 0px 0px 1px $ui.glassEdgeStrong' } },
 ];
+// Phones lay the hero's actions in one row: the primary takes the room (from its content width, so
+// a larger text size grows it rather than clipping it), the round marks keep theirs.
+const growSmall: Style = { 'flex-grow': '1', 'flex-shrink': '1', 'min-width': '0px' } as Style;
 export const heroPrimary: Node = {
   type: 'box',
   press: { action: 'play', arg: '{hero.id}' },
@@ -152,36 +159,41 @@ export const heroPrimary: Node = {
   testId: 'hero-primary',
   when: [{ test: 'heroAct.playable' }],
   style: { ...pill(true), position: 'relative' },
-  states: firstHeroHalo({ ...pill(true), position: 'relative' }),
-  small: { height: '50px', 'padding-left': '22px', 'padding-right': '26px', 'justify-content': 'center' },
+  states: firstHeroHalo,
+  small: { ...pillSmall(true), ...growSmall },
   hover: { 'background-color': '$ui.inkHover' },
   focus: { 'box-shadow': focusRing },
   children: [
     {
       type: 'box',
       style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center' },
+      small: { gap: '10px', 'min-width': '0px' },
       children: [
-        { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' } },
+        { type: 'icon', symbol: 'play-fill', style: { width: '18px', height: '18px' }, small: { width: '15px', height: '15px' } },
         {
           type: 'box',
           style: { display: 'flex', 'flex-direction': 'column', gap: '3px', 'align-items': 'flex-start' },
+          small: { gap: '2px', 'flex-shrink': '1', 'min-width': '0px' },
           children: [
             {
               type: 'text',
               text: '{heroAct.actionLabel}',
               style: { 'font-size': '16px', 'font-weight': '700', 'line-height': '1.1' },
+              small: { 'font-size': '15px', 'font-weight': '650', 'line-clamp': '1' },
             },
             {
               type: 'text',
               when: [{ test: 'heroAct.actionDetail' }],
               text: '{heroAct.actionDetail}',
               style: { 'font-size': '12px', 'font-weight': '600', opacity: '0.62', 'line-height': '1', 'white-space': 'nowrap' },
+              small: { 'font-size': '11px' },
             },
           ],
         },
         {
           type: 'box',
           when: [{ test: 'heroAct.hasProgress' }],
+          small: { width: '32px', 'flex-shrink': '0' },
           style: {
             width: '44px',
             height: '3px',
@@ -213,10 +225,12 @@ export const heroMore = (primary: boolean): Node => ({
   testId: 'hero-more',
   when: [{ test: 'heroAct.playable', not: primary }],
   style: morePill(primary),
-  states: primary ? firstHeroHalo(morePill(true)) : undefined,
+  states: primary ? firstHeroHalo : undefined,
+  // Phones: the primary More info fills the row; beside a play action it is a round 44pt mark,
+  // named for a screen reader by its label.
   small: primary
-    ? { height: '50px', 'padding-left': '22px', 'padding-right': '24px', 'justify-content': 'center', 'flex-shrink': '0' }
-    : { height: '48px', 'padding-left': '20px', 'padding-right': '22px', 'justify-content': 'center', 'flex-shrink': '0' },
+    ? { ...pillSmall(true), ...growSmall }
+    : { width: `${phone.button}px`, height: `${phone.button}px`, padding: '0px', 'padding-left': '0px', 'padding-right': '0px', 'flex-shrink': '0' },
   hover: primary
     ? { 'background-color': '$ui.inkHover' }
     : { 'background-color': '$ui.controlHover', 'border-color': '$ui.glassEdgeStrong' },
@@ -226,8 +240,8 @@ export const heroMore = (primary: boolean): Node => ({
       type: 'box',
       style: { display: 'flex', 'flex-direction': 'row', gap: '10px', 'align-items': 'center' },
       children: [
-        { type: 'icon', symbol: 'info', style: { width: '17px', height: '17px' } },
-        { type: 'text', text: '{t:hero.moreInfo}', style: { 'font-size': '15px' } },
+        { type: 'icon', symbol: 'info', style: { width: '17px', height: '17px' }, ...(primary ? {} : { small: { width: '19px', height: '19px' } }) },
+        { type: 'text', text: '{t:hero.moreInfo}', style: { 'font-size': '15px' }, small: primary ? { 'font-weight': '650' } : { display: 'none' } },
       ],
     },
   ],
@@ -240,7 +254,7 @@ export const heroCopy: Node = {
   item: {
     type: 'box',
     style: { display: 'flex', 'flex-direction': 'column', ...gutter, gap: '16px', 'max-width': '46rem' },
-    small: { ...gutterSmall, gap: '12px', 'max-width': 'none' },
+    small: { ...gutterSmall, gap: '10px', 'max-width': 'none' },
     children: [
       { type: 'widget', widget: 'observe', params: { receipt: '{hero.receipt}' } },
       {
@@ -258,6 +272,7 @@ export const heroCopy: Node = {
           'backdrop-filter': 'blur(14px)',
           border: '1px solid $ui.glassEdge',
         },
+        small: { padding: '4px 10px 4px 8px', gap: '6px' },
         children: [
           {
             type: 'box',
@@ -284,6 +299,7 @@ export const heroCopy: Node = {
               'text-transform': 'uppercase',
               color: '$ui.ink',
             },
+            small: { 'font-size': '10px', 'letter-spacing': '0.1em' },
           },
         ],
       },
@@ -302,7 +318,7 @@ export const heroCopy: Node = {
           'object-fit': 'contain',
           'align-self': 'flex-start',
         },
-        small: { height: '96px', 'max-width': '78%' },
+        small: { height: '80px', 'max-width': '72%' },
       },
       {
         type: 'text',
@@ -320,7 +336,7 @@ export const heroCopy: Node = {
           'line-clamp': '2',
           'text-shadow': '0px 4px 40px $ui.shadow',
         },
-        small: { 'font-size': '48px' },
+        small: { 'font-size': '40px' },
       },
       {
         type: 'text',
@@ -362,8 +378,8 @@ export const heroCopy: Node = {
           'flex-wrap': 'wrap',
           'margin-top': '8px',
         } as Style,
-        // Phones stack the actions full width, so no label wraps inside its pill.
-        small: { 'margin-top': '4px', 'flex-direction': 'column', 'flex-wrap': 'nowrap', 'align-items': 'stretch', gap: '10px' } as Style,
+        // Phones keep the actions in one row: the primary fills it, More info is a round mark.
+        small: { 'margin-top': '4px', 'flex-wrap': 'nowrap', gap: '8px' } as Style,
         children: [heroPrimary, heroMore(false), heroMore(true)],
       },
     ],
@@ -379,6 +395,7 @@ export const heroCopy: Node = {
 const segmentTrack = (color: string): Style => ({
   position: 'relative',
   width: 'calc(100% - 8px)',
+  'max-width': '32px',
   height: '4px',
   'border-radius': '2px',
   'overflow-x': 'hidden',
@@ -401,12 +418,14 @@ export const segment: Node = {
     'justify-content': 'center',
     'border-radius': '8px',
   },
-  small: { width: '30px' },
+  // Phones: a shorter, finer segment in the same 44pt-tall target.
+  small: { width: '24px' },
   focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
   children: [
     {
       type: 'box',
       style: segmentTrack('color-mix(in srgb, $ui.ink 36%, transparent)'),
+      small: { height: '3px', 'border-radius': '1.5px' },
       states: [{ when: [{ test: 'heroAct.hasProgress' }], style: segmentTrack('color-mix(in srgb, $ui.accent 72%, transparent)') }],
       groupHover: { 'background-color': 'color-mix(in srgb, $ui.ink 62%, transparent)' },
       children: [
@@ -444,18 +463,35 @@ const step = (direction: 'prev' | 'next'): Node => ({
 });
 // One control whose name and glyph follow the state, so focus stays on it when pressed. Paused, it
 // shows a turning arrow, not the play triangle the hero's own play buttons use.
+// Phones draw it as a quiet 28pt disc in a 44pt target, its edge level with the gutter.
+const slideshowSmall: Style = {
+  width: `${phone.target}px`, height: `${phone.target}px`, 'margin-right': '-8px', border: 'none',
+  'background-color': 'transparent', 'backdrop-filter': 'none',
+} as Style;
 const slideshowControl: Node = {
   type: 'box',
   press: { action: 'toggle', arg: 'hero-paused' },
   label: '{t:hero.slideshowPause}',
   testId: 'hero-slideshow',
+  group: true,
   style: pagerButton,
-  states: [{ when: [{ test: 'env.heroPaused' }], style: pagerButton, label: '{t:hero.slideshowPlay}' }],
+  small: slideshowSmall,
+  states: [{ when: [{ test: 'env.heroPaused' }], style: {}, label: '{t:hero.slideshowPlay}' }],
   hover: { 'background-color': '$ui.controlHover' },
   focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' },
   children: [
-    { type: 'icon', when: [{ test: 'env.heroPaused', not: true }], symbol: 'pause', style: { width: '13px', height: '13px' } },
-    { type: 'icon', when: [{ test: 'env.heroPaused' }], symbol: 'autoplay', style: { width: '17px', height: '17px' } },
+    { type: 'icon', when: [{ test: 'env.heroPaused', not: true }, { ...small, not: true }], symbol: 'pause', style: { width: '13px', height: '13px' } },
+    { type: 'icon', when: [{ test: 'env.heroPaused' }, { ...small, not: true }], symbol: 'autoplay', style: { width: '17px', height: '17px' } },
+    {
+      type: 'box',
+      when: [small],
+      style: { ...pagerButton, width: '28px', height: '28px', 'box-sizing': 'border-box', 'background-color': 'transparent', 'backdrop-filter': 'none' } as Style,
+      groupHover: { 'background-color': '$ui.controlHover' },
+      children: [
+        { type: 'icon', when: [{ test: 'env.heroPaused', not: true }], symbol: 'pause', style: { width: '10px', height: '10px' } },
+        { type: 'icon', when: [{ test: 'env.heroPaused' }], symbol: 'autoplay', style: { width: '13px', height: '13px' } },
+      ],
+    },
   ],
 };
 const caption: Node = {
@@ -505,7 +541,7 @@ export const heroPager: Node = {
     'padding-top': '18px',
     'text-shadow': '0px 1px 12px $ui.shadow',
   } as Style,
-  small: { ...gutterSmall, 'padding-top': '12px', gap: '4px' } as Style,
+  small: { ...gutterSmall, 'padding-top': '6px', gap: '2px' } as Style,
   children: [
     {
       type: 'box',
@@ -523,7 +559,7 @@ export const heroPager: Node = {
 };
 // The search field below the hero's copy and pager (folded to the field while searching or with
 // no featured title); a slot stands at the top of its tree, so here the field follows the copy
-// column and its pager: 34 + 60 + 14 px wide, 26 + 60 + 10 on phones. It scrolls away with the
+// column and its pager: 34 + 60 + 14 px wide, 14 + 44 + 6 on phones. It scrolls away with the
 // hero; the top bar keeps its own Search.
 export const searchSlot: Node = {
   type: 'slot',
@@ -538,10 +574,10 @@ export const searchSlot: Node = {
     'align-items': 'center',
   } as Style,
   small: {
-    'padding-top': '26px',
-    'padding-bottom': '10px',
-    'padding-left': '16px',
-    'padding-right': '16px',
+    'padding-top': '14px',
+    'padding-bottom': '6px',
+    'padding-left': '18px',
+    'padding-right': '18px',
   } as Style,
   inner: {
     width: '100%',
@@ -574,18 +610,18 @@ export const copyColumn: Node = {
   layoutTransition: '640ms ease-out',
   style: copyBase,
   states: [
-    { when: [{ test: 'env.searchFocused' }, small], style: folded('80px') },
+    { when: [{ test: 'env.searchFocused' }, small], style: folded('72px') },
     { when: [{ test: 'env.searchFocused' }], style: folded('82px') },
-    { when: [{ test: 'env.searching' }, small], style: folded('80px') },
+    { when: [{ test: 'env.searching' }, small], style: folded('72px') },
     { when: [{ test: 'env.searching' }], style: folded('82px') },
-    { when: [noHero, small], style: folded('80px') },
+    { when: [noHero, small], style: folded('72px') },
     { when: [noHero], style: folded('82px') },
     {
       when: [small],
       style: {
         ...copyBase,
-        'min-height': '440px',
-        'padding-top': 'calc(56px + 22px + env(safe-area-inset-top))',
+        'min-height': '400px',
+        'padding-top': belowBar(22),
       },
     },
   ],

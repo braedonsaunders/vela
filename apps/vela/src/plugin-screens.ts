@@ -23,3 +23,9 @@ export function withScreens(libraries: Destination[], screens: readonly ScreenNa
 
 /** The web address of a plugin screen. */
 export const screenPath = (id: string) => `/screen/${encodeURIComponent(id)}`;
+
+/** A fully qualified landing page address belongs to the section navigator. */
+export function screenLandingHref(entry: ScreenNav | undefined, page: string, params: Record<string, string>) {
+  if (!entry || page !== (entry.page || 'index')) return null;
+  return { pathname: '/screen/[id]' as const, params: { ...params, id: entry.id } };
+}

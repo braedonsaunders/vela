@@ -137,7 +137,7 @@ export function PhotoViewerNavigation({ navigation, card, ratio, children }: {
     <>
       <View style={StyleSheet.absoluteFill}
         {...(web ? { onPointerEnter: () => setHover(true), onPointerLeave: () => setHover(false) } : {})}>
-        <PhotoTouchSurface key={card.id} ratio={ratio} onSwipe={move}>{children}</PhotoTouchSurface>
+        <PhotoTouchSurface key={card.id} ratio={ratio} embedded onSwipe={move}>{children}</PhotoTouchSurface>
         {!fullscreen ? <PhotoArrows navigation={navigation} pointerInside={hover} embedded /> : null}
         {info && !fullscreen ? <PhotoInfo card={card} /> : null}
       </View>

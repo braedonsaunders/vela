@@ -60,6 +60,12 @@ export interface Faults {
    */
   audioStartPending: number;
   videoStartPending: number;
+  /**
+   * The next this many video playback starts are answered 503 `preparing` (class `source`, retry
+   * after a second, forty attempts) with a download-queue position counting down, as Ether answers a
+   * title whose source it is still finding or downloading (W464); each refusal counts one down.
+   */
+  videoStartPreparing: number;
   /** The next this many bootstrap reads return row ids from the preceding feed snapshot. */
   bootstrapStaleReads: number;
   /**
@@ -68,7 +74,7 @@ export interface Faults {
    */
   catchUpFixture: boolean; startStoppedSession: number;
 }
-export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, originalLost409: 0, originalLostTruncate: 0, originalLostVersionUnavailable: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0, refreshAbandonMs: 0, audioStartPending: 0, videoStartPending: 0, bootstrapStaleReads: 0, catchUpFixture: false, startStoppedSession: 0 };
+export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, originalLost409: 0, originalLostTruncate: 0, originalLostVersionUnavailable: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0, refreshAbandonMs: 0, audioStartPending: 0, videoStartPending: 0, videoStartPreparing: 0, bootstrapStaleReads: 0, catchUpFixture: false, startStoppedSession: 0 };
 let segmentCount = 0;
 let rangeFailureUntil = 0;
 let rangeFailureSetting = 0;

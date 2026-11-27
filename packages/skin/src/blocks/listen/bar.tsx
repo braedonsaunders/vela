@@ -57,9 +57,9 @@ export function NowPlayingBar({ queueOpen, onQueue, soundOpen = false, onSound, 
               <Cover uri={item.poster} shape="square" size={58} title={item.name} accent={item.accent} lift={0.5} />
             </Pressable>
             <View style={{ minWidth: 0, flexShrink: 1 }}>
-              {audio.unreleased ? <>
+              {audio.unreleased || (audio.phase === 'failed' && audio.reason) ? <>
                 <Link label={item.name} strong onPress={() => openNowPlaying()} menu={menu} testID="bar-title" part="bar.title" />
-                <Text accessibilityRole="alert" style={m.text({ 'font-size': '13px', color: '$ui.inkSecondary' })}>{audio.error}</Text>
+                <Text accessibilityRole="alert" style={m.text({ 'font-size': '13px', color: '$ui.inkSecondary' })}>{audio.unreleased ? audio.error : audio.reason}</Text>
               </> : spoken ? <>
                 {/* A book or episode opens its page; the line under it is the chapter, else the book or show it is from. */}
                 <Link label={item.name} strong onPress={() => app.go(placeOf(item))} menu={menu} testID="bar-title" part="bar.title" />

@@ -12,6 +12,7 @@
 //   section reading that record.
 import { Component, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Platform, ScrollView, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, type TextStyle } from 'react-native';
+import { MiniPlayerInset } from '../widgets/media/mini-player-inset';
 import { pageScrollMemory } from '../screen/scroll-memory';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { InheritedContext, useHost } from '../host';
@@ -147,6 +148,7 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
   // A page inside an experience's shell (renderer 20) lays out its own column: the shell keeps it
   // clear of its bars, so no inset, no end space and no gap of the section's own.
   const embedded = !!runtime?.scrollKey;
+  const miniPlayerInset = useContext(MiniPlayerInset);
   const defaultGap = embedded ? 0 : px(isPage ? 22 : 30);
   const gap = parsePoints(node.gap, px, defaultGap);
   // An embedded page's own padding rows (from the style in force) pad its scroll content, so the end
@@ -216,7 +218,7 @@ export function SectionsBlock({ node, ctx }: { node: SectionsBlockNode; ctx: Ctx
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingTop: topPad,
-          paddingBottom: bottomPad,
+          paddingBottom: bottomPad + (scrollKey?.startsWith('listen:') ? miniPlayerInset : 0),
           ...sidePads,
           gap,
         }}
