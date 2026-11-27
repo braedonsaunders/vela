@@ -21,12 +21,13 @@ interface HeroProps {
   spacious?: boolean;
   copyTop?: number;
   compact?: boolean;
+  sidebar?: boolean;
   onWatch(channelId: string): void;
   /** The server offers catch-up: Start over and Replay act here, and a past programme says why it cannot. */
   onReplay?(channelId: string, programmeId: string, kind: 'catchUp' | 'startOver'): void;
 }
 
-export function GuideHero({ look, channel, programme, small, still, inset, side, onWatch, onReplay, spacious = false, copyTop = 0, compact = false }: HeroProps) {
+export function GuideHero({ look, channel, programme, small, still, inset, side, onWatch, onReplay, spacious = false, copyTop = 0, compact = false, sidebar = false }: HeroProps) {
   return (
     <View style={StyleSheet.absoluteFill}>
       {programme ? (
@@ -66,9 +67,9 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
           accessibilityLiveRegion="polite"
         >
           {programme ? (
-            <ProgrammeCopy look={look} channel={channel} programme={programme} small={small || compact} onWatch={onWatch} onReplay={onReplay} spacious={spacious} compact={compact} />
+            <ProgrammeCopy look={look} channel={channel} programme={programme} small={small || compact} onWatch={onWatch} onReplay={onReplay} spacious={spacious} compact={compact} sidebar={sidebar} />
           ) : (
-            <ChannelCopy look={look} channel={channel} small={small} onWatch={onWatch} />
+            <ChannelCopy look={look} channel={channel} small={small} sidebar={sidebar} onWatch={onWatch} />
           )}
         </View>
       </View>
@@ -222,9 +223,11 @@ function ProgrammeCopy({
   onReplay,
   spacious,
   compact,
+  sidebar,
 }: {
   spacious: boolean;
   compact: boolean;
+  sidebar: boolean;
   look: GuideLook;
   channel: GuideChannel;
   programme: GuideProgramme;
@@ -255,12 +258,13 @@ function ProgrammeCopy({
         size={compact ? 20 : spacious ? 32 : small ? 24 : 26}
         style={[
           look.display(),
+          sidebar && { maxWidth: '100%' },
           { textShadowColor: look.shadow, textShadowRadius: 40, textShadowOffset: { width: 0, height: 4 } },
         ]}
       >
         {programme.name}
       </Line>
-      <View style={{ flexDirection: 'row', flexWrap: spacious || (small && !!programme.replay) ? 'wrap' : 'nowrap', gap: compact ? 4 : 12, alignItems: 'center', minWidth: 0 }}>
+      <View style={{ flexDirection: 'row', flexWrap: sidebar || spacious || (small && !!programme.replay) ? 'wrap' : 'nowrap', gap: compact ? 4 : 12, alignItems: 'center', minWidth: 0 }}>
         {!small && programme.replay !== 'catchUp' ? (
           <WatchPill look={look} label={watchLabel} onPress={() => onWatch(channel.id)} testID="guide-watch" />
         ) : null}
@@ -356,22 +360,24 @@ function ChannelCopy({
   look,
   channel,
   small,
+  sidebar,
   onWatch,
 }: {
   look: GuideLook;
   channel: GuideChannel;
   small: boolean;
+  sidebar: boolean;
   onWatch(id: string): void;
 }) {
   return (
     <>
       <Eyebrow look={look}>{channel.number}</Eyebrow>
-      <Line look={look} size={small ? 24 : 26} heading={2} style={look.display()}>
+      <Line look={look} size={sidebar ? 20 : small ? 24 : 26} heading={2} style={look.display()}>
         {channel.name}
       </Line>
-      <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+      <View style={sidebar ? { gap: 4, alignItems: 'flex-start' } : { flexDirection: 'row', gap: 12, alignItems: 'center' }}>
         {!small ? <WatchPill look={look} label={msg('live.watch')} onPress={() => onWatch(channel.id)} /> : null}
-        <Line look={look} size={13} color={look.inkSecondary}>
+        <Line look={look} size={13} color={look.inkSecondary} style={sidebar ? { maxWidth: '100%' } : undefined}>
           {!channel.listingsLoaded ? '' : channel.listed ? msg('live.nothingNow') : msg('live.noListings')}
         </Line>
       </View>

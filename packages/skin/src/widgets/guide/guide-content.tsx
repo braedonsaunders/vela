@@ -187,7 +187,9 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   const top = !flowHeader && Platform.isTV && Platform.OS === 'android' ? 108 : guideTop(flowHeader, small, viewport.insets.top);
   const band = guideBand(viewport.width, viewport.height, top, side);
   const previewWidth = Math.min(232, Math.round(viewport.width * 0.25));
-  const tileHeight = landscape ? Math.min(72, previewWidth * 9 / 16) : cinematic ? band.pictureHeight : Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
+  // Leave room for the sidebar's channel heading, Watch button and listing status on short screens.
+  const sidebarTileHeight = clamp(viewport.height - 314, 36, 72);
+  const tileHeight = landscape ? Math.min(sidebarTileHeight, previewWidth * 9 / 16) : cinematic ? band.pictureHeight : Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
   const headerHeight = cinematic ? band.height : Platform.isTV ? tileHeight + 32 : small ? 196 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
   const landing = useMemo(() => ({
     minute: handOff && handOff.minute >= 0 ? handOff.minute + (handOffOffset ?? 0) : model.landing,
@@ -224,6 +226,7 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
           side={landscape ? 12 : side}
           inset={landscape ? 12 : cinematic && band.stacked ? side : small && !cinematic ? 16 + 132 : side + (tileHeight * 16) / 9 + 28}
           spacious={cinematic && !landscape}
+          sidebar={landscape}
           copyTop={landscape ? (view.tile.state === 'off' ? 8 : tileHeight + 14) : cinematic && band.stacked ? tileHeight + band.gap : 0}
           compact={landscape || cinematic && (band.stacked || band.height < 240)}
           onWatch={watch}
