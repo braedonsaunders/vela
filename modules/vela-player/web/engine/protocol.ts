@@ -1,3 +1,4 @@
+import { localMediaURL } from './local-media';
 import { codecFamily } from './video-info';
 import type { PlaybackPlan, PlaybackPath, PlayerObservation } from '../../../../packages/protocol/types';
 import type { PlaybackSession, Snapshot } from './model';
@@ -5,14 +6,20 @@ import type { PlaybackSession, Snapshot } from './model';
 /** The plan's media URLs may be relative to the server; `mediaBase` is that server's origin (the
  * page's own when it serves both, as Ether does at /vela). */
 export function sessionFromPlan(plan: PlaybackPlan, mediaBase: string = location.href): PlaybackSession {
-  const absolute = (url: string) => new URL(url, mediaBase).href;
+  const local = plan.sessionId.startsWith('local-');
+  const absolute = (url: string) => {
+    if (!local) return new URL(url, mediaBase).href;
+    const checked = localMediaURL(url);
+    if (!checked) throw new Error('Local media URL is outside the downloads scope');
+    return checked.href;
+  };
   const selected = plan.paths.find((p) => p.id === plan.selectedPathId);
   if (!selected) throw new Error('Plan selected path is absent');
   const edition = selected.edition ?? '';
   return {
     id: plan.sessionId,
     serverState: plan.state,
-    serverControlled: true,
+    serverControlled: !local,
     selectedSourceId: plan.selectedPathId,
     selectedVersionId: plan.selectedVersionId ?? undefined,
     mediaId: plan.titleId ?? plan.channelId ?? plan.extraId ?? plan.liveItemId ?? '',
@@ -48,7 +55,7 @@ export function sessionFromPlan(plan: PlaybackPlan, mediaBase: string = location
       language: t.language,
       codec: t.codec,
       streamIndex: t.streamIndex,
-      url: t.delivery?.kind === 'external' ? absolute(t.delivery.url) : t.url && absolute(t.url),
+      url: t.delivery?.kind === 'external' ? absolute(t.delivery.url) : !local && t.url ? absolute(t.url) : undefined,
       delivery: t.delivery?.kind === 'external' ? { ...t.delivery, url: absolute(t.delivery.url) } : t.delivery,
       forced: t.forced,
       hearingImpaired: t.hearingImpaired,

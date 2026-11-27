@@ -61,7 +61,8 @@ export async function recoverPlayback(context: HostContext, error: unknown, toke
   context.playback.status = 'recovering';
   context.playback.failure = null;
   publishHostState(context, true);
-  const readFailure = transientReadFailure(failure.message, kind);
+  const local = context.session.current?.id.startsWith('local-');
+  const readFailure = !local && transientReadFailure(failure.message, kind);
   try {
     if (context.media.source && readFailure) {
       let budget = readRetries.get(context);
@@ -98,7 +99,8 @@ export async function recoverPlayback(context: HostContext, error: unknown, toke
     if (
       !readFailure && context.media.backend === 'webgpu' &&
       context.media.source &&
-      context.media.source.delivery === 'hls' &&
+      (context.media.source.delivery === 'hls' ||
+        (local && !!context.surface.video.canPlayType(context.media.source.mime))) &&
       !context.recovery.browserFallbacks.has(routeKey(context, context.media.source))
     ) {
       context.recovery.browserFallbacks.add(routeKey(context, context.media.source));

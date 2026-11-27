@@ -57,6 +57,7 @@ export interface HostMediaState {
   closingRuntime: Promise<void>;
   backend: Snapshot['backend'];
   nativeOrigin: number;
+  nativeObjectURL?: string;
 }
 export interface HostWatchdogState {
   frameSeen: boolean;

@@ -1,3 +1,4 @@
+import { localMediaPolicy } from '../local-media';
 import { type DecoderRetry } from '../universal/retry';
 import type { Source } from '../model';
 import { cancelled, type Generation } from '../session';
@@ -31,7 +32,7 @@ export async function activatePacketRuntime(
     surface: { container: parent, video: context.surface.video },
     signal: job.signal,
     retry,
-    mediaRequests: context.surface.mediaAccess,
+    mediaRequests: context.session.current?.id.startsWith('local-') ? localMediaPolicy() : context.surface.mediaAccess,
     onFailure: (reason, _position, transport) => {
       if (current()) {
         const generation = context.media.runtimeGeneration!;

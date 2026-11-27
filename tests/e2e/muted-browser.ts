@@ -1,29 +1,46 @@
-import { web } from '@e2e-dev/web';
+import { surfaceOf, web } from '@e2e-dev/web';
+
+const surfaces = new Set<NonNullable<ReturnType<typeof surfaceOf>>>();
+
+/** Use Playwright for context-wide controls the e2e browser fixture doesn't expose. */
+export function runningBrowserPage(origin: string) {
+  for (const surface of surfaces) {
+    try {
+      if (new URL(surface.page().url()).origin === origin) return surface.page();
+    } catch {
+      // This engine has no active page in the current worker.
+    }
+  }
+  throw new Error('No active browser context for the mock app');
+}
+
+export function mutePageMedia() {
+  const media = HTMLMediaElement.prototype;
+  const muted = Object.getOwnPropertyDescriptor(media, 'muted');
+  const volume = Object.getOwnPropertyDescriptor(media, 'volume');
+  Object.defineProperty(media, 'muted', {
+    configurable: true,
+    get() { return true; },
+    set() { muted?.set?.call(this, true); },
+  });
+  Object.defineProperty(media, 'volume', {
+    configurable: true,
+    get() { return 0; },
+    set() { volume?.set?.call(this, 0); },
+  });
+}
 
 export function mutedBrowser(browser: 'chromium' | 'webkit', options: { allowSoftwareVisualizer?: boolean } = {}) {
-  return web({
+  const engine = web({
     browser,
     viewport: { width: 1440, height: 900 },
     reducedMotion: 'reduce',
-    headers: {
-      'X-Vela-Language': 'en',
-      'X-Vela-Screen-Renderer': '19',
-    },
-    initScripts: [() => {
-      const media = HTMLMediaElement.prototype;
-      const muted = Object.getOwnPropertyDescriptor(media, 'muted');
-      const volume = Object.getOwnPropertyDescriptor(media, 'volume');
-      Object.defineProperty(media, 'muted', {
-        configurable: true,
-        get() { return true; },
-        set() { muted?.set?.call(this, true); },
-      });
-      Object.defineProperty(media, 'volume', {
-        configurable: true,
-        get() { return 0; },
-        set() { volume?.set?.call(this, 0); },
-      });
-    }, ...(options.allowSoftwareVisualizer ? [() => {
+    // The e2e runner disables service workers whenever it injects headers.
+    // The mock proxy supplies the same headers while keeping the worker enabled.
+    ...(options.allowSoftwareVisualizer ? { locale: 'en-US' } : {
+      headers: { 'X-Vela-Language': 'en', 'X-Vela-Screen-Renderer': '19' },
+    }),
+    initScripts: [mutePageMedia, ...(options.allowSoftwareVisualizer ? [() => {
       // Headless CI exposes WebGL through a software adapter. Exercise the actual scene renderer,
       // picker, persistence and fallback, but do not treat its frame timings as production data.
       const getContext = HTMLCanvasElement.prototype.getContext;
@@ -48,4 +65,7 @@ export function mutedBrowser(browser: 'chromium' | 'webkit', options: { allowSof
       };
     }] : [])],
   });
+  const surface = surfaceOf(engine);
+  if (surface) surfaces.add(surface);
+  return engine;
 }
