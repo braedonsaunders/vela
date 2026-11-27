@@ -305,7 +305,11 @@ export class EtherAdapter implements ServerAdapter, PasswordSignIn, WebCodeSignI
       idempotencyKey: options?.idempotencyKey ?? randomId(),
       ...(options?.versionId ? { versionId: options.versionId } : {}),
     };
-    const grant = await this.http.request<V.DownloadGrant>('POST', `/titles/${segment(id)}/download`, request);
+    const grant = await this.http.request<V.DownloadGrant>('POST', `/titles/${segment(id)}/download`, request)
+      .catch(error => { throw downloadRefusal(error); });
+    if (!grant || typeof grant.url !== 'string' || !Array.isArray(grant.audioTracks) || !Array.isArray(grant.subtitleTracks)) {
+      throw new Error('The server answered the download request with an incomplete grant');
+    }
     const origin = new URL(this.origin).origin;
     const url = new URL(grant.url, origin);
     if (url.origin !== origin || url.username || url.password || !/^\/vela\/v0\/download\/[^/]+$/.test(url.pathname)) {
@@ -802,4 +806,19 @@ function query(values: object): string {
     .filter(([, value]) => value !== undefined)
     .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`);
   return pairs.length ? `?${pairs.join('&')}` : '';
+}
+
+/** Ether's download refusals in words a viewer can act on; the server's message when it is already a sentence. */
+function downloadRefusal(error: unknown): unknown {
+  if (!(error instanceof VelaError)) return error;
+  const code = error.detail.code;
+  const words: Record<string, string> = {
+    version_unavailable: 'This version can\'t be downloaded from the server right now.',
+    download_limit: 'You\'ve reached today\'s download limit on this server.',
+    download_not_allowed: 'Downloads aren\'t allowed for this title or account on this server.',
+    media_not_generated: 'This title isn\'t ready to download yet.',
+  };
+  const message = words[code];
+  if (!message || (error.detail.message && error.detail.message !== code && /\s/.test(error.detail.message))) return error;
+  return new VelaError({ ...error.detail, message }, error.status, error.retryAfter);
 }
