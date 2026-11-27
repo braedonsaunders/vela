@@ -52,3 +52,19 @@ test('Ether rejects a grant with a missing file identity or a foreign ticket URL
     await expect(adapter().resolveDownload('movie')).rejects.toThrow();
   }
 });
+
+test('Ether download refusals read as sentences, and an incomplete grant fails clearly', async () => {
+  const refuse = (code: string, message = code, status = 409) => new Response(JSON.stringify({
+    error: { class: 'source', code, message, retry: { allowed: false } },
+  }), { status, headers: { 'Content-Type': 'application/json' } });
+  for (const [answer, words] of [
+    [refuse('version_unavailable'), 'This version can\'t be downloaded from the server right now.'],
+    [refuse('download_limit', 'download_limit', 429), 'You\'ve reached today\'s download limit on this server.'],
+    [refuse('download_limit', 'Daily download limit reached', 429), 'Daily download limit reached'],
+  ] as const) {
+    routeFetch({ 'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] }, 'POST /vela/v0/titles/movie/download': answer });
+    await expect(adapter().resolveDownload('movie')).rejects.toThrow(words);
+  }
+  routeFetch({ 'GET /vela/v0/titles/movie': { title, cast: [], crew: [], extras: [] }, 'POST /vela/v0/titles/movie/download': { ...grant, subtitleTracks: undefined } });
+  await expect(adapter().resolveDownload('movie')).rejects.toThrow('incomplete grant');
+});

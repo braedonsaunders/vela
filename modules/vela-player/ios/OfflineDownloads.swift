@@ -2,7 +2,71 @@
 // Stored under Application Support/vela-downloads/<serverId>/<viewerId>/<titleId>/ with isExcludedFromBackup = true.
 // Paths in index.json and outbox.json stay relative to vela-downloads/ and are resolved against the current
 // Application Support URL on every read so an iOS container UUID change never breaks offline playback.
+// Credential headers never reach a plain file: transfer.json keeps the request without them, and a
+// transfer the system finishes after a relaunch reads them from the Keychain (this device only),
+// deleted as soon as the transfer ends. Credentials go only to the download's own origin
+// (docs/downloads.md): auxiliary fetches refuse redirects elsewhere, a download that redirects
+// elsewhere is refused before the background session takes it, and one that ended elsewhere fails.
 import Foundation
+import Security
+
+/// Where an in-flight transfer's credential headers survive an app relaunch.
+protocol TransferCredentialStore: AnyObject {
+    func save(_ headers: [String: String], forKey key: String)
+    func load(forKey key: String) -> [String: String]
+    func remove(forKey key: String)
+}
+
+/// The Keychain, readable after the first unlock so background completion works while locked.
+final class KeychainTransferCredentials: TransferCredentialStore {
+    private let service = "app.ether.vela.downloads.transfer"
+    private func query(_ key: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: key]
+    }
+    func save(_ headers: [String: String], forKey key: String) {
+        SecItemDelete(query(key) as CFDictionary)
+        guard !headers.isEmpty, let data = try? JSONEncoder().encode(headers) else { return }
+        var item = query(key)
+        item[kSecValueData as String] = data
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(item as CFDictionary, nil)
+    }
+    func load(forKey key: String) -> [String: String] {
+        var item = query(key)
+        item[kSecReturnData as String] = true
+        item[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        guard SecItemCopyMatching(item as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return [:] }
+        return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+    }
+    func remove(forKey key: String) { SecItemDelete(query(key) as CFDictionary) }
+}
+
+/// Memory only: a relaunched process has no credentials (tests, and hosts without a background session).
+final class MemoryTransferCredentials: TransferCredentialStore {
+    private var values: [String: [String: String]] = [:]
+    private let lock = NSLock()
+    func save(_ headers: [String: String], forKey key: String) { lock.lock(); values[key] = headers; lock.unlock() }
+    func load(forKey key: String) -> [String: String] { lock.lock(); defer { lock.unlock() }; return values[key] ?? [:] }
+    func remove(forKey key: String) { lock.lock(); values.removeValue(forKey: key); lock.unlock() }
+}
+
+/// Scheme, host and port as a connection uses them; two URLs share credentials only when equal.
+func downloadOrigin(_ url: URL?) -> String? {
+    guard let url, let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
+          let host = url.host?.lowercased(), !host.isEmpty, url.user == nil, url.password == nil else { return nil }
+    let port = url.port ?? (scheme == "https" ? 443 : 80)
+    return "\(scheme)://\(host):\(port)"
+}
+
+/// Follows redirects only within the request's own origin; anything else ends the request unfollowed.
+final class SameOriginRedirects: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        let from = downloadOrigin(task.originalRequest?.url)
+        completionHandler(from != nil && downloadOrigin(request.url) == from ? request : nil)
+    }
+}
 
 final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     static let shared = OfflineDownloads()
@@ -19,7 +83,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         let viewerId: String
         let titleId: String
         let url: String
-        let headers: [String: String]
+        var headers: [String: String]
         let container: String
         let mimeType: String
         let byteLength: Int64?
@@ -27,12 +91,51 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         let wifiOnly: Bool
         let posterUrl: String?
         let sidecars: [SidecarRequest]
+
+        enum CodingKeys: String, CodingKey {
+            case key, serverId, viewerId, titleId, url, container, mimeType, byteLength, etag, wifiOnly, posterUrl, sidecars
+        }
+
+        init(key: String, serverId: String, viewerId: String, titleId: String, url: String, headers: [String: String],
+             container: String, mimeType: String, byteLength: Int64?, etag: String?, wifiOnly: Bool, posterUrl: String?,
+             sidecars: [SidecarRequest]) {
+            self.key = key; self.serverId = serverId; self.viewerId = viewerId; self.titleId = titleId; self.url = url
+            self.headers = headers; self.container = container; self.mimeType = mimeType; self.byteLength = byteLength
+            self.etag = etag; self.wifiOnly = wifiOnly; self.posterUrl = posterUrl; self.sidecars = sidecars
+        }
+
+        /// Headers are never encoded: transfer.json holds the request without its credentials.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            key = try c.decode(String.self, forKey: .key)
+            serverId = try c.decode(String.self, forKey: .serverId)
+            viewerId = try c.decode(String.self, forKey: .viewerId)
+            titleId = try c.decode(String.self, forKey: .titleId)
+            url = try c.decode(String.self, forKey: .url)
+            headers = [:]
+            container = try c.decode(String.self, forKey: .container)
+            mimeType = try c.decode(String.self, forKey: .mimeType)
+            byteLength = try c.decodeIfPresent(Int64.self, forKey: .byteLength)
+            etag = try c.decodeIfPresent(String.self, forKey: .etag)
+            wifiOnly = try c.decode(Bool.self, forKey: .wifiOnly)
+            posterUrl = try c.decodeIfPresent(String.self, forKey: .posterUrl)
+            sidecars = try c.decode([SidecarRequest].self, forKey: .sidecars)
+        }
     }
 
     private let rootDirectory: URL
     private let sessionIdentifier: String
     private let useBackgroundSession: Bool
     private let lock = NSLock()
+    private let credentials: TransferCredentialStore
+    private let redirects = SameOriginRedirects()
+    private lazy var auxiliarySession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpCookieStorage = nil
+        config.urlCredentialStorage = nil
+        config.httpShouldSetCookies = false
+        return URLSession(configuration: config, delegate: redirects, delegateQueue: nil)
+    }()
     private var transfers: [String: TransferMeta] = [:]
     private var activeTasks: [String: URLSessionDownloadTask] = [:]
     private var lastProgressAt: [String: TimeInterval] = [:]
@@ -50,11 +153,14 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         #else
         let background = false
         #endif
-        self.init(rootDirectory: root, sessionIdentifier: "app.ether.vela.downloads", useBackgroundSession: background)
+        self.init(rootDirectory: root, sessionIdentifier: "app.ether.vela.downloads", useBackgroundSession: background,
+                  credentials: background ? KeychainTransferCredentials() : MemoryTransferCredentials())
     }
 
-    init(rootDirectory: URL, sessionIdentifier: String = "app.ether.vela.downloads", useBackgroundSession: Bool = false) {
+    init(rootDirectory: URL, sessionIdentifier: String = "app.ether.vela.downloads", useBackgroundSession: Bool = false,
+         credentials: TransferCredentialStore = MemoryTransferCredentials()) {
         var standardized = rootDirectory.standardizedFileURL
+        self.credentials = credentials
         self.rootDirectory = standardized
         self.sessionIdentifier = sessionIdentifier
         self.useBackgroundSession = useBackgroundSession
@@ -144,13 +250,40 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         session.getAllTasks { [weak self] tasks in
             guard let self else { return }
             self.lock.lock()
-            defer { self.lock.unlock() }
             for case let task as URLSessionDownloadTask in tasks {
                 guard let key = task.taskDescription, self.transfers[key] != nil, self.activeTasks[key] == nil,
                       task.state == .running || task.state == .suspended else { continue }
                 self.activeTasks[key] = task
             }
+            self.lock.unlock()
+            self.reportOrphanedTransfers(wifiOnly: session === self.wifiSession)
         }
+    }
+
+    /// A persisted transfer the system no longer runs (a force-quit, a reboot) is interrupted: core
+    /// resumes it with fresh credentials from the partial file.
+    private func reportOrphanedTransfers(wifiOnly: Bool) {
+        lock.lock()
+        let orphans = transfers.values.filter { $0.wifiOnly == wifiOnly && activeTasks[$0.key] == nil }
+        lock.unlock()
+        for meta in orphans {
+            let part = partialMediaURL(for: meta)
+            let written = ((try? FileManager.default.attributesOfItem(atPath: part.path)[.size] as? NSNumber)?.int64Value) ?? 0
+            interruptTransfer(meta, bytesWritten: written)
+        }
+    }
+
+    private func interruptTransfer(_ meta: TransferMeta, bytesWritten: Int64) {
+        emitEvent([
+            "serverId": meta.serverId,
+            "viewerId": meta.viewerId,
+            "titleId": meta.titleId,
+            "status": "paused",
+            "bytesWritten": bytesWritten,
+            "byteLength": meta.byteLength as Any,
+            "error": "The download was interrupted before it finished",
+            "errorCode": "interrupted",
+        ])
     }
 
     func writeSnapshot(_ snapshot: [String: Any]) throws {
@@ -285,6 +418,9 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
               let url = URL(string: meta.url) else {
             throw NSError(domain: "VelaDownloads", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid download directory or URL"])
         }
+        if let refusal = preflightRedirect(url: url, headers: meta.headers) {
+            throw NSError(domain: "VelaDownloads", code: 3, userInfo: [NSLocalizedDescriptionKey: refusal])
+        }
         lock.lock()
         let previous = transfers[meta.key]
         lock.unlock()
@@ -295,6 +431,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         ensureDirectory(&dir, excludeFromBackup: true)
         try? FileManager.default.removeItem(at: titleDir.appendingPathComponent("transfer-status.json"))
         saveTransferMeta(meta)
+        credentials.save(meta.headers, forKey: meta.key)
 
         let session = meta.wifiOnly ? wifiSession : cellularSession
         let resumeFile = resumeDataURL(serverId: meta.serverId, viewerId: meta.viewerId, titleId: meta.titleId)
@@ -338,6 +475,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         lock.unlock()
         task?.cancel()
         removePersistedTransferMeta(forKey: key)
+        credentials.remove(forKey: key)
     }
 
     private func cancelTasks(withPrefix prefix: String) {
@@ -352,7 +490,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         }
         lock.unlock()
         for t in tasks { t.cancel() }
-        for k in keys { removePersistedTransferMeta(forKey: k) }
+        for k in keys { removePersistedTransferMeta(forKey: k); credentials.remove(forKey: k) }
     }
 
     // MARK: URLSessionDownloadDelegate
@@ -390,6 +528,14 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         emitEvent(event)
     }
 
+    /// Foreground sessions ask before following a redirect: only within the download's own origin.
+    /// (Background sessions follow redirects themselves; preflightRedirect and the origin check on
+    /// completion cover those.)
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        redirects.urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: request, completionHandler: completionHandler)
+    }
+
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
         guard let key = downloadTask.taskDescription else { return }
@@ -400,6 +546,12 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         }
         activeTasks.removeValue(forKey: key)
         lock.unlock()
+
+        if let ended = downloadTask.currentRequest?.url, downloadOrigin(ended) != downloadOrigin(URL(string: meta.url)) {
+            endTransfer(meta)
+            failTransfer(meta, code: "forbidden", message: "The server sent the download to another address, which Vela doesn't follow.", bytesWritten: 0)
+            return
+        }
 
         let http = downloadTask.response as? HTTPURLResponse
         let status = http?.statusCode ?? 200
@@ -474,11 +626,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         let posterRelative = fetchPoster(for: meta, into: titleDir)
         let sidecarRelatives = fetchSidecars(for: meta, into: titleDir)
 
-        lock.lock()
-        transfers.removeValue(forKey: key)
-        lastProgressAt.removeValue(forKey: key)
-        lock.unlock()
-        removePersistedTransferMeta(forKey: key)
+        endTransfer(meta)
 
         let mediaRelative = "\(meta.serverId)/\(meta.viewerId)/\(meta.titleId)/media.\(meta.container)"
         var event: [String: Any] = [
@@ -528,11 +676,13 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
             try? resumeData.write(to: resumeFile, options: .atomic)
             excludeItemFromBackup(resumeFile)
         }
-        let code = Self.isNoSpaceError(error) ? "no_space" : "network"
-        let message = code == "no_space"
-            ? "Not enough free storage space to finish downloading"
-            : "The download was interrupted before it finished"
-        failTransfer(meta, code: code, message: message, bytesWritten: task.countOfBytesReceived)
+        if Self.isNoSpaceError(error) {
+            failTransfer(meta, code: "no_space", message: "Not enough free storage space to finish downloading",
+                         bytesWritten: task.countOfBytesReceived)
+        } else {
+            // A lost network: core resumes it, with fresh credentials, once it is back online.
+            interruptTransfer(meta, bytesWritten: task.countOfBytesReceived)
+        }
     }
 
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
@@ -598,7 +748,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         let sem = DispatchSemaphore(value: 0)
         var resultData: Data?
         var resultHTTP: HTTPURLResponse?
-        let task = URLSession.shared.dataTask(with: req) { data, response, error in
+        let task = auxiliarySession.dataTask(with: req) { data, response, error in
             if error == nil, let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
                 resultData = data
                 resultHTTP = http
@@ -613,7 +763,42 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
 
     // MARK: Helpers
 
+    /// Forget a finished or failed transfer: its in-memory request, transfer.json and Keychain headers.
+    private func endTransfer(_ meta: TransferMeta) {
+        lock.lock()
+        transfers.removeValue(forKey: meta.key)
+        lastProgressAt.removeValue(forKey: meta.key)
+        lock.unlock()
+        removePersistedTransferMeta(forKey: meta.key)
+        credentials.remove(forKey: meta.key)
+    }
+
+    /// Ask for the first byte without following redirects: a download that redirects to another
+    /// origin is refused before the background session (which follows redirects itself) takes it.
+    /// Network failures here are not refusals; the transfer itself reports them.
+    private func preflightRedirect(url: URL, headers: [String: String]) -> String? {
+        guard downloadOrigin(url) != nil else { return "Invalid download URL" }
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        for (name, value) in headers { req.setValue(value, forHTTPHeaderField: name) }
+        req.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+        let sem = DispatchSemaphore(value: 0)
+        var refused: String?
+        let task = auxiliarySession.dataTask(with: req) { _, response, _ in
+            if let http = response as? HTTPURLResponse, (300..<400).contains(http.statusCode),
+               let location = http.value(forHTTPHeaderField: "Location"),
+               downloadOrigin(URL(string: location, relativeTo: url)?.absoluteURL) != downloadOrigin(url) {
+                refused = "The server sends this download to another address, which Vela doesn't follow."
+            }
+            sem.signal()
+        }
+        task.resume()
+        if sem.wait(timeout: .now() + 16) == .timedOut { task.cancel() }
+        return refused
+    }
+
     private func failTransfer(_ meta: TransferMeta, code: String, message: String, bytesWritten: Int64) {
+        // A refused transfer is over: nothing may keep its credentials.
+        if code == "forbidden" { credentials.remove(forKey: meta.key) }
         emitEvent([
             "serverId": meta.serverId,
             "viewerId": meta.viewerId,
@@ -684,8 +869,11 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         defer { lock.unlock() }
         for case let fileURL as URL in enumerator where fileURL.lastPathComponent == "transfer.json" {
             if let data = try? Data(contentsOf: fileURL),
-               let meta = try? JSONDecoder().decode(TransferMeta.self, from: data) {
+               var meta = try? JSONDecoder().decode(TransferMeta.self, from: data) {
+                meta.headers = credentials.load(forKey: meta.key)
                 transfers[meta.key] = meta
+                // Rewrite files from builds that stored headers, so none stay on disk.
+                if let text = String(data: data, encoding: .utf8), text.contains("\"headers\"") { saveTransferMeta(meta) }
             }
         }
     }

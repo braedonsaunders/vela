@@ -253,6 +253,32 @@ describe('interrupted transfers resume with fresh credentials', () => {
     expect(h.downloads.item('102')?.status).toBe('paused');
   });
 
+  test('a transfer interrupted by quitting resumes on relaunch when hydration finishes before sign-in', async () => {
+    const port = new Port();
+    port.snapshot.items = [record({ status: 'paused', errorCode: 'interrupted', bytesWritten: 1 * GB, etag: '"e"', sourceId: 'part-9' })];
+    const h = harness(port, 'offline');
+    // Launch: no viewer known yet while the index loads.
+    h.box.update('auth', auth => ({ ...auth, phase: 'signed-out', serverId: '', viewerId: '' }));
+    await h.downloads.hydrate();
+    await settle();
+    expect(h.box.get().downloads.items).toEqual([]);
+    h.box.update('auth', auth => ({ ...auth, phase: 'signed-in', serverId: 'srv', viewerId: 'viewer-1' }));
+    await settle();
+    expect(port.resumed.map(request => request.titleId)).toEqual(['101']);
+  });
+
+  test('an engine that resumes by itself clears the reason it had stopped', async () => {
+    const port = new Port();
+    port.snapshot.items = [record({ status: 'downloading', bytesWritten: 1 * GB })];
+    const h = harness(port, 'offline');
+    await h.downloads.hydrate();
+    const base = { serverId: 'srv', viewerId: 'viewer-1', titleId: '101' };
+    await h.downloads.applyTransferEvent({ ...base, status: 'paused', bytesWritten: 2 * GB, errorCode: 'interrupted', error: 'Waiting for Wi-Fi' });
+    expect(h.downloads.item('101')).toMatchObject({ status: 'paused', error: 'Waiting for Wi-Fi' });
+    await h.downloads.applyTransferEvent({ ...base, status: 'downloading', bytesWritten: 2.1 * GB });
+    expect(h.downloads.item('101')).toMatchObject({ status: 'downloading', error: undefined, errorCode: undefined, neededBytes: undefined });
+  });
+
   test('a transfer the server now refuses stays put rather than retrying forever', async () => {
     const port = new Port();
     port.snapshot.items = [record({ status: 'paused', errorCode: 'interrupted', bytesWritten: 1 * GB })];
@@ -270,8 +296,10 @@ describe('the browser', () => {
     const port = new WebPort();
     const h = harness(port);
     await h.downloads.hydrate();
-    expect(await h.downloads.offer('movie')).toEqual({ kind: 'save-file' });
+    // Not yet persistent and never asked: Download, which asks on the press.
+    expect(await h.downloads.offer('movie')).toEqual({ kind: 'download' });
     expect(await h.downloads.enqueue('101')).toBeNull();
+    expect(await h.downloads.offer('movie')).toEqual({ kind: 'save-file' });
     expect(port.started).toHaveLength(0);
     expect(h.box.get().downloads).toMatchObject({ persisted: false });
     expect(h.box.get().downloads.error).toContain('saves the file to your computer');
