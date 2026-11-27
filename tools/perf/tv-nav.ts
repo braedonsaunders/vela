@@ -396,7 +396,9 @@ async function measure(o: Options, name: string, label: string): Promise<RunRepo
     writeFileSync(join(work, 'trace.cfg'), traceConfig(seconds, o.bufferMb));
     d.push(join(work, 'steps.sh'), '/data/local/tmp/tv-nav-steps.sh');
     d.push(join(work, 'trace.cfg'), '/data/local/tmp/tv-nav.cfg');
-    const out = '/data/misc/perfetto-traces/tv-nav.pftrace';
+    // Some Android 10 builds ship no perfetto-traces directory: the shell's own temp dir then.
+    const traces = d.shell('[ -d /data/misc/perfetto-traces ] && echo /data/misc/perfetto-traces || echo /data/local/tmp').trim();
+    const out = `${traces}/tv-nav.pftrace`;
     d.shell(`rm -f ${out}`);
     d.shell('logcat -c');
     // The config on stdin: Android 10 has no /data/misc/perfetto-configs.
