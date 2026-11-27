@@ -68,11 +68,12 @@ export function aboutApp(): { version: string; build: string; platform: string }
 }
 
 export function platform(): VelaPlatform {
-  // `same-origin`: a development page served beside its server on one origin (a remote preview),
-  // where `?server=none` previews a fresh install with no server (as a native app first opens).
+  // `same-origin`: a development page served beside its demo server on one origin (a remote
+  // preview). It opens as a fresh install does, with no server (as a native app first opens);
+  // `?server=demo` uses the demo server beside it.
   const sameOrigin = __DEV__ && config.server === 'same-origin';
   const development = __DEV__ && !sameOrigin ? config.server || DEVELOPMENT_SERVER : '';
-  const standalone = sameOrigin && new URLSearchParams(location.search).get('server') === 'none';
+  const standalone = sameOrigin && new URLSearchParams(location.search).get('server') !== 'demo';
   const desktop = desktopShell();
   const link = webHandoff(!!desktop);
   return {
