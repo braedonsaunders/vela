@@ -22,6 +22,9 @@ const ROW = {
   margin: '0px -10px',
   'border-radius': '10px',
 };
+/** A server's line: its row and, for another server, the remove button beside it. It spans the
+ * menu's rows as ROW does on its own, and the row inside it fills what the button leaves. */
+const SERVER_LINE = { 'flex-direction': 'row', 'align-items': 'center', margin: '0px -10px', gap: '4px' };
 const LOOKS = { hover: { 'background-color': '$ui.control' }, focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' } };
 
 export function ServerSwitcher({ params }: WidgetProps) {
@@ -32,6 +35,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
   const [confirmId, setConfirmId] = useState('');
   const [returnTo, setReturnTo] = useState('');
   const selecting = useRef(false);
+  const look = useLook();
   const busy = pending !== '';
   if (!switcher) return null;
   const selectServer = (id: string) => switcher.selectServer?.(id) ?? switcher.actions.select(id);
@@ -68,12 +72,12 @@ export function ServerSwitcher({ params }: WidgetProps) {
   };
   const title = params.label || msg('connect.servers');
   return (
-    <View style={{ gap: 2 }} accessibilityRole="menu" accessibilityLabel={title}>
+    <View style={look.box({ gap: '2px' })} accessibilityRole="menu" accessibilityLabel={title}>
       {switcher.openDownloads ? <Row label="Downloads" testID="server-downloads" icon="download" onPress={() => {
         host.setFlag('menu', false);
         switcher.openDownloads?.();
       }} disabled={busy} /> : null}
-      <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' }} style={{ paddingVertical: 4 }}>
+      <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' }} style={look.box({ 'padding-top': '4px', 'padding-bottom': '4px' })}>
         {title}
       </Words>
       {switcher.servers.list.map(server => {
@@ -81,7 +85,9 @@ export function ServerSwitcher({ params }: WidgetProps) {
         const confirming = removable && confirmId === server.id;
         return (
           <View key={server.id}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: -10, gap: 4 }}>
+            {/* Spans the menu's rows (their margin), in the document's lengths: a raw -10 drew the
+                row 8 px left of the others on Android TV, which scales the document's px. */}
+            <View style={look.box(SERVER_LINE)}>
               <Row
                 label={server.selected && switcher.brandingName ? switcher.brandingName : server.name}
                 detail={pending === server.id && !confirming ? msg('ui.connectingToYourLibrary') : serverDetail(server)}
@@ -106,9 +112,9 @@ export function ServerSwitcher({ params }: WidgetProps) {
               /> : null}
             </View>
             {confirming ? (
-              <View style={{ gap: 4, paddingVertical: 6 }}>
+              <View style={look.box({ gap: '4px', 'padding-top': '6px', 'padding-bottom': '6px' })}>
                 <Words rows={{ 'font-size': '13px' }}>{msg('connect.removeConfirm', { name: server.name })}</Words>
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+                <View style={look.box({ 'flex-direction': 'row', 'justify-content': 'flex-end', gap: '8px' })}>
                   <Row label={msg('ui.cancel')} onPress={() => { setReturnTo(server.id); setConfirmId(''); }} disabled={busy}
                     testID="server-remove-cancel" inline compact preferFocus />
                   <Row label={msg('connect.removeAction')} accessibilityLabel={msg('connect.remove', { name: server.name })}
@@ -190,7 +196,7 @@ function Row({
       {...handlers}
     >
       {icon ? <Glyph symbol={icon} size={17} color={look.ui.ink} /> : null}
-      {iconOnly ? null : <View style={{ flex: compact ? undefined : 1, minWidth: 0, gap: 2 }}>
+      {iconOnly ? null : <View style={[look.box({ gap: '2px' }), { flex: compact ? undefined : 1, minWidth: 0 }]}>
         <Words rows={{ 'font-size': '14px', ...(destructive ? { color: '#ffffff' } : {}) }} style={face ? { fontFamily: face } : undefined} lines={1}>
           {label}
         </Words>

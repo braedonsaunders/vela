@@ -231,12 +231,17 @@ export const viewerBadge = (size: number, fontSize: string, compact?: { size: nu
 export const aboutLine: Node = {
   type: 'box',
   when: [{ test: 'env.aboutLine' }],
-  readingStop: true,
-  label: '{env.aboutLabel}',
-  testId: 'about-line',
   style: { 'padding-top': '14px', 'margin-top': '-4px',
     'border-style': 'solid', 'border-width': '0px', 'border-top-width': '1px', 'border-top-color': '$ui.glassEdge' },
-  children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ui.inkQuiet' } }],
+  // The stop is the line of text alone, below the rule: on TV its focus ring goes around the text.
+  children: [{
+    type: 'box',
+    readingStop: true,
+    label: '{env.aboutLabel}',
+    testId: 'about-line',
+    style: { 'border-radius': '6px' },
+    children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ui.inkQuiet' } }],
+  }],
 };
 
 export const shell: Node = {
