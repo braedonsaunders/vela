@@ -51,6 +51,12 @@ class EventParser {
   private id = '';
 
   push(text: string): StreamEvent[] {
+    // A plan arrives as one long `data:` line over many chunks: until a chunk ends a line, it only
+    // joins the partial line (splitting the whole partial line again for every chunk is quadratic).
+    if (!/[\r\n]/.test(text) && !this.buffer.endsWith('\r')) {
+      this.buffer += text;
+      return [];
+    }
     this.buffer += text;
     // A trailing '\r' may be the first half of '\r\n' split across chunks: hold it back.
     const held = this.buffer.endsWith('\r') ? '\r' : '';
