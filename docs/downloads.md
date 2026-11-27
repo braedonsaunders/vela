@@ -233,18 +233,27 @@ see only the active `(serverId, viewerId)`. Another Plex Home profile, another E
 viewer or another server can't list, play or resolve them. All of this lives in core,
 so every platform behaves the same.
 
-Deletion is the same everywhere because core does it:
+Deletion is the same everywhere because core does it. Files are deleted only when the
+viewer asks:
 
 | Event | What happens to files |
 | --- | --- |
 | Sign out | That viewer's downloads and pending progress on that server are deleted |
 | Remove a server | Every viewer's downloads for that server are deleted |
-| Server refuses the session (401, "session ended") | That viewer's downloads are deleted |
+| Server refuses the session (401: a restart with fresh keys, "sign out everywhere", a token that expired offline), or the viewer chooses "Sign in again" | **Nothing is deleted.** The viewer's records are marked `awaitingSignIn` and the outbox is kept |
+| The same viewer signs in again (same server and viewer id) | Their downloads rejoin the library and the outbox replays |
+| A different viewer signs in | The waiting downloads stay hidden from them. The library offers "Delete them" behind a confirmation |
 | Switch profile or server | Nothing is deleted; the files are hidden until that viewer returns |
 
-The UI asks first. Sign out and Remove server say how many downloads on this device
-will be deleted and wait for confirmation. A refused session can't ask, because the
-server has already ended it.
+While signed out on a server whose session was refused, the library lists the waiting
+downloads with "Sign in to <server> to keep watching these", and offline playback stays
+allowed. The files were authorized when they were downloaded and belong to that viewer.
+Progress recorded meanwhile goes to the outbox under the record's own viewer. Sign-in and
+the offline routes (`/downloads`, `/watch/:id`) let these through. Resuming or starting a
+download still needs a signed-in session and fresh permission.
+
+Sign out and Remove server say how many downloads on this device will be deleted and wait
+for confirmation.
 
 ## Permission changes
 
@@ -258,7 +267,8 @@ This follows iOS today:
   (`downloadsAvailable`, then the grant or part request). A refusal (`downloadsAvailable`
   false, or 401/403) ends the transfer as `failed`/`forbidden` with the server's
   message, and it is never retried automatically.
-- Ending the viewer's session (401) deletes that viewer's downloads, as above.
+- Ending the viewer's session (401) never deletes downloads; they wait for that viewer, as above.
+  Only an explicit sign-out, a server removal, or the viewer's own Delete removes files.
 
 ## Servers and permissions
 

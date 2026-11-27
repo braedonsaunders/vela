@@ -4,6 +4,7 @@
 import { describe, expect, test } from 'bun:test';
 import type * as V from '../src/wire';
 import {
+  allowsOfflineRoute,
   autoResumable,
   checkDownloadSpace,
   DEFAULT_DOWNLOAD_TRAITS,
@@ -349,5 +350,50 @@ describe('per viewer and per server', () => {
     expect(h.downloads.isPlayable('101')).toBe(false);
     expect(port.fileUrls).toEqual([]);
     expect((await h.downloads.planFor('202'))?.titleId).toBe('202');
+  });
+});
+
+describe('a refused session keeps downloads (docs/downloads.md)', () => {
+  const outboxEntry = { serverId: 'srv', viewerId: 'viewer-1', titleId: '101', positionSeconds: 300, durationSeconds: 6120, completed: false,
+    observedAt: '2026-11-27T12:00:00.000Z', idempotencyKey: 'k1' };
+
+  test('signed out after a 401, the files stay listed and playable; the same viewer gets them back', async () => {
+    const port = new Port();
+    port.snapshot = { items: [record({ viewerId: 'viewer-1' })], outbox: [outboxEntry] };
+    const h = harness(port);
+    await h.downloads.hydrate();
+    await h.downloads.awaitSignIn('srv', 'viewer-1');
+    h.box.update('auth', auth => ({ ...auth, phase: 'signed-out', viewerId: '', viewer: '' }));
+    await settle();
+    expect(h.box.get().downloads.items.map(item => [item.titleId, item.awaitingSignIn])).toEqual([['101', true]]);
+    expect(h.box.get().downloads.outbox).toHaveLength(1);
+    expect((await h.downloads.planFor('101'))?.paths[0]?.url).toContain('/srv/viewer-1/101/media.mkv');
+    // Offline progress while waiting still lands in the outbox under the record's own viewer.
+    await h.downloads.recordProgress({ titleId: '101', positionSeconds: 400, observedAt: '2026-11-27T13:00:00.000Z' });
+    expect(h.box.get().downloads.outbox.map(entry => [entry.viewerId, entry.positionSeconds])).toEqual([['viewer-1', 400]]);
+    expect(allowsOfflineRoute('signed-out', '/downloads', () => true, true)).toBe(true);
+    expect(allowsOfflineRoute('signed-out', '/downloads', () => true)).toBe(false);
+
+    h.box.update('auth', auth => ({ ...auth, phase: 'signed-in', viewerId: 'viewer-1', viewer: 'Viewer 1' }));
+    await settle();
+    expect(h.downloads.item('101')?.awaitingSignIn).toBeUndefined();
+    expect(port.snapshot.items[0]?.awaitingSignIn).toBeUndefined();
+  });
+
+  test('another viewer signing in sees none of them, and deletes them only when asked', async () => {
+    const port = new Port();
+    port.snapshot = { items: [record({ viewerId: 'viewer-1', awaitingSignIn: true }), record({ viewerId: 'viewer-2', titleId: '202' })], outbox: [outboxEntry] };
+    const h = harness(port);
+    h.switchViewer('viewer-2');
+    await h.downloads.hydrate();
+    await settle();
+    expect(h.box.get().downloads.items.map(item => item.titleId)).toEqual(['202']);
+    expect(h.box.get().downloads.awaitingElsewhere).toBe(1);
+    expect(await h.downloads.planFor('101')).toBeNull();
+    expect(port.snapshot.items).toHaveLength(2);
+    await h.downloads.removeAwaitingElsewhere();
+    expect(port.snapshot.items.map(item => item.viewerId)).toEqual(['viewer-2']);
+    expect(port.snapshot.outbox).toEqual([]);
+    expect(h.box.get().downloads.awaitingElsewhere).toBe(0);
   });
 });

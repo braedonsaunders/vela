@@ -31,13 +31,15 @@ function DownloadLibrary() {
   const wide = width >= 640;
   // A desktop window gives the list more room, so a row's actions sit on one line beside its title.
   const roomy = width >= 1200;
-  const { items, usedBytes, hydrated, error, traits, persisted, settings } = useVelaState(state => state.downloads);
+  const { items, usedBytes, hydrated, error, traits, persisted, settings, awaitingElsewhere } = useVelaState(state => state.downloads);
+  const serverName = useVelaState(state => state.auth.serverName);
   const toggleWifi = () => {
     store.downloads.setWifiOnly(!settings.wifiOnly);
     preferences.set(DOWNLOAD_SETTINGS, JSON.stringify(store.getState().downloads.settings));
   };
   useEffect(() => { void store.downloads.refreshStorage(); }, [store]);
   const online = useVelaState(state => state.auth.phase === 'signed-in');
+  const waitingForSignIn = !online && items.some(item => item.awaitingSignIn);
   const [busy, setBusy] = useState('');
   const [failure, setFailure] = useState('');
   const perform = async (id: string, action: () => Promise<unknown>) => {
@@ -71,11 +73,21 @@ function DownloadLibrary() {
           </View>
         </View>
         {failure || error ? <Notice>{failure || error}</Notice> : null}
-        {traits.metered ? <View style={styles.setting}>
+        {waitingForSignIn ? <View style={styles.setting} testID="downloads-sign-in">
           <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }} style={styles.settingText}>
-            {settings.wifiOnly ? 'Downloads wait for Wi-Fi.' : 'Downloads also use mobile data.'}
+            {`Sign in to ${serverName || 'your server'} to keep watching these. They still play offline.`}
           </Words>
-          <Pill label={settings.wifiOnly ? 'Allow mobile data' : 'Wi-Fi only'} height={40} onPress={toggleWifi} testID="downloads-wifi-only" />
+          <Pill label="Sign in" height={40} onPress={() => router.replace('/sign-in')} testID="downloads-sign-in-button" />
+        </View> : null}
+        {online && awaitingElsewhere ? <View style={styles.setting} testID="downloads-elsewhere">
+          <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }} style={styles.settingText}>
+            {awaitingElsewhere === 1 ? 'A download from another account on this server is waiting for that account to sign in.'
+              : `${awaitingElsewhere} downloads from another account on this server are waiting for that account to sign in.`}
+          </Words>
+          <Pill label="Delete them" height={40} disabled={!!busy} testID="downloads-elsewhere-delete" onPress={() => void (async () => {
+            if (!await confirmAction('Delete these downloads?', 'They belong to another account on this server. That account can download them again after signing in.', 'Delete')) return;
+            void perform('elsewhere', () => store.downloads.removeAwaitingElsewhere());
+          })()} />
         </View> : null}
         {storageNotice(traits, persisted) ? <View testID="downloads-storage-notice">
           <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }}>{storageNotice(traits, persisted)}</Words>
@@ -94,6 +106,12 @@ function DownloadLibrary() {
             {Platform.isTV ? 'Open a movie or episode and select Download to watch it without an internet connection.'
               : 'Open a movie or episode and choose Download to watch it without an internet connection.'}
           </Words> : null}
+        </View> : null}
+        {traits.metered && hydrated ? <View style={[styles.setting, styles.footerSetting, { borderColor: ui.glassEdge }]} testID="downloads-wifi-setting">
+          <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }} style={styles.settingText}>
+            {settings.wifiOnly ? 'Downloads use Wi-Fi only.' : 'Downloads can use mobile data.'}
+          </Words>
+          <Pill label={settings.wifiOnly ? 'Allow mobile data' : 'Wi-Fi only'} height={40} onPress={toggleWifi} testID="downloads-wifi-only" />
         </View> : null}
       </ScrollView>
     </SafeAreaView>
@@ -195,6 +213,7 @@ const styles = StyleSheet.create({
   track: { height: 4, borderRadius: 2, overflow: 'hidden', marginVertical: 2 },
   setting: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
   settingText: { flex: 1, minWidth: 180 },
+  footerSetting: { marginTop: 18, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth },
   empty: { borderWidth: 1, borderRadius: 16, padding: 20, gap: 8, alignItems: 'flex-start' },
 });
 

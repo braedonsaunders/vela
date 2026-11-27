@@ -248,6 +248,9 @@ export interface DownloadRecord {
   baselineWatch?: { positionSeconds: number; played: boolean; lastViewedAt?: V.Timestamp };
   /** Kept when replacing an already-completed download until the new file verifies. */
   previousCompleted?: VerifiedDownloadCopy;
+  /** The server refused this viewer's session (a 401): the files and pending progress are kept,
+   * still playable offline, until the same viewer signs in again (docs/downloads.md). */
+  awaitingSignIn?: boolean;
 }
 
 export interface DownloadTransferRequest {
@@ -346,6 +349,8 @@ export interface DownloadsState {
   freeBytes: number | null;
   usedBytes: number;
   error: string;
+  /** Downloads on this server from another viewer whose session was refused, hidden from this viewer. */
+  awaitingElsewhere: number;
 }
 
 export const initialDownloads: DownloadsState = {
@@ -361,6 +366,7 @@ export const initialDownloads: DownloadsState = {
   freeBytes: null,
   usedBytes: 0,
   error: '',
+  awaitingElsewhere: 0,
 };
 
 /** Whole percent for a transfer whose total size is known. */
@@ -466,10 +472,20 @@ export function totalDownloadedBytes(items: readonly DownloadRecord[]): number {
   return total;
 }
 
-/** Downloads visible to the active viewer on the selected server (other Plex Home members' files stay hidden). */
+/**
+ * Downloads visible on the selected server: the active viewer's own (other Plex Home members' files
+ * stay hidden), or, with no viewer signed in, the ones waiting for their viewer to sign in again.
+ */
 export function visibleDownloads(items: readonly DownloadRecord[], serverId: string, viewerId: string): DownloadRecord[] {
-  if (!serverId || !viewerId) return [];
+  if (!serverId) return [];
+  if (!viewerId) return items.filter(item => item.serverId === serverId && item.awaitingSignIn === true);
   return items.filter(item => item.serverId === serverId && item.viewerId === viewerId);
+}
+
+/** Other viewers' downloads on this server that wait for their own sign-in (hidden from `viewerId`). */
+export function awaitingElsewhere(items: readonly DownloadRecord[], serverId: string, viewerId: string): number {
+  if (!serverId || !viewerId) return 0;
+  return items.filter(item => item.serverId === serverId && item.viewerId !== viewerId && item.awaitingSignIn === true).length;
 }
 
 /** The segments of an index path, refusing anything that could leave its title's directory. */
@@ -647,9 +663,11 @@ export function allowsOfflineRoute(
   phase: AuthPhase,
   pathname: string,
   hasPlayableDownload: (titleId: string) => boolean,
+  /** Signed out after the server refused the session, with that viewer's downloads kept. */
+  waitingForSignIn = false,
 ): boolean {
   if (pathname === '/sign-in' || pathname === '/connect') return true;
-  if (phase !== 'offline') return false;
+  if (phase !== 'offline' && !(phase === 'signed-out' && waitingForSignIn)) return false;
   if (pathname === '/downloads') return true;
   const watchMatch = /^\/watch\/([^/?#]+)$/.exec(pathname);
   if (watchMatch) {
@@ -700,9 +718,11 @@ export class Downloads {
     this.box.subscribe(() => this.syncActiveViewer());
     session.onReset((_kind, refused) => {
       if (refused && this.activeViewer) {
+        // A refused session (a restart with fresh keys, sign out everywhere, a token that expired
+        // offline) is not a sign-out: keep the files and the outbox until this viewer is back.
         const { serverId, viewerId } = this.activeViewer;
         this.activeViewer = undefined;
-        void this.removeViewer(serverId, viewerId).catch(() => {});
+        void this.awaitSignIn(serverId, viewerId).catch(() => {});
       } else {
         this.syncVisible();
       }
@@ -721,6 +741,9 @@ export class Downloads {
       const changed = this.activeViewer?.serverId !== serverId || this.activeViewer?.viewerId !== viewerId;
       this.activeViewer = { serverId, viewerId };
       if (changed) this.syncVisible();
+      // The same viewer is back: their kept downloads rejoin the library and their progress replays.
+      if (phase === 'signed-in' && (enteredOnline || changed) && this.state.allItems.some(item =>
+        item.serverId === serverId && item.viewerId === viewerId && item.awaitingSignIn)) void this.reattach(serverId, viewerId);
     } else if (phase === 'signed-out') {
       this.syncVisible();
     }
@@ -734,9 +757,10 @@ export class Downloads {
     const allItems = this.state.allItems;
     const items = visibleDownloads(allItems, serverId, viewerId);
     const usedBytes = totalDownloadedBytes(allItems);
-    if (items.length !== this.state.items.length || usedBytes !== this.state.usedBytes ||
+    const elsewhere = awaitingElsewhere(allItems, serverId, viewerId);
+    if (items.length !== this.state.items.length || usedBytes !== this.state.usedBytes || elsewhere !== this.state.awaitingElsewhere ||
         items.some((item, i) => item !== this.state.items[i])) {
-      this.box.update('downloads', state => ({ ...state, items, usedBytes }));
+      this.box.update('downloads', state => ({ ...state, items, usedBytes, awaitingElsewhere: elsewhere }));
     }
   }
 
@@ -856,6 +880,7 @@ export class Downloads {
         hydrated: true,
         allItems,
         items: visibleDownloads(allItems, serverId, viewerId),
+        awaitingElsewhere: awaitingElsewhere(allItems, serverId, viewerId),
         outbox,
         freeBytes,
         usedBytes: totalDownloadedBytes(allItems),
@@ -889,8 +914,7 @@ export class Downloads {
   /** Find a download record for the currently active server and viewer. */
   item(titleId: string): DownloadRecord | undefined {
     const { serverId, viewerId } = this.box.get().auth;
-    return this.state.allItems.find(item =>
-      item.serverId === serverId && item.viewerId === viewerId && item.titleId === titleId);
+    return visibleDownloads(this.state.allItems, serverId, viewerId).find(item => item.titleId === titleId);
   }
 
   /** Whether `titleId` has a verified local download for the currently active server and viewer. */
@@ -904,7 +928,8 @@ export class Downloads {
     await this.hydrate();
     const phase = this.box.get().auth.phase;
     const record = this.item(titleId);
-    if ((phase !== 'offline' && phase !== 'signed-in') || !isPlayableDownload(record)) return null;
+    if (!isPlayableDownload(record) || !(phase === 'offline' || phase === 'signed-in' ||
+        (phase === 'signed-out' && record.awaitingSignIn))) return null;
     const verified = record.status === 'completed' ? record : record.previousCompleted;
     if (phase === 'signed-in' && ((options?.versionId && verified?.versionId !== options.versionId) ||
         (options?.sourceId && verified?.sourceId !== options.sourceId))) return null;
@@ -1241,12 +1266,46 @@ export class Downloads {
 
   /** Remove one downloaded title (or cancel its active transfer) for the active viewer. */
   async remove(titleId: string): Promise<void> {
-    const { serverId, viewerId } = this.box.get().auth;
-    if (!serverId || !viewerId) return;
+    const record = this.item(titleId);
+    if (!record) return;
+    const { serverId, viewerId } = record;
     await this.port?.removeTitle(serverId, viewerId, titleId);
     const allItems = this.state.allItems.filter(item =>
       !(item.serverId === serverId && item.viewerId === viewerId && item.titleId === titleId));
     await this.commitSnapshot(allItems, this.state.outbox);
+  }
+
+  /**
+   * The server refused this viewer's session: keep their files and pending progress, marked as
+   * waiting for the same viewer to sign in again. Still playable offline; hidden from other viewers.
+   */
+  async awaitSignIn(serverId: string, viewerId: string): Promise<void> {
+    if (!serverId || !viewerId) return;
+    if (!this.state.allItems.some(item => item.serverId === serverId && item.viewerId === viewerId && !item.awaitingSignIn)) return;
+    const allItems = this.state.allItems.map(item =>
+      item.serverId === serverId && item.viewerId === viewerId ? { ...item, awaitingSignIn: true } : item);
+    await this.commitSnapshot(allItems, this.state.outbox);
+  }
+
+  /** The same viewer signed in again: their kept downloads rejoin the library. */
+  private async reattach(serverId: string, viewerId: string): Promise<void> {
+    const allItems = this.state.allItems.map(item => {
+      if (item.serverId !== serverId || item.viewerId !== viewerId || !item.awaitingSignIn) return item;
+      const { awaitingSignIn: _waiting, ...rest } = item;
+      return rest;
+    });
+    await this.commitSnapshot(allItems, this.state.outbox);
+    void this.replayProgress();
+  }
+
+  /** Delete the downloads (and pending progress) other viewers left waiting on this server; asked first in the UI. */
+  async removeAwaitingElsewhere(): Promise<void> {
+    const { serverId, viewerId } = this.box.get().auth;
+    if (!serverId || !viewerId) return;
+    const viewers = new Set(this.state.allItems
+      .filter(item => item.serverId === serverId && item.viewerId !== viewerId && item.awaitingSignIn)
+      .map(item => item.viewerId));
+    for (const other of viewers) await this.removeViewer(serverId, other);
   }
 
   /** Remove all downloads for the currently active viewer on the selected server. */
@@ -1324,10 +1383,9 @@ export class Downloads {
     completed?: boolean;
     observedAt?: V.Timestamp;
   }): Promise<void> {
-    const { serverId, viewerId } = this.box.get().auth;
-    if (!serverId || !viewerId) return;
     const record = this.item(params.titleId);
     if (!record || !Number.isFinite(params.positionSeconds)) return;
+    const { serverId, viewerId } = record;
     const duration = params.durationSeconds ?? record?.title.durationSeconds ?? 0;
     const position = Math.max(0, params.positionSeconds);
     const observedAt = params.observedAt ?? new Date().toISOString();
@@ -1444,6 +1502,7 @@ export class Downloads {
       ...state,
       allItems,
       items: visibleDownloads(allItems, serverId, viewerId),
+      awaitingElsewhere: awaitingElsewhere(allItems, serverId, viewerId),
       outbox,
       usedBytes: totalDownloadedBytes(allItems),
       ...(freeBytes !== undefined ? { freeBytes } : {}),
