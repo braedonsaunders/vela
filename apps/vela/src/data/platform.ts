@@ -4,8 +4,8 @@
 import { getRandomValues } from 'expo-crypto';
 import Constants from 'expo-constants';
 import { Dimensions, PixelRatio, Platform } from 'react-native';
-import type { VelaPlatform } from '@vela/core';
-import { VelaPlayer, velaDownloads } from '@vela/player';
+import { platformEmbedsTrailers, type VelaPlatform } from '@vela/core';
+import { canEmbed, VelaPlayer, velaDownloads } from '@vela/player';
 import { config, DEVELOPMENT_SERVER } from './config';
 import { secrets } from './secrets';
 
@@ -52,6 +52,7 @@ export function platform(): VelaPlatform {
     media: VelaPlayer.capabilities(),
     audio: VelaPlayer.audioCapabilities(),
     downloads: velaDownloads,
+    trailerEmbed: platformEmbedsTrailers({ os: Platform.OS, isTV: Platform.isTV }) && canEmbed(),
     mock: config.mock,
     artWidth: screenArtWidth(),
   };

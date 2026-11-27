@@ -6,6 +6,7 @@ import type * as V from './wire';
 import type { CardMedia, CardShape } from './media';
 import type { PluginLevels } from './plugin-levels';
 import type { VelaExperience } from './library-presentation';
+import type { TrailerEmbed } from './trailer-embed';
 
 /** A labelled piece of a title's parent context and its select action, when known. */
 export interface ContextPart { label: string; select: string }
@@ -171,7 +172,10 @@ export interface Extra {
   id: string;
   name: string;
   kind: string;
+  /** It plays here: on the server, or in the trailer embed. */
   ready: boolean;
+  /** Played in YouTube's privacy-enhanced embed on this device; `fallback`: the server can play it instead. */
+  embed?: TrailerEmbed & { fallback: boolean };
 }
 
 export interface DetailModel {

@@ -57,6 +57,8 @@ export function advertise(adapter: ServerAdapter, description: ServerDescription
       removeFromContinue: stated('removeFromContinue'),
       extras: stated('extras'),
       extraPlayback: stated('extraPlayback'),
+      // Trailer embeds describe extras the server already answers (Extra.clientPlayback): stated by it.
+      ...(description.features.trailerEmbed ? { trailerEmbed: description.features.trailerEmbed } : {}),
       themeMusic: stated('themeMusic'),
       initialTrackSelection: stated('initialTrackSelection'),
       versions: operation('versions', hasVersions(adapter)),

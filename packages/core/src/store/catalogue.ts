@@ -7,6 +7,7 @@ import { libraryCardArtwork } from '../library-presentation';
 import { pluginLevelsOf, type PluginLevels } from '../plugin-levels';
 import { VelaError } from '../adapter/errors';
 import { hasTitleManagement } from '../adapter/capabilities';
+import { trailerEmbedAllowed } from '../trailer-embed';
 import { capabilitiesOf } from '../adapter/advertise';
 import { hasLibraryFacets, hasLibraryJumpIndex, supportsLibraryBrowse, hasLibraryLive, hasLibraryRecommendations, hasPersonFilmography, hasVersions } from '../adapter/capabilities';
 import { personDates } from '../discovery/person-date';
@@ -273,6 +274,8 @@ export class Catalogue {
     private readonly artWidth: () => number,
     private readonly retryOptions: Pick<ReadRetryOptions, 'sleep'> = {},
     private readonly refreshHome: () => void = () => {},
+    /** This device plays YouTube trailers in the privacy-enhanced embed (VelaPlatform.trailerEmbed). */
+    private readonly platformEmbedsTrailers = false,
   ) {
     session.onReset(() => {
       for (const controller of this.viewControllers) controller.abort();
@@ -347,6 +350,7 @@ export class Catalogue {
       features.extraPlayback?.available === true,
       features.themeMusic?.available === true,
       hasPersonFilmography(connection.adapter),
+      trailerEmbedAllowed(this.platformEmbedsTrailers, features.trailerEmbed),
     );
     this.pending.answered(id, answer);
     return { model, answer };
