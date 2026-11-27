@@ -2,6 +2,7 @@ import { searchServers } from '@vela/core';
 // The view state a document reads (env) for one route, from the store's state and the app's own
 // view state. A value the store has not read yet is honest about it: loading, or absent.
 import { Platform } from 'react-native';
+import { isLandscapePhone } from '@vela/skin/src/widgets/guide/geometry';
 import { detailDateDisplay, type VelaState } from '@vela/core';
 import { aboutOf, searchView, type About, type Env, type RouteName } from '@vela/skin';
 import type { LiveView } from '@vela/skin/src/widgets/guide';
@@ -49,6 +50,7 @@ export function environment({ state, view, live, route, entry, library, width, h
     section: route === 'library' ? entry : route === 'live' ? 'live' : route === 'screen' ? screenDestinationId(entry) : 'home',
     query: state.search.query,
     small: width < 640,
+    landscapePhone: isLandscapePhone(width, height ?? 0, Platform.isTV || (Platform.OS === 'ios' && Platform.isPad)),
     shortLandscape: !Platform.isTV && width < 1600 && height !== undefined && width > height && height < 500,
     tv: width >= 1600 || Platform.isTV,
     still: view.still,

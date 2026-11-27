@@ -6,6 +6,11 @@ export type Zoom = 0 | 1 | 2;
 
 export const RULER = 44;
 
+/** A short landscape phone viewport leaves the guide more room with details beside it. */
+export function isLandscapePhone(width: number, height: number, largeDevice = false): boolean {
+  return !largeDevice && width > height && width <= 1000 && height > 0 && height < 500;
+}
+
 export function minuteWidth(small: boolean, zoom: Zoom): number {
   if (small) return 4;
   return zoom === 0 ? 4 : zoom === 2 ? 9 : 6;

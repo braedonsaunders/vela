@@ -41,6 +41,8 @@ export interface Env {
   query: string;
   small: boolean;
   shortLandscape?: boolean;
+  /** The guide has room for a sidebar and grid, with no ambient video. */
+  landscapePhone?: boolean;
   tv: boolean;
   still: boolean;
   canLive: boolean;

@@ -88,7 +88,7 @@ interface PageProps {
 function GuidePage({ look, model, view, controller, focus, layout, active }: PageProps) {
   const { viewport, env, doc } = useHost();
   const small = viewport.width < 640;
-  const landscape = env.shortLandscape === true && !small;
+  const landscape = env.landscapePhone === true;
   const still = env.still;
   const side = Math.max(gutter(small, viewport.width), viewport.insets.left, viewport.insets.right);
   const [selected, setSelected] = useState(() => {
@@ -96,7 +96,9 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
     return { channel: channel?.id ?? '', programme: focus?.programmeId || channel?.nowId || '' };
   });
   const initialChannel = useRef(selected.channel);
-  useEffect(() => controller.initializePreview(initialChannel.current), [controller]);
+  useEffect(() => {
+    if (!landscape) controller.initializePreview(initialChannel.current);
+  }, [controller, landscape]);
   const [filter, setFilter] = useState<ChannelFilter>('all');
   const [tab, setTab] = useState('');
   const [mode, setMode] = useState<'now' | 'guide'>('now');
@@ -187,10 +189,7 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   const top = !flowHeader && Platform.isTV && Platform.OS === 'android' ? 108 : guideTop(flowHeader, small, viewport.insets.top);
   const band = guideBand(viewport.width, viewport.height, top, side);
   const previewWidth = Math.min(232, Math.round(viewport.width * 0.25));
-  // Leave room for the sidebar's channel heading, Watch button and listing status on short screens.
-  const sidebarTileHeight = clamp(viewport.height - 314, 36, 72);
-  const sidebarTileWidth = Math.min(180, previewWidth - 6);
-  const tileHeight = landscape ? sidebarTileHeight : cinematic ? band.pictureHeight : Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
+  const tileHeight = cinematic ? band.pictureHeight : Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
   const headerHeight = cinematic ? band.height : Platform.isTV ? tileHeight + 32 : small ? 196 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
   const landing = useMemo(() => ({
     minute: handOff && handOff.minute >= 0 ? handOff.minute + (handOffOffset ?? 0) : model.landing,
@@ -228,21 +227,20 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
           inset={landscape ? 12 : cinematic && band.stacked ? side : small && !cinematic ? 16 + 132 : side + (tileHeight * 16) / 9 + 28}
           spacious={cinematic && !landscape}
           sidebar={landscape}
-          copyTop={landscape ? (view.tile.state === 'off' ? 8 : tileHeight + 14) : cinematic && band.stacked ? tileHeight + band.gap : 0}
+          copyTop={landscape ? 8 : cinematic && band.stacked ? tileHeight + band.gap : 0}
           compact={landscape || cinematic && (band.stacked || band.height < 240)}
           onWatch={watch}
           onReplay={archive ? replay : undefined}
         />
       ) : null}
-      {view.tile.state !== 'off' ? (
-        <View style={{ position: 'absolute', right: landscape ? (previewWidth - sidebarTileWidth) / 2 : cinematic && band.stacked ? (viewport.width - tileHeight * 16 / 9) / 2 : side, ...(landscape ? { top: 6 } : cinematic ? { top: band.stacked ? 0 : band.gap } : { bottom: small ? 12 : 8 }), zIndex: 2 }}>
+      {!landscape && view.tile.state !== 'off' ? (
+        <View style={{ position: 'absolute', right: cinematic && band.stacked ? (viewport.width - tileHeight * 16 / 9) / 2 : side, ...(cinematic ? { top: band.stacked ? 0 : band.gap } : { bottom: small ? 12 : 8 }), zIndex: 2 }}>
           <GuideTile
             look={look}
             tile={view.tile}
             channelName={tunedName}
             height={tileHeight}
-            width={landscape ? sidebarTileWidth : undefined}
-            small={small || landscape}
+            small={small}
             still={still}
             controller={controller}
           />

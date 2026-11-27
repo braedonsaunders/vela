@@ -124,10 +124,10 @@ export function useLiveTile(): LiveView['tile'] {
 }
 
 /** Keeps a surface open while `active` (the screen holding it is focused). */
-export function useLiveSurface(surface: Surface, active: boolean): void {
+export function useLiveSurface(surface: Surface, active: boolean, preview = true): void {
   const controller = useContext(LiveContext)?.controller;
   useEffect(() => {
     if (!controller || !active) return;
-    return controller.open(surface);
-  }, [controller, surface, active]);
+    return controller.open(surface, preview);
+  }, [controller, surface, active, preview]);
 }

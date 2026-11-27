@@ -240,9 +240,11 @@ function ProgrammeCopy({
   const watchLabel = programme.airing ? msg('live.watch') : msg('ui.watchChannel', { channel: channel.name });
   return (
     <>
-      <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', minWidth: 0 }}>
+      <View style={sidebar ? { gap: 4, alignItems: 'flex-start' } : { flexDirection: 'row', gap: 10, alignItems: 'center', minWidth: 0 }}>
         {programme.airing ? <LiveBadge look={look} /> : null}
-        <Eyebrow look={look}>{`${channel.number} · ${channel.name}`}</Eyebrow>
+        <View style={sidebar ? { width: '100%' } : { flexShrink: 1, minWidth: 0 }}>
+          <Eyebrow look={look}>{`${channel.number} · ${channel.name}`}</Eyebrow>
+        </View>
         {programme.genre && !small ? (
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center', flexShrink: 0 }}>
             <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: look.tone(programme.tone) }} />
