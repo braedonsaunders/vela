@@ -285,14 +285,18 @@ test('the bridge allows only its methods with valid IDs and requests', async () 
   expect(exportName('a/b:c\u0000.mkv', 'mkv')).toBe('a b c .mkv');
   expect(exportName('', 'mp4')).toBe('Video.mp4');
   expect(imageExtension(JPEG)).toBe('jpg');
-  expect(imageExtension(Buffer.from('<svg/>'))).toBeNull();
+  expect(imageExtension(Buffer.from('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBe('svg');
+  expect(imageExtension(Buffer.from('<html><svg></svg></html>'))).toBeNull();
 });
 
-test('an SVG poster is never stored', async () => {
+test('an SVG poster is kept as SVG (served sandboxed); anything that is not an image is dropped', async () => {
   reset();
-  const { downloads, settled, root } = engine();
-  await downloads.startTransfer(request({ posterUrl: `${mediaBase}/svg` }));
-  const done = await settled('completed');
-  expect(done.posterPath).toBeUndefined();
-  expect(readdirSync(join(root, 'srv/viewer/t1')).some(name => name.startsWith('poster'))).toBe(false);
+  const svg = engine();
+  await svg.downloads.startTransfer(request({ posterUrl: `${mediaBase}/svg` }));
+  expect((await svg.settled('completed')).posterPath).toBe('srv/viewer/t1/poster.svg');
+  reset();
+  const text = engine();
+  await text.downloads.startTransfer(request({ posterUrl: `${mediaBase}/en.srt` }));
+  expect((await text.settled('completed')).posterPath).toBeUndefined();
+  expect(readdirSync(join(text.root, 'srv/viewer/t1')).some(name => name.startsWith('poster'))).toBe(false);
 });

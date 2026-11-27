@@ -143,11 +143,14 @@ async function readJSON(file) {
 
 const sizeOf = file => fs.promises.stat(file).then(stat => stat.size, () => 0);
 
-/** The image type of a poster's first bytes; only JPEG, PNG and WebP are kept (never SVG). */
+/** The image type of a poster's first bytes: JPEG, PNG, WebP or SVG (as iOS keeps); anything else is dropped.
+ * The download route serves every stored file under a sandboxing CSP, so an SVG never runs script. */
 function imageExtension(bytes) {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg';
   if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
   if (bytes.length >= 12 && bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.toString('latin1', 8, 12) === 'WEBP') return 'webp';
+  const head = bytes.subarray(0, 512).toString('utf8').replace(/^\uFEFF/, '').trimStart();
+  if (/^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*<svg[\s>]/i.test(head)) return 'svg';
   return null;
 }
 

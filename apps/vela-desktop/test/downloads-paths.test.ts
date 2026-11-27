@@ -97,6 +97,7 @@ test('the route serves stored files with ranges and types, and nothing else', as
   expect((await get('srv/viewer/title%201/subtitles/en.vtt')).headers.get('content-type')).toBe('text/vtt; charset=utf-8');
   expect((await get('srv/viewer/title%201/poster.jpg')).headers.get('content-type')).toBe('image/jpeg');
   expect((await get('srv/viewer/title%201/poster.jpg')).headers.get('x-content-type-options')).toBe('nosniff');
+  expect((await get('srv/viewer/title%201/poster.jpg')).headers.get('content-security-policy')).toStartWith('sandbox;');
   for (const bad of ['srv/viewer/title%201/escape.mkv', 'srv/viewer/linked/dir/secret.txt', 'srv/viewer/title%201/media.mp4.part',
     'index.json', 'srv/viewer/title%201/%2e%2e/%2e%2e/%2e%2e/%2e%2e/secret.txt', 'srv%2fviewer/title%201/media.mkv']) {
     const response = await get(bad);

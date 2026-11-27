@@ -142,7 +142,7 @@ const TYPES = {
   '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.flac': 'audio/flac', '.ogg': 'audio/ogg', '.opus': 'audio/ogg',
   '.vtt': 'text/vtt; charset=utf-8', '.webvtt': 'text/vtt; charset=utf-8', '.srt': 'application/x-subrip; charset=utf-8',
   '.ass': 'text/x-ssa; charset=utf-8', '.ssa': 'text/x-ssa; charset=utf-8',
-  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml',
 };
 function contentType(file) {
   return TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
@@ -190,6 +190,9 @@ function downloadsRoute(root) {
       'accept-ranges': 'bytes',
       'cache-control': 'no-cache',
       'x-content-type-options': 'nosniff',
+      // Stored files are media, images and text: nothing served here may run script or load anything,
+      // even an SVG poster opened as a document.
+      'content-security-policy': "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self'",
     };
     const range = parseRange(request.headers.get('range'), stat.size);
     if (range === 'unsatisfiable') {
