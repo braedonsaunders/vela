@@ -52,3 +52,10 @@ test('without a source id, the version id tells the files apart', () => {
   const auto = { sessionId: 's1', source: planSource(version('auto', 0, 'r1')), trackId: null };
   expect(settlePick(auto, 'subtitle', report(1, {}), version('auto', 1, 'r2'))).toBe('drop');
 });
+
+test('a plan without paths names its file by its version, or by nothing, and does not throw', () => {
+  const noPaths = (more: Partial<PlaybackPlan>) => ({ sessionId: 's1', sourceGeneration: 0, seekGeneration: 0, ...more }) as unknown as PlaybackPlan;
+  expect(planSource(noPaths({ selectedVersionId: 'va' }))).toBe('va');
+  expect(planSource(noPaths({}))).toBeUndefined();
+  expect(settlePick({ sessionId: 's1', source: undefined, trackId: '2' }, 'audio', report(0, { audioTrackId: '2' }), noPaths({}))).toBe('confirm');
+});

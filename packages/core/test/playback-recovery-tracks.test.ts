@@ -4092,3 +4092,397 @@ test('an audio pick on an automatic version shown before its switch reply does n
     expect([box.get().playback.plan?.audioTracks[1]?.language, box.get().playback.plan?.selectedAudioTrackId]).toEqual(['spa', '1']);
   }, () => false, command => command.idempotencyKey === 'french' ? french : undefined, undefined, { auto: b });
 });
+
+/** The reopen sequence with the pick reported while playing or paused: the pick (Regular, or French audio) waits for
+ * session.ready() and is then held on its way; the player reports it `when` (before the command leaves, after, or both) in
+ * `state`; the session reopens the same file (source generation 1) and the player reports the file's own selection there while
+ * playing; the command is then refused as stale. Ether ids (`forcedTwoFrench`) or Plex ids (`plexForced`), with or without
+ * generations on the reports. */
+async function reopenedPick(ether: boolean, kind: 'audio' | 'subtitle', tagged: boolean, when: 'before' | 'after' | 'both', state: 'playing' | 'paused'): Promise<void> {
+  const file = ether ? forcedTwoFrench : plexForced;
+  const [want, other] = kind === 'audio' ? [ether ? '4' : '2', '1'] : [ether ? '3' : '105', ether ? '2' : '104'];
+  const field = kind === 'audio' ? 'audioTrackId' : 'subtitleTrackId';
+  const selected = kind === 'audio' ? 'selectedAudioTrackId' : 'selectedSubtitleTrackId';
+  let refuse = (_: Error) => {};
+  const refused = new Promise<never>((_, reject) => { refuse = reject; });
+  refused.catch(() => undefined);
+  await lab([file, file], async ({ playback, box, commands, files, run }) => {
+    const session = (playback as unknown as { session: { ready: () => Promise<unknown> } }).session;
+    await playback.start({ kind: 'title', id: 'movie' });
+    const ready = session.ready;
+    let open = () => {};
+    const waiting = new Promise<unknown>(resolve => { open = () => resolve(ready()); });
+    session.ready = () => waiting;
+    const report = (id: string, state: 'playing' | 'paused', sourceGeneration: number, position: number) =>
+      playback.snapshot({ sessionId: 's1', live: null, position, state, [field]: id, ...(tagged ? { sourceGeneration } : {}) });
+    const pick = playback.command('s1', { kind: 'tracks', [field]: want, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'pick' } as never);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    if (when !== 'after') report(want, state, 0, 60);
+    open();
+    for (let i = 0; i < 5; i++) await Promise.resolve(); // The command is on its way.
+    session.ready = ready;
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['pick']);
+    if (when !== 'before') report(want, state, 0, 61);
+    files.set('s1', { ...files.get('s1')!, generation: 1, seek: 1 });
+    await run(5000);
+    expect(box.get().playback.plan?.sourceGeneration).toBe(1);
+    report(other, 'playing', 1, 62);
+    refuse(stale(files.get('s1')!));
+    expect(await pick).toBe(true);
+    expect(commands.filter(c => c.kind === 'tracks').map(c => c.idempotencyKey)).toEqual(['pick', 'key']);
+    expect(files.get('s1')![selected]).toBe(want);
+    expect(box.get().playback.plan?.[selected]).toBe(want);
+    const sent = commands.length;
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    expect(commands.slice(sent).filter(c => c.kind === 'tracks').at(-1)?.[field]).toBe(want);
+    expect(box.get().playback.plan?.[selected]).toBe(want);
+  }, c => c.idempotencyKey === 'pick' ? refused : false);
+}
+
+test('a pick the player reported while playing, before and after it left, is sent again after a reopen of the same file', async () => {
+  // Regular 3 (Plex: 105) waits for session.ready() and the player reports it while playing; the command then leaves and is held
+  // on its way, and the player reports Regular while playing again; the session reopens the same file (source generation 1) and
+  // the player reports forced 2 (104) there, the reopened file's own selection; Regular is refused as stale: it is sent again, and
+  // the session fails onto the same file: Regular, not forced. The same for French audio, and for reports without generations.
+  for (const ether of [true, false]) for (const kind of ['subtitle', 'audio'] as const) for (const tagged of [true, false]) {
+    await reopenedPick(ether, kind, tagged, 'both', 'playing');
+  }
+});
+
+test('a pick the player reported while playing or paused only before or only after it left is sent again after a reopen of the same file', async () => {
+  // As above, with the pick reported only before the command left, or only after, while playing or paused, or reported paused both
+  // times: Regular (French) is sent again and carried.
+  for (const ether of [true, false]) for (const kind of ['subtitle', 'audio'] as const) for (const tagged of [true, false]) {
+    for (const [when, state] of [['before', 'playing'], ['after', 'playing'], ['before', 'paused'], ['after', 'paused'], ['both', 'paused']] as const) {
+      await reopenedPick(ether, kind, tagged, when, state);
+    }
+  }
+});
+
+/** The reopen sequence followed by the viewer's own change there: the pick (Regular 3, Plex 105; or French audio) is reported while
+ * playing on source 0; the session reopens the same file (source generation 1) and the player reports, while playing, the file's own
+ * selection (forced 2, Plex 104; English audio) and then, when `changed`, another one (SDH 6, Plex 106; Off; Spanish audio).
+ * `row`: `waiting`, the pick awaits session.ready() through those reports, is then refused as stale and sent again, and the server
+ * takes the retry but its answer is lost (a poll shows the pick); `lost` (Plex, where a command sent after the reopen is not stale),
+ * the same with the pick's own answer lost; `unsent`, a further reopen shows the pick while it still waits, and session.ready() then
+ * fails, so it is never sent; `held`, the pick is sent at once and refused as stale after the file's own selection, its retry is
+ * taken with the reply held, the other selection is reported, a further reopen shows it, and the held reply arrives. The session
+ * then fails onto the same file: the track it carries. */
+async function reopenedChange(row: 'waiting' | 'lost' | 'unsent' | 'held', ether: boolean, kind: 'subtitle' | 'off' | 'audio', tagged: boolean,
+  changed: boolean): Promise<string | null | undefined> {
+  const base = ether ? forcedTwoFrench : plexForced;
+  const file: File = kind === 'audio' ? { ...base, audioTracks: [...base.audioTracks, audio(ether ? '5' : '3', 'spa')] }
+    : { ...base, subtitleTracks: [...base.subtitleTracks, subtitle(ether ? '6' : '106', 'eng', { hearingImpaired: true })] };
+  const [want, own, other] = kind === 'audio' ? [ether ? '4' : '2', '1', ether ? '5' : '3']
+    : [ether ? '3' : '105', ether ? '2' : '104', kind === 'off' ? null : ether ? '6' : '106'];
+  const field = kind === 'audio' ? 'audioTrackId' : 'subtitleTrackId';
+  const selected = kind === 'audio' ? 'selectedAudioTrackId' : 'selectedSubtitleTrackId';
+  let open = () => {}, fail = (_: Error) => {}, refuse = () => {}, answer = (_?: unknown) => {}, lose = (_: Error) => {}, onFirst = true;
+  const opened = new Promise<void>((resolve, reject) => { open = resolve; fail = reject; });
+  opened.catch(() => undefined);
+  const refused = new Promise<void>(resolve => { refuse = resolve; });
+  const held = new Promise<unknown>(resolve => { answer = resolve; });
+  const lost = new Promise<never>((_, reject) => { lose = reject; });
+  lost.catch(() => undefined);
+  let files: Map<string, File> | undefined, carried: string | null | undefined;
+  await lab([file, file], async ({ playback, box, commands, files: served, run }) => {
+    files = served;
+    const session = (playback as unknown as { session: { ready: () => Promise<unknown> } }).session;
+    await playback.start({ kind: 'title', id: 'movie' });
+    const ready = session.ready;
+    if (row !== 'held') session.ready = () => opened.then(ready);
+    const report = (id: string | null, sourceGeneration: number, position: number) =>
+      playback.snapshot({ sessionId: 's1', live: null, position, state: 'playing', [field]: id, ...(tagged ? { sourceGeneration } : {}) });
+    const reopen = (generation: number, shows?: string | null) => {
+      served.set('s1', { ...file, generation, seek: generation, revision: 2 + generation, ...(shows !== undefined ? { [selected]: shows } : {}) });
+      return run(5000);
+    };
+    const pick = playback.command('s1', { kind: 'tracks', [field]: want, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'pick' } as never);
+    for (let i = 0; i < 12; i++) await Promise.resolve();
+    report(want, 0, 60);
+    await reopen(1);
+    report(own, 1, 61);
+    if (changed && row !== 'held') report(other, 1, 62);
+    if (row === 'unsent') {
+      await reopen(2, want);
+      fail(new Error('could not connect'));
+    } else if (row === 'held') {
+      refuse();
+      for (let i = 0; i < 25; i++) await Promise.resolve();
+      const taken = served.get('s1');
+      if (changed) report(other, 1, 62);
+      await reopen((served.get('s1')!.generation ?? 0) + 1, changed ? other : undefined);
+      answer(taken);
+    } else {
+      session.ready = ready;
+      open();
+      refuse();
+      for (let i = 0; i < 35; i++) await Promise.resolve();
+      if (row === 'lost') served.set('s1', { ...served.get('s1')!, revision: 10, [selected]: want });
+      await run(5000);
+      lose(new Error('connection lost'));
+    }
+    await pick;
+    session.ready = ready;
+    onFirst = false;
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    carried = box.get().playback.plan?.[selected];
+    expect(served.get('s2')![selected] ?? null).toBe(carried ?? null);
+    expect(commands.filter(c => c.kind === 'tracks' && c.idempotencyKey === 'pick')).toHaveLength(row === 'unsent' ? 0 : 1);
+  }, c => c.idempotencyKey === 'pick' && row !== 'lost' ? refused.then(() => { throw stale(files!.get('s1')!); }) : false,
+  c => !onFirst ? undefined : c.idempotencyKey === 'pick' && row === 'lost' ? lost : c.idempotencyKey === 'key' ? row === 'held' ? held : lost : undefined);
+  return carried;
+}
+
+test('after a reopen of the same file, a selection the player reports after the file\'s own there retires a pick awaiting the session', async () => {
+  // Regular 3 (Plex: 105) waits for session.ready() and the player reports it while playing; the session reopens the same file and
+  // the player reports forced 2 (104), the reopened file's own selection, and then SDH 6 (106), the viewer's newer choice there.
+  // A plan that shows Regular does not take it back, whether the command (sent again after a stale refusal, or on Plex as first
+  // sent) is taken with its answer lost, or a further reopen shows Regular and the command is never sent: the session fails onto
+  // SDH. The same with Off or Spanish audio as the newer choice, and for reports without generations.
+  for (const ether of [true, false]) for (const kind of ['subtitle', 'off', 'audio'] as const) for (const tagged of [true, false]) {
+    const other = kind === 'audio' ? ether ? '5' : '3' : kind === 'off' ? null : ether ? '6' : '106';
+    expect(await reopenedChange('waiting', ether, kind, tagged, true)).toBe(other);
+    expect(await reopenedChange('unsent', ether, kind, tagged, true)).toBe(other);
+    if (!ether) expect(await reopenedChange('lost', ether, kind, tagged, true)).toBe(other);
+  }
+});
+
+test('after a reopen of the same file, a selection the player reports after the file\'s own there is not replaced by the held reply of a pick sent again', async () => {
+  // Regular is reported while playing, the session reopens the same file and the player reports forced there; Regular is refused as
+  // stale and sent again, and the server takes it with its reply held; the player then reports SDH (Off, Spanish audio) on that
+  // source, a further reopen shows it, and the held reply arrives: SDH stays and is carried.
+  for (const ether of [true, false]) for (const kind of ['subtitle', 'off', 'audio'] as const) for (const tagged of [true, false]) {
+    expect(await reopenedChange('held', ether, kind, tagged, true)).toBe(kind === 'audio' ? ether ? '5' : '3' : kind === 'off' ? null : ether ? '6' : '106');
+  }
+});
+
+test('after a reopen of the same file, a plan or a reply from behind a further reopen showing the pick does not take it over the file\'s own selection', async () => {
+  // As above with only the reopened file's own selection reported there: a plan that shows Regular (after a lost answer, or a
+  // further reopen while it waits) does not record it, nor does the held reply of its retry from behind a further reopen.
+  for (const ether of [true, false]) for (const kind of ['subtitle', 'audio'] as const) for (const tagged of [true, false]) {
+    const own = kind === 'audio' ? '1' : ether ? '2' : '104';
+    for (const row of ['waiting', 'unsent', 'held', ...(ether ? [] : ['lost'] as const)] as const) expect(await reopenedChange(row, ether, kind, tagged, false)).toBe(own);
+  }
+});
+
+/** An older pick sent again and a later command for the same kind: Regular 105 (Off, French audio 2) is reported while playing on
+ * source 0; the session reopens the same file (source generation 1) showing SDH 106 (Spanish audio 3) and the player reports forced
+ * 104 (English audio) there; Regular is refused as stale and sent again, and Plex takes it (revision 4) with its reply held; the viewer
+ * then picks SDH, which Plex takes too (revision 5), its answer held (`second`: or lost when the first reply arrives); a poll shows
+ * SDH; the retry's reply arrives. `first`: delayed, Regular is not refused but its request reaches the server only after the reopen,
+ * and Plex takes it as first sent (revision 4) with its reply held. `reported`: once Plex took Regular, the player reports Regular
+ * while playing on source 1, before the viewer picks SDH. Returns what the plan shows then and, after the player reported that and
+ * the session failed onto the same file before the second answer, the track the replacement plays. */
+async function laterPick(kind: 'subtitle' | 'off' | 'audio', tagged: boolean, second: 'held' | 'lost', first: 'stale' | 'delayed' = 'stale',
+  reported = false): Promise<[unknown, unknown]> {
+  const file: File = kind === 'audio' ? { ...plexForced, audioTracks: [...plexForced.audioTracks, audio('3', 'spa')] }
+    : { ...plexForced, subtitleTracks: [...plexForced.subtitleTracks, subtitle('106', 'eng', { hearingImpaired: true })] };
+  const [want, own, other] = kind === 'audio' ? ['2', '1', '3'] : kind === 'off' ? [null, '104', '106'] : ['105', '104', '106'];
+  const field = kind === 'audio' ? 'audioTrackId' : 'subtitleTrackId';
+  const selected = kind === 'audio' ? 'selectedAudioTrackId' : 'selectedSubtitleTrackId';
+  let refuse = () => {}, answer = () => {}, onFirst = true, files: Map<string, File> | undefined, result: [unknown, unknown] = [undefined, undefined];
+  const refused = new Promise<void>(resolve => { refuse = resolve; });
+  const held = new Promise<void>(resolve => { answer = resolve; });
+  const never = new Promise<never>(() => {});
+  await lab([file, file], async ({ playback, box, files: served, run }) => {
+    files = served;
+    await playback.start({ kind: 'title', id: 'movie' });
+    const report = (id: string | null, sourceGeneration: number, position: number) =>
+      playback.snapshot({ sessionId: 's1', live: null, position, state: 'playing', [field]: id, ...(tagged ? { sourceGeneration } : {}) });
+    const pick = playback.command('s1', { kind: 'tracks', [field]: want, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'pick' } as never);
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    report(want, 0, 60);
+    served.set('s1', { ...file, generation: 1, seek: 1, revision: 3, [selected]: other });
+    await run(5000);
+    report(own, 1, 61);
+    refuse();
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    if (reported) report(want, 1, 61);
+    void playback.command('s1', { kind: 'tracks', [field]: other, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'second' } as never);
+    for (let i = 0; i < 25; i++) await Promise.resolve();
+    await run(5000);
+    expect(box.get().playback.plan?.[selected]).toBe(other);
+    answer();
+    await pick;
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    const shown = box.get().playback.plan?.[selected] ?? null;
+    report(shown, 1, 62);
+    onFirst = false;
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    result = [shown, box.get().playback.plan?.[selected] ?? null];
+  }, c => c.idempotencyKey === 'pick' ? refused.then(() => { if (first === 'delayed') return 'deliver'; throw stale(files!.get('s1')!); }) : false,
+  c => {
+    if (!onFirst) return undefined;
+    if (c.idempotencyKey === (first === 'delayed' ? 'pick' : 'key')) { const taken = files!.get('s1'); return held.then(() => taken); }
+    if (c.idempotencyKey === 'second') return second === 'lost' ? held.then(() => { throw new Error('connection lost'); }) : never;
+    return undefined;
+  });
+  return result;
+}
+
+test('the held reply of an older pick sent again does not undo a later pick of the same kind a plan shows', async () => {
+  // Regular is reported, the same file is reopened showing SDH and the player reports forced there; Regular is refused as stale and
+  // sent again, Plex takes it with its reply held, and the viewer then picks SDH, which Plex takes too with its answer held or lost;
+  // a poll shows SDH. The retry's reply arrives: the plan still shows SDH, and after the player reports it the session fails onto
+  // SDH. The same with Off as the older pick, with Spanish over French audio, and for reports without generations.
+  for (const kind of ['subtitle', 'off', 'audio'] as const) for (const tagged of [true, false]) for (const second of ['held', 'lost'] as const) {
+    const other = kind === 'audio' ? '3' : '106';
+    expect(await laterPick(kind, tagged, second)).toEqual([other, other]);
+  }
+});
+
+test('the held reply of an older pick that reached the server only after a reopen does not undo a later pick of the same kind a plan shows', async () => {
+  // As above, but Regular is not refused: its request reaches the server only after the reopen and Plex takes it as first sent, with
+  // its reply held; the viewer then picks SDH, which Plex takes too, and a poll shows SDH. The reply of Regular arrives: the plan still
+  // shows SDH, and the session fails onto SDH. The same with Off as the older pick, with Spanish over French audio, and for reports
+  // without generations.
+  for (const kind of ['subtitle', 'off', 'audio'] as const) for (const tagged of [true, false]) for (const second of ['held', 'lost'] as const) {
+    const other = kind === 'audio' ? '3' : '106';
+    expect(await laterPick(kind, tagged, second, 'delayed')).toEqual([other, other]);
+  }
+});
+
+test('the held reply of an older pick does not undo a later pick of the same kind a plan shows after the player reported the older pick on the reopened file', async () => {
+  // As the two above, sent again after a stale refusal or reaching the server only after the reopen: once Plex took Regular, the
+  // player reports Regular on the reopened file, and the viewer then picks SDH, which Plex takes too, and a poll shows SDH. The
+  // reply of Regular arrives: the plan still shows SDH, and the session fails onto SDH. The same with Off as the older pick, with
+  // Spanish over French audio, and for reports without generations.
+  for (const first of ['stale', 'delayed'] as const) for (const kind of ['subtitle', 'off', 'audio'] as const) for (const tagged of [true, false])
+    for (const second of ['held', 'lost'] as const) {
+      const other = kind === 'audio' ? '3' : '106';
+      expect(await laterPick(kind, tagged, second, first, true)).toEqual([other, other]);
+    }
+});
+
+/** Picks of one kind sent one after another on one plan, with no reopen: the server answers `answered`, in that order, and leaves
+ * the others unanswered; then the session fails onto the same file before another poll or player report. `row`: refused, French
+ * and then Spanish over a plan showing Spanish, the player reporting English (`reported`), Spanish refused (its answer is the
+ * refusal); off, Off twice over a plan showing Off, the player reporting forced; two, Regular and then SDH, or three, Regular, SDH
+ * and Regular again, over a plan showing SDH, the player reporting SDH. On Ether each names the server's current generations.
+ * Returns what the plan shows after the answers and the track the replacement plays. */
+async function samePlanPicks(ether: boolean, row: 'refused' | 'off' | 'two' | 'three', answered: number[], tagged: boolean, reported: boolean): Promise<[unknown, unknown]> {
+  const base = ether ? forcedTwoFrench : plexForced;
+  const [regular, forced, sdh, french, spanish] = ether ? ['3', '2', '6', '4', '5'] : ['105', '104', '106', '2', '3'];
+  const isAudio = row === 'refused';
+  const file: File = isAudio ? { ...base, audioTracks: [...base.audioTracks, audio(spanish, 'spa')], selectedAudioTrackId: spanish }
+    : row === 'off' ? { ...base, selectedSubtitleTrackId: null }
+    : { ...base, subtitleTracks: [...base.subtitleTracks, subtitle(sdh, 'eng', { hearingImpaired: true })], selectedSubtitleTrackId: sdh };
+  const picks = isAudio ? [french, spanish] : row === 'off' ? [null, null] : row === 'two' ? [regular, sdh] : [regular, sdh, regular];
+  const field = isAudio ? 'audioTrackId' : 'subtitleTrackId';
+  const selected = isAudio ? 'selectedAudioTrackId' : 'selectedSubtitleTrackId';
+  const gates = picks.map(() => { let open = () => {}; const opened = new Promise<void>(resolve => { open = resolve; }); return { opened, open: () => open() }; });
+  let onFirst = true, files: Map<string, File> | undefined, result: [unknown, unknown] = [undefined, undefined];
+  await lab([file, file], async ({ playback, box, files: served, run }) => {
+    files = served;
+    await playback.start({ kind: 'title', id: 'movie' });
+    if (reported) playback.snapshot({ sessionId: 's1', live: null, position: 60, state: 'playing', [field]: isAudio ? '1' : row === 'off' ? forced : sdh, ...(tagged ? { sourceGeneration: 0 } : {}) });
+    for (const [i, id] of picks.entries()) {
+      const now = served.get('s1')!;
+      void playback.command('s1', { kind: 'tracks', [field]: id, sourceGeneration: now.generation ?? 0, seekGeneration: now.seek ?? 0, idempotencyKey: `pick${i}` } as never).catch(() => undefined);
+      for (let j = 0; j < 15; j++) await Promise.resolve();
+    }
+    for (const i of answered) {
+      gates[i]!.open();
+      for (let j = 0; j < 30; j++) await Promise.resolve();
+    }
+    const shown = box.get().playback.plan?.[selected] ?? null;
+    onFirst = false;
+    playback.recover('s1');
+    await run();
+    expect(box.get().playback.sessionId).toBe('s2');
+    result = [shown, box.get().playback.plan?.[selected] ?? null];
+  }, c => isAudio && c.idempotencyKey === 'pick1'
+    ? gates[1]!.opened.then(() => { throw new VelaError({ class: 'request', code: 'invalid_track', message: 'invalid track', retry: { allowed: false } } as never, 422); }) : false,
+  c => {
+    const i = Number(/^pick(\d)$/.exec(c.idempotencyKey)?.[1] ?? -1);
+    if (!onFirst || i < 0 || (isAudio && i === 1)) return undefined;
+    const taken = files!.get('s1');
+    return gates[i]!.opened.then(() => taken);
+  });
+  return result;
+}
+
+test('a pick the server refused does not take away an older pick of the same kind it accepted on the same plan, in either reply order', async () => {
+  // The plan shows Spanish and the player reports English; the viewer picks French, which the server takes, and then Spanish, which
+  // it refuses. Whether French's reply or Spanish's refusal comes first, the plan shows French and the session fails onto French.
+  // On Plex and Ether, for reports with and without generations, and with nothing reported.
+  for (const ether of [false, true]) for (const tagged of [true, false]) for (const reported of [true, false]) {
+    const french = ether ? '4' : '2';
+    expect(await samePlanPicks(ether, 'refused', [0, 1], tagged, reported)).toEqual([french, french]);
+    expect(await samePlanPicks(ether, 'refused', [1, 0], tagged, reported)).toEqual([french, french]);
+  }
+});
+
+test('two picks of Off on one plan, one answered and the other still awaiting its answer, keep Off', async () => {
+  // The plan shows Off and the player reports forced; the viewer picks Off twice. The server answers the first (or the second) and
+  // the other answer is still held when the session fails: the plan shows Off and so does the replacement.
+  for (const ether of [false, true]) for (const tagged of [true, false]) for (const reported of [true, false]) {
+    expect(await samePlanPicks(ether, 'off', [0], tagged, reported)).toEqual([null, null]);
+    expect(await samePlanPicks(ether, 'off', [1], tagged, reported)).toEqual([null, null]);
+  }
+});
+
+test('on one plan, the reply of an older pick still shows and records its track while a later pick of the same kind awaits its answer', async () => {
+  // The plan shows SDH; the viewer picks Regular and then SDH (or Regular, SDH and Regular again). Only the first pick is answered:
+  // the plan shows Regular and the session fails onto Regular. Only the second is answered: SDH.
+  for (const ether of [false, true]) for (const tagged of [true, false]) for (const reported of [true, false]) {
+    const [regular, sdh] = ether ? ['3', '6'] : ['105', '106'];
+    for (const row of ['two', 'three'] as const) {
+      expect(await samePlanPicks(ether, row, [0], tagged, reported)).toEqual([regular, regular]);
+      expect(await samePlanPicks(ether, row, [1], tagged, reported)).toEqual([sdh, sdh]);
+    }
+  }
+});
+
+test('on Ether, Off picked again after a reopen of the same file is carried when the reply of the first Off, sent again, arrives', async () => {
+  // The plan shows Off and the player reports forced; the viewer picks Off and the player reports Off. The same file is reopened
+  // showing Off and the player reports forced there; the first Off is refused as stale and sent again, and the server takes it with
+  // its reply held. The viewer picks Off again, which stays unanswered (or waits for the session). The held reply arrives and the
+  // player still reports Off on the reopened source: the session fails onto Off.
+  for (const second of ['unanswered', 'waiting'] as const) {
+    const file: File = { ...forcedTwoFrench, selectedSubtitleTrackId: null };
+    let refuse = () => {}, answer = () => {}, onFirst = true, files: Map<string, File> | undefined;
+    const refused = new Promise<void>(resolve => { refuse = resolve; });
+    const held = new Promise<void>(resolve => { answer = resolve; });
+    const never = new Promise<never>(() => {});
+    await lab([file, file], async ({ playback, box, files: served, run }) => {
+      files = served;
+      const session = (playback as unknown as { session: { ready: () => Promise<unknown> } }).session;
+      await playback.start({ kind: 'title', id: 'movie' });
+      const report = (id: string | null, sourceGeneration: number, position: number) =>
+        playback.snapshot({ sessionId: 's1', live: null, position, state: 'playing', subtitleTrackId: id, sourceGeneration });
+      report('2', 0, 59);
+      const first = playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 0, seekGeneration: 0, idempotencyKey: 'pick' } as never);
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      report(null, 0, 60);
+      served.set('s1', { ...file, generation: 1, seek: 1, revision: 3 });
+      await run(5000);
+      report('2', 1, 61);
+      refuse();
+      for (let i = 0; i < 30; i++) await Promise.resolve();
+      const ready = session.ready;
+      if (second === 'waiting') session.ready = () => never;
+      void playback.command('s1', { kind: 'tracks', subtitleTrackId: null, sourceGeneration: 1, seekGeneration: 1, idempotencyKey: 'again' } as never).catch(() => undefined);
+      for (let i = 0; i < 25; i++) await Promise.resolve();
+      session.ready = ready;
+      answer();
+      await first;
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      expect(box.get().playback.plan?.selectedSubtitleTrackId ?? null).toBeNull();
+      report(null, 1, 62);
+      onFirst = false;
+      playback.recover('s1');
+      await run();
+      expect(box.get().playback.sessionId).toBe('s2');
+      expect(box.get().playback.plan?.selectedSubtitleTrackId ?? null).toBeNull();
+    }, c => c.idempotencyKey === 'pick' ? refused.then(() => { throw stale(files!.get('s1')!); }) : c.idempotencyKey === 'again' ? never : false,
+    c => onFirst && c.idempotencyKey === 'key' ? held : undefined);
+  }
+});

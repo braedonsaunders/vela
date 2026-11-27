@@ -189,6 +189,14 @@ export function matchSeriesTracks(
  * its own; the others are left out, so the plan's own selection stands for them.
  */
 export function playableLocally(plan: V.PlaybackPlan, ids: SeriesTrackMatch, client?: V.ClientCapabilities): SeriesTrackMatch {
+  // A plan without paths says nothing about what the engine can switch: the tracks it lists are taken as they are.
+  if (!plan.paths) {
+    return {
+      ...(ids.audioTrackId !== undefined && plan.audioTracks.some(t => t.id === ids.audioTrackId) ? { audioTrackId: ids.audioTrackId } : {}),
+      ...(ids.subtitleTrackId === null || (ids.subtitleTrackId !== undefined && plan.subtitleTracks.some(t => t.id === ids.subtitleTrackId))
+        ? { subtitleTrackId: ids.subtitleTrackId } : {}),
+    };
+  }
   const path = plan.paths.find(p => p.id === plan.selectedPathId) ?? plan.paths[0];
   const direct = path?.kind === 'direct' || path?.original === true;
   const result: SeriesTrackMatch = {};

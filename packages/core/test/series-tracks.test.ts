@@ -160,6 +160,14 @@ describe('series track matching', () => {
     )).toEqual({ subtitleTrackId: 's-en-forced' });
   });
 
+  test('a plan without paths takes the tracks it lists and does not throw', () => {
+    // Nothing is known of what the engine can switch on it: the matched tracks are applied as they are.
+    const noPaths = { ...basePlan(), paths: undefined } as unknown as PlaybackPlan;
+    expect(matchSeriesTracks(noPaths, { audio: { language: 'ja' }, subtitle: { language: 'en', hearingImpaired: true }, updatedAt: 1 }, { client: capableClient }))
+      .toEqual({ audioTrackId: 'a-ja', subtitleTrackId: 's-en-sdh' });
+    expect(matchSeriesTracks(noPaths, { subtitle: null, updatedAt: 1 })).toEqual({ subtitleTrackId: null });
+  });
+
   test('bounds stored map size, drops malformed entries, and prunes removed servers', () => {
     const raw: Record<string, unknown> = {
       'bad-key': { audio: { language: 'ja' }, updatedAt: 10 },

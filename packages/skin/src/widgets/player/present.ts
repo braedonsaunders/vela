@@ -457,7 +457,7 @@ export interface PendingPick { sessionId: string; source: string | undefined; tr
 export function planSource(plan: PlaybackPlan | null | undefined): string | undefined {
   if (!plan) return undefined;
   const version = plan.playingVersionId !== undefined ? plan.playingVersionId : plan.selectedVersionId;
-  return plan.paths.find(path => path.id === plan.selectedPathId)?.sourceId || version || undefined;
+  return plan.paths?.find(path => path.id === plan.selectedPathId)?.sourceId || version || undefined;
 }
 
 /** What a report of `plan` does to a pending pick: confirms it as the viewer's choice, drops it, or
