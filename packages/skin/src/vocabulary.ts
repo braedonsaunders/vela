@@ -2,7 +2,7 @@
 // over the binding context (the repeated item a node sits in) and the environment (the app's
 // view state). The semantics are those of the Contract renderer's table (tools/renderer.ts),
 // key for key. A template calls only the accessors it names.
-import { joinMeta } from './meta-line';
+import { cardFacts, joinMeta } from './meta-line';
 import { identityKeys } from './identity-keys';
 import { pagerBinding, pagerState } from './pager-book';
 import { drawnAs, duration, isUnreleased, msg, releaseLabel, videoRoleLabel } from '@vela/core';
@@ -258,7 +258,8 @@ export const VOCABULARY: Record<string, Accessor> = {
   'card.label': from('card', cardName),
   'card.kindId': from('card', kindId),
   'hero.kindId': from('hero', kindId),
-  'card.facts': from('card', x => joinMeta([x.facts])),
+  // A phone's narrow cards wrap their facts between facts; wider and TV layouts keep the one line.
+  'card.facts': (c, e) => c.card ? e.small && !e.tv ? cardFacts([c.card.facts], c.card.rating) : joinMeta([c.card.facts]) : '',
   'hero.facts': from('hero', x => joinMeta([x.facts])),
   'card.factsLine': from('card', factsLine),
   'hero.factsLine': from('hero', factsLine),
