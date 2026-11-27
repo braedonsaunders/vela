@@ -1,4 +1,4 @@
-import type { BoxNode, Node, Style } from '../../../skin';
+import type { BoxNode, Node, ProfileMenuLook, Style } from '../../../skin';
 import { gutter, gutterSmall, lift, sans, side } from './look';
 
 export const tab = (
@@ -503,9 +503,9 @@ export const shell: Node = {
       } as Style,
     },
     navigationSheet,
-    // The profile sheet: large rows a remote can step through.
+    // The profile sheet: large rows a remote can step through (the profile menu primitive).
     {
-      type: 'box',
+      type: 'profileMenu',
       when: [{ test: 'env.viewer' }, { test: 'flag:menu' }],
       motion: 'sheet',
       role: 'dialog',
@@ -518,6 +518,8 @@ export const shell: Node = {
         right: side,
         'z-index': '30',
         width: 'clamp(300px, 24vw, 440px)',
+        'max-height': 'calc(100vh - clamp(84px, 7vw, 132px) - 20px - env(safe-area-inset-bottom))',
+        'overflow-y': 'auto',
         'box-sizing': 'border-box',
         padding: 'clamp(18px, 1.4vw, 26px)',
         display: 'flex',
@@ -529,118 +531,85 @@ export const shell: Node = {
         'box-shadow': '0px 0px 0px 1px rgba(255, 255, 255, 0.10), 0px 40px 90px -20px rgba(0, 0, 0, 0.9)',
         'font-size': 'clamp(16px, 1.2vw, 22px)',
       },
-      small: { top: '68px', right: '12px', left: '12px', width: 'auto' },
+      small: { top: '68px', right: '12px', left: '12px', width: 'auto', 'max-height': 'calc(100vh - 80px - env(safe-area-inset-bottom))' },
+    },
+  ],
+};
+
+const sheetText: Style = { 'font-weight': '650' };
+// The sheet's look: big rows that light up in ink under the remote.
+export const sheetLook: ProfileMenuLook = {
+  parts: {
+    header: {
+      type: 'box',
+      style: { display: 'flex', 'flex-direction': 'row', gap: '16px', 'align-items': 'center', padding: '6px 10px 14px' },
       children: [
         {
-          type: 'box',
+          type: 'text',
+          text: '{env.viewerInitial}',
           style: {
-            display: 'flex',
-            'flex-direction': 'row',
-            gap: '16px',
-            'align-items': 'center',
-            padding: '6px 10px 14px',
+            display: 'flex', 'align-items': 'center', 'justify-content': 'center', width: '56px', height: '56px', 'border-radius': '28px',
+            'font-size': '24px', 'font-weight': '700', color: '$ground', 'background-image': 'linear-gradient(140deg, #f5f1e9 0%, #dcb998 100%)', 'flex-shrink': '0',
           },
-          children: [
-            {
-              type: 'text',
-              text: '{env.viewerInitial}',
-              style: {
-                display: 'flex',
-                'align-items': 'center',
-                'justify-content': 'center',
-                width: '56px',
-                height: '56px',
-                'border-radius': '28px',
-                'font-size': '24px',
-                'font-weight': '700',
-                color: '$ground',
-                'background-image': 'linear-gradient(140deg, #f5f1e9 0%, #dcb998 100%)',
-                'flex-shrink': '0',
-              },
-            },
-            {
-              type: 'box',
-              style: { display: 'flex', 'flex-direction': 'column', gap: '2px', 'min-width': '0px' },
-              children: [
-                {
-                  type: 'text',
-                  text: '{env.viewer}',
-                  style: { 'font-size': 'clamp(19px, 1.45vw, 27px)', 'font-weight': '700', 'line-clamp': '1' },
-                },
-                {
-                  type: 'text',
-                  text: '{s:watchingAs}',
-                  style: { 'font-size': 'clamp(14px, 1vw, 18px)', color: '$ink-quiet' },
-                },
-              ],
-            },
-          ],
         },
         {
           type: 'box',
-          press: { action: 'openPicker' },
-          controlStates: false,
-          label: '{s:appearance}',
-          testId: 'skin-picker',
-          style: { ...sheetRow() },
-          focus: sheetFocus(),
-          hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' },
+          style: { display: 'flex', 'flex-direction': 'column', gap: '2px', 'min-width': '0px' },
           children: [
-            { type: 'icon', symbol: 'layers', style: { width: '24px', height: '24px' } },
-            {
-              type: 'box',
-              style: { display: 'flex', 'flex-direction': 'column', gap: '2px', flex: '1' },
-              children: [
-                { type: 'text', text: '{s:appearance}', style: { 'font-weight': '650' } },
-                { type: 'text', text: '{s:skinName}', style: { 'font-size': '0.8em', opacity: '0.7' } },
-              ],
-            },
-            { type: 'icon', symbol: 'forward-chevron', style: { width: '16px', height: '16px', opacity: '0.6' } },
+            { type: 'text', text: '{entry.label}', style: { 'font-size': 'clamp(19px, 1.45vw, 27px)', 'font-weight': '700', 'line-clamp': '1' } },
+            { type: 'text', text: '{s:watchingAs}', style: { 'font-size': 'clamp(14px, 1vw, 18px)', color: '$ink-quiet' } },
           ],
-        },
-        {
-          type: 'box',
-          when: [{ test: 'env.canManageLibraries' }],
-          press: { action: 'manageLibraries' },
-          controlStates: false,
-          label: '{s:manageLibraries}',
-          testId: 'manage-libraries',
-          style: { ...sheetRow() },
-          focus: sheetFocus(),
-          hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' },
-          children: [
-            { type: 'icon', symbol: 'library', style: { width: '24px', height: '24px' } },
-            { type: 'text', text: '{s:manageLibraries}', style: { 'font-weight': '650' } },
-          ],
-        },
-        { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
-        { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-        {
-          type: 'box',
-          press: { action: 'signOut' },
-          controlStates: false,
-          label: '{s:signOut}',
-          style: { ...sheetRow() },
-          focus: sheetFocus(),
-          hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' },
-          children: [
-            { type: 'icon', symbol: 'sign-out', style: { width: '24px', height: '24px' } },
-            { type: 'text', text: '{s:signOut}', style: { 'font-weight': '650' } },
-          ],
-        },
-        // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
-        {
-          type: 'box',
-          when: [{ test: 'env.aboutLine' }],
-          readingStop: true,
-          label: '{env.aboutLabel}',
-          testId: 'about-line',
-          style: { padding: '12px 18px 4px', 'border-radius': '14px' },
-          children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': 'clamp(12px, 0.85vw, 16px)', 'line-height': '1.35', color: '$ink-quiet' } }],
         },
       ],
     },
-  ],
+    divider: { type: 'box', style: { height: '1px', 'flex-shrink': '0', margin: '8px 18px', 'background-color': 'rgba(255, 255, 255, 0.10)' } },
+    section: {
+      type: 'text',
+      text: '{section.title}',
+      role: 'heading',
+      level: 2,
+      style: { padding: '10px 18px 4px', 'font-size': '0.75em', 'font-weight': '650', 'letter-spacing': '0.12em', 'text-transform': 'uppercase', color: '$ink-quiet' },
+    },
+    row: {
+      type: 'box',
+      controlStates: false,
+      style: sheetRow(),
+      focus: sheetFocus(),
+      hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' },
+      children: [
+        { type: 'icon', symbol: '{entry.icon}', style: { width: '24px', height: '24px', 'flex-shrink': '0' } },
+        { type: 'text', text: '{entry.label}', style: { ...sheetText, flex: '1', 'line-clamp': '1' } },
+      ],
+    },
+    picker: {
+      type: 'box',
+      controlStates: false,
+      style: sheetRow(),
+      focus: sheetFocus(),
+      hover: { 'background-color': 'rgba(255, 255, 255, 0.10)' },
+      children: [
+        { type: 'icon', symbol: 'layers', style: { width: '24px', height: '24px', 'flex-shrink': '0' } },
+        {
+          type: 'box',
+          style: { display: 'flex', 'flex-direction': 'column', gap: '2px', flex: '1' },
+          children: [
+            { type: 'text', text: '{entry.label}', style: sheetText },
+            { type: 'text', text: '{entry.detail}', style: { 'font-size': '0.8em', opacity: '0.7' } },
+          ],
+        },
+        { type: 'icon', symbol: 'forward-chevron', style: { width: '16px', height: '16px', opacity: '0.6' } },
+      ],
+    },
+    // The server rows in the sheet's own size; they reach 10px past their column, so it is inset to the rows' text.
+    servers: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', padding: '0px 18px', 'font-size': 'clamp(16px, 1.2vw, 22px)' } },
+    // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
+    about: {
+      type: 'box',
+      testId: '{entry.testId}',
+      style: { padding: '12px 18px 4px', 'border-radius': '14px' },
+      children: [{ type: 'text', text: '{entry.label}', style: { 'font-size': 'clamp(12px, 0.85vw, 16px)', 'line-height': '1.35', color: '$ink-quiet' } }],
+    },
+  },
 };
 
 export function sheetRow(): Style {

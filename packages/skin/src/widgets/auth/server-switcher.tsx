@@ -1,12 +1,15 @@
 // Widget `serverSwitcher` (the profile menu): your servers, the current one checked, each with
 // its kind and state; choosing another switches to it, and "Add a server" opens Connect. Its text
 // takes the node's inherited rows; the quiet lines and the check take the document's `ui` inks.
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
+// In the profile menu primitive (params.entries `servers`, renderer 22) it draws the server list
+// alone: Downloads, Manage libraries, the heading and Add a server are the menu's own entries.
+// Placed bare (older documents) it draws them all, as before.
+import { createContext, useContext, useEffect, useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { msg } from '@vela/core';
 import { useVelaState } from '@vela/core/react';
 import { eyebrow } from '../../resolve/vela-base/look';
-import { useHost, useInheritedText, type WidgetProps } from '../../host';
+import { InheritedContext, useHost, useInheritedText, type WidgetProps } from '../../host';
 import { serverDetail } from './connect/server-row';
 import type { ServerOption } from './connect/model';
 import { Alert, APressable, Glyph, NO_RING, overlaid, useInteraction, Words } from '../common/controls';
@@ -27,6 +30,10 @@ const ROW = {
  * menu's rows as ROW does on its own, and the row inside it fills what the button leaves. */
 const SERVER_LINE = { 'flex-direction': 'row', 'align-items': 'center', margin: '0px -10px', gap: '4px' };
 const LOOKS = { hover: { 'background-color': '$ui.control' }, focus: { 'box-shadow': '0px 0px 0px 2px $ui.accent' } };
+/** In the profile menu primitive the rows' names take the type the look sets around the list (its
+ * `servers` part): size, spacing and case, as the look's own rows. */
+const LABEL_ROWS = ['font-size', 'letter-spacing', 'text-transform'] as const;
+const LabelRows = createContext<Record<string, string>>({});
 
 export function ServerSwitcher({ params }: WidgetProps) {
   const switcher = useServerSwitch();
@@ -37,6 +44,7 @@ export function ServerSwitcher({ params }: WidgetProps) {
   const [returnTo, setReturnTo] = useState('');
   const selecting = useRef(false);
   const look = useLook();
+  const inherited = useContext(InheritedContext).rows as Record<string, unknown>;
   const busy = pending !== '';
   if (!switcher) return null;
   const selectServer = (id: string) => switcher.selectServer?.(id) ?? switcher.actions.select(id);
@@ -72,19 +80,21 @@ export function ServerSwitcher({ params }: WidgetProps) {
     }
   };
   const title = params.label || msg('connect.servers');
+  const listOnly = params.entries === 'servers';
   return (
+    <LabelRows.Provider value={listOnly ? lookRows(inherited) : NO_ROWS}>
     <View style={look.box({ gap: '2px' })} accessibilityRole="menu" accessibilityLabel={title}>
-      {switcher.openDownloads ? <Row label="Downloads" testID="server-downloads" icon="download" onPress={() => {
+      {!listOnly && switcher.openDownloads ? <Row label="Downloads" testID="server-downloads" icon="download" onPress={() => {
         host.setFlag('menu', false);
         switcher.openDownloads?.();
       }} disabled={busy} /> : null}
-      {switcher.openLibraries ? <Row label="Manage libraries" testID="server-libraries" icon="library" onPress={() => {
+      {!listOnly && switcher.openLibraries ? <Row label="Manage libraries" testID="server-libraries" icon="library" onPress={() => {
         host.setFlag('menu', false);
         switcher.openLibraries?.();
       }} disabled={busy} /> : null}
-      <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' }} style={look.box({ 'padding-top': '4px', 'padding-bottom': '4px' })}>
+      {listOnly ? null : <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.inkQuiet' }} style={look.box({ 'padding-top': '4px', 'padding-bottom': '4px' })}>
         {title}
-      </Words>
+      </Words>}
       {switcher.servers.list.map(server => {
         const removable = !server.selected && server.id !== switcher.servers.selectedId;
         const confirming = removable && confirmId === server.id;
@@ -133,10 +143,16 @@ export function ServerSwitcher({ params }: WidgetProps) {
           </View>
         );
       })}
-      <Row label={params.addLabel || msg('connect.add')} onPress={switcher.openConnect} disabled={busy} testID="server-add" />
+      {listOnly ? null : <Row label={params.addLabel || msg('connect.add')} onPress={switcher.openConnect} disabled={busy} testID="server-add" />}
       {error ? <Alert>{error}</Alert> : null}
     </View>
+    </LabelRows.Provider>
   );
+}
+
+const NO_ROWS: Record<string, string> = {};
+function lookRows(rows: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(LABEL_ROWS.flatMap(row => typeof rows[row] === 'string' ? [[row, rows[row] as string]] : []));
 }
 
 function Row({
@@ -178,6 +194,7 @@ function Row({
   // The menu's own face, where the document sets one.
   const face = useInheritedText().style.fontFamily;
   const { state, handlers } = useInteraction();
+  const labelRows = useContext(LabelRows);
   const button = useRef<ComponentRef<typeof APressable>>(null);
   useEffect(() => {
     if (Platform.OS === 'web' && preferFocus && !disabled) button.current?.focus();
@@ -203,7 +220,7 @@ function Row({
     >
       {icon ? <Glyph symbol={icon} size={17} color={look.ui.ink} /> : null}
       {iconOnly ? null : <View style={[look.box({ gap: '2px' }), { flex: compact ? undefined : 1, minWidth: 0 }]}>
-        <Words rows={{ 'font-size': '14px', ...(destructive ? { color: '#ffffff' } : {}) }} style={face ? { fontFamily: face } : undefined} lines={1}>
+        <Words rows={{ 'font-size': '14px', ...labelRows, ...(destructive ? { color: '#ffffff' } : {}) }} style={face ? { fontFamily: face } : undefined} lines={1}>
           {label}
         </Words>
         {detail ? (

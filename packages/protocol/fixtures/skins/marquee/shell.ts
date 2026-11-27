@@ -1,6 +1,6 @@
 // Marquee's frame: the sidebar (an icon rail on narrower screens, a drawer on phones),
 // the top bar and the account menu.
-import type { Condition, Node, Style } from '../../../skin';
+import type { Condition, Node, ProfileMenuLook, Style } from '../../../skin';
 import { searchBox } from './search';
 import {
   sans,
@@ -367,39 +367,68 @@ const topBar: Node = {
   ],
 };
 
-const menuRow = (
-  text: string,
-  icon: Node,
-  press: { action: 'openPicker' | 'manageLibraries' | 'signOut' },
-  extra: Partial<Node> = {},
-): Node =>
-  ({
-    type: 'box',
-    press,
-    label: text,
-    ...extra,
-    style: {
-      position: 'relative',
-      outline: 'auto',
-      display: 'flex',
-      'flex-direction': 'row',
-      gap: '12px',
-      'align-items': 'center',
-      'box-sizing': 'border-box',
-      width: '100%',
-      height: '42px',
-      padding: '0px 16px',
-      color: '$ink',
+// The account menu's look (the profile menu primitive): flat full-width rows, amber focus.
+const menuRowStyle: Style = {
+  position: 'relative', outline: 'auto', display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center',
+  'box-sizing': 'border-box', width: '100%', 'min-height': '42px', padding: '0px 16px', color: '$ink', 'font-size': '14px',
+};
+const divider: Node = { type: 'box', style: { height: '1px', 'flex-shrink': '0', 'background-color': '$line', margin: '4px 0px' } };
+export const accountMenuLook: ProfileMenuLook = {
+  parts: {
+    header: {
+      type: 'box',
+      style: { display: 'flex', 'flex-direction': 'row', gap: '12px', 'align-items': 'center', padding: '10px 16px 10px' },
+      children: [
+        avatar(36, 16),
+        { type: 'text', text: '{entry.label}', style: { 'font-size': '15px', 'font-weight': '700', flex: '1', 'min-width': '0px', 'line-clamp': '1' } },
+      ],
     },
-    hover: { 'background-color': '$hover' },
-    focus: { 'box-shadow': 'inset 0px 0px 0px 2px $amber' },
-    children: [icon, { type: 'text', text, style: { 'font-size': '14px' } }],
-  }) as Node;
-const divider: Node = { type: 'box', style: { height: '1px', 'background-color': '$line' } };
+    divider,
+    section: {
+      type: 'text',
+      text: '{section.title}',
+      role: 'heading',
+      level: 2,
+      style: { padding: '8px 16px 4px', 'font-size': '12px', 'font-weight': '700', 'letter-spacing': '0.06em', 'text-transform': 'uppercase', color: '$ink-faint' },
+    },
+    row: {
+      type: 'box',
+      style: menuRowStyle,
+      hover: { 'background-color': '$hover' },
+      focus: { 'box-shadow': 'inset 0px 0px 0px 2px $amber' },
+      children: [
+        { type: 'icon', symbol: '{entry.icon}', style: { width: '18px', height: '18px', 'flex-shrink': '0' } },
+        { type: 'text', text: '{entry.label}', style: { flex: '1', 'line-clamp': '1' } },
+      ],
+    },
+    // The server rows reach 10px past their column (the base's menu), so the column is inset to the rows' text.
+    servers: { type: 'box', style: { display: 'flex', 'flex-direction': 'column', padding: '0px 16px', 'font-size': '14px' } },
+    // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
+    about: {
+      type: 'box',
+      style: { padding: '6px 16px 8px' },
+      children: [{ type: 'box', testId: '{entry.testId}', style: { 'border-radius': '4px' }, children: [
+        { type: 'text', text: '{entry.label}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ink-faint' } }] }],
+    },
+  },
+  entries: {
+    appearance: { label: '{s:changeAppearance}', glyph: glyph('grid', 18) },
+    manageLibraries: { glyph: glyph('rows', 18) },
+    signOut: { glyph: glyph('signout', 18) },
+  },
+  sections: [
+    { id: 'viewer', entries: ['viewer'] },
+    { id: 'you', divider: true, entries: [] },
+    { id: 'servers', title: '{t:connect.servers}', divider: true, entries: [] },
+    { id: 'session', divider: true, entries: [] },
+  ],
+};
 const accountMenu: Node = {
-  type: 'box',
+  type: 'profileMenu',
   when: [set('env.viewer'), set('flag:menu')],
   id: 'marquee-account-menu',
+  role: 'dialog',
+  label: '{s:profile}',
   motion: 'drop',
   exit: 'gone100',
   escape: 'menu',
@@ -410,70 +439,18 @@ const accountMenu: Node = {
     right: '14px',
     'z-index': '30',
     width: '260px',
+    'max-height': `calc(100vh - ${bar.normal + 8}px - env(safe-area-inset-bottom))`,
+    'overflow-y': 'auto',
     'box-sizing': 'border-box',
     padding: '8px 0px',
+    display: 'flex',
+    'flex-direction': 'column',
     'border-radius': '6px',
     'background-color': '$menu',
     'box-shadow': '0px 12px 40px $shadow, 0px 0px 0px 1px $line',
   },
-  small: { top: px(bar.small - 4), right: '8px' },
-  children: [
-    {
-      type: 'box',
-      style: {
-        display: 'flex',
-        'flex-direction': 'row',
-        gap: '12px',
-        'align-items': 'center',
-        padding: '10px 16px 14px',
-      },
-      children: [
-        avatar(36, 16),
-        {
-          type: 'text',
-          text: '{env.viewer}',
-          style: {
-            'font-size': '15px',
-            'font-weight': '700',
-            flex: '1',
-            'min-width': '0px',
-            'line-clamp': '1',
-          },
-        },
-      ],
-    },
-    divider,
-    menuRow('{s:changeAppearance}', glyph('grid', 18), { action: 'openPicker' }, {
-      testId: 'skin-picker',
-      when: [{ test: 'env.skinCount', is: 'gt', value: '1' }],
-      a11y: { haspopup: 'dialog' },
-    } as Partial<Node>),
-    menuRow('{s:manageLibraries}', glyph('rows', 18), { action: 'manageLibraries' }, {
-      testId: 'manage-libraries',
-      when: [set('env.canManageLibraries')],
-    } as Partial<Node>),
-    {
-      type: 'box',
-      style: { padding: '0px 16px' },
-      children: [
-        { type: 'widget', widget: 'install', params: { action: 'install', label: '{s:install}' } },
-        { type: 'widget', widget: 'install', params: { action: 'update', label: '{s:update}' } },
-      ],
-    },
-    divider,
-    menuRow('{s:signOut}', glyph('signout', 18), { action: 'signOut' }),
-    // Which Vela this is, where it runs and the server: quiet, selectable, and on TV a stop the remote reaches.
-    {
-      type: 'box',
-      when: [set('env.aboutLine')],
-      readingStop: true,
-      label: '{env.aboutLabel}',
-      testId: 'about-line',
-      style: { padding: '6px 16px 8px' },
-      children: [{ type: 'text', text: '{env.aboutLine}', style: { 'font-size': '12px', 'line-height': '16px', color: '$ink-faint' } }],
-    },
-  ],
-} as Node;
+  small: { top: px(bar.small - 4), right: '8px', 'max-height': `calc(100vh - ${bar.small + 8}px - env(safe-area-inset-bottom))` },
+};
 
 // Phones: the sidebar is a drawer behind the menu button.
 const drawerOpen = [set('env.viewer'), set('env.small'), set('flag:drawer')];

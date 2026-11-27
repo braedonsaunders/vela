@@ -71,6 +71,15 @@ const within = (node: RNode, predicate: (node: RNode) => boolean): boolean => pr
   || node.kind === 'repeat' && within(node.item, predicate);
 const signsOut = (node: RNode) => node.kind === 'box' && node.press?.action === 'signOut';
 const isAbout = (node: RNode): node is Box => node.kind === 'box' && node.readingStop === true;
+function pathTo(from: RNode, to: RNode): RNode[] {
+  if (from === to) return [from];
+  if (from.kind !== 'box') return [];
+  for (const child of from.children) {
+    const rest = pathTo(child, to);
+    if (rest.length) return [from, ...rest];
+  }
+  return [];
+}
 function stopIn(node: RNode): Box | undefined {
   if (node.kind !== 'box') return undefined;
   return node.readingStop === true ? node : node.children.map(stopIn).find(Boolean);
@@ -84,18 +93,22 @@ test.each(documents)('%s ends its profile menu with the About line', (_name, doc
     const walk = (node: RNode) => {
       if (node.kind === 'repeat') return walk(node.item);
       if (node.kind !== 'box') return;
-      const out = node.children.findIndex(signsOut);
-      if (out >= 0) {
+      // Sign out is a child of the menu, or of one of its sections (the profile menu primitive's groups).
+      const out = node.children.findIndex(child => signsOut(child) || child.kind === 'box' && !child.press && child.children.some(signsOut) && !within(child, isAbout));
+      // A section that holds Sign out alone is not the menu: the menu holds the About line too.
+      if (out >= 0 && within(node, isAbout)) {
         menus++;
         // The line after Sign out is the stop, or holds it (the Vela base keeps its rule outside the stop).
         const line = node.children.slice(out + 1).find(child => within(child, isAbout));
         expect(line).toBeDefined();
         const about = isAbout(line!) ? line : stopIn(line!);
         expect(about).toBeDefined();
-        expect(holds(line!.when, { index: 0 }, env)).toBe(true);
+        // Shown while there is a line, by the conditions on the way down to the stop.
+        const shown = (e: Env) => pathTo(line!, about!).every(step => holds(step.when, { index: 0 }, e));
+        expect(shown(env)).toBe(true);
         expect(fill(about!.label!, { index: 0 }, env)).toBe(aboutLabel(android));
         expect(within(about!, n => n.kind === 'text' && fill(n.text, { index: 0 }, env) === 'Vela 0.2.48 (2048) · Android · Ether 0.3.19')).toBe(true);
-        expect(holds(line!.when, { index: 0 }, { ...env, about: undefined })).toBe(false);
+        expect(shown({ ...env, about: undefined })).toBe(false);
       }
       node.children.forEach(walk);
     };
