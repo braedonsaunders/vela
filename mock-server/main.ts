@@ -199,6 +199,12 @@ const lastStopped = new Map<string, string>();
  */
 function startFault(g: Grant, body: V.PlaybackRequest, pending: 'audioStartPending' | 'videoStartPending'): V.PlaybackPlan | undefined {
   if (body.queued) return undefined;
+  if (pending === 'videoStartPending' && faults.videoStartPreparing > 0) {
+    const ahead = --faults.videoStartPreparing;
+    const message = ahead > 0 ? `Waiting for the download service (queued at TorBox behind ${ahead} active downloads)…` : 'Finding a source…';
+    throw Response.json({ error: { class: 'source', code: 'preparing', message, retry: { allowed: true, afterSeconds: 1, maxAttempts: 40 } } } satisfies V.ErrorResponse,
+      { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '1', 'X-Ether-Media-Error': 'preparing' } });
+  }
   if (faults[pending] > 0) {
     faults[pending]--;
     throw Response.json({ error: { class: 'transient', code: 'preparation_pending', message: 'Playback is being prepared', retry: { allowed: true, afterSeconds: 1 } } } satisfies V.ErrorResponse,

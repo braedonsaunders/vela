@@ -12,6 +12,17 @@ const DEFAULT_ATTEMPTS = 3;
 const MAX_ATTEMPTS = 5;
 /** A retry further away than this is not waited for behind a spinner. */
 const MAX_WAIT_SECONDS = 60;
+/**
+ * Ether's `preparing`: still finding a source, or a download service is fetching the release. That
+ * is a wait, not a failure: the server's own attempt count is honoured up to this bound, and each
+ * attempt waits what the server asked (no more than MAX_WAIT_SECONDS) rather than ending the start.
+ */
+const MAX_PREPARING_ATTEMPTS = 120;
+
+/** Whether a refused start is Ether still preparing the title (`preparing`), a wait rather than a failure. */
+export function stillPreparing(error: unknown): boolean {
+  return error instanceof VelaError && error.detail.code === 'preparing' && error.detail.retry?.allowed === true;
+}
 
 /**
  * Seconds to wait before asking again after `retries` earlier retries of this start, or 0 when
@@ -23,6 +34,11 @@ export function startRetry(error: unknown, retries: number): number {
   if (retry?.allowed !== true) return 0;
   const header = Number(error.retryAfter ?? NaN);
   const hint = Number.isFinite(retry.afterSeconds) ? Math.max(0, retry.afterSeconds!) : 0;
+  if (stillPreparing(error)) {
+    const asked = Math.ceil(Math.max(1, hint, Number.isFinite(header) ? header : 0));
+    const allowed = Number.isFinite(retry.maxAttempts) ? Math.min(MAX_PREPARING_ATTEMPTS, Math.floor(retry.maxAttempts!)) : DEFAULT_ATTEMPTS;
+    return retries < Math.max(0, allowed - 1) ? Math.min(asked, MAX_WAIT_SECONDS) : 0;
+  }
   const minimum = error.detail.code === 'catchup_unavailable' ? 30 : 1;
   const seconds = Math.ceil(Math.max(2 ** Math.min(retries, 5), hint, Number.isFinite(header) ? header : 0, minimum));
   const attempts = Number.isFinite(retry.maxAttempts) ? Math.floor(retry.maxAttempts!) : DEFAULT_ATTEMPTS;

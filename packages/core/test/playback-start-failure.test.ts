@@ -100,6 +100,47 @@ test('startRetry follows retry.allowed, afterSeconds, Retry-After and maxAttempt
   expect(startRetry(refused({ allowed: true, afterSeconds: 120 }), 0)).toBe(0);
 });
 
+const preparing = (message: string, retry: ProtocolError['retry'], header: string | null = null) =>
+  new VelaError({ class: 'source', code: 'preparing', message, retry }, 503, header);
+
+test('Ether still preparing a title is waited out on its own attempt count and waits, not ended as a failure', () => {
+  // Its maxAttempts is honoured past the five a refusal gets: forty attempts, thirty-nine waits.
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 30, maxAttempts: 40 }), 4)).toBe(30);
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 30, maxAttempts: 40 }), 38)).toBe(30);
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 30, maxAttempts: 40 }), 39)).toBe(0);
+  // The server's wait, not a doubling backoff; a long one is waited a minute at a time, not final.
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 2, maxAttempts: 40 }), 10)).toBe(2);
+  expect(startRetry(preparing('Waiting for the download service…', { allowed: true, afterSeconds: 300, maxAttempts: 3 }), 0)).toBe(60);
+  expect(startRetry(preparing('Finding a source…', { allowed: true, maxAttempts: 40 }, '12'), 0)).toBe(12);
+  // Bounded however many the server allows, and never when it forbids asking again.
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 1, maxAttempts: 10_000 }), 118)).toBe(1);
+  expect(startRetry(preparing('Finding a source…', { allowed: true, afterSeconds: 1, maxAttempts: 10_000 }), 119)).toBe(0);
+  expect(startRetry(preparing('Finding a source…', { allowed: false, afterSeconds: 5 }), 0)).toBe(0);
+});
+
+test('a title Ether is still preparing keeps waiting with each answer\'s message, then plays', async () => {
+  const { box, playback, requests } = harness([
+    async () => { throw preparing('Finding a source…', { allowed: true, afterSeconds: 1, maxAttempts: 40 }, '1'); },
+    async () => { throw preparing('Waiting for the download service (queued at TorBox behind 3 active downloads)…', { allowed: true, afterSeconds: 1, maxAttempts: 40 }, '1'); },
+    async () => { throw preparing('Waiting for the download service (queued at TorBox behind 2 active downloads)…', { allowed: true, afterSeconds: 1, maxAttempts: 40 }, '1'); },
+    async () => { throw preparing('Waiting for the download service (queued at TorBox behind 1 active downloads)…', { allowed: true, afterSeconds: 1, maxAttempts: 40 }, '1'); },
+    async () => { throw preparing('Waiting for the download service…', { allowed: true, afterSeconds: 1, maxAttempts: 40 }, '1'); },
+    async () => titlePlan('s6'),
+  ]);
+  await playback.start({ kind: 'title', id: 'movie' });
+  expect(box.get().playback).toMatchObject({ phase: 'failed', errorCode: 'preparing', retryAfterSeconds: 1, error: 'Finding a source…' });
+  await wait(1100);
+  expect(box.get().playback.error).toBe('Waiting for the download service (queued at TorBox behind 3 active downloads)…');
+  // Past the five attempts a plain refusal gets, still waiting rather than failed.
+  await wait(3300);
+  expect(requests()).toBe(5);
+  expect(box.get().playback).toMatchObject({ phase: 'failed', errorCode: 'preparing', retryAfterSeconds: 1, retryAttempt: 5 });
+  await wait(1100);
+  expect(requests()).toBe(6);
+  expect(box.get().playback).toMatchObject({ phase: 'playing', sessionId: 's6', error: '', errorCode: '' });
+  await playback.stop();
+}, 10_000);
+
 test('startRefusal carries the server\'s message and class, or a fallback', () => {
   expect(startRefusal(refused({ allowed: false }))).toEqual({ message: 'The connection to the Live TV provider failed.', code: 'network', errorClass: 'source' });
   expect(startRefusal(new Error('boom'), 'x')).toEqual({ message: 'boom', code: '', errorClass: '' });

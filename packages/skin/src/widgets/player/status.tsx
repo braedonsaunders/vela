@@ -27,7 +27,7 @@ interface Props {
   /** What the engine is doing while it waits, for screen readers. */
   waitingLabel: string;
   /** A refused start being asked again: shown in words under the spinner. */
-  retrying?: { seconds: number; message: string } | null;
+  retrying?: { seconds: number; message: string; preparing?: boolean } | null;
   onRetry(): void;
   useOriginal?: () => void;
   onClose(): void;
@@ -47,13 +47,17 @@ export function Status({ look, failed, waiting, waitingLabel, retrying, onRetry,
     );
   }
   if (!waiting && !retrying) return null;
+  // Ether still preparing the title is a wait in its own words ("Finding a source…", a download
+  // queue position), not a retried failure: its message is the heading.
+  const preparing = retrying?.preparing ? retrying.message.trim() || msg('player.preparing') : '';
+  const heading = preparing || msg('player.retrying');
   return (
     <View pointerEvents="none" testID="player-status" style={{ alignItems: 'center', justifyContent: 'center', gap: look.size(14), maxWidth: look.size(440), marginHorizontal: 16 }}>
-      <Spinner look={look} size={look.size(look.small ? 52 : 64)} label={retrying ? msg('player.retrying') : waitingLabel} />
+      <Spinner look={look} size={look.size(look.small ? 52 : 64)} label={retrying ? heading : waitingLabel} />
       {retrying ? (
-        <View accessibilityLiveRegion="polite" testID="player-retrying" style={{ alignItems: 'center', gap: look.size(6) }}>
-          <Text style={look.text(16, 600, look.ink)}>{msg('player.retrying')}</Text>
-          {retrying.message ? (
+        <View accessibilityLiveRegion="polite" testID={preparing ? 'player-preparing' : 'player-retrying'} style={{ alignItems: 'center', gap: look.size(6) }}>
+          <Text style={[look.text(16, 600, look.ink), { textAlign: 'center' }]}>{heading}</Text>
+          {retrying.message && !preparing ? (
             <Text style={[look.text(13, 400, look.inkSecondary), { textAlign: 'center', lineHeight: look.size(20) }]}>{retrying.message}</Text>
           ) : null}
         </View>

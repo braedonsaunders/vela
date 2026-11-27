@@ -111,7 +111,11 @@ test('core\'s refused start is a failure only once it stops retrying, and a retr
   expect(startRetrying(failed)).toBeNull();
   const waiting = { ...failed, retryAfterSeconds: 4, retryAttempt: 1 };
   expect(startFailure(waiting, target)).toBeNull();
-  expect(startRetrying(waiting)).toEqual({ seconds: 4, message: failed.error });
+  expect(startRetrying(waiting)).toEqual({ seconds: 4, message: failed.error, preparing: false });
+  // Ether still preparing the title is a wait in its own words, not a retried refusal.
+  const preparing = { ...waiting, errorCode: 'preparing', error: 'Finding a source…' };
+  expect(startRetrying(preparing)).toEqual({ seconds: 4, message: 'Finding a source…', preparing: true });
+  expect(startFailure(preparing, { kind: 'title', id: 't' })).toBeNull();
   expect(startFailure({ ...initialPlayback, phase: 'starting' }, target)).toBeNull();
   expect(startRetrying({ ...initialPlayback, phase: 'starting' })).toBeNull();
 });
