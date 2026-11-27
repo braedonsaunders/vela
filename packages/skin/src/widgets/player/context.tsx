@@ -60,6 +60,8 @@ export interface PlayerChromeState {
   /** The last command the engine or the server refused, in words ("" when none). */
   actionError: string;
   liveRecoveryNotice?: string;
+  /** The session stepped down to a server transcode the network can carry (delivery.ts), for a moment. */
+  qualityNotice?: string;
   /** Only the quality command currently awaiting acknowledgement. */
   pendingQualityId?: string;
   pendingVersionId?: string;

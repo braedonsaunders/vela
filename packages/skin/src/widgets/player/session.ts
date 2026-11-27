@@ -5,7 +5,7 @@
 import { forcedMute, quietPlayback } from '../../quiet-playback';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { AWAKE, commandOrigin, msg, sleepDue, sleepFrom, VelaError, withSessionVersions, type PlaybackTarget, type Sleep, type SleepMode, type StartRefusal, type StreamingSettings } from '@vela/core';
+import { AWAKE, commandOrigin, deliveryWatch, heardDelivery, msg, stepDown, sleepDue, sleepFrom, VelaError, withSessionVersions, type PlaybackTarget, type Sleep, type SleepMode, type StartRefusal, type StreamingSettings } from '@vela/core';
 import { useVela, useVelaState } from '@vela/core/react';
 import type { PlaybackPlan } from '../../../../protocol/types';
 import type { Command, Failure, Snapshot, VelaPlayerProps } from '@vela/player-api';
@@ -36,6 +36,14 @@ export interface LiveSessionOwner {
   retry(): void;
   updatePlan(plan: PlaybackPlan): void;
 }
+
+/** Media3 (Android) plays a server path at the one rate it has: a stream the network cannot carry steps down
+ * to a server transcode (core delivery.ts). The engine reports the bytes it receives (loadProgress). */
+const STEPS_DOWN = Platform.OS === 'android';
+/** How often the evidence is weighed (snapshots arrive four times a second). */
+const STEP_CHECK_MS = 1000;
+/** How long the step-down notice stands. */
+const QUALITY_NOTICE_MS = 6000;
 
 /** Native phones and tablets offer both picture modes. The watch route opts in on compact web. */
 const PICTURE_CHOICE = (Platform.OS === 'ios' || Platform.OS === 'android') && !Platform.isTV;
@@ -79,6 +87,12 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
   const versionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const position = useRef(0);
   const paused = useRef(false);
+  /** Delivery evidence for an automatic step down (delivery.ts), when it was last weighed, and the session the
+   * viewer chose a quality on (an automatic step never overrides that). */
+  const delivery = useRef(deliveryWatch());
+  const deliveryChecked = useRef(0);
+  const viewerQuality = useRef('');
+  const [qualityNotice, setQualityNotice] = useState('');
   const presented = useRef(false);
   const reported = useRef<Snapshot | null>(null);
   const { kind, id } = target;
@@ -227,7 +241,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     else if (input.type === 'play' || input.type === 'catchUp') viewerPaused.current = false;
     // A seek leaves the presented place; the player's next presenting report says where it is.
     if (input.type === 'seek' || input.type === 'seekBy') presented.current = false;
-    if (input.type === 'quality') { pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }
+    if (input.type === 'quality') { viewerQuality.current = sessionIdRef.current; pendingQuality.current = nextId.current; qualityPick.current = input.renditionId ?? 'auto'; setPendingQualityId(qualityPick.current); }
     if (input.type === 'audio' && sessionIdRef.current) {
       pendingAudio.current = { commandId: nextId.current, sessionId: sessionIdRef.current, source: sourceRef.current, trackId: input.trackId };
     } else if (input.type === 'subtitle' && sessionIdRef.current) {
@@ -339,6 +353,30 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     send({ type: 'pause' });
   }, [sessionId, send]);
 
+  // A stream the network cannot carry: the best server transcode the measured throughput carries, chosen as
+  // an automatic switch (the engine's own, like a recovery's, so a stale one is dropped), and said so briefly.
+  const stepDownIfStarved = (next: Snapshot) => {
+    const now = Date.now();
+    delivery.current = heardDelivery(delivery.current, next, now);
+    if (now - deliveryChecked.current < STEP_CHECK_MS) return;
+    deliveryChecked.current = now;
+    const step = stepDown(delivery.current, plan, now);
+    if (!step || !plan) return;
+    // Once per source: the switch brings new generations, and with them fresh evidence.
+    delivery.current = deliveryWatch();
+    console.info(`Vela playback: stepping down to ${step.pathId} (${Math.round(step.rateBps / 1e5) / 10} Mbit/s) at ${Math.round(step.throughputBps / 1e5) / 10} Mbit/s measured`);
+    nextId.current += 1;
+    setSent({ command: { id: nextId.current, type: 'quality', renditionId: `path:${step.pathId}` }, on: plan.sessionId });
+    const quality = plan.paths.find(path => path.id === step.pathId)?.quality;
+    setQualityNotice(msg('player.quality.steppedDown', { quality: quality ? `${quality.height}p · ${Math.round(step.rateBps / 1e5) / 10} Mb/s` : '' }));
+  };
+  useEffect(() => {
+    if (!qualityNotice) return;
+    const timer = setTimeout(() => setQualityNotice(''), QUALITY_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [qualityNotice]);
+  useEffect(() => { delivery.current = deliveryWatch(); setQualityNotice(''); }, [sessionId]);
+
   const recovery = playback.timeshiftRecovery;
   const enginePlan = useMemo(() => Platform.OS === 'android' && recovery && plan &&
     recovery.sessionId === plan.sessionId && recovery.seekGeneration === plan.seekGeneration
@@ -372,6 +410,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
           if (settled !== 'wait') pending.current = null;
           if (chosen && settled === 'confirm') vela.playback.rememberTrack(chosen.sessionId, track, chosen.trackId);
         }
+        if (STEPS_DOWN && !external && viewerQuality.current !== sessionId) stepDownIfStarved(next);
         const asleep = sleepRef.current;
         // The end came first: an end-of-item sleep has done its work (nothing follows), a timer has none left.
         if (asleep.mode !== 'off' && next.state === 'ended') setSleepState(AWAKE);
@@ -458,6 +497,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       failure: playback.phase === 'preparing' ? null : failure,
       actionError: refused || (liveRecoveryNotice ? '' : actionError),
       liveRecoveryNotice,
+      qualityNotice,
       pendingQualityId,
       pendingVersionId,
       versionMessage,

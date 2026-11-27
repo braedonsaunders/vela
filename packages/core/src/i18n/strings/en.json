@@ -566,6 +566,7 @@
   "player.quality.convertedFromCurrent": "Converted from the current version",
   "player.quality.plexStream": "Plex server stream",
   "player.quality.title": "Playback quality",
+  "player.quality.steppedDown": "The network can't keep up: playing {quality} instead",
   "player.streaming": "Streaming quality",
   "player.streaming.wifi": "On Wi-Fi",
   "player.streaming.mobile": "On mobile data",

@@ -433,12 +433,12 @@ function Chrome({ state, onCaptionInsets }: { state: PlayerChromeState; onCaptio
         />
       </View>
       {!idle.visible && !failed ? <LiveNotice look={look} watch={live} lift={surfaces.lift} /> : null}
-      {(state.liveRecoveryNotice || state.versionMessage) && !failed ? (
+      {(state.liveRecoveryNotice || state.versionMessage || state.qualityNotice) && !failed ? (
         <View pointerEvents="none" accessibilityLiveRegion="polite"
-          testID={state.liveRecoveryNotice ? 'player-live-recovery-notice' : 'player-version-notice'}
+          testID={state.liveRecoveryNotice ? 'player-live-recovery-notice' : state.versionMessage ? 'player-version-notice' : 'player-quality-notice'}
           style={{ position: 'absolute', top: top + look.size(64), alignSelf: 'center', maxWidth: '80%',
             paddingVertical: look.size(8), paddingHorizontal: look.size(14), borderRadius: look.radiusControl, backgroundColor: look.scrim }}>
-          <Text style={look.text(14, 500, look.ink)}>{state.liveRecoveryNotice || state.versionMessage}</Text>
+          <Text style={look.text(14, 500, look.ink)}>{state.liveRecoveryNotice || state.versionMessage || state.qualityNotice}</Text>
         </View>
       ) : null}
       {info && !failed ? <InfoCard look={look} view={view} top={top} onLayout={event => {
