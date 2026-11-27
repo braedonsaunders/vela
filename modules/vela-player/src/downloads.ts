@@ -68,15 +68,23 @@ export interface VelaDownloadsPort {
 interface NativeDownloadsModule {
   downloadsBaseDirectoryUrl?(): string;
   downloadsFreeBytes?(): Promise<number | null>;
-  downloadsReadSnapshot?(): Promise<NativeDownloadsSnapshot>;
-  downloadsWriteSnapshot?(snapshot: NativeDownloadsSnapshot): Promise<void>;
-  downloadsStartTransfer?(request: NativeDownloadTransferRequest): Promise<void>;
-  downloadsResumeTransfer?(request: NativeDownloadTransferRequest): Promise<void>;
+  /** Android: JSON text (see jsonBridge). */
+  downloadsReadSnapshot?(): Promise<NativeDownloadsSnapshot | string>;
+  downloadsWriteSnapshot?(snapshot: NativeDownloadsSnapshot | string): Promise<void>;
+  downloadsStartTransfer?(request: NativeDownloadTransferRequest | string): Promise<void>;
+  downloadsResumeTransfer?(request: NativeDownloadTransferRequest | string): Promise<void>;
   downloadsPauseTransfer?(serverId: string, viewerId: string, titleId: string): Promise<void>;
   downloadsRemoveTitle?(serverId: string, viewerId: string, titleId: string): Promise<void>;
   downloadsRemoveViewer?(serverId: string, viewerId: string): Promise<void>;
   downloadsRemoveServer?(serverId: string): Promise<void>;
   addListener?(event: 'onDownload', listener: (event: NativeDownloadTransferProgress) => void): { remove(): void };
+}
+
+/** Android's Expo bridge converts neither `undefined` nor nested `null` into a Kotlin map, and records and
+ * requests carry both (optional and cleared fields): there, snapshots and requests cross as JSON text. */
+const jsonBridge = Platform.OS === 'android';
+function out<T>(value: T): T | string {
+  return jsonBridge ? JSON.stringify(value) : value;
 }
 
 function createVelaDownloads(): VelaDownloadsPort | undefined {
@@ -93,27 +101,28 @@ function createVelaDownloads(): VelaDownloadsPort | undefined {
     traits: nativeDownloadsTraits(Platform.OS, !!Platform.isTV),
     baseDirectoryUrl: () => native.downloadsBaseDirectoryUrl?.() ?? '',
     readSnapshot: async () => {
-      const snap = await native.downloadsReadSnapshot?.();
+      const raw: NativeDownloadsSnapshot | string | undefined = await native.downloadsReadSnapshot?.();
+      const snap: NativeDownloadsSnapshot | undefined = typeof raw === 'string' ? JSON.parse(raw) : raw;
       return {
         items: Array.isArray(snap?.items) ? snap.items : [],
         outbox: Array.isArray(snap?.outbox) ? snap.outbox : [],
       };
     },
     writeSnapshot: async (snapshot) => {
-      await native.downloadsWriteSnapshot?.({
+      await native.downloadsWriteSnapshot?.(out({
         items: Array.isArray(snapshot?.items) ? snapshot.items : [],
         outbox: Array.isArray(snapshot?.outbox) ? snapshot.outbox : [],
-      });
+      }));
     },
     freeBytes: async () => (await native.downloadsFreeBytes?.()) ?? null,
     startTransfer: async (request) => {
-      await native.downloadsStartTransfer?.(request);
+      await native.downloadsStartTransfer?.(out(request));
     },
     pauseTransfer: async (serverId, viewerId, titleId) => {
       await native.downloadsPauseTransfer?.(serverId, viewerId, titleId);
     },
     resumeTransfer: async (request) => {
-      await native.downloadsResumeTransfer?.(request);
+      await native.downloadsResumeTransfer?.(out(request));
     },
     removeTitle: async (serverId, viewerId, titleId) => {
       await native.downloadsRemoveTitle?.(serverId, viewerId, titleId);

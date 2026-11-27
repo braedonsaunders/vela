@@ -40,3 +40,36 @@ internal class MediaScope(origin: String, prefix: String) {
     return if (port in 1..65535) "${name.lowercase()}:$port" else null
   }
 }
+
+/** The one local allowance (docs/downloads.md, "Local file routes"): a `file:` URL whose canonical path
+ * (symlinks resolved) is a regular file inside the canonical downloads root. It never carries credentials,
+ * and every http(s) rule above is untouched. Encoded separators and NULs are refused before decoding;
+ * `..`, `.`, empty segments, backslashes, control characters and drive letters after it. */
+internal class LocalMediaScope(root: java.io.File) {
+  private val root: java.io.File = root.canonicalFile
+
+  fun file(url: String): java.io.File? = try {
+    val uri = URI(url)
+    val raw = uri.rawPath
+    if (!uri.scheme.equals("file", true) || uri.isOpaque || uri.rawAuthority != null || uri.rawUserInfo != null ||
+      uri.rawQuery != null || uri.rawFragment != null || raw == null || encodedSeparator.containsMatchIn(raw)) null
+    else {
+      val path = uri.path
+      val segments = path.split('/')
+      if (segments.first().isNotEmpty() || segments.drop(1).any(::refused)) null
+      else java.io.File(path).canonicalFile.takeIf { it.path.startsWith(root.path + java.io.File.separator) && it.isFile }
+    }
+  } catch (_: Exception) { null }
+
+  private fun refused(segment: String) = segment.isEmpty() || segment == "." || segment == ".." || segment.contains('\\') ||
+    segment.any { it.code < 32 || it.code == 127 } || Regex("^[A-Za-z]:$").matches(segment)
+
+  private companion object {
+    val encodedSeparator = Regex("%(?:2f|5c|00)", RegexOption.IGNORE_CASE)
+  }
+}
+
+/** The downloads root's local scope, set when the downloads engine starts (OfflineDownloads). */
+internal object LocalMedia {
+  @Volatile var scope: LocalMediaScope? = null
+}
