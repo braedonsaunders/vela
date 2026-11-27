@@ -28,7 +28,7 @@ import { resolveUi } from '@vela/skin/src/resolve/ui';
 import { PlexProfileDialog, ServersProvider } from '@vela/skin/src/widgets/auth';
 import { LiveProvider, useLiveView } from '@vela/skin/src/widgets/guide';
 import { GuideRowDrawing, GuideSurface } from '@vela/guide-native';
-import { holdBack } from '@vela/skin/src/menu-key';
+import { holdBack, useBackHeld } from '@vela/skin/src/menu-key';
 import { useDispatcher } from './actions';
 import { config } from './data/config';
 import { parityAudioSpec, startParityAudio } from './parity';
@@ -63,6 +63,7 @@ import { useLast } from '@vela/skin/src/presence';
 const SKIN_PREFERENCE = 'skin';
 import { authArt } from './auth-art';
 import { createEnvironmentReader } from './env';
+import { appRenderTier } from './render-tier';
 import { wireLocalSources } from './local-sources';
 import { useCanVisualize } from './visualizer/availability';
 import { useMediaAccess } from './media-access';
@@ -453,6 +454,34 @@ function AppHost({ store, state, live, children }: AppHostProps) {
   const closeAddToPlaylist = useCallback(() => setPlaylistTarget(null), []);
   // The sheet stays drawn while it leaves (presence.tsx).
   const shownPlaylistTarget = useLast(playlistTarget);
+  const backHeld = useBackHeld();
+  const homeVisible = pathname === '/' && !pickerOpen && !playlistTarget && !state.auth.plexSwitching && !backHeld;
+  useEffect(() => {
+    if (!homeVisible || state.auth.phase !== 'signed-in') return;
+    const web = Platform.OS === 'web';
+    const refresh = () => {
+      if (web ? document.hidden || !document.hasFocus() || document.querySelector('[aria-modal="true"], [role="menu"]')
+        : AppState.currentState !== 'active') return;
+      void store.home.refresh('ambient');
+    };
+    const foreground = AppState.addEventListener('change', next => { if (next === 'active') refresh(); });
+    const focus = Platform.OS === 'android' ? AppState.addEventListener('focus', refresh) : undefined;
+    // Lite devices only read in response to foregrounding; a TV left on Home costs no polling.
+    const idle = appRenderTier() === 'lite' ? undefined : setInterval(refresh, 10 * 60_000);
+    if (web) {
+      window.addEventListener('focus', refresh);
+      document.addEventListener('visibilitychange', refresh);
+    }
+    return () => {
+      foreground.remove();
+      focus?.remove();
+      clearInterval(idle);
+      if (web) {
+        window.removeEventListener('focus', refresh);
+        document.removeEventListener('visibilitychange', refresh);
+      }
+    };
+  }, [store, homeVisible, state.auth.phase]);
   const pickDocument = useCallback((index: number) => {
     if (appearance?.force) return;
     setChoice(documents[index]!.id);

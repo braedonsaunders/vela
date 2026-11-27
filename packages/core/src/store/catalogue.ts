@@ -91,6 +91,9 @@ export class Catalogue {
       await api.setTitleWatch(id, { ...change, idempotencyKey: this.session.key() });
       if (epoch !== this.session.epoch) return;
       void this.title(id, true);
+      if (change.watchlisted !== undefined || change.favorite !== undefined || change.played !== undefined || change.continueWatching === false) {
+        void this.refreshHome();
+      }
       // A library's recommended rows (a plugin library's Continue watching, say) live outside the
       // store: patch the held answers at once, and let any library on show read its rows again.
       if (change.played !== undefined || change.continueWatching === false) {
@@ -247,6 +250,7 @@ export class Catalogue {
     private readonly session: Session,
     private readonly artWidth: () => number,
     private readonly retryOptions: Pick<ReadRetryOptions, 'sleep'> = {},
+    private readonly refreshHome: () => void = () => {},
   ) {
     session.onReset(() => {
       for (const controller of this.viewControllers) controller.abort();

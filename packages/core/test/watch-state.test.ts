@@ -73,3 +73,22 @@ test('an unlike takes the title out of the liked lists at once; a like waits for
   expect(optimisticWatchState(state, 'target', { favorite: true }).music.liked).toBe(state.music.liked);
   expect(optimisticWatchState(state, 'other', { favorite: false }).music.liked).toBe(state.music.liked);
 });
+
+test.each([
+  { watchlisted: true }, { watchlisted: false }, { favorite: true }, { favorite: false },
+  { played: true }, { played: false }, { continueWatching: false as const },
+])('a confirmed %j mutation triggers a fresh Home read', async change => {
+  const box = new StateBox(stateWithCards());
+  let accept!: () => void;
+  let reads = 0;
+  const pending = new Promise<void>(resolve => { accept = resolve; });
+  const adapter = { titleActions: async () => null, setTitleWatch: () => pending };
+  const session = { onReset() {}, key: () => 'mutation-key', async ready() { return { adapter }; } };
+  const catalogue = new Catalogue(box, session as unknown as Session, () => 640, {}, () => { reads++; });
+  const mutation = catalogue.setTitleWatch('target', change);
+  await Promise.resolve();
+  expect(reads).toBe(0);
+  accept();
+  await mutation;
+  expect(reads).toBe(1);
+});

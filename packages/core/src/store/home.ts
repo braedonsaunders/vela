@@ -51,6 +51,7 @@ const ROW_SKIP_PAGES = 5;
  * at once. The watched position itself is drawn locally at once (`watched`).
  */
 export const RECONCILE_SPACING_MS = 30_000;
+export const HOME_REFRESH_SPACING_MS = 60_000;
 export const HOME_SLOW_MS = 7_000;
 /** A reconcile that takes the server's answer as it is. */
 const ANY_PROGRESS: Watched = { titleId: '', positionSeconds: 0, finished: false };
@@ -76,6 +77,9 @@ export class Home {
   private slowTimer: ReturnType<typeof setTimeout> | undefined;
   private reading: Promise<void> | undefined;
   private controller: AbortController | undefined;
+  private refreshController: AbortController | undefined;
+  private refreshedAt = Number.NEGATIVE_INFINITY;
+  private refreshRevision = 0;
   private reconcilePending: Watched | undefined;
   private reconcileReading: Promise<void> | undefined;
   private reconcileController: AbortController | undefined;
@@ -101,6 +105,10 @@ export class Home {
       this.reading = undefined;
       this.controller = undefined;
       this.artworkReads.clear();
+      this.refreshController?.abort();
+      this.refreshController = undefined;
+      this.refreshedAt = Number.NEGATIVE_INFINITY;
+      this.refreshRevision++;
       this.reconcilePending = undefined;
       this.reconcileGeneration++;
       this.reconcileController?.abort();
@@ -125,6 +133,7 @@ export class Home {
     if (this.timer) clearTimeout(this.timer);
     const controller = new AbortController();
     this.controller = controller;
+    this.refreshedAt = Date.now();
     const reading = this.read(attempt, controller.signal).finally(() => {
       if (this.reading !== reading) return;
       this.reading = undefined;
@@ -181,6 +190,34 @@ export class Home {
     } finally {
       clearTimeout(slowTimer);
       if (this.slowTimer === slowTimer) this.slowTimer = undefined;
+    }
+  }
+
+  /** A quiet Home read, shared by lifecycle events and confirmed viewer mutations. */
+  async refresh(reason: 'ambient' | 'mutation', now = Date.now()): Promise<void> {
+    const epoch = this.session.epoch;
+    if (reason === 'mutation' && this.reading) await this.reading;
+    if (epoch !== this.session.epoch || this.reading || !this.box.get().home.value) return;
+    if (reason === 'ambient' && (this.refreshController || this.reconcileController || now - this.refreshedAt < HOME_REFRESH_SPACING_MS)) return;
+
+    this.refreshController?.abort();
+    const controller = new AbortController();
+    this.refreshController = controller;
+    this.refreshedAt = now;
+    this.refreshRevision++;
+    try {
+      const connection = await this.session.ready();
+      const fresh = await this.readFresh(connection, controller.signal);
+      if (controller.signal.aborted || epoch !== this.session.epoch) return;
+      this.box.update('home', home => {
+        if (!home.value) return home;
+        const value = adoptHome(home.value, fresh);
+        return value === home.value ? home : { ...home, value, ...this.paged(home, value) };
+      });
+    } catch {
+      // A background correction leaves the current Home usable if the server is unavailable.
+    } finally {
+      if (this.refreshController === controller) this.refreshController = undefined;
     }
   }
 
@@ -268,6 +305,7 @@ export class Home {
 
   private async reconcileOne(watched: Watched, generation: number, signal: AbortSignal): Promise<void> {
     const epoch = this.session.epoch;
+    const revision = this.refreshRevision;
     for (let attempt = 0; attempt <= RECONCILE_RETRIES; attempt++) {
       try {
         const connection = await this.session.ready();
@@ -304,7 +342,7 @@ export class Home {
           await wait(this.reconcileDelayMs * (attempt + 1), signal);
           continue;
         }
-        if (behind) return;
+        if (behind || revision !== this.refreshRevision || this.refreshController) return;
         this.box.update('home', home => {
           const value = home.value ? merge(home.value) : home.value;
           return { ...home, value, progressRevision: home.progressRevision + 1, ...(value !== home.value ? this.paged(home, value) : {}) };
@@ -360,7 +398,7 @@ export class Home {
     return rows
       .filter(row => !known.has(row.id) && !!known.add(row.id))
       .map(row => {
-        if (isSurfaceRow(row)) return feedRow(row, images, this.artWidth());
+        if (isSurfaceRow(row) || row.purpose === 'watchlist') return feedRow(row, images, this.artWidth());
         const items = row.items.filter(item => item.kind !== 'title' || !featured.has(item.title.id));
         return feedRow({ ...row, items }, images, this.artWidth());
       })
@@ -467,7 +505,7 @@ export class Home {
           if (!home.value || !current || current.nextCursor !== read) return home;
           const seen = new Set(current.items.map(item => item.id));
           const items = data.items
-            .filter(item => item.kind !== 'title' || !featured.has(item.title.id))
+            .filter(item => current.purpose === 'watchlist' || item.kind !== 'title' || !featured.has(item.title.id))
             .map(item => entry(item, images, this.artWidth()))
             .filter(item => !seen.has(item.id) && !!seen.add(item.id));
           added = items.length;

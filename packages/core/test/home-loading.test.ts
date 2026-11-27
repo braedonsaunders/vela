@@ -362,3 +362,24 @@ test("libraries listed before the server's features are known choose by class, t
   await home.libraries();
   expect(chosen()).toEqual([['music', 'watch'], ['books', 'listen'], ['photos', 'gallery'], ['tv', 'live'], ['odd', 'watch']]);
 });
+
+test('ambient Home reads are throttled per session and confirmed writes bypass the throttle', async () => {
+  const box = new StateBox({ home: initialHome, libraries: idle() } as unknown as VelaState);
+  const reads: boolean[] = [];
+  const api = { home: async (fresh = false) => { reads.push(fresh); return bootstrap; } };
+  const session = { epoch: 0, onReset() {}, negotiate: async () => {},
+    ready: async () => ({ adapter: api, images: async () => undefined }), check() {} };
+  const home = new Home(box, session as unknown as Session, () => 640);
+  await home.refresh('ambient');
+  expect(reads).toEqual([]);
+  await home.ensure();
+  const time = Date.now() + 61_000;
+  const old = box.get().home;
+  await Promise.all([home.refresh('ambient', time), home.refresh('ambient', time)]);
+  await home.refresh('ambient', time + 59_999);
+  expect(reads).toEqual([false, true]);
+  expect(box.get().home).toBe(old);
+  await home.refresh('ambient', time + 60_000);
+  await home.refresh('mutation', time + 60_001);
+  expect(reads).toEqual([false, true, true, true]);
+});
