@@ -133,6 +133,8 @@ export const claimPlayPause = (_onPress: () => void): (() => void) => () => {};
 /** A browser's picture-in-picture keeps the page in the foreground: nothing to report. */
 export const pictureInPicture = (): boolean => false;
 
+export const deviceProfile = (): Record<string, unknown> | null => null;
+
 export const sampleUIFrames = async (_enabled: boolean): Promise<Record<string, number> | undefined> => undefined;
 
 /** The browser's view of the network (the Network Information API, where the browser has it). */
