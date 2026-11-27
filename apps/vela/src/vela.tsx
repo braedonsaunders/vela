@@ -518,6 +518,7 @@ function AppHost({ store, state, live, children }: AppHostProps) {
       entry,
       library,
       width,
+      height: contentViewport.height,
       skinCount: documents.length,
       skinName: resolved.doc.name,
       app: ABOUT_APP,

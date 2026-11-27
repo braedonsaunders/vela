@@ -68,7 +68,7 @@ export class LiveController {
   private readonly timing: GuideTiming;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly listeners = new Set<() => void>();
-  private readonly surfaces = new Map<Surface, number>();
+  private readonly surfaces = new Map<Surface, { count: number; previews: number }>();
   private readonly tile: Tile;
   private readonly homeZap: Zap;
   private readonly watchZap: Zap;
@@ -128,14 +128,17 @@ export class LiveController {
   view = (): LiveView => this.current;
 
   /** A surface is on screen until the returned function runs. */
-  open(surface: Surface): () => void {
+  open(surface: Surface, preview = true): () => void {
     if (this.disposed) return () => {};
-    this.surfaces.set(surface, (this.surfaces.get(surface) ?? 0) + 1);
+    const entry = this.surfaces.get(surface) ?? { count: 0, previews: 0 };
+    entry.count++;
+    if (preview) entry.previews++;
+    this.surfaces.set(surface, entry);
     this.sync();
     return () => {
-      const left = (this.surfaces.get(surface) ?? 1) - 1;
-      if (left > 0) this.surfaces.set(surface, left);
-      else this.surfaces.delete(surface);
+      entry.count--;
+      if (preview) entry.previews--;
+      if (entry.count === 0) this.surfaces.delete(surface);
       if (surface === 'home') this.homeZap.cancel();
       if (surface === 'watch') this.watchZap.cancel();
       this.sync();
@@ -514,9 +517,9 @@ export class LiveController {
   }
 
   private updateTile(): void {
-    const surface = this.surfaces.has('guide') || this.surfaces.has('home');
+    const ambient = (this.surfaces.get('guide')?.previews ?? 0) > 0 || (this.surfaces.get('home')?.previews ?? 0) > 0;
     this.tile.update({
-      open: surface && this.visible && this.load === 'ready',
+      open: ambient && this.visible && this.load === 'ready',
       order: this.guide?.tuneOrder ?? [],
       remembered: this.options.memory.get(this.rememberKey) ?? '',
       quiet: this.quiet,

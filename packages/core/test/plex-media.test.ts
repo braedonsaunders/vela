@@ -128,7 +128,8 @@ describe('Plex audio and stacked titles', () => {
     const last = (await adapter.sessionSnapshot(plan.sessionId)).plan;
     await adapter.reportObservation(plan.sessionId, { sequence: 2, state: 'ended', positionSeconds: 60, sourceGeneration: last.sourceGeneration, seekGeneration: last.seekGeneration } as never);
     expect((await adapter.sessionSnapshot(plan.sessionId)).plan.state).toBe('ended');
-    expect(seen.some(r => r.url.pathname === '/:/scrobble')).toBe(true);
+    expect(seen.some(r => r.url.pathname === '/:/scrobble')).toBe(false);
+    expect(seen.filter(r => r.url.pathname === '/:/timeline' && r.url.searchParams.get('state') === 'stopped').map(r => r.url.searchParams.get('time'))).toEqual(['60000']);
   });
 
   test('a stacked title needs the server\'s stream', async () => {
@@ -1058,7 +1059,7 @@ describe('Plex progress beside commands on a slow server', () => {
     expect((await adapter.sessionSnapshot(plan.sessionId)).lastObservationSequence).toBe(3);
   });
 
-  test('an end waits for the progress before it and is scrobbled once', async () => {
+  test('an end waits for the progress before it and stops the timeline once', async () => {
     const { server, seen, posts } = slow();
     const adapter = plex();
     const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'e', positionSeconds: 0 } as never);
@@ -1081,8 +1082,26 @@ describe('Plex progress beside commands on a slow server', () => {
       'x-plex-client-identifier': 'client-1', 'x-plex-platform': 'Web', 'x-plex-device': 'Browser',
       'x-plex-device-name': 'Test Device', 'x-plex-token': 'token-1',
     });
-    expect(seen.filter(r => r.url.pathname === '/:/scrobble')).toHaveLength(1);
+    expect(seen.filter(r => r.url.pathname === '/:/scrobble')).toHaveLength(0);
     expect((await adapter.sessionSnapshot(plan.sessionId)).plan.state).toBe('ended');
+  });
+
+  test('one play-through sends exactly one view-recording request even when the player ends short of the library duration', async () => {
+    const seen = routeFetch({
+      'GET /library/metadata/3': { MediaContainer: { Metadata: [single] } },
+      'POST /:/timeline': {}, 'PUT /:/scrobble': {}, 'GET /video/:/transcode/universal/stop': {},
+    });
+    const adapter = plex();
+    const { sessionId } = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'play-through' } as never);
+    await adapter.reportObservation(sessionId, at(1, 10));
+    await adapter.reportObservation(sessionId, at(2, 590));
+    await adapter.reportObservation(sessionId, at(3, 590, 'ended'));
+    await adapter.reportObservation(sessionId, at(4, 590, 'ended'));
+    const completion = seen.filter(r => r.url.pathname === '/:/scrobble'
+      || r.url.pathname === '/:/timeline' && r.url.searchParams.get('state') === 'stopped');
+    expect(completion.map(r => [r.method, r.url.pathname, r.url.searchParams.get('time')])).toEqual([
+      ['POST', '/:/timeline', '600000'],
+    ]);
   });
 
   test('a refused stopped timeline still scrobbles, cleans up, and ends the session', async () => {
@@ -1101,6 +1120,20 @@ describe('Plex progress beside commands on a slow server', () => {
     ]);
     expect(Object.fromEntries(seen[2]!.url.searchParams)).toEqual({ key: '3', identifier: 'com.plexapp.plugins.library' });
     expect((await adapter.sessionSnapshot(sessionId)).plan.state).toBe('ended');
+  });
+
+  test('pagehide during a refused completion sends the scrobble fallback without another timeline', async () => {
+    const { server, seen, posts } = slow();
+    server.failing = true;
+    const adapter = plex();
+    const plan = await adapter.startPlayback({ titleId: '3', client, idempotencyKey: 'end-pagehide' } as never);
+    const completion = adapter.reportObservation(plan.sessionId, at(1, 600, 'ended'));
+    await settle();
+    expect(adapter.unloadStop(plan.sessionId, plan).map(r => new URL(r.url).pathname)).toEqual(['/video/:/transcode/universal/stop']);
+    server.release();
+    expect(await completion).toEqual({ accepted: true });
+    expect(posts()).toEqual(['stopped 600']);
+    expect(seen.filter(r => r.url.pathname === '/:/scrobble')).toHaveLength(1);
   });
 
   test('a burned-in subtitle chosen behind a slow post starts the stream at the newest position, without its post', async () => {

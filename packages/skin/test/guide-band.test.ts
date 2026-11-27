@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { guideBand, guideTop } from '../src/widgets/guide/geometry';
+import { guideBand, guideTop, isLandscapePhone } from '../src/widgets/guide/geometry';
 import { resolveDocument } from '../src/resolve';
 import { cinematicDoc } from '../../protocol/fixtures/skins/cinematic';
 import { velaBase } from '../src/resolve/base';
@@ -39,4 +39,13 @@ test('Cinematic opts in through its guide document; other documents retain compa
   expect(resolveDocument(cinematicDoc, 1440).guideLayout).toBe('cinematic');
   expect(resolveDocument({ ...cinematicDoc, id: 'other', routes: undefined }, 1440).guideLayout).toBeUndefined();
   expect(resolveDocument(velaBase, 1440).guideLayout).toBeUndefined();
+});
+
+test('only short phone landscape viewports use the guide sidebar', () => {
+  expect(isLandscapePhone(844, 390)).toBe(true);
+  expect(isLandscapePhone(932, 430)).toBe(true);
+  expect(isLandscapePhone(568, 320)).toBe(true);
+  expect(isLandscapePhone(390, 844)).toBe(false);
+  expect(isLandscapePhone(1194, 834)).toBe(false);
+  expect(isLandscapePhone(960, 450, true)).toBe(false);
 });

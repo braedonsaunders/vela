@@ -56,15 +56,17 @@ test('Plex reports identifiers, millisecond positions and state in order; partia
   expect(plan.positionSeconds).toBe(12);
 });
 
-test('Plex completion scrobbles exactly once with the library identifier and rating key', async () => {
+test('Plex completion reports the library identifier and rating key on the stopped timeline', async () => {
   const seen = routeFetch(plexRoutes());
   const adapter = plex();
   const plan = await adapter.startPlayback({ titleId: '10', client, idempotencyKey: 'start' });
   await Promise.all([adapter.reportObservation(plan.sessionId, observation(1, 100, 'ended')), adapter.reportObservation(plan.sessionId, observation(1, 100, 'ended'))]);
-  const reports = seen.filter(r => r.url.pathname === '/:/scrobble');
+  const reports = seen.filter(r => r.url.pathname === '/:/timeline');
   expect(reports).toHaveLength(1);
-  expect(reports[0]!.method).toBe('PUT');
-  expect(Object.fromEntries(reports[0]!.url.searchParams)).toEqual({ key: '10', identifier: 'com.plexapp.plugins.library' });
+  expect(reports[0]!.method).toBe('POST');
+  expect(Object.fromEntries(reports[0]!.url.searchParams)).toMatchObject({
+    key: '/library/metadata/10', ratingKey: '10', identifier: 'com.plexapp.plugins.library', state: 'stopped',
+  });
 });
 
 test('Plex paused seeks stay paused and duplicate seek commands do not report twice', async () => {
@@ -185,8 +187,11 @@ test('Plex resume and watched state come back from subsequent server reads', asy
   let position = 12000, played = false;
   routeFetch({ ...plexRoutes(),
     'GET /library/metadata/10': () => ({ MediaContainer: { Metadata: [{ ...movie, viewOffset: position, viewCount: played ? 1 : 0 }] } }),
-    'POST /:/timeline': (r: Seen) => { position = Number(r.url.searchParams.get('time')); return noContent(); },
-    'PUT /:/scrobble': () => { played = true; position = 0; return noContent(); },
+    'POST /:/timeline': (r: Seen) => {
+      position = Number(r.url.searchParams.get('time'));
+      if (r.url.searchParams.get('state') === 'stopped' && position === movie.duration) { played = true; position = 0; }
+      return noContent();
+    },
     'GET /hubs': () => ({ MediaContainer: { Hub: [{ title: 'Continue', key: '/hubs/home/continueWatching', Metadata: played ? [] : [{ ...movie, viewOffset: position }] }] } }),
   });
   const adapter = plex();

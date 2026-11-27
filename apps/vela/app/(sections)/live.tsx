@@ -15,7 +15,7 @@ export default function Live() {
   const vela = useVela();
   const host = vela.host('live', 'live');
   const active = useSectionFocus() ?? false;
-  useLiveSurface('guide', active);
+  useLiveSurface('guide', active && !!host, host?.env.landscapePhone !== true);
   const focus = useHandOff(ch, prog, at);
   if (!host) return <View style={{ flex: 1 }} />;
   // The page's own heading: the guide's programme titles are the headings below it.

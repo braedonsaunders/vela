@@ -142,7 +142,7 @@ export class Tile {
 
   private settle(): void {
     if (this.wanted && !this.held && this.requesting !== this.generation) this.request();
-    if (!this.wanted && this.held) this.release();
+    if (!this.wanted && (this.held || this.requesting === this.generation)) this.release();
   }
 
   private request(): void {

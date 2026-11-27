@@ -40,6 +40,9 @@ export interface Env {
   section: string;
   query: string;
   small: boolean;
+  shortLandscape?: boolean;
+  /** The guide has room for a sidebar and grid, with no ambient video. */
+  landscapePhone?: boolean;
   tv: boolean;
   still: boolean;
   canLive: boolean;
@@ -361,6 +364,7 @@ export const VOCABULARY: Record<string, Accessor> = {
   'env.section': (_, e) => e.section,
   'env.query': (_, e) => e.query,
   'env.small': (_, e) => yes(e.small),
+  'env.shortLandscape': (_, e) => yes(e.shortLandscape === true),
   'env.tv': (_, e) => yes(e.tv),
   'env.still': (_, e) => yes(e.still),
   'env.searching': (_, e) => yes(e.query !== ''),

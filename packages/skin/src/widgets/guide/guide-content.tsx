@@ -88,6 +88,7 @@ interface PageProps {
 function GuidePage({ look, model, view, controller, focus, layout, active }: PageProps) {
   const { viewport, env, doc } = useHost();
   const small = viewport.width < 640;
+  const landscape = env.landscapePhone === true;
   const still = env.still;
   const side = Math.max(gutter(small, viewport.width), viewport.insets.left, viewport.insets.right);
   const [selected, setSelected] = useState(() => {
@@ -95,7 +96,9 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
     return { channel: channel?.id ?? '', programme: focus?.programmeId || channel?.nowId || '' };
   });
   const initialChannel = useRef(selected.channel);
-  useEffect(() => controller.initializePreview(initialChannel.current), [controller]);
+  useEffect(() => {
+    if (!landscape) controller.initializePreview(initialChannel.current);
+  }, [controller, landscape]);
   const [filter, setFilter] = useState<ChannelFilter>('all');
   const [tab, setTab] = useState('');
   const [mode, setMode] = useState<'now' | 'guide'>('now');
@@ -185,6 +188,7 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
   const flowHeader = hasFlowHeader(doc.document.slots?.shell);
   const top = !flowHeader && Platform.isTV && Platform.OS === 'android' ? 108 : guideTop(flowHeader, small, viewport.insets.top);
   const band = guideBand(viewport.width, viewport.height, top, side);
+  const previewWidth = Math.min(232, Math.round(viewport.width * 0.25));
   const tileHeight = cinematic ? band.pictureHeight : Platform.isTV ? 200 : small ? 72 : Math.round(clamp(viewport.height * 0.16 - 14, 120, 168) * 0.7);
   const headerHeight = cinematic ? band.height : Platform.isTV ? tileHeight + 32 : small ? 196 : 60 + Math.round(clamp(viewport.height * 0.16, 128, 168) * 0.7);
   const landing = useMemo(() => ({
@@ -210,43 +214,46 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
 
   if (handOffOffset === undefined) return <GuideStatus look={look} text={msg('ui.loadingTheGuide')} busy />;
 
+  const preview = (showGrid || cinematic) && !expanded ? (
+    <View style={{ ...(landscape ? { width: previewWidth } : { height: headerHeight }), flexShrink: 0, overflow: 'hidden' }}>
+      {picked ? (
+        <GuideHero
+          look={look}
+          channel={picked.channel}
+          programme={picked.programme}
+          small={small}
+          still={still || holding}
+          side={landscape ? 12 : side}
+          inset={landscape ? 12 : cinematic && band.stacked ? side : small && !cinematic ? 16 + 132 : side + (tileHeight * 16) / 9 + 28}
+          spacious={cinematic && !landscape}
+          sidebar={landscape}
+          copyTop={landscape ? 8 : cinematic && band.stacked ? tileHeight + band.gap : 0}
+          compact={landscape || cinematic && (band.stacked || band.height < 240)}
+          onWatch={watch}
+          onReplay={archive ? replay : undefined}
+        />
+      ) : null}
+      {!landscape && view.tile.state !== 'off' ? (
+        <View style={{ position: 'absolute', right: cinematic && band.stacked ? (viewport.width - tileHeight * 16 / 9) / 2 : side, ...(cinematic ? { top: band.stacked ? 0 : band.gap } : { bottom: small ? 12 : 8 }), zIndex: 2 }}>
+          <GuideTile
+            look={look}
+            tile={view.tile}
+            channelName={tunedName}
+            height={tileHeight}
+            small={small}
+            still={still}
+            controller={controller}
+          />
+        </View>
+      ) : null}
+    </View>
+  ) : null;
+
   return (
     <GuideFocusScope active={visible} enter={() => grid.current?.focusGrid()} leave={() => grid.current?.leaveGrid()} onHold={setHolding}
       escape={escape} top={toNavigation} rewind={rewind}>
     <View style={page}>
-      {(showGrid || cinematic) && !expanded ? (
-        <View style={{ height: headerHeight, flexShrink: 0, overflow: 'hidden' }}>
-          {picked ? (
-            <GuideHero
-              look={look}
-              channel={picked.channel}
-              programme={picked.programme}
-              small={small}
-              still={still || holding}
-              side={side}
-              inset={cinematic && band.stacked ? side : small && !cinematic ? 16 + 132 : side + (tileHeight * 16) / 9 + 28}
-              spacious={cinematic}
-              copyTop={cinematic && band.stacked ? tileHeight + band.gap : 0}
-              compact={cinematic && (band.stacked || band.height < 240)}
-              onWatch={watch}
-              onReplay={archive ? replay : undefined}
-            />
-          ) : null}
-          {view.tile.state !== 'off' ? (
-            <View style={{ position: 'absolute', right: cinematic && band.stacked ? (viewport.width - tileHeight * 16 / 9) / 2 : side, ...(cinematic ? { top: band.stacked ? 0 : band.gap } : { bottom: small ? 12 : 8 }), zIndex: 2 }}>
-              <GuideTile
-                look={look}
-                tile={view.tile}
-                channelName={tunedName}
-                height={tileHeight}
-                small={small}
-                still={still}
-                controller={controller}
-              />
-            </View>
-          ) : null}
-        </View>
-      ) : null}
+      {!landscape ? preview : null}
       <GuideToolbar>
       {small ? (
         <View style={{ zIndex: 10 }}>
@@ -297,12 +304,12 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
             gap: 14,
             paddingHorizontal: side,
             paddingTop: 4,
-            paddingBottom: 8,
+            paddingBottom: landscape ? 2 : 8,
             zIndex: 10,
           }}
         >
           <View style={{ flexShrink: 1, minWidth: 0, marginLeft: -side }}>
-            <DayChips look={look} model={model} onPick={pickDay} side={side} />
+            <DayChips look={look} model={model} onPick={pickDay} side={side} fadeEdges={landscape} />
           </View>
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center', flexShrink: 0 }}>
             <IconButton look={look} label={msg('ui.earlierProgrammes')} glyph="back" onPress={() => shift(-2)} />
@@ -340,28 +347,32 @@ function GuidePage({ look, model, view, controller, focus, layout, active }: Pag
         <GuideTabs look={look} model={model} tab={tabOn} onPick={setTab} side={side} small={small} />
       ) : null}
       </GuideToolbar>
-      <GuideBody
-        look={look}
-        liveView={controller.view}
-        model={model}
-        rows={rows}
-        small={small}
-        showGrid={showGrid}
-        active={visible}
-        zoom={zoom}
-        still={still}
-        selected={highlighted}
-        landing={landing}
-        gridKey={gridKey.current}
-        grid={grid}
-        nowList={nowList}
-        onSelect={select}
-        onPress={press}
-        onWatch={watch}
-        onRange={onRange}
-        onVisible={onVisible}
-        onAll={() => setFilter('all')}
-      />
+      <View style={{ flex: 1, minHeight: 0, flexDirection: landscape ? 'row' : 'column' }}>
+        {landscape ? preview : null}
+        <GuideBody
+          look={look}
+          liveView={controller.view}
+          model={model}
+          rows={rows}
+          small={small}
+          compact={landscape}
+          showGrid={showGrid}
+          active={visible}
+          zoom={zoom}
+          still={still}
+          selected={highlighted}
+          landing={landing}
+          gridKey={gridKey.current}
+          grid={grid}
+          nowList={nowList}
+          onSelect={select}
+          onPress={press}
+          onWatch={watch}
+          onRange={onRange}
+          onVisible={onVisible}
+          onAll={() => setFilter('all')}
+        />
+      </View>
     </View>
     </GuideFocusScope>
   );
@@ -373,6 +384,7 @@ interface BodyProps {
   model: GuideModel;
   rows: GuideChannel[];
   small: boolean;
+  compact: boolean;
   showGrid: boolean;
   active: boolean;
   zoom: Zoom;
@@ -404,7 +416,7 @@ function GuideBody(props: BodyProps) {
         flex: 1,
         minHeight: 0,
         marginHorizontal: small ? 0 : 8,
-        marginBottom: small ? 0 : 8,
+        marginBottom: small || props.compact ? 0 : 8,
         overflow: 'hidden',
         borderRadius: small ? 0 : 8,
         borderTopWidth: 1,
@@ -420,6 +432,7 @@ function GuideBody(props: BodyProps) {
         model={model}
         rows={rows}
         small={small}
+        compact={props.compact}
         zoom={props.zoom}
         still={props.still}
         active={props.active}

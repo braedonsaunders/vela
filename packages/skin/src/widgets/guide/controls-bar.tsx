@@ -1,5 +1,6 @@
 // The guide's controls: chips, pills and the pieces of its toolbar (days, the time stepper,
 // "Now", zoom, full guide, favourites, the channel filter and the owner's named Guides).
+import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Platform, ScrollView, View } from 'react-native';
 import Animated, {
@@ -124,14 +125,24 @@ export function DayChips({
   onPick,
   side,
   compact = false,
+  fadeEdges = false,
 }: {
   look: GuideLook;
   model: GuideModel;
   onPick(day: number): void;
   side: number;
   compact?: boolean;
+  fadeEdges?: boolean;
 }) {
-  return (
+  const metrics = useRef({ offset: 0, width: 0, content: 0 });
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const updateEdges = (change: Partial<typeof metrics.current>) => {
+    const { offset, width, content } = Object.assign(metrics.current, change);
+    const left = offset > 1;
+    const right = content - width - offset > 1;
+    setEdges(old => old.left === left && old.right === right ? old : { left, right });
+  };
+  const chips = (
     <ScrollView
       horizontal
       scrollsToTop={false}
@@ -139,6 +150,10 @@ export function DayChips({
       style={{ flexGrow: 0, flexShrink: 1 }}
       // A compact chip's touch reaches past its edge: the strip holds that reach, so it is not clipped.
       contentContainerStyle={{ gap: 6, alignItems: 'center', paddingHorizontal: side, paddingVertical: compact ? COMPACT.slop.top : 0 }}
+      onLayout={fadeEdges ? e => updateEdges({ width: e.nativeEvent.layout.width }) : undefined}
+      onContentSizeChange={fadeEdges ? content => updateEdges({ content }) : undefined}
+      onScroll={fadeEdges ? e => updateEdges({ offset: e.nativeEvent.contentOffset.x }) : undefined}
+      scrollEventThrottle={fadeEdges ? 16 : undefined}
       accessibilityLabel={msg('live.day')}
     >
       {model.days.map(d => {
@@ -157,6 +172,19 @@ export function DayChips({
         );
       })}
     </ScrollView>
+  );
+  if (!fadeEdges) return chips;
+  return (
+    <View style={{ flexShrink: 1, minWidth: 0 }}>
+      {chips}
+      {(['left', 'right'] as const).map(edge => edges[edge] ? (
+        <LinearGradient key={edge} pointerEvents="none"
+          colors={['transparent', look.page]}
+          start={{ x: edge === 'left' ? 1 : 0, y: 0.5 }}
+          end={{ x: edge === 'left' ? 0 : 1, y: 0.5 }}
+          style={{ position: 'absolute', [edge]: 0, top: 0, bottom: 0, width: 36 }} />
+      ) : null)}
+    </View>
   );
 }
 

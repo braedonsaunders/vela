@@ -18,6 +18,7 @@ import {
   sectionHeading,
   side,
   sideSmall,
+  shortLandscape,
   small,
   veil,
 } from './look';
@@ -94,6 +95,48 @@ export const cardContext: Node = {
   ],
 };
 
+const titleSupplement: Node[] = [
+  {
+    type: 'box',
+    when: [{ test: 'detail.hasMediaFacts' }],
+    motion: enter(300),
+    style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'flex-wrap': 'wrap' },
+    children: [
+      {
+        type: 'repeat',
+        over: 'detail.mediaFacts',
+        item: {
+          type: 'text',
+          text: '{fact.text}',
+          style: {
+            'font-size': '12px',
+            'font-weight': '650',
+            'letter-spacing': '0.06em',
+            color: '$ui.ink',
+            padding: '5px 9px',
+            'border-radius': '6px',
+            border: '1px solid $ui.glassEdgeStrong',
+            'background-color': '$ui.control',
+            'backdrop-filter': 'blur(12px)',
+          },
+        },
+      },
+    ],
+  },
+  {
+    type: 'use', template: 'velaSummary',
+    motion: enter(340),
+    style: {
+      color: '$ui.ink',
+      opacity: '0.88',
+      'font-size': '17px',
+      'line-height': '1.6',
+      'max-width': '42rem',
+    },
+    small: { 'font-size': '15px' },
+  },
+];
+
 export const band: Node = {
   type: 'box',
   when: [{ test: 'env.load', is: 'eq', value: 'ready' }],
@@ -110,6 +153,7 @@ export const band: Node = {
     'overflow-y': 'hidden',
   },
   small: { 'min-height': '600px' },
+  states: [{ when: [shortLandscape], style: { 'min-height': '0px' } }],
   children: [
     {
       type: 'box',
@@ -212,6 +256,7 @@ export const band: Node = {
         'max-width': '58rem',
       },
       small: { gap: '14px', 'padding-top': '96px', 'padding-bottom': '8px', ...sideSmall },
+      states: [{ when: [shortLandscape, { ...small, not: true }], style: { gap: '10px', 'padding-top': '20px' } }],
       children: [
         {
           type: 'box',
@@ -267,6 +312,7 @@ export const band: Node = {
                 'align-self': 'flex-start',
               },
               small: { height: '80px', 'max-width': '80%' },
+              states: [{ when: [shortLandscape], style: { height: '64px' } }],
             },
             {
               type: 'text',
@@ -277,6 +323,7 @@ export const band: Node = {
               motion: enter(200),
               style: { ...display, 'font-size': '84px', 'line-height': '1.04', 'text-shadow': '0px 4px 40px $ui.shadow' },
               small: { 'font-size': '40px' },
+              states: [{ when: [shortLandscape], style: { 'font-size': '44px', 'line-clamp': '2' } }],
             },
           ],
         },
@@ -287,45 +334,7 @@ export const band: Node = {
           motion: enter(260),
           style: { 'font-size': '14px', color: '$ui.inkSecondary', 'font-variant-numeric': 'tabular-nums' },
         },
-        {
-          type: 'box',
-          when: [{ test: 'detail.hasMediaFacts' }],
-          motion: enter(300),
-          style: { display: 'flex', 'flex-direction': 'row', gap: '8px', 'flex-wrap': 'wrap' },
-          children: [
-            {
-              type: 'repeat',
-              over: 'detail.mediaFacts',
-              item: {
-                type: 'text',
-                text: '{fact.text}',
-                style: {
-                  'font-size': '12px',
-                  'font-weight': '650',
-                  'letter-spacing': '0.06em',
-                  color: '$ui.ink',
-                  padding: '5px 9px',
-                  'border-radius': '6px',
-                  border: '1px solid $ui.glassEdgeStrong',
-                  'background-color': '$ui.control',
-                  'backdrop-filter': 'blur(12px)',
-                },
-              },
-            },
-          ],
-        },
-        {
-          type: 'use', template: 'velaSummary',
-          motion: enter(340),
-          style: {
-            color: '$ui.ink',
-            opacity: '0.88',
-            'font-size': '17px',
-            'line-height': '1.6',
-            'max-width': '42rem',
-          },
-          small: { 'font-size': '15px' },
-        },
+        ...titleSupplement.map(node => ({ ...node, when: [...(node.when ?? []), { ...shortLandscape, not: true }] })),
         {
           type: 'box',
           motion: enter(400),
@@ -340,6 +349,7 @@ export const band: Node = {
           // Phones: play (with Restart's mark and Versions) spans the row; the trailer and the round
           // actions share the line below it, wrapping before anything runs past the edge.
           small: { 'margin-top': '6px', 'flex-wrap': 'wrap', gap: '10px 8px' },
+          states: [{ when: [shortLandscape], style: { 'margin-top': '0px' } }],
           children: [
             {
               type: 'box',
@@ -429,6 +439,7 @@ export const band: Node = {
             pendingStatus('detail.trailerPending', '{t:jellytwin.trailer}'),
           ],
         },
+        ...titleSupplement.map(node => ({ ...node, when: [...(node.when ?? []), shortLandscape] })),
       ],
     },
   ],
@@ -1114,6 +1125,10 @@ margin: '4vh 4vw',
 'margin-top': 'max(4vh, 92px)',
   },
   small: { 'border-radius': '0px', margin: '0px', 'margin-top': '0px', height: '100dvh' },
+  states: [{ when: [shortLandscape, { ...small, not: true }], style: {
+    'margin-top': 'calc(64px + env(safe-area-inset-top))',
+    height: 'calc(100dvh - 72px - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
+  } }],
   children: [
 // The close button stands in a strip across the frame's top. On a TV the strip is a focus
 // region: up from anything at the top of the page lands on the button, which tvOS's focus

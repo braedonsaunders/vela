@@ -72,6 +72,8 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
   const { look, programme: p, channel, scale, row, small, nowMinute, selected, scrollX } = props;
   const left = p.at * scale;
   const width = p.span * scale;
+  const top = Math.min(5, Math.floor((row - 40) / 2));
+  const height = row - 2 * top - 1;
   const elapsed = p.airing ? Math.max(0, Math.min(width, (nowMinute - p.at) * scale)) : 0;
   const labelled = width >= 10 * scale;
   // A past programme the archive still holds looks playable: it keeps its colour and gains a replay mark.
@@ -85,7 +87,7 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
   return (
     <CellSurface
       lift
-      programmeFrame={!Platform.isTV || selected || nearViewportEdge(props) ? { left: left + 2, width: Math.max(2, width - 4), viewportWidth: props.visibleWidth, scrollX, top: 5, height: row - 11, rowTop: props.rowTop, viewportHeight: props.visibleHeight, scrollY: props.scrollY } : undefined}
+      programmeFrame={!Platform.isTV || selected || nearViewportEdge(props) ? { left: left + 2, width: Math.max(2, width - 4), viewportWidth: props.visibleWidth, scrollX, top, height, rowTop: props.rowTop, viewportHeight: props.visibleHeight, scrollY: props.scrollY } : undefined}
       focusable={!Platform.isTV}
       nativeID={cellId(p.id, channel.id)}
       testID={cellId(p.id, channel.id)}
@@ -97,9 +99,9 @@ export const ProgrammeCell = memo(function ProgrammeCell(props: CellProps) {
       style={({ hovered, focused }) => ({
         position: 'absolute',
         left: left + 2,
-        top: 5,
+        top,
         width: Math.max(2, width - 4),
-        height: row - 11,
+        height,
         flexDirection: 'row',
         alignItems: 'stretch',
         overflow: 'hidden',

@@ -110,6 +110,7 @@ export const focusRing = '0px 0px 0px 2px $ui.page, 0px 0px 0px 4px $ui.accent';
 export const navFocus: Style = { 'box-shadow': 'inset 0px 0px 0px 2px $ui.accent', color: '$ui.ink' };
 
 export const small: Condition = { test: 'env.small' };
+export const shortLandscape: Condition = { test: 'env.shortLandscape' };
 // Waiting marks, as compiled cinematic draws them: three breathing dots (still under
 // reduced motion) and shimmering skeleton blocks.
 export const pulse: Node = { type: 'widget', widget: 'contentLoader', params: { inline: 'true' } };

@@ -37,7 +37,6 @@ interface PlexSession {
   transcodeId?: string;
   /** The stopped timeline has been sent; stream cleanup can still be pending. */
   timelineStopped?: boolean;
-  scrobbled?: boolean;
   /** Each mutation's answer by idempotency key, so a repeated command is not applied twice. */
   mutations: Map<string, V.PlaybackPlan>;
   /** The idempotency keys of the mutations queued and not settled yet, each with how many calls carry it. */
@@ -1036,26 +1035,38 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
     return { accepted: true };
   }
 
-  private timelineQuery(s: PlexSession, state: string) {
+  private timelineQuery(s: PlexSession, state: string, completed = false) {
     // PMS bounds the clock by the library item's duration. The player clock is for the selected file.
-    const time = Math.round(inside(s.plan.positionSeconds, seconds(s.metadata.duration)) * 1000);
+    const duration = seconds(s.metadata.duration);
+    const position = completed && duration > 0 ? duration : inside(s.plan.positionSeconds, duration);
+    const time = Math.round(position * 1000);
     const session = s.plan.sessionId;
     return { ratingKey: s.metadata.ratingKey, key: `/library/metadata/${s.metadata.ratingKey}`,
       time, duration: s.metadata.duration, state, session, hasMDE: 1,
       identifier: 'com.plexapp.plugins.library', 'X-Plex-Session-Identifier': session };
   }
 
-  private async timeline(s: PlexSession, state: string, retried = false) {
+  private async timeline(s: PlexSession, state: string, completed = false, retried = false) {
     if (s.plan.channelId || s.timelineStopped) return;
     // Once dispatched, the terminal timeline outlives pagehide. Pagehide still stops the stream.
     const keepaliveStarted = state === 'stopped' ? () => { s.timelineStopped = true; } : undefined;
-    const post = this.request('/:/timeline', this.timelineQuery(s, state),
-    'POST', true, retried ? undefined : s.sessionWork.signal, undefined, keepaliveStarted).catch(error => {
+    const post = this.request('/:/timeline', this.timelineQuery(s, state, completed),
+    'POST', true, retried ? undefined : s.sessionWork.signal, undefined, keepaliveStarted).catch(async error => {
       // An explicit HTTP refusal allows a retry. A missing reply may follow an accepted timeline.
       if (keepaliveStarted && error instanceof VelaError && error.detail.code === 'plex_http') {
+        if (completed) {
+          // Commit to the fallback before yielding so pagehide cannot send a second stopped timeline.
+          try {
+            return await this.request('/:/scrobble', { key: s.metadata.ratingKey, identifier: 'com.plexapp.plugins.library' },
+              'PUT', true, undefined, undefined, keepaliveStarted);
+          } catch (fallbackError) {
+            if (fallbackError instanceof VelaError && fallbackError.detail.code === 'plex_http') s.timelineStopped = false;
+            throw fallbackError;
+          }
+        }
         s.timelineStopped = false;
         // Pagehide skipped the stopped timeline because this one was on the wire; send it once more on its own.
-        if (s.sessionWork.signal.aborted && !retried) void this.timeline(s, 'stopped', true).catch(() => {});
+        if (s.sessionWork.signal.aborted && !retried) void this.timeline(s, 'stopped', completed, true).catch(() => {});
       }
       throw error;
     });
@@ -1096,20 +1107,8 @@ export class PlexAdapter implements ServerAdapter, PathSwitching, LiveTv, TrackC
       const state = r.state === 'ended' ? 'stopped' : r.state;
       const posts = !slot?.by || state !== s.posted;
       const completedTitle = r.state === 'ended' && !!s.plan.titleId;
-      if (posts) {
-        try { await this.timeline(s, state); }
-        catch (error) {
-          // A refusal to record progress should not prevent Plex from recording completion.
-          if (!completedTitle || !(error instanceof VelaError) || error.detail.code !== 'plex_http') throw error;
-        }
-      }
+      if (posts) await this.timeline(s, state, completedTitle);
       if (signal.aborted) return true;
-      // A natural end is completion; a user's partial stop is only a timeline update.
-      if (completedTitle && !s.scrobbled) {
-        await this.request('/:/scrobble', { key: s.metadata.ratingKey, identifier: 'com.plexapp.plugins.library' }, 'PUT', true, signal);
-        if (signal.aborted) return true;
-        s.scrobbled = true;
-      }
       if (r.state === 'ended') await this.stopTranscode(s.transcodeId ?? id, s.plan.media === 'audio', signal);
       s.sequence = r.sequence; s.plan.state = r.state === 'ended' ? 'ended' : r.state === 'paused' ? 'paused' : 'playing'; s.plan.revision++;
       return posts;
