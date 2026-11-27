@@ -48,6 +48,7 @@ export interface GridProps {
   model: GuideModel;
   rows: GuideChannel[];
   small: boolean;
+  compact: boolean;
   zoom: Zoom;
   still: boolean;
   selected: { channel: string; programme: string };
@@ -65,7 +66,7 @@ export interface GridProps {
 const MARGIN = 30;
 
 export const GuideGrid = memo(GuideGridContent, (a, b) =>
-  a.liveView === b.liveView && a.look === b.look && a.small === b.small && a.zoom === b.zoom && a.still === b.still
+  a.liveView === b.liveView && a.look === b.look && a.small === b.small && a.compact === b.compact && a.zoom === b.zoom && a.still === b.still
   && a.active === b.active
   && a.selected.channel === b.selected.channel && a.selected.programme === b.selected.programme
   && a.landing.explicit === b.landing.explicit && a.landing.channelId === b.landing.channelId && (!a.landing.channelId || a.landing.minute === b.landing.minute)
@@ -84,8 +85,9 @@ function SharedGuideGrid(props: GridProps) {
   useEffect(() => props.active ? startGuideFrames() : undefined, [props.active]);
   const { look, model, rows, small, zoom, still, selected, landing } = props;
   const scale = minuteWidth(small, zoom);
-  const row = rowHeight(small, Platform.isTV);
-  const rail = railWidth(small, Platform.isTV);
+  const row = props.compact ? 44 : rowHeight(small, Platform.isTV);
+  const compactRail = small || props.compact;
+  const rail = railWidth(compactRail, Platform.isTV);
   const width = model.minutes * scale;
   const [body, setBody] = useState({ width: 0, height: 0 });
   const [canvas, setCanvas] = useState({ width: 0, height: 0 });
@@ -482,7 +484,7 @@ function SharedGuideGrid(props: GridProps) {
                   <RailCell
                     look={look}
                     channel={c}
-                    small={small}
+                    small={compactRail}
                     width={rail}
                     row={row}
                     selected={c.id === selected.channel}
@@ -532,7 +534,7 @@ function SharedGuideGrid(props: GridProps) {
                 windowSize={3}
                 maxToRenderPerBatch={8}
                 updateCellsBatchingPeriod={16}
-                extraData={`${column}|${selected.channel}|${selected.programme}|${model.nowMinute}|${scale}`}
+                extraData={`${column}|${selected.channel}|${selected.programme}|${model.nowMinute}|${scale}|${row}`}
                 renderItem={({ item, index }) => renderRow(item, index)}
               />
               )}

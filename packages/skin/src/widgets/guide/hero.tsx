@@ -55,7 +55,7 @@ export function GuideHero({ look, channel, programme, small, still, inset, side,
           right: inset,
           top: copyTop,
           bottom: 0,
-          justifyContent: spacious && !compact ? 'center' : 'flex-end',
+          justifyContent: spacious && !compact ? 'center' : compact && copyTop > 0 ? 'flex-start' : 'flex-end',
           paddingBottom: small ? 12 : 8,
         }}
       >
