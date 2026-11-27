@@ -174,6 +174,22 @@ const cardMetadata: BoxNode = {
   ],
 };
 
+// Each row card's phone width in px and its art's aspect (across, down). The cards' styles and
+// the Top 10 numeral beside them are both built from these, so the numeral follows the card.
+type CardShape = { width: number; aspect: readonly [number, number] };
+const phoneShapes = {
+  velaCard: { width: 112, aspect: [2, 3] },
+  velaCardHero: { width: 300, aspect: [16, 9] },
+  velaCardWide: { width: 220, aspect: [16, 9] },
+  velaCardTile: { width: 112, aspect: [1, 1] },
+} as const satisfies Record<string, CardShape>;
+const aspectOf = (shape: CardShape) => `${shape.aspect[0]} / ${shape.aspect[1]}`;
+// A row card's art height on a phone; any other template is sized as the poster.
+const smallArt = (template: string): number => {
+  const shape: CardShape = Object.hasOwn(phoneShapes, template) ? phoneShapes[template as keyof typeof phoneShapes] : phoneShapes.velaCard;
+  return shape.width * shape.aspect[1] / shape.aspect[0];
+};
+
 export const card: Node = {
   type: 'box',
   group: true,
@@ -191,7 +207,7 @@ export const card: Node = {
   },
   // A phone's row card is a grid column's size (titleGrid), so a library reads the same in
   // its rows and its grid.
-  small: { width: '112px' },
+  small: { width: `${phoneShapes.velaCard.width}px` },
   children: [
     { type: 'widget', widget: 'observe', params: { receipt: '{card.receipt}' } },
     {
@@ -199,7 +215,7 @@ export const card: Node = {
       style: {
         position: 'relative',
         width: '100%',
-        'aspect-ratio': '2 / 3',
+        'aspect-ratio': aspectOf(phoneShapes.velaCard),
         'background-color': '$ui.raised',
         'border-radius': cardRadius(2),
         'overflow-x': 'hidden',
@@ -325,10 +341,17 @@ export const card: Node = {
 
 // A Top 10 row's numeral: large, outlined, fading toward its foot, the poster overlapping
 // its right edge. "10" sits tighter so both digits fit beside the card. On a phone, where a
-// caption can run to four lines, it hangs from the top of the row against the artwork instead
-// of standing on the card's foot: its 0.74 line puts the foot about 0.765 of its size down, so
-// the size follows the art's height (`art`, 168 px for the 112 px poster).
-export const numeral = (ten: boolean, art = 168): Node => ({
+// caption can run to four lines, it hangs from the top of the row on the artwork instead of
+// standing on the card's foot, sized from the art's height (`art`). In its 0.74 line a font
+// sets the baseline 0.72 to 0.77 of the size below the line's top (Arial Black lowest), and a
+// digit's ink runs from up to 0.03 of the size above the line's top to 0.78 below it, its
+// round foot dipping under the baseline. At 1.12 of the art's height below a padding of 0.08 of
+// it, the ink keeps about 0.04 of the art's height clear of its top and of its foot in any of them
+// (foot at most 0.08 + 0.78 x 1.12 = 0.954 of the art). The line ends at 0.08 + 0.74 x 1.12 =
+// 0.909 of the art, so a bottom padding of 0.08 of it keeps that foot and the 3 px shadow inside
+// the numeral's own box, which the mask and a clipped line cut to, and the box (0.989 of the art)
+// inside the art's foot.
+export const numeral = (ten: boolean, art: number): Node => ({
   type: 'text',
   text: '{index.label}',
   when: [
@@ -351,15 +374,14 @@ export const numeral = (ten: boolean, art = 168): Node => ({
     'flex-shrink': '0',
   },
   small: {
-    'font-size': `${Math.round(220 * art / 168)}px`,
+    'font-size': `${Math.round(art * 1.12)}px`,
     'text-shadow': '0px 0px 3px color-mix(in srgb, $ui.ink 88%, $ui.page)',
-    'margin-right': `${Math.round(-30 * art / 168)}px`,
+    'margin-right': `${Math.round(art * -0.15)}px`,
     'align-self': 'flex-start',
-    'padding-bottom': '0px',
+    'padding-top': `${Math.round(art * 0.08)}px`,
+    'padding-bottom': `${Math.round(art * 0.08)}px`,
   },
 });
-// The small art's height for each row card: a 112 px poster or tile, a 220 px landscape card.
-const smallArt: Record<string, number> = { velaCard: 168, velaCardTile: 112, velaCardWide: 124 };
 const rowItemStyle = (layer: string): Style => ({
   position: 'relative',
   display: 'flex',
@@ -374,7 +396,7 @@ const rowItemOf = (template: string): Node => ({
   style: rowItemStyle('0'),
   // The previewing card's overlay opens over its neighbours.
   states: [{ when: [previewing], style: rowItemStyle('5') }],
-  children: [...(template === 'velaCardHero' ? [] : [numeral(false, smallArt[template]), numeral(true, smallArt[template])]), { type: 'use', template }],
+  children: [...(template === 'velaCardHero' ? [] : [numeral(false, smallArt(template)), numeral(true, smallArt(template))]), { type: 'use', template }],
 });
 export const rowItem: Node = rowItemOf('velaCard');
 /** Every expandable row's final card. Skins may override the `velaSeeAll` template. */
@@ -556,7 +578,7 @@ export const searchGridCard: BoxNode = {
 // draws large landscape art in place, `wide` landscape cards, `tiles` square tiles; any other
 // layout is the standard poster shelf. The card is the row card at another shape: its frame's
 // aspect and the art it prefers (landscape art first for the landscape shapes).
-function shaped(width: string, small: string, aspect: string, landscape: boolean): Node {
+function shaped(width: string, shape: CardShape, landscape: boolean): Node {
   const base = card as BoxNode;
   const [observe, frame, ...rest] = base.children ?? [];
   const f = frame as BoxNode;
@@ -567,13 +589,13 @@ function shaped(width: string, small: string, aspect: string, landscape: boolean
   return {
     ...base,
     style: { ...base.style, width },
-    small: { width: small },
-    children: [observe as Node, { ...f, style: { ...f.style, 'aspect-ratio': aspect }, children: [...pictures, ...art] }, ...rest],
+    small: { width: `${shape.width}px` },
+    children: [observe as Node, { ...f, style: { ...f.style, 'aspect-ratio': aspectOf(shape) }, children: [...pictures, ...art] }, ...rest],
   } as Node;
 }
-export const heroCard = shaped('clamp(420px, 40vw, 760px)', '300px', '16 / 9', true);
-export const wideCard = shaped('clamp(240px, 20vw, 380px)', '220px', '16 / 9', true);
-export const tileCard = shaped('clamp(150px, 12.4vw, 232px)', '112px', '1 / 1', false);
+export const heroCard = shaped('clamp(420px, 40vw, 760px)', phoneShapes.velaCardHero, true);
+export const wideCard = shaped('clamp(240px, 20vw, 380px)', phoneShapes.velaCardWide, true);
+export const tileCard = shaped('clamp(150px, 12.4vw, 232px)', phoneShapes.velaCardTile, false);
 // A hero row's large art stands alone: no rank numerals, one plain shelf whatever its presentation.
 const heroShelfRow = shelfRow(true, 'velaCardHero') as BoxNode;
 export const heroRow: Node = { ...heroShelfRow, children: (heroShelfRow.children ?? []).flatMap(child => {
