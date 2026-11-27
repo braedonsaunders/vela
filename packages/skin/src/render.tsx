@@ -57,7 +57,7 @@ import { Arrive, EASE_IN, MOTION } from './presence';
 import { needsAnimatedFrame } from './animated-frame';
 import { useHeroSwipe } from './hero-swipe';
 import { resolveUi } from './resolve/ui';
-import { fill, holds, type CssT, type Layer, type RNode, type RPress, type ResolvedDocument } from './resolve';
+import { fill, fillRow, holds, type CssT, type Layer, type RNode, type RPress, type ResolvedDocument } from './resolve';
 import { INHERITED, boxStyle, textStyle, type Css, type Effects } from './translate';
 import { itemKey as vocabularyKey, type Card, type Ctx, type Env } from './vocabulary';
 import { itemKey, items } from './screen/items';
@@ -599,7 +599,11 @@ const MOVES = new Set(['scale', 'translate', 'rotate', 'transition', 'animation'
 
 function filled(css: CssT | undefined, c: Ctx, e: Env, still: boolean): Css {
   const out: Css = {};
-  for (const [row, value] of Object.entries(css ?? {})) if (!(still && MOVES.has(row))) out[row] = fill(value, c, e);
+  for (const [row, value] of Object.entries(css ?? {})) {
+    if (still && MOVES.has(row)) continue;
+    const text = fillRow(row, value, c, e);
+    if (text !== undefined) out[row] = text;
+  }
   return out;
 }
 

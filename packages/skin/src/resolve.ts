@@ -163,6 +163,33 @@ export interface ResolvedDocument {
 /** Image URLs (Plex puts a short-lived token in them) may be read only by an image source or a background image. */
 const URL_KEYS = /^(card|hero|detail|dest|person|personPage|ch|tile|hit)\.(poster|backdrop|logo|portrait|nowArt|artwork)$/;
 const UNSAFE = /expression\(|javascript:|@import|[;{}<>\\]/i;
+/** CSS functions that load an image. A style names one only as a background-image layer that is
+ * exactly `url({artwork})` (URL_KEYS), which the renderer hands to the host's image loader. */
+const IMAGE_FUNCTION = /(url|image|image-set|cross-fade|element|paint|src)\(/i;
+
+/** A style value's top-level comma layers. */
+function layers(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0, at = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    else if (ch === ',' && depth === 0) { out.push(text.slice(at, i)); at = i + 1; }
+  }
+  out.push(text.slice(at));
+  return out.map(layer => layer.trim());
+}
+
+/** Whether a style value, as written after tokens and strings are filled, names an image other than
+ * catalogue artwork in a background-image. */
+function namesImage(row: string, text: string): boolean {
+  if (row !== 'background-image') return IMAGE_FUNCTION.test(text.replace(/\{[a-zA-Z.:-]+\}/g, ''));
+  return layers(text).some(layer => {
+    const artwork = /^url\(\{([a-zA-Z.]+)\}\)$/.exec(layer)?.[1];
+    return !(artwork && URL_KEYS.test(artwork)) && IMAGE_FUNCTION.test(layer.replace(/\{[a-zA-Z.:-]+\}/g, ''));
+  });
+}
 
 /** Resolving a screen or surface document (resolve/screen.ts): holes read its data, not the vocabulary. */
 export interface ScreenMode {
@@ -206,7 +233,8 @@ export interface Context {
 function strings(text: string, r: Context): string {
   return withClientStrings(text)
     .replace(/\{s:([a-zA-Z0-9.-]+)\}/g, (_, key: string) => r.strings[key] ?? '')
-    .replace(/\{env\.skinName\}/g, () => r.doc.name);
+    // The name is text: it never adds a binding to the value it is written into.
+    .replace(/\{env\.skinName\}/g, () => r.doc.name.replace(/[{}]/g, ''));
 }
 
 function compile(text: string | undefined, r: Context, urls = false): Template | undefined {
@@ -242,6 +270,16 @@ export function fill(template: Template | undefined, c: Ctx, e: Env): string {
   if (template === undefined) return '';
   if (typeof template === 'string') return template;
   return template.parts.map(p => (typeof p === 'string' ? p : p(c, e))).join('');
+}
+
+/** A style row as drawn. A value filled from data never loads an image through CSS: only a
+ * background-image's url() layers name one, and the renderer hands those to the host's image
+ * loader. undefined: the row is not drawn. */
+export function fillRow(row: string, template: Template, c: Ctx, e: Env): string | undefined {
+  const text = fill(template, c, e);
+  if (typeof template === 'string') return text;
+  const probe = row === 'background-image' ? layers(text).filter(layer => !/^url\([^()]*\)$/.test(layer)).join(',') : text;
+  return IMAGE_FUNCTION.test(probe) ? undefined : text;
 }
 
 function tests(list: Condition[] | undefined, r?: Context): Test[] {
@@ -321,11 +359,14 @@ function css(style: Style | undefined, r: Context): CssT {
     const text = tokenValue(r.screen ? tokenArgs(String(raw), r.screen.scope) : String(raw), r);
     if (r.screen) {
       // Any row may hold a hole; each is validated once filled (resolve/screen-style.ts).
-      if (UNSAFE.test(text.replace(/\{[^{}]*\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
+      if (UNSAFE.test(text.replace(/\{[^{}]*\}/g, '')) || IMAGE_FUNCTION.test(text.replace(/\{[^{}]*\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
       out[row] = screenStyleRow(row, text, r.screen.scope, r.screen.scale, r.screen.step);
       continue;
     }
-    if (UNSAFE.test(text.replace(/\{[a-zA-Z.:-]+\}/g, ''))) throw new Error(`Unsafe style value: ${row}: ${raw}`);
+    // Checked as it will be drawn: tokens, the document's strings and its name filled in. compile()
+    // still takes `text`, so strings are filled once.
+    const drawn = strings(text, r);
+    if (UNSAFE.test(drawn.replace(/\{[a-zA-Z.:-]+\}/g, '')) || namesImage(row, drawn)) throw new Error(`Unsafe style value: ${row}: ${raw}`);
     out[row] = compile(text, r, row === 'background-image')!;
   }
   return out;

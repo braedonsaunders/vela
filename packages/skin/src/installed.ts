@@ -33,7 +33,8 @@ export function installedDocument(value: unknown, origin: string, resolved = fal
     if (typeof v === 'string') {
       if (/url\s*\(|javascript:|@import/i.test(v)) throw new Error('Unsafe skin value');
       if (['src', 'url', 'preview'].includes(key)) {
-        if (key === 'src' && /^\{[a-zA-Z][a-zA-Z0-9.]*\}$/.test(v)) return v;
+        // A data binding (catalogue artwork); the skin's own name is text, never an image source.
+        if (key === 'src' && /^\{[a-zA-Z][a-zA-Z0-9.]*\}$/.test(v) && v !== '{env.skinName}') return v;
         return appearanceAsset(v, origin);
       }
       return v;
