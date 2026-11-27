@@ -33,3 +33,14 @@ test('standalone sign-in has no inert Back destination', () => {
   expect(flow.history).toEqual([]);
   expect(authFlow(flow, { type: 'server', serverId: 'server-a' })).toBe(flow);
 });
+test('the welcome leads to a typed address and Back returns to it', () => {
+  let flow = authFlow(initialAuthFlow(0), {type: 'address'});
+  expect(flow.step.page).toBe('address');
+  flow = authFlow(flow, {type: 'server', serverId: 'a'});
+  expect(authFlow(flow, {type: 'back'}).step.page).toBe('address');
+  expect(authFlow(authFlow(flow, {type: 'back'}), {type: 'back'}).step.page).toBe('add');
+});
+test('a restored server list does not pull a typed address away', () => {
+  const flow = authFlow(initialAuthFlow(0), {type: 'address'});
+  expect(authFlow(flow, {type: 'servers', count: 2})).toBe(flow);
+});

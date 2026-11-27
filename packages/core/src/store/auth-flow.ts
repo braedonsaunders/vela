@@ -1,7 +1,8 @@
-/** Presentation navigation shared by every host. Authentication and tokens stay in Auth/Servers. */
-export type AuthStep = { page: 'choose' | 'add' | 'plex' } | { page: 'signin' | 'code' | 'server-plex'; serverId: string };
+/** Presentation navigation shared by every host. Authentication and tokens stay in Auth/Servers.
+ * `add` is the welcome (Plex, or a server's address); `address` is typing that address. */
+export type AuthStep = { page: 'choose' | 'add' | 'address' | 'plex' } | { page: 'signin' | 'code' | 'server-plex'; serverId: string };
 export interface AuthFlow { step: AuthStep; history: AuthStep[] }
-export type AuthFlowEvent = { type: 'add' | 'plex' | 'back' } | { type: 'server'; serverId: string } | { type: 'code' | 'server-plex' } | { type: 'servers'; count: number };
+export type AuthFlowEvent = { type: 'add' | 'address' | 'plex' | 'back' } | { type: 'server'; serverId: string } | { type: 'code' | 'server-plex' } | { type: 'servers'; count: number };
 export function initialAuthFlow(saved: number): AuthFlow {
   return { step: { page: saved ? 'choose' : 'add' }, history: [] };
 }
