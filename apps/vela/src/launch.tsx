@@ -6,6 +6,7 @@ import Animated, { useReducedMotion, type CSSAnimationProperties } from 'react-n
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { LaunchArt } from './launch-art';
 import { launchDelay, type LaunchStage } from './launch-state';
+import { holdLaunch, settleLaunch } from '@vela/skin/src/launch-signal';
 
 const fadeIn = { from: { opacity: 0 }, to: { opacity: 1 } };
 const fadeOut = { from: { opacity: 1 }, to: { opacity: 0 } };
@@ -16,8 +17,11 @@ interface LaunchBranding { name?: string; wordmark?: { url: string; dark?: strin
 
 export function LaunchGate({ ready, brandingReady, branding, children }: { ready: boolean; brandingReady: boolean; branding?: LaunchBranding; children: ReactNode }) {
   const still = useReducedMotion();
-  const [stage, setStage] = useState<LaunchStage>('intro');
+  // Entrances under the cover (the sign-in's sail) wait until it dissolves.
+  const [stage, setStage] = useState<LaunchStage>(() => { holdLaunch(); return 'intro'; });
   const visible = stage !== 'done';
+  useEffect(() => { if (stage !== 'intro') settleLaunch(); }, [stage]);
+  useEffect(() => () => settleLaunch(), []);
   const duration = still ? 160 : 420;
   return <View style={styles.root}>
     <Animated.View pointerEvents={visible ? 'none' : 'auto'} accessibilityElementsHidden={visible}
