@@ -133,8 +133,10 @@ export function Label({ children }: { children: string }) {
 
 /** A failure the viewer should read: announced, in the accent ink. */
 export function Alert({ children }: { children: string }) {
+  // On the signed-out stage everything is centred, failures too.
+  const centred = !!useAuthLayout();
   return (
-    <Words rows={{ 'font-size': '14px', 'line-height': '1.5', color: '$ui.accent' }} accessibilityRole="alert">
+    <Words rows={{ 'font-size': centred ? '15px' : '14px', 'line-height': '1.5', color: '$ui.accent' }} accessibilityRole="alert" style={centred ? { textAlign: 'center' } : undefined}>
       {children}
     </Words>
   );
@@ -159,14 +161,15 @@ export function Pulse() {
 
 /** A waiting line: the pulse beside what is being waited for. */
 export function Waiting({ children }: { children: string }) {
+  const centred = !!useAuthLayout();
   return (
     <View
-      style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}
+      style={{ flexDirection: 'row', gap: 10, alignItems: 'center', alignSelf: centred ? 'center' : undefined }}
       accessibilityRole="text"
       accessibilityLiveRegion="polite"
     >
       <Pulse />
-      <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }}>{children}</Words>
+      <Words rows={{ 'font-size': centred ? '15px' : '14px', color: '$ui.inkSecondary' }}>{children}</Words>
     </View>
   );
 }

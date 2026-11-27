@@ -18,8 +18,10 @@ interface StepState {
   first: boolean;
   /** Dissolving away: it no longer reports its size. */
   leaving: boolean;
+  /** The stage is showing: until then blocks wait, unseen, to enter. */
+  ready: boolean;
 }
-const StepContext = createContext<StepState>({ direction: 'forward', first: false, leaving: false });
+const StepContext = createContext<StepState>({ direction: 'forward', first: false, leaving: false, ready: true });
 
 /** The current step, keyed by `id`; when the id changes the previous one dissolves over it. */
 export function Steps({ id, direction, children }: { id: string; direction: StepDirection; children: ReactNode }) {
@@ -41,11 +43,11 @@ export function Steps({ id, direction, children }: { id: string; direction: Step
     <View style={{ flexGrow: 1 }}>
       {shown.leaving ? (
         <Animated.View key={shown.leaving.id} pointerEvents="none" style={[{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }, exit(shown.leaving.direction)]}>
-          <StepContext.Provider value={{ direction: shown.leaving.direction, first: false, leaving: true }}>{shown.leaving.node}</StepContext.Provider>
+          <StepContext.Provider value={{ direction: shown.leaving.direction, first: false, leaving: true, ready: true }}>{shown.leaving.node}</StepContext.Provider>
         </Animated.View>
       ) : null}
       <Animated.View key={id} style={{ flexGrow: 1 }}>
-        <StepContext.Provider value={{ direction, first: entering.current, leaving: false }}>{children}</StepContext.Provider>
+        <StepContext.Provider value={{ direction, first: entering.current, leaving: false, ready: stage?.ready ?? true }}>{children}</StepContext.Provider>
       </Animated.View>
     </View>
   );
@@ -63,10 +65,11 @@ function exit(direction: StepDirection): ViewStyle {
 /** A block of a step, rising into place `index` beats after the step begins. */
 export function Rise({ index, children, style }: { index: number; children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const look = useLook();
-  const { direction, first, leaving } = useContext(StepContext);
-  // The entrance is chosen once, as the block mounts: re-renders never restart it.
-  const [entrance] = useState(() => (leaving ? undefined : animation(blockEntrance(index, direction, first), {}, look.still, 0)));
-  return <Animated.View style={[style, entrance as ViewStyle]}>{children}</Animated.View>;
+  const { direction, first, leaving, ready } = useContext(StepContext);
+  // The entrance is chosen once, when the stage first shows the block: re-renders never restart it.
+  const entrance = useRef<ViewStyle | null>(null);
+  if (!entrance.current && (ready || leaving)) entrance.current = (leaving ? {} : animation(blockEntrance(index, direction, first), {}, look.still, 0) ?? {}) as ViewStyle;
+  return <Animated.View style={[style, entrance.current ?? { opacity: 0 }]}>{children}</Animated.View>;
 }
 
 /** Centred lines of even length (the web balances them; native copy breaks by hand). */

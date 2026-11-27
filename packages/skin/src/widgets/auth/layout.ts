@@ -18,7 +18,8 @@ export function authLayout(viewport: Viewport, availableHeight = viewport.height
   // The smallest keyboard area (a landscape phone typing): fields and the action, nothing else.
   const minimal = compact && height < 300;
   const gap = tv ? 24 : short || minimal ? 8 : tight ? 12 : 16;
-  const sides = (viewport.sides?.left ?? 0) + (viewport.sides?.right ?? 0) + viewport.insets.left + viewport.insets.right;
+  // The host already lays screens out between the side safe areas (viewport.width excludes them).
+  const sides = viewport.insets.left + viewport.insets.right;
   const room = landscape ? (viewport.width - sides) * 0.58 : viewport.width - sides;
   const margin = compact ? 24 : 32;
   return {
@@ -93,8 +94,7 @@ export function horizonPlan({ viewport, height, keyboard, content, tv = false, t
     return { horizon, sail: sailFor(horizon - top, maxSail), contentTop: top, contentBottom: bottom, split: true, pane };
   }
   if (compact && viewport.width > viewport.height) {
-    const sideLeft = (viewport.sides?.left ?? 0) + insets.left;
-    const pane = Math.round(sideLeft + (viewport.width - sideLeft) * 0.42);
+    const pane = Math.round(insets.left + (viewport.width - insets.left) * 0.42);
     // Typing in landscape takes nearly all the height: the scene keeps its place behind the step.
     const horizon = Math.round(top + (height - top - Math.max(insets.bottom, 12)) * 0.62);
     return { horizon, sail: sailFor(horizon - top, 132), contentTop: top, contentBottom: bottom, split: true, pane };

@@ -135,14 +135,14 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
   useEffect(() => () => stage?.setWaiting(false), []);
   const controlHeight = layout?.controlHeight ?? 56;
   const serverPlex = step.page === 'signin' && target === auth?.serverId && auth.plexAvailable
-    ? <Pill primary={!auth.passwordAvailable} label="Sign in with Plex" testID="server-plex" height={controlHeight} disabled={busy} onPress={() => { send({type: 'server-plex'}); void run(() => authActions!.startPlex()); }}><PlexMark /></Pill>
+    ? <Pill primary={!auth.passwordAvailable} label="Sign in with Plex" testID="server-plex" height={auth.passwordAvailable ? controlHeight - 6 : controlHeight} disabled={busy} onPress={() => { send({type: 'server-plex'}); void run(() => authActions!.startPlex()); }}><PlexMark /></Pill>
     : null;
   const failure = error || (step.page === 'signin' && auth?.phase !== 'offline' && auth?.error) || '';
   const extras = <>
     {auth?.secureOrigin && step.page === 'signin' ? <Pill label="Use secure connection" height={48} onPress={() => void run(async () => { const result = await authActions?.secureSwitch(); if (result?.error) return result; if (result?.url) { if (Platform.OS === 'web') window.location.assign(result.url); else await Linking.openURL(result.url); } })} /> : null}
     {note && step.page === 'signin' ? <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }} style={{ textAlign: 'center' }}>{note}</Words> : null}
-    {failure ? <Alert>{failure}</Alert> : null}
   </>;
+  const alert = failure ? <Alert>{failure}</Alert> : null;
 
   let page;
   if (step.page === 'add') {
@@ -151,6 +151,7 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
       heading={first ? <WelcomeMark /> : undefined}
       title={first ? undefined : brandingName && !flow.history.length ? brandingName : copy.title}
       subtitle={copy.subtitle}
+      body={alert}
       actions={<>
         <Pill primary label="Continue with Plex" testID="connect-plex" height={controlHeight} disabled={busy} onPress={startPlex}><PlexMark /></Pill>
         <Pill label="Enter a server address" testID="connect-address-open" height={controlHeight} disabled={busy} onPress={() => send({type: 'address'})} />
@@ -162,12 +163,12 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
       body={<AddressStep servers={[]} busy={busy} probe={url => actions.probe(url)} onAdd={add} onSelect={select} onRemove={id => void run(() => actions.remove(id))} error={error} />} />;
   } else if (step.page === 'choose') {
     page = <StepFrame title={copy.title} subtitle={copy.subtitle}
-      body={<ServerList servers={servers} brandingName={brandingName} busy={busy} onSelect={select} onRemove={id => void run(() => actions.remove(id))} />}
+      body={<><ServerList servers={servers} brandingName={brandingName} busy={busy} onSelect={select} onRemove={id => void run(() => actions.remove(id))} />{alert}</>}
       actions={<Pill label="Add a server" testID="auth-add" height={controlHeight} onPress={() => send({type: 'add'})} />} />;
   } else if (step.page === 'server-plex') {
     page = <PlexStep title={copy.title} subtitle={copy.subtitle} link={auth?.plex ?? null} busy={busy} starting={busy && !auth?.plex} error={auth?.error ?? ''} onStart={() => void run(() => authActions!.startPlex())} onChoose={() => {}} onChooseProfile={(id, pin) => void run(() => authActions!.choosePlexProfile(id, pin))} onCancel={back} />;
   } else if (offline) {
-    page = <StepFrame title={title} subtitle={savedOffline ? '' : `Reconnecting to ${name}`}
+    page = <StepFrame title={savedOffline ? title : `Reconnecting to ${name}`}
       body={<Reconnecting name={name} auth={auth!} busy={busy} onDownloads={onDownloads} onRetry={() => void run(() => authActions?.retry?.() ?? Promise.resolve())} onSignInAgain={authActions?.signInAgain ? () => void run(() => authActions.signInAgain!()) : undefined} />} />;
     if (titleLabel) page = <View accessibilityLabel={titleLabel} style={{ flexGrow: 1 }}>{page}</View>;
   } else if (plexPage) {
@@ -183,10 +184,10 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
   } else if (connecting) {
     page = <StepFrame title={copy.title} align="centre" body={<Rise index={1} style={{ alignItems: 'center' }}><Waiting>{auth!.phase === 'redeeming' ? `Signing in to ${name}…` : `Connecting to ${name}…`}</Waiting></Rise>} />;
   } else if (target === auth?.serverId && auth.plexAvailable && !auth.passwordAvailable && !auth.quickAvailable) {
-    page = <StepFrame title={copy.title} body={extras} actions={serverPlex} />;
+    page = <StepFrame title={copy.title} body={<>{extras}{alert}</>} actions={serverPlex} />;
   } else {
     page = <StepFrame title={copy.title} body={<>
-      <Credentials secondary={serverPlex} busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.landscape || layout?.minimal}
+      <Credentials error={failure} secondary={serverPlex} busy={busy} canPassword={target === auth?.serverId ? auth.passwordAvailable : true} canQuick={target === auth?.serverId ? auth.quickAvailable : true} compact={layout?.minimal}
         onSignIn={(username, password) => void run(() => kind === 'ether' && authActions ? authActions.signIn(username, password) : actions.jellyfinSignIn(target, username, password))}
         onQuick={() => void run(async () => { if (kind === 'ether' && authActions) await authActions.startQuick(); else await actions.jellyfinQuickStart(target); send({type: 'code'}); })} />
       {extras}
@@ -201,7 +202,7 @@ function WelcomeMark() {
   const look = useLook();
   const height = stage?.layout.compact ? 44 : 52;
   return <View accessible accessibilityRole="header" accessibilityLabel="Vela" style={{ height, width: height * WORDMARK_ASPECT }}>
-    <Wordmark height={height} write={!look.still} delay={stage?.first ? SAIL_DRAWN_MS - 700 : 120} colour={look.ui.ink} />
+    {stage?.ready !== false ? <Wordmark height={height} write={!look.still} delay={stage?.first ? SAIL_DRAWN_MS - 700 : 120} colour={look.ui.ink} /> : null}
   </View>;
 }
 

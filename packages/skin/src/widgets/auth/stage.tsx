@@ -8,6 +8,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Dimensions, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, type KeyboardEvent, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useHost } from '../../host';
+import { useLaunchSettled } from '../../launch-signal';
 import { easing } from '../../motion';
 import { APressable, Glyph, NO_RING, overlaid, useInteraction } from '../common/controls';
 import { useLook } from '../common/look';
@@ -21,6 +22,8 @@ export interface StageApi {
   plan: HorizonPlan;
   /** The mark is still drawing: the first step's blocks wait for it. */
   first: boolean;
+  /** The scene is showing (measured, and no launch ident over it): entrances may play. */
+  ready: boolean;
   /** The step's natural height (its blocks without the space between them). */
   reportContent(height: number): void;
   /** Something is being waited for: the horizon's light travels. */
@@ -78,12 +81,14 @@ export function Stage({ children, branding }: { children: ReactNode; branding?: 
   const [deep, setDeep] = useState(false);
   // The mark draws once, the first time the stage has somewhere to put it.
   const [first, setFirst] = useState(true);
+  const launched = useLaunchSettled();
   const measured = content > 0;
+  const ready = launched && (measured || horizonPlan({ viewport, height, keyboard: 0, content: 1, tv, touch }).split);
   useEffect(() => {
-    if (!measured || !first) return;
+    if (!ready || !first) return;
     const timer = setTimeout(() => setFirst(false), 1600);
     return () => clearTimeout(timer);
-  }, [measured, first]);
+  }, [ready, first]);
   const layout = authLayout(viewport, height - keyboard.height, tv, touch);
   const plan = horizonPlan({ viewport, height, keyboard: keyboard.height, content, tv, touch, deep });
   const maxSail = horizonPlan({ viewport, height, keyboard: 0, content: 1, tv, touch }).split ? 132 : tv ? 240 : layout.compact ? 172 : 220;
@@ -94,23 +99,24 @@ export function Stage({ children, branding }: { children: ReactNode; branding?: 
   const keyboardMoving = lastKeyboard.current !== keyboard.height;
   lastKeyboard.current = keyboard.height;
   const moveMs = !placed.current ? 0 : keyboardMoving ? keyboard.ms : HORIZON_MS;
-  if (measured || plan.split) placed.current = true;
+  if (ready) placed.current = true;
   const reportContent = useCallback((h: number) => setContent(previous => (Math.abs(previous - h) < 1 ? previous : h)), []);
-  const api = useMemo<StageApi>(() => ({ layout, plan, first, reportContent, setWaiting, setBack, setDeep }),
-    [layout.contentWidth, layout.headingSize, layout.gap, layout.compact, layout.minimal, layout.tight, layout.controlHeight, plan.horizon, plan.sail, plan.contentTop, plan.contentBottom, plan.split, plan.pane, first, reportContent]);
-  const sideLeft = (viewport.sides?.left ?? 0) + viewport.insets.left;
-  const sideRight = (viewport.sides?.right ?? 0) + viewport.insets.right;
+  const api = useMemo<StageApi>(() => ({ layout, plan, first, ready, reportContent, setWaiting, setBack, setDeep }),
+    [layout.contentWidth, layout.headingSize, layout.gap, layout.compact, layout.minimal, layout.tight, layout.controlHeight, plan.horizon, plan.sail, plan.contentTop, plan.contentBottom, plan.split, plan.pane, first, ready, reportContent]);
+  // The host pads screens by the side safe areas already; these are only what is left inside.
+  const sideLeft = viewport.insets.left;
+  const sideRight = viewport.insets.right;
   const glide = moveMs > 0 && !look.still ? {
     transitionProperty: ['top', 'bottom'],
     transitionDuration: moveMs,
     transitionTimingFunction: easing(HORIZON_EASE),
   } as unknown as ViewStyle : null;
   const column: ViewStyle = plan.split
-    ? { position: 'absolute', left: plan.pane, right: sideRight, top: viewport.insets.top, bottom: plan.contentBottom }
+    ? { position: 'absolute', left: plan.pane, right: sideRight, top: viewport.insets.top + 12, bottom: plan.contentBottom }
     : { position: 'absolute', left: sideLeft, right: sideRight, top: plan.contentTop, bottom: plan.contentBottom };
   const stage = (
     <View style={StyleSheet.absoluteFill} onLayout={event => { setHeight(event.nativeEvent.layout.height); setWidth(event.nativeEvent.layout.width); }}>
-      {measured || plan.split ? <Horizon plan={plan} width={width} height={height} maxSail={maxSail} waiting={waiting} branding={branding} draw={first} moveMs={moveMs} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.page }]} />}
+      {ready ? <Horizon plan={plan} width={width} height={height} maxSail={maxSail} waiting={waiting} branding={branding} draw={first} moveMs={moveMs} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.page }]} />}
       <Animated.View style={[column, glide]}>
         <ScrollView
           testID="auth-stage-scroll"

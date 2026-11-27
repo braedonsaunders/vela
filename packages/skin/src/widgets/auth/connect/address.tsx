@@ -1,4 +1,5 @@
 import { useAuthLayout } from '../layout-context';
+import { DISPLAY_LINE_HEIGHT } from '../layout';
 // Connect's first step: an address, checked as it is typed (before any credential is sent);
 // the server it found, with its kind, name and version; and your servers, to switch or remove.
 import { useState } from 'react';
@@ -74,8 +75,9 @@ export function AddressStep({
         placeholder={msg('connect.addressHint')}
         testID="connect-address"
         preferred
+        bare
       />
-      {checked.answer?.state === 'checking' ? <Waiting>{msg('connect.checking')}</Waiting> : null}
+      {checked.answer?.state === 'checking' ? <View style={{ alignItems: 'center' }}><Waiting>{msg('connect.checking')}</Waiting></View> : null}
       {found ? (
         <Animated.View
           accessibilityLiveRegion="polite"
@@ -90,18 +92,18 @@ export function AddressStep({
             look.motion('velaEnter0'),
           ]}
         >
-          <View style={{ gap: 4 }}>
+          <View style={{ gap: 2, alignItems: 'center' }}>
             <Words rows={{ ...eyebrow, 'font-size': '12px', color: '$ui.accent' }}>{found.kindLabel}</Words>
-            <Words rows={{ ...display, 'font-size': '28px' }} lines={2}>
+            <Words rows={{ ...display, 'font-size': '30px', 'line-height': String(DISPLAY_LINE_HEIGHT) }} lines={2} style={{ textAlign: 'center' }}>
               {foundName(found)}
             </Words>
             {found.version ? (
-              <Words rows={{ 'font-size': '12px', color: '$ui.inkQuiet' }}>{found.version}</Words>
+              <Words rows={{ 'font-size': '13px', color: '$ui.inkQuiet' }}>{found.version}</Words>
             ) : null}
           </View>
           <Pill
             primary
-            height={50}
+            height={layout?.controlHeight ?? 56}
             label={msg('connect.continue')}
             onPress={add}
             disabled={busy}

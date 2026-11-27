@@ -85,6 +85,8 @@ export function Horizon({ plan, width, height, maxSail, waiting, branding, draw,
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: look.ui.page, overflow: 'hidden' }]} pointerEvents="none"
       accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {/* First appearance: the dusk comes up out of the dark as the sail draws. */}
+      <Animated.View style={[StyleSheet.absoluteFill, draw && !still ? fadeIn(0, 1400) : null]}>
       {/* Everything hangs from the horizon: one transform moves the whole world. */}
       <Animated.View style={[styles.anchor, { width, transform: [{ translateY: plan.horizon }] }, glide(moveMs)]}>
         {/* Sky */}
@@ -139,6 +141,7 @@ export function Horizon({ plan, width, height, maxSail, waiting, branding, draw,
           </>
         )}
       </Animated.View>
+      </Animated.View>
       {/* Split: a veil behind the step's column keeps its words legible over the sky. */}
       {plan.split ? <View style={[StyleSheet.absoluteFill, { left: plan.pane * 0.7, backgroundImage: `linear-gradient(90deg, ${look.ui.page}00 0%, ${look.ui.page}b3 40%, ${look.ui.page}d9 100%)` } as ViewStyle]} /> : null}
       {/* The edges fall away. */}
@@ -147,10 +150,10 @@ export function Horizon({ plan, width, height, maxSail, waiting, branding, draw,
   );
 }
 
-function fadeIn(delay: number): ViewStyle {
+function fadeIn(delay: number, duration = 900): ViewStyle {
   return {
     animationName: { from: { opacity: 0 }, to: { opacity: 1 } },
-    animationDuration: 900,
+    animationDuration: duration,
     animationDelay: delay,
     animationFillMode: 'both',
     animationTimingFunction: 'ease-out',

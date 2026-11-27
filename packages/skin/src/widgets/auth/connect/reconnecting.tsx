@@ -17,16 +17,17 @@ export function Reconnecting({ name, auth, busy, onRetry, onDownloads, onSignInA
     return () => clearInterval(timer);
   }, [counting, auth.retryAt]);
   const note = reconnectNote(auth, now, busy);
-  return <View style={{ gap: auth.viewerId ? 10 : 12 }}>
+  const centred = { textAlign: 'center' as const };
+  return <View style={{ gap: 12 }}>
     {auth.viewerId ? (
-      <Words rows={{ 'font-size': '14px', color: '$ui.inkSecondary' }} testID="reconnect-note">{note || 'Your server is unavailable.'}</Words>
+      <Words rows={{ 'font-size': '16px', color: '$ui.inkSecondary' }} style={centred} testID="reconnect-note">{note || 'Your server is unavailable.'}</Words>
     ) : <>
-      <Waiting>{`Reconnecting to ${name}…`}</Waiting>
-      {auth.error ? <Words rows={{ 'font-size': '13px', color: '$ui.inkSecondary' }}>{auth.error}</Words> : null}
-      {note ? <Words rows={{ 'font-size': '13px', color: '$ui.inkQuiet' }} testID="reconnect-note">{note}</Words> : null}
+      {auth.error ? <Words rows={{ 'font-size': '15px', color: '$ui.inkSecondary' }} style={centred}>{auth.error}</Words> : null}
+      {note ? <Words rows={{ 'font-size': '14px', color: '$ui.inkQuiet' }} style={centred} testID="reconnect-note">{note}</Words> : <Waiting>{`Reconnecting to ${name}…`}</Waiting>}
     </>}
-    {onDownloads ? <Pill primary label="Open Downloads" testID="reconnect-downloads" height={44} onPress={onDownloads} /> : null}
-    <Pill primary={!!auth.viewerId && !onDownloads} label="Retry" testID="reconnect-retry" height={44} disabled={busy} onPress={onRetry} />
-    {onSignInAgain && offersSignInAgain(auth) ? <Pill label="Sign in again" testID="reconnect-sign-in" height={44} disabled={busy} onPress={onSignInAgain} /> : null}
+    <View style={{ height: 8 }} />
+    {onDownloads ? <Pill primary label="Open Downloads" testID="reconnect-downloads" height={52} onPress={onDownloads} /> : null}
+    <Pill primary={!!auth.viewerId && !onDownloads} label="Retry" testID="reconnect-retry" height={52} disabled={busy} onPress={onRetry} />
+    {onSignInAgain && offersSignInAgain(auth) ? <Pill label="Sign in again" testID="reconnect-sign-in" height={50} disabled={busy} onPress={onSignInAgain} /> : null}
   </View>;
 }
