@@ -44,6 +44,23 @@ beforeAll(async () => {
     fetch(req) {
       const url = new URL(req.url);
       seen.push({ path: url.pathname, headers: new Headers(req.headers) });
+      if (['/old-grant', '/new-grant', '/changed-grant'].includes(url.pathname)) {
+        const length = 262144;
+        const changed = url.pathname === '/changed-grant';
+        const etag = changed ? '"changed"' : '"original"';
+        const byte = changed ? 0x42 : 0x41;
+        const range = req.headers.get('range');
+        const start = Number(/^bytes=(\d+)-/.exec(range ?? '')?.[1] ?? 0);
+        const end = range === 'bytes=0-0' ? 0 : length - 1;
+        const headers: Record<string, string> = {
+          'Accept-Ranges': 'bytes', ETag: etag, 'Content-Length': String(end - start + 1),
+        };
+        if (range) headers['Content-Range'] = `bytes ${start}-${end}/${length}`;
+        const body = url.pathname === '/old-grant' && !range
+          ? new ReadableStream({ start(c) { c.enqueue(new Uint8Array(65536).fill(byte)); } })
+          : new Uint8Array(end - start + 1).fill(byte);
+        return new Response(body, { status: range ? 206 : 200, headers });
+      }
       if (url.pathname === '/media/101.mkv') {
         return new Response('A'.repeat(32), {
           status: 200,
@@ -145,6 +162,20 @@ appleTest('OfflineDownloads resumes a partial .part file using Range and If-Rang
   expect(rangeHit?.headers.get('range')).toBe('bytes=16-');
   expect(rangeHit?.headers.get('if-range')).toBe('"etag-resumed"');
   expect(rangeHit?.headers.get('x-plex-token')).toBe('fresh-token');
+});
+
+appleTest('OfflineDownloads resumes URLSession bytes with a fresh grant and restarts for a changed file or invalid archive', async () => {
+  for (const mode of ['resume-regrant', 'resume-changed', 'resume-invalid']) {
+    expect(await runMode(mode)).toBe('regrant_ok');
+    const hits = seen.filter(h => h.path !== '/old-grant' && h.headers.get('range') !== 'bytes=0-0');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.headers.get('x-grant')).toBe('fresh');
+    if (mode === 'resume-regrant') {
+      expect(hits[0]?.headers.get('range')).toMatch(/^bytes=[1-9]\d*-$/);
+    } else {
+      expect(hits[0]?.headers.get('range')).toBeNull();
+    }
+  }
 });
 
 appleTest('OfflineDownloads keeps credential headers off disk while a transfer is in flight', async () => {

@@ -157,6 +157,48 @@ enum OfflineDownloadsProbe {
             }
             print("corrupt_ok")
 
+        case "resume-regrant", "resume-changed", "resume-invalid":
+            let partial = DispatchSemaphore(value: 0)
+            let done = DispatchSemaphore(value: 0)
+            var final: [String: Any] = [:]
+            downloads.emit = { event in
+                switch event["status"] as? String {
+                case "downloading": partial.signal()
+                case "completed", "failed": final = event; done.signal()
+                default: break
+                }
+            }
+            var request: [String: Any] = [
+                "serverId": "srv", "viewerId": "viewer", "titleId": "title",
+                "url": "\(origin)/old-grant", "headers": ["X-Grant": "old"],
+                "byteLength": 262144, "etag": "\"original\"",
+            ]
+            try downloads.startTransfer(request)
+            guard partial.wait(timeout: .now() + 10) == .success else {
+                throw URLError(.timedOut)
+            }
+            downloads.pauseTransfer(serverId: "srv", viewerId: "viewer", titleId: "title")
+            let titleDir = root.appendingPathComponent("srv/viewer/title")
+            let resumeFile = titleDir.appendingPathComponent("resume.data")
+            guard FileManager.default.fileExists(atPath: resumeFile.path) else {
+                throw URLError(.cannotCreateFile)
+            }
+            if mode == "resume-invalid" { try Data([0]).write(to: resumeFile) }
+            let changed = mode == "resume-changed"
+            request["url"] = "\(origin)/" + (changed ? "changed-grant" : "new-grant")
+            request["headers"] = ["X-Grant": "fresh"]
+            if changed { request["etag"] = "\"changed\"" }
+            try downloads.resumeTransfer(request)
+            guard done.wait(timeout: .now() + 10) == .success, final["status"] as? String == "completed" else {
+                fputs("unexpected transfer result: \(final)\n", stderr)
+                exit(1)
+            }
+            let media = try Data(contentsOf: titleDir.appendingPathComponent("media.mp4"))
+            guard media == Data(repeating: changed ? 0x42 : 0x41, count: 262144) else {
+                throw URLError(.cannotDecodeContentData)
+            }
+            print("regrant_ok")
+
         case "resume-range":
             // Pre-seed a 16-byte .part file, then call resumeTransfer for a 32-byte resource.
             let titleDir = root.appendingPathComponent("srv-plex/viewer-1/resumed", isDirectory: true)

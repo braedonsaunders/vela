@@ -312,23 +312,27 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
     func pauseTransfer(serverId: String, viewerId: String, titleId: String) {
         let key = Self.transferKey(serverId: serverId, viewerId: viewerId, titleId: titleId)
         lock.lock()
-        let task = activeTasks.removeValue(forKey: key)
+        let task = activeTasks[key]
         let meta = transfers[key]
         lock.unlock()
         guard let task else { return }
         let resumeFile = resumeDataURL(serverId: serverId, viewerId: viewerId, titleId: titleId)
         let semaphore = DispatchSemaphore(value: 0)
         task.cancel { [weak self] data in
-            if let self, let data, !data.isEmpty {
-                var dir = resumeFile.deletingLastPathComponent()
-                self.ensureDirectory(&dir, excludeFromBackup: true)
-                try? data.write(to: resumeFile, options: .atomic)
-                self.excludeItemFromBackup(resumeFile)
-            }
-            semaphore.signal()
+            defer { semaphore.signal() }
+            guard let self else { return }
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            guard self.activeTasks[key] === task, let data, !data.isEmpty else { return }
+            try? data.write(to: resumeFile, options: .atomic)
+            self.excludeItemFromBackup(resumeFile)
         }
         _ = semaphore.wait(timeout: .now() + 2)
-        if let meta {
+        lock.lock()
+        let isCurrent = activeTasks[key] === task
+        if isCurrent { activeTasks.removeValue(forKey: key) }
+        lock.unlock()
+        if isCurrent, let meta {
             emitEvent([
                 "serverId": meta.serverId,
                 "viewerId": meta.viewerId,
@@ -413,6 +417,47 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         )
     }
 
+    /// CFNetwork keeps the partial file. Replace both archived requests and the URL that names
+    /// the download, leaving the byte count, validator and temporary file reference intact.
+    /// Only accept the keyed-archive layout we recognize. A new OS layout can start from scratch.
+    private static func retargetResumeData(_ data: Data, previous: TransferMeta, request: URLRequest) -> Data? {
+        let rootKey = "NSKeyedArchiveRootObjectKey"
+        let urlKey = "NSURLSessionDownloadURL"
+        let currentKey = "NSURLSessionResumeCurrentRequest"
+        let originalKey = "NSURLSessionResumeOriginalRequest"
+        guard let url = request.url, let etag = previous.etag, etag.hasPrefix("\""), etag.hasSuffix("\""),
+              let length = previous.byteLength,
+              downloadOrigin(url) == downloadOrigin(URL(string: previous.url)),
+              let decoder = try? NSKeyedUnarchiver(forReadingFrom: data) else { return nil }
+        decoder.requiresSecureCoding = true
+        decoder.decodingFailurePolicy = .setErrorAndReturn
+        guard decoder.containsValue(forKey: rootKey),
+              var info = decoder.decodeObject(
+                  of: [NSDictionary.self, NSString.self, NSNumber.self, NSData.self, NSDate.self], forKey: rootKey
+              ) as? [String: Any] else { return nil }
+        decoder.finishDecoding()
+        guard decoder.error == nil,
+              info[urlKey] as? String == previous.url,
+              info[currentKey] is Data, info[originalKey] is Data,
+              info["NSURLSessionResumeEntityTag"] as? String == etag,
+              let offset = (info["NSURLSessionResumeBytesReceived"] as? NSNumber)?.int64Value,
+              offset > 0, offset < length,
+              let tempFile = info["NSURLSessionResumeInfoTempFileName"] as? String,
+              isSafeComponent(tempFile),
+              request.value(forHTTPHeaderField: "Range") == nil else { return nil }
+
+        let requestEncoder = NSKeyedArchiver(requiringSecureCoding: true)
+        requestEncoder.encode(request as NSURLRequest, forKey: rootKey)
+        let encodedRequest = requestEncoder.encodedData
+        info[currentKey] = encodedRequest
+        info[originalKey] = encodedRequest
+        info[urlKey] = url.absoluteString
+
+        let encoder = NSKeyedArchiver(requiringSecureCoding: true)
+        encoder.encode(info as NSDictionary, forKey: rootKey)
+        return encoder.encodedData
+    }
+
     private func launchTransfer(_ meta: TransferMeta, preferResumeData: Bool) throws {
         guard let titleDir = safeChildDirectory([meta.serverId, meta.viewerId, meta.titleId]),
               let url = URL(string: meta.url) else {
@@ -424,37 +469,51 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         lock.lock()
         let previous = transfers[meta.key]
         lock.unlock()
-        let sameFile = previous.map { $0.etag == meta.etag && $0.container == meta.container && $0.byteLength == meta.byteLength } ?? true
-        let sameRequest = previous.map { $0.url == meta.url && $0.headers == meta.headers && $0.wifiOnly == meta.wifiOnly } ?? false
-        cancelTask(forKey: meta.key)
-        var dir = titleDir
-        ensureDirectory(&dir, excludeFromBackup: true)
-        try? FileManager.default.removeItem(at: titleDir.appendingPathComponent("transfer-status.json"))
-        saveTransferMeta(meta)
-        credentials.save(meta.headers, forKey: meta.key)
-
+        let sameFile = previous.map {
+            $0.key == meta.key && $0.etag == meta.etag && $0.container == meta.container && $0.byteLength == meta.byteLength
+        } ?? true
         let session = meta.wifiOnly ? wifiSession : cellularSession
         let resumeFile = resumeDataURL(serverId: meta.serverId, viewerId: meta.viewerId, titleId: meta.titleId)
         let partFile = partialMediaURL(for: meta)
-        let task: URLSessionDownloadTask
+        let files = FileManager.default
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
+        for (name, value) in meta.headers {
+            req.setValue(value, forHTTPHeaderField: name)
+        }
 
-        if preferResumeData, sameFile, sameRequest, let resumeData = try? Data(contentsOf: resumeFile), !resumeData.isEmpty {
-            try? FileManager.default.removeItem(at: resumeFile)
-            task = session.downloadTask(withResumeData: resumeData)
+        cancelTask(forKey: meta.key)
+        var dir = titleDir
+        ensureDirectory(&dir, excludeFromBackup: true)
+        try? files.removeItem(at: titleDir.appendingPathComponent("transfer-status.json"))
+
+        var systemResume: Data?
+        // Each background session owns its own temporary files. An explicit .part uses
+        // HTTP Range below, since the system file in that case can contain only the suffix.
+        if preferResumeData, sameFile, let previous, previous.wifiOnly == meta.wifiOnly,
+           !files.fileExists(atPath: partFile.path),
+           let data = try? Data(contentsOf: resumeFile), !data.isEmpty {
+            systemResume = previous.url == meta.url && previous.headers == meta.headers
+                ? data : Self.retargetResumeData(data, previous: previous, request: req)
+        }
+        try? files.removeItem(at: resumeFile)
+        if !sameFile, let previous {
+            try? files.removeItem(at: partialMediaURL(for: previous))
+        }
+        saveTransferMeta(meta)
+        credentials.save(meta.headers, forKey: meta.key)
+
+        let task: URLSessionDownloadTask
+        if let systemResume {
+            task = session.downloadTask(withResumeData: systemResume)
         } else {
-            try? FileManager.default.removeItem(at: resumeFile)
-            var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
-            for (name, value) in meta.headers {
-                req.setValue(value, forHTTPHeaderField: name)
-            }
             if preferResumeData, sameFile, let etag = meta.etag, !etag.isEmpty,
-               let attrs = try? FileManager.default.attributesOfItem(atPath: partFile.path),
+               let attrs = try? files.attributesOfItem(atPath: partFile.path),
                let existingBytes = (attrs[.size] as? NSNumber)?.int64Value,
                existingBytes > 0 {
                 req.setValue("bytes=\(existingBytes)-", forHTTPHeaderField: "Range")
                 req.setValue(etag, forHTTPHeaderField: "If-Range")
             } else {
-                try? FileManager.default.removeItem(at: partFile)
+                try? files.removeItem(at: partFile)
             }
             task = session.downloadTask(with: req)
         }
@@ -493,6 +552,12 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         for k in keys { removePersistedTransferMeta(forKey: k); credentials.remove(forKey: k) }
     }
 
+    /// Called with the lock held. Background tasks can complete before getAllTasks reattaches them.
+    private func isCurrentTask(_ task: URLSessionTask, forKey key: String) -> Bool {
+        if let active = activeTasks[key] { return active === task }
+        return useBackgroundSession && task.originalRequest?.url?.absoluteString == transfers[key]?.url
+    }
+
     // MARK: URLSessionDownloadDelegate
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
@@ -500,7 +565,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         guard let key = downloadTask.taskDescription else { return }
         let now = Date().timeIntervalSince1970
         lock.lock()
-        guard let meta = transfers[key] else {
+        guard isCurrentTask(downloadTask, forKey: key), let meta = transfers[key] else {
             lock.unlock()
             return
         }
@@ -540,7 +605,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
                     didFinishDownloadingTo location: URL) {
         guard let key = downloadTask.taskDescription else { return }
         lock.lock()
-        guard let meta = transfers[key] else {
+        guard isCurrentTask(downloadTask, forKey: key), let meta = transfers[key] else {
             lock.unlock()
             return
         }
@@ -571,10 +636,22 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
         ensureDirectory(&mutableTitleDir, excludeFromBackup: true)
 
         let partFile = partialMediaURL(for: meta)
+        let hasPartial = FileManager.default.fileExists(atPath: partFile.path)
         let finalFile = titleDir.appendingPathComponent("media.\(meta.container)")
 
+        if status == 206, !hasPartial {
+            let range = http?.value(forHTTPHeaderField: "Content-Range")
+            guard let offset = Self.startByteFromContentRange(range),
+                  let total = Self.totalBytesFromContentRange(range), offset < total,
+                  meta.byteLength.map({ $0 == total }) ?? true,
+                  let etag = meta.etag, http?.value(forHTTPHeaderField: "ETag") == etag else {
+                failTransfer(meta, code: "corrupt", message: "The server returned a different file range. Retry the download.", bytesWritten: 0)
+                return
+            }
+        }
+
         do {
-            if status == 206, FileManager.default.fileExists(atPath: partFile.path) {
+            if status == 206, hasPartial {
                 let size = (try FileManager.default.attributesOfItem(atPath: partFile.path)[.size] as? NSNumber)?.int64Value
                 guard let offset = Self.startByteFromContentRange(http?.value(forHTTPHeaderField: "Content-Range")),
                       size == offset, let etag = meta.etag, http?.value(forHTTPHeaderField: "ETag") == etag else {
@@ -662,13 +739,11 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
             return
         }
         lock.lock()
-        activeTasks.removeValue(forKey: key)
-        guard let meta = transfers[key] else {
+        guard isCurrentTask(task, forKey: key), let meta = transfers[key] else {
             lock.unlock()
             return
         }
-        lock.unlock()
-
+        activeTasks.removeValue(forKey: key)
         if let resumeData = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data, !resumeData.isEmpty {
             let resumeFile = resumeDataURL(serverId: meta.serverId, viewerId: meta.viewerId, titleId: meta.titleId)
             var dir = resumeFile.deletingLastPathComponent()
@@ -676,6 +751,7 @@ final class OfflineDownloads: NSObject, URLSessionDownloadDelegate, @unchecked S
             try? resumeData.write(to: resumeFile, options: .atomic)
             excludeItemFromBackup(resumeFile)
         }
+        lock.unlock()
         if Self.isNoSpaceError(error) {
             failTransfer(meta, code: "no_space", message: "Not enough free storage space to finish downloading",
                          bytesWritten: task.countOfBytesReceived)
