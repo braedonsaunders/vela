@@ -334,7 +334,8 @@ export class Servers {
         // Unreachable: the local session is still forgotten.
       }
       await this.forgetServer(id);
-      this.session.selected();
+      if (this.session.hasServer()) this.session.selected();
+      else this.session.clearSelection();
       await this.refresh();
       return { id, error: '' };
     } catch (error) {

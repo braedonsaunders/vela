@@ -33,3 +33,11 @@ test('standalone sign-in has no inert Back destination', () => {
   expect(flow.history).toEqual([]);
   expect(authFlow(flow, { type: 'server', serverId: 'server-a' })).toBe(flow);
 });
+
+test('standalone sign-in can open the chooser and remove its last server', () => {
+  const signIn = selectedAuthFlow('old', 1, false);
+  const chooser = authFlow(signIn, { type: 'choose' });
+  expect(chooser).toEqual({ step: { page: 'choose' }, history: [] });
+  expect(authFlow(chooser, { type: 'sync-server', serverId: 'remaining' })).toBe(chooser);
+  expect(authFlow(chooser, { type: 'servers', count: 0 }).step.page).toBe('add');
+});

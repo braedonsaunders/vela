@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ServerCredentials, ServerRegistry, serverAddress } from '../src/session/servers';
-import { MemoryStore, device, tokens } from './helpers';
+import { createVela } from '../src/store';
+import { MemoryStore, device, restoreFetch, routeFetch, tokens } from './helpers';
 
 const ETHER = 'https://ether.example';
 
@@ -248,4 +249,26 @@ describe('ServerCredentials', () => {
     store.set('vela.server-sessions', '[]');
     await expect(new ServerCredentials(store, device, () => 'key', 'a').get()).rejects.toThrow('Invalid server sessions');
   });
+});
+
+test('removing the final standalone server clears the selected session and publishes an empty list', async () => {
+  const store = new MemoryStore();
+  const registry = new ServerRegistry(store);
+  const server = registry.add('ether', 'Old server', 'https://old.example');
+  registry.select(server.id);
+  const vela = createVela({ secrets: store, device, appVersion: 'test', rendererVersion: 1, artWidth: 390, media: {
+    containers: [], videoCodecs: [], audioCodecs: [], subtitleFormats: [], hdr: [],
+    maxWidth: 1920, maxHeight: 1080, hls: false, mse: false,
+  } });
+  routeFetch({});
+  try {
+    await vela.start();
+    expect(vela.getState().auth.serverId).toBe(server.id);
+
+    expect(await vela.servers.remove(server.id)).toEqual({ id: server.id, error: '' });
+    expect(vela.getState().auth).toMatchObject({ serverId: '', phase: 'signed-out' });
+    expect(vela.getState().servers).toMatchObject({ list: [], selectedId: '' });
+  } finally {
+    restoreFetch();
+  }
 });

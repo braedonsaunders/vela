@@ -19,3 +19,19 @@ export const SIGN_IN_AGAIN_AFTER_FAILURES = 2;
 export function offersSignInAgain(auth: Pick<SessionAuth, 'failures'>): boolean {
   return (auth.failures ?? 0) >= SIGN_IN_AGAIN_AFTER_FAILURES;
 }
+
+export const chooseDifferentServer = { label: 'Use a different server', testID: 'auth-choose-server' };
+
+export function reconnectActions(auth: Pick<SessionAuth, 'failures'>, handlers: {
+  choose(): void;
+  retry(): void;
+  downloads?(): void;
+  signInAgain?(): void;
+}) {
+  return [
+    { action: 'choose', ...chooseDifferentServer, onPress: handlers.choose },
+    ...(handlers.downloads ? [{ action: 'downloads', label: 'Open Downloads', testID: 'reconnect-downloads', onPress: handlers.downloads } as const] : []),
+    { action: 'retry', label: 'Retry', testID: 'reconnect-retry', onPress: handlers.retry },
+    ...(handlers.signInAgain && offersSignInAgain(auth) ? [{ action: 'signInAgain', label: 'Sign in again', testID: 'reconnect-sign-in', onPress: handlers.signInAgain } as const] : []),
+  ] as const;
+}
