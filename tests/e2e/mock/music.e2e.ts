@@ -1,5 +1,11 @@
 import { expect, type App, type Screen } from 'e2e';
 import { describe, test, type Browser } from '@e2e-dev/web';
+import type { Request, Response } from 'playwright-core';
+import type { PlaybackPlan, PlaybackRequest, PlayerObservation } from '../../../packages/protocol/types';
+import { runningBrowserPage } from '../muted-browser';
+
+const firstTrack = 'track-gapless-sweep-aac-1-01';
+const secondTrack = 'track-gapless-sweep-aac-1-02';
 
 const scenes = [
   'Synthwire Valley', 'Basalt Ridge', 'Mercury Tide', 'Basalt Organ',
@@ -36,23 +42,56 @@ describe('Music deterministic release gate', { session: 'mock-music', serial: tr
       body: JSON.stringify({ audioStartPending: 1 }),
     })).status)).toBe(200);
 
-    let starts = 0;
-    const playback = '**/vela/v0/playback';
-    await browser.route(playback, route => {
-      if (route.request.method === 'POST') starts += 1;
-      return route.continue();
-    });
-    await screen.getByTestId('music-play').tap();
-    await expect(screen.getByTestId('now-playing-bar')).toBeVisible({ timeout: 30_000 });
+    const page = runningBrowserPage(new URL(await browser.url()).origin);
+    const firstStartStatuses: number[] = [];
+    const sessions = new Map<string, string>();
+    const playing = new Set<string>();
+    const ended = new Set<string>();
+    const observePlan = async (response: Response) => {
+      const request = response.request();
+      if (request.method() !== 'POST' || new URL(response.url()).pathname !== '/vela/v0/playback') return;
+      const { titleId, queued } = request.postDataJSON() as PlaybackRequest;
+      if (titleId === firstTrack && !queued) firstStartStatuses.push(response.status());
+      if ((titleId === firstTrack || titleId === secondTrack) && response.ok()) {
+        const plan = await response.json() as PlaybackPlan;
+        sessions.set(titleId, plan.sessionId);
+      }
+    };
+    const observePlayback = (request: Request) => {
+      if (request.method() !== 'POST') return;
+      const match = /^\/vela\/v0\/sessions\/([^/]+)\/observations$/.exec(new URL(request.url()).pathname);
+      if (!match) return;
+      const { state } = request.postDataJSON() as PlayerObservation;
+      if (state === 'playing') playing.add(match[1]!);
+      if (state === 'ended') ended.add(match[1]!);
+    };
+    page.on('response', observePlan);
+    page.on('request', observePlayback);
+    try {
+      await screen.getByTestId('music-play').tap();
+      await expect(screen.getByTestId('now-playing-bar')).toBeVisible({ timeout: 30_000 });
+      await expect(screen.getByTestId('bar-title')).toHaveText('Sweep, part 1');
+      await expect(screen.getByTestId('bar-toggle')).toHaveAttribute('aria-label', 'Pause');
+      await expect.poll(() => firstStartStatuses, { timeout: 10_000 }).toEqual([503, 200]);
+
+      // Preparing the queued track is not an advance. Wait for the engine to
+      // report the first track ended and the second session actually playing.
+      await expect.poll(() => ({
+        firstEnded: ended.has(sessions.get(firstTrack) ?? ''),
+        secondPlaying: playing.has(sessions.get(secondTrack) ?? ''),
+      }), { timeout: 45_000 }).toEqual({ firstEnded: true, secondPlaying: true });
+      await expect(screen.getByTestId('bar-title')).toHaveText('Sweep, part 2');
+    } finally {
+      page.off('response', observePlan);
+      page.off('request', observePlayback);
+    }
+    // Opening Now Playing mounts the background WebGL renderer on this runner.
+    // Keep that setup out of the timed handoff, then hold track two for scene checks.
+    await screen.getByTestId('bar-toggle').tap();
+    await expect(screen.getByTestId('bar-toggle')).toHaveAttribute('aria-label', 'Play');
     await screen.getByTestId('bar-expand').tap();
     await expect(screen.getByTestId('now-playing')).toBeVisible({ timeout: 30_000 });
-    await expect(screen.getByTestId('now-playing-title')).toHaveText('Sweep, part 1');
-    await expect(screen.getByTestId('now-playing-toggle')).toHaveAttribute('aria-label', 'Pause');
-    await expect.poll(() => starts, { timeout: 10_000 }).toBe(2);
-
-    await expect(screen.getByTestId('now-playing-title')).toHaveText('Sweep, part 2', { timeout: 20_000 });
-    await browser.unroute(playback);
-    await screen.getByTestId('now-playing-toggle').tap();
+    await expect(screen.getByTestId('now-playing-title')).toHaveText('Sweep, part 2');
     await expect(screen.getByTestId('now-playing-toggle')).toHaveAttribute('aria-label', 'Play');
 
     await openVisualizer(browser, screen);

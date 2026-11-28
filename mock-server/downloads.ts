@@ -49,7 +49,8 @@ export async function issueDownload(owner: string, viewerId: string, detail: Tit
   if (request.versionId !== undefined && !available.includes(request.versionId)) {
     downloadError(409, 'version_unavailable', 'This download version is unavailable');
   }
-  const resource = originalFixture.name ? `original/${originalFixture.name}` : 'direct.mp4';
+  const defaultResource = await Bun.file(join(mediaRoot, 'download.mp4')).exists() ? 'download.mp4' : 'direct.mp4';
+  const resource = originalFixture.name ? `original/${originalFixture.name}` : defaultResource;
   const path = originalFixture.name ? join(formatsRoot, originalFixture.name) : join(mediaRoot, resource);
   const file = Bun.file(path);
   if (!await file.exists()) downloadError(503, 'media_not_generated', 'Generate the mock original fixture first');

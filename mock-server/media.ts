@@ -124,7 +124,7 @@ export async function serveMedia(req: Request, resource: string, truncateOrigina
   }
   const original = /^original\/(.+)$/.exec(resource)?.[1];
   if (original !== undefined && !originalFixtureName.test(original)) return new Response('Not found', { status: 404 });
-  if (original === undefined && !/^(master\.m3u8|mse-master\.m3u8|ts-master\.m3u8|direct\.mp4|universal-avc\.mp4|subtitles\.vtt|(?:v(?:360|540|720)|video(?:360|540|720)|a_(?:en|es))\/(?:index\.m3u8|init\.mp4|seg-\d+\.m4s)|ts(?:360|540|720)\/(?:index\.m3u8|seg-\d+\.ts))$/.test(resource)) return new Response('Not found', { status: 404 });
+  if (original === undefined && !/^(master\.m3u8|mse-master\.m3u8|ts-master\.m3u8|direct\.mp4|download\.mp4|universal-avc\.mp4|subtitles\.vtt|(?:v(?:360|540|720)|video(?:360|540|720)|a_(?:en|es))\/(?:index\.m3u8|init\.mp4|seg-\d+\.m4s)|ts(?:360|540|720)\/(?:index\.m3u8|seg-\d+\.ts))$/.test(resource)) return new Response('Not found', { status: 404 });
   const file = Bun.file(original ? join(formatsRoot, original) : join(mediaRoot, resource));
   if (original && !await file.exists()) return new Response('Not found', { status: 404 });
   if (!await file.exists()) return Response.json({ error: 'media_not_generated', message: 'Run bun mock-server/scripts/make-media.ts' }, { status: 503 });

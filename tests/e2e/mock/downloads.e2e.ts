@@ -125,7 +125,7 @@ test('persists a movie, resumes a partial, plays offline, replays progress and d
       const row = page.getByTestId(`download-${titleId}`);
       await expect.poll(() => action.getAttribute('aria-label'), { timeout: 30_000 }).toBe('Download');
       await admin(page, downloadReadsPath, 'DELETE');
-      await admin(page, '/__admin/faults', 'POST', { downloadTruncate: 1, bandwidthBps: 24_000_000 });
+      await admin(page, '/__admin/faults', 'POST', { downloadTruncate: 1, bandwidthBps: 4_000_000 });
       await page.evaluate(stubStorage, true);
       await action.press('Enter');
       await expect.poll(() => action.getAttribute('aria-label'), { timeout: 30_000 }).toBe('Downloading');
@@ -178,10 +178,24 @@ test('persists a movie, resumes a partial, plays offline, replays progress and d
       await visible(page.getByTestId('watch-stage'), 45_000);
       const scrubber = page.getByTestId('player-scrub');
       await expect.poll(() => scrubber.isEnabled(), { timeout: 45_000 }).toBe(true);
-      const toggle = page.getByTestId('player-toggle');
-      if (await toggle.getAttribute('aria-label') === 'Play') await toggle.press('Enter');
+      const video = page.getByTestId('watch-stage').locator('video');
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement) => ({
+        hasMetadata: element.readyState >= HTMLMediaElement.HAVE_METADATA,
+        error: element.error?.message ?? null,
+      })), { timeout: 30_000 }).toEqual({ hasMetadata: true, error: null });
+      const videoStart = await video.evaluate((element: HTMLVideoElement) => element.currentTime);
       const start = Number(await scrubber.getAttribute('aria-valuenow'));
-      await expect.poll(async () => Number(await scrubber.getAttribute('aria-valuenow')), { timeout: 20_000 })
+      // WebKit may preload only metadata until a play gesture. Wait for the
+      // blob to attach, then send the gesture only if the element is paused.
+      const playButton = page.getByRole('button', { name: 'Play', exact: true }).and(page.getByTestId('player-toggle'));
+      if (await video.evaluate((element: HTMLVideoElement) => element.paused) && await playButton.isVisible()) {
+        await playButton.press('Enter');
+      }
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement, from) => ({
+        advanced: element.currentTime > from + 5 && element.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
+        error: element.error?.message ?? null,
+      }), videoStart), { timeout: 30_000 }).toEqual({ advanced: true, error: null });
+      await expect.poll(async () => Number(await scrubber.getAttribute('aria-valuenow')))
         .toBeGreaterThan(start + 5);
       await evidence(page, 'offline-playback', release);
       await page.getByRole('button', { name: 'Close player', exact: true }).press('Enter');
