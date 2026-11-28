@@ -1,4 +1,4 @@
-import { applyOfflineWatch, downloadFeature, issueDownload, serveDownload } from './downloads';
+import { applyOfflineWatch, downloadFeature, downloadReads, issueDownload, serveDownload } from './downloads';
 import { librarySortTitle, matchesLibrarySearch } from './library-search';
 import { renderArtwork } from './artwork';
 import { previewSessions, stopPreview, trailerPreview } from './previews';
@@ -447,6 +447,7 @@ function homeRow(g: Grant, row: V.Row, url: URL): V.Row {
  * from an older snapshot answers 409 cursor_expired; an id it never minted, 404.
  */
 let rowSnapshot = 1;
+let remintObservation: { oldRowId: string; conflicts: number; staleReads: number; recovered: boolean } | undefined;
 const feedChanged = () => { rowSnapshot++; };
 const minted = (row: V.Row, key = row.id, snapshot = rowSnapshot): V.Row => ({ ...row, id: `${row.id}~${snapshot}`, key });
 /** The row a wire id names, by its base id; a superseded snapshot is refused. */
@@ -454,7 +455,10 @@ function mintedRow(id: string, candidates: V.Row[]): V.Row {
   const at = id.lastIndexOf('~'), base = at < 0 ? id : id.slice(0, at), snapshot = at < 0 ? '' : id.slice(at + 1);
   const row = candidates.find(r => r.id === base);
   if (!row) fail('not-found', 'row_not_found', 'Row not found');
-  if (snapshot !== String(rowSnapshot)) fail('conflict', 'cursor_expired', 'Refresh from first page');
+  if (snapshot !== String(rowSnapshot)) {
+    if (remintObservation?.oldRowId === id) remintObservation.conflicts++;
+    fail('conflict', 'cursor_expired', 'Refresh from first page');
+  }
   return row;
 }
 const labRows: V.Row[] = [
@@ -971,9 +975,15 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
     const firstPage = new URL(url); firstPage.search = '';
     // Plugin screens and surfaces, only for a client that says its renderer (screens.ts).
     const { navigation, surfaces, homeRows: surfaceRows } = screensBootstrap(req, g.viewer.id);
-    const stale = faults.bootstrapStaleReads > 0 && rowSnapshot > 1;
+    // When a test remints a specific row, reserve the stale bootstrap for
+    // recovery from its 409. A background Home refresh can also read bootstrap.
+    const stale = faults.bootstrapStaleReads > 0 && rowSnapshot > 1
+      && (!remintObservation || remintObservation.conflicts > 0);
     const snapshot = stale ? rowSnapshot - 1 : rowSnapshot;
-    if (stale) faults.bootstrapStaleReads--;
+    if (stale) {
+      faults.bootstrapStaleReads--;
+      if (remintObservation) remintObservation.staleReads++;
+    }
     const home = homeRows(g, firstPage, surfaceRows, snapshot);
     const bootstrap = { viewer, capabilities, defaultSkinId: capabilities.defaultSkinId, heroes, rows: home.items, ...(home.nextCursor ? { nextCursor: home.nextCursor } : {}), ...(navigation ? { navigation } : {}), ...(surfaces ? { surfaces } : {}) } satisfies V.Bootstrap;
     return stale ? json(bootstrap) : cached(req, bootstrap, `${g.id}:${req.headers.get('x-vela-screen-renderer') ?? ''}:${req.headers.get('x-vela-screen-preview') ?? ''}`);
@@ -1014,8 +1024,13 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
   }
   const rowMatch = /^\/rows\/([^/]+)$/.exec(path);
   if (method === 'GET' && rowMatch) {
-    const r = mintedRow(decodeURIComponent(rowMatch[1]!), [...watchlistRows(), ...progressRows(), ...rows, squareCollections, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])]);
-    return cached(req, minted(homeRow(g, r, url)), `${g.id}:${rowSnapshot}`);
+    const id = decodeURIComponent(rowMatch[1]!);
+    const r = mintedRow(id, [...watchlistRows(), ...progressRows(), ...rows, squareCollections, ...mediaHomeRows(g), ...(labPreset ? [...labRows, ...labHomeRows] : [])]);
+    const response = cached(req, minted(homeRow(g, r, url)), `${g.id}:${rowSnapshot}`);
+    if (remintObservation?.staleReads && remintObservation.oldRowId.startsWith(r.id + '~')) {
+      remintObservation.recovered = true;
+    }
+    return response;
   }
   const versionsMatch = /^\/titles\/([^/]+)\/versions(?:\/(choice))?$/.exec(path);
   if (versionsMatch) {
@@ -1423,6 +1438,10 @@ async function dispatch(req: Request): Promise<Response> {
       for (const disconnect of listeners) disconnect();
       return json({ dropped: listeners.length, expired });
     }
+    if (url.pathname === '/__admin/download-reads' && process.env.VELA_MOCK_DOWNLOADS === '1') {
+      if (req.method === 'DELETE') downloadReads.length = 0;
+      if (req.method === 'GET' || req.method === 'DELETE') return json(downloadReads);
+    }
     const downloadWatch = /^\/__admin\/download-watch\/([a-z0-9-]+)$/.exec(url.pathname);
     if (downloadWatch && process.env.VELA_MOCK_DOWNLOADS === '1') {
       const title = allTitles.find(item => item.id === downloadWatch[1]);
@@ -1436,10 +1455,19 @@ async function dispatch(req: Request): Promise<Response> {
     }
     if (req.method === 'GET' && url.pathname === '/__admin/catch-up-fixture') return json(archiveFixture);
     if (req.method === 'POST' && url.pathname === '/__admin/remint-home') {
-      const { bootstrapStaleReads } = await req.json();
+      const { bootstrapStaleReads, oldRowId } = await req.json();
       if (bootstrapStaleReads === 1) faults.bootstrapStaleReads = 1;
+      remintObservation = typeof oldRowId === 'string' ? { oldRowId, conflicts: 0, staleReads: 0, recovered: false } : undefined;
       feedChanged();
       return json({ accepted: true });
+    }
+    if (url.pathname === '/__admin/remint-home') {
+      if (req.method === 'GET') return json(remintObservation ?? null);
+      if (req.method === 'DELETE') {
+        remintObservation = undefined;
+        faults.bootstrapStaleReads = 0;
+        return json(null);
+      }
     }
     if (req.method === 'GET' && url.pathname === '/__admin/faults') return json(faults);
     if (req.method === 'POST' && url.pathname === '/__admin/faults') { const data = await req.json(); for (const key of Object.keys(faults) as (keyof typeof faults)[]) if (key in data) { if (typeof faults[key] === 'boolean') (faults as any)[key] = data[key] === true; else if (Number.isFinite(data[key]) && data[key] >= 0) (faults as any)[key] = Math.min(data[key], 60_000_000); } if ('refreshFailSeconds' in data) refreshFailureUntil = Date.now() + faults.refreshFailSeconds * 1000; if ('refreshAbandonMs' in data) { abandonedRefreshKeys.clear(); refreshAbandonArmed = faults.refreshAbandonMs > 0; } return json(faults); }
@@ -1491,10 +1519,21 @@ async function dispatch(req: Request): Promise<Response> {
   }
   const download = /^\/vela\/v0\/download\/([a-f0-9-]+)(\/subtitles\.vtt)?$/.exec(url.pathname);
   if (download && (req.method === 'GET' || req.method === 'HEAD')) {
-    return serveDownload(req, download[1]!, owner => {
+    const response = await serveDownload(req, download[1]!, owner => {
       const grant = grants.get(owner);
       return !!grant && !grant.revoked && grant.expires > Date.now();
     }, !!download[2]);
+    if (process.env.VELA_MOCK_DOWNLOADS === '1' && req.method === 'GET' && !download[2]) {
+      if (downloadReads.length === 32) downloadReads.shift();
+      downloadReads.push({
+        range: req.headers.get('range'),
+        ifRange: req.headers.get('if-range'),
+        status: response.status,
+        contentRange: response.headers.get('content-range'),
+        etag: response.headers.get('etag'),
+      });
+    }
+    return response;
   }
   // Reading grants: opaque short-lived document URLs, fetched without the bearer.
   const reading = /^\/reading\/media\/([a-f0-9]+)\/([^/]+)$/.exec(url.pathname);
