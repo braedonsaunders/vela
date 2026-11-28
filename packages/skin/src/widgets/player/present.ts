@@ -359,7 +359,7 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapsho
         traits: [q.videoCodec ? codecName(q.videoCodec) : '', rangeName(q.dynamicRange)].filter(Boolean).join(' · '),
         rate: rate(q.bitrate),
         needs: needs(q.bitrate),
-        disabledReason: held ? '' : path ? unplayableReason(path.id, snapshot) : msg('player.qualityUnavailable'),
+        disabledReason: held ? '' : path ? unplayableReason(path.id, snapshot) : msg('player.quality.automaticOnly'),
         original: false,
       };
     },
@@ -635,7 +635,8 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     serverStream: unnamed ? serverStreamOf(`path:${unnamed.id}`, path?.id === unnamed.id) : undefined,
     qualityAuto: auto.offered,
     qualityAutoId: auto.id,
-    lockedQuality: lockedQuality(snapshot, path),
+    // Automatic as the adaptive path: any other path playing (the original, a fixed rung) is a quality held.
+    lockedQuality: auto.id && path && !adapts(path) ? `path:${path.id}` : lockedQuality(snapshot, path),
     qualityId: snapshot?.renditions?.some(q => q.id === snapshot.renditionId) || path?.qualities.some(q => q.id === snapshot?.renditionId)
       ? snapshot!.renditionId!
       : path

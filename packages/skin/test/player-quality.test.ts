@@ -258,7 +258,7 @@ test('a rung of the adaptive ladder is the server path of its height on a native
   expect(rung720.aliases).toContain('rung-720');
   expect(rung720.disabledReason).toBe('');
   // No fixed path of 360p: shown, but it cannot be held.
-  expect(view.qualities.find(q => q.resolution === '360p')!.disabledReason).not.toBe('');
+  expect(view.qualities.find(q => q.resolution === '360p')!.disabledReason).toBe('Plays only within Automatic quality');
 });
 
 test('on a fixed rung or the original, Automatic is offered unchecked and returns to the adaptive path', () => {
@@ -269,6 +269,9 @@ test('on a fixed rung or the original, Automatic is offered unchecked and return
   const original = present(adaptivePlan('primary'), aether('primary'));
   expect(original.qualityAuto).toBe(true);
   expect(original.lockedQuality).toBe('path:primary');
+  // A direct path not marked original (the mock's `direct`) is held too: Automatic is not checked over it.
+  const direct = adaptivePlan('direct'); direct.paths[0] = { ...direct.paths[0]!, id: 'direct', original: undefined } as typeof direct.paths[0];
+  expect(present(direct, aether('direct')).lockedQuality).toBe('path:direct');
   expect(qualityReached('path:adaptive-hls', aether('adaptive-hls', { waiting: false } as Partial<Snapshot>), adaptivePlan())).toBe(true);
 });
 
