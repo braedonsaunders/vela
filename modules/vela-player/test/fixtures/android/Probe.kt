@@ -14,6 +14,15 @@ private fun plan(selected: String = "original", session: String = "one", fallbac
 ))!!
 
 fun main() {
+  val subtitle = SubtitleWindowClock(60_500_000)
+  check(subtitle.fromMillis(2_500_700, null) == 63_000L)
+  check(subtitle.mediaMicros(60_000_000) == -500_000L)
+  check(subtitle.mediaMicros(63_250_000) == 2_750_000L)
+  check(subtitle.fromMillis(102_499_000, 63_000) == 63_000L)
+  check(subtitle.fromMillis(102_500_000, 63_000) == 163_000L)
+  check(subtitle.fromMillis(44_000_000, null) == 104_500L) // first request after a seek
+  check(subtitle.fromMillis(1_000_000, 163_000) == 61_500L)
+
   val clock = TimeshiftClock(edgeSeconds = 1200.0, edgeAtMs = 1_800_000_000_000, plannedStartSeconds = 1080.0)
   val loadedStart = clock.edgeAtMs - 100_000
   check(clock.windowStartSeconds(loadedStart) == 1100.0)

@@ -29,6 +29,7 @@ protocol PlaybackRendering: AnyObject {
     func layout()
     func configureLoad(options: inout LoadOptions, preview: Bool)
     /// `offset` is the viewer's subtitle delay: positive shows cues later.
+    func setWindowedSubtitleCues(_ cues: [SubtitleCue]?)
     func drawCaptions(engine: AetherEngine, offset: Double)
     func freezePicture(frame: CGImage?, aspectFill: Bool)
     /// The picture fills the view (cropping) instead of fitting it: captions keep to the part that shows.
@@ -41,6 +42,7 @@ protocol PlaybackRendering: AnyObject {
 }
 
 extension PlaybackRendering {
+    func setWindowedSubtitleCues(_ cues: [SubtitleCue]?) {}
     func displayMatch() -> DisplayMatch? { nil }
     func setAspectFill(_ fill: Bool) {}
     func setCaptionInsets(_ insets: CaptionInsets) {}

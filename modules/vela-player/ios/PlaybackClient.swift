@@ -91,6 +91,10 @@ final class PlaybackClient {
     private var outputVolume: Float { muted || PlaybackSilence.on ? 0 : volume }
     private var muted: Bool
     private var audio: Int?
+    #if os(iOS) || os(tvOS)
+    private var windowedSubtitles: WindowedSubtitles?
+    private var subtitleSeek: UUID?
+    #endif
     private var subtitle: Int?
     /// The viewer's subtitle delay for this title, in seconds (positive shows cues later).
     private var subtitleOffset = 0.0
@@ -153,6 +157,9 @@ final class PlaybackClient {
             audio = Int(value)
             if let audio { engine?.selectAudioTrack(index: audio); emit("aid", Int64(audio)) }
         case "sid":
+            #if os(iOS) || os(tvOS)
+            clearWindowedSubtitles()
+            #endif
             subtitle = Int(value)
             if let subtitle { engine?.selectSubtitleTrack(index: subtitle); emit("sid", Int64(subtitle)) }
             else { engine?.clearSubtitle(); emit("sid", nil) }
@@ -175,6 +182,9 @@ final class PlaybackClient {
             // Aether keeps decoded cues this far either side of the clock for the overlay's offset.
             engine?.maximumSubtitleOffsetSeconds = abs(subtitleOffset)
             emit("sub-delay", subtitleOffset)
+            #if os(iOS) || os(tvOS)
+            windowedSubtitles?.reset()
+            #endif
             drawCaptions()
         }
         if name == "speed" {
@@ -197,13 +207,29 @@ final class PlaybackClient {
             else { failPath() }
         case "seek":
             guard args.count > 1, let target = Double(args[1]), let engine else { return }
+            #if os(iOS) || os(tvOS)
+            let seek = UUID()
+            subtitleSeek = seek
+            windowedSubtitles?.reset()
+            drawCaptions()
+            Task { @MainActor [weak self] in
+                await engine.seek(to: target)
+                guard let self, self.subtitleSeek == seek else { return }
+                self.subtitleSeek = nil
+                self.drawCaptions()
+            }
+            #else
             Task { @MainActor in await engine.seek(to: target) }
+            #endif
         case "live-edge":
             // A live stream without a rewind window: Aether places the playhead behind the edge itself.
             guard args.count > 1, let offset = Double(args[1]), let engine else { return }
             Task { @MainActor in await engine.seekToLiveEdge(offsetSeconds: offset) }
         case "sub-add":
             guard args.count > 1, let url = URL(string: args[1]), let engine else { return }
+            #if os(iOS) || os(tvOS)
+            clearWindowedSubtitles()
+            #endif
             // The plan's format, for a URL that does not name it (an ASS sidecar draws through libass).
             let hint = args.count > 3 && !args[3].isEmpty ? args[3] : nil
             let track = engine.addExternalSubtitleTrack(ExternalSubtitleTrack(url: url, formatHint: hint))
@@ -534,8 +560,34 @@ final class PlaybackClient {
         ["id": Int64(track.id), "ff-index": Int64(track.id), "type": type, "title": track.name,
          "lang": track.language ?? "und", "codec": track.codec, "external": track.isExternal]
     }
+    #if os(iOS) || os(tvOS)
+    func selectWindowedSubtitle(_ url: URL, origin: Double) {
+        set("sid", "no")
+        windowedSubtitles = WindowedSubtitles(url: url, origin: origin, access: VelaMediaAccessStore.snapshot)
+        drawCaptions()
+    }
+
+    private func clearWindowedSubtitles() {
+        guard let windowedSubtitles else { return }
+        windowedSubtitles.reset()
+        self.windowedSubtitles = nil
+        rendering.setWindowedSubtitleCues(nil)
+    }
+    #endif
+
     private func drawCaptions() {
-        if let engine { rendering.drawCaptions(engine: engine, offset: subtitleOffset) }
+        guard let engine else { return }
+        #if os(iOS) || os(tvOS)
+        if let windowedSubtitles {
+            if subtitleSeek == nil {
+                windowedSubtitles.poll(mediaTime: engine.clock.sourceTime - subtitleOffset) { [weak self] in
+                    self?.drawCaptions()
+                }
+            }
+            rendering.setWindowedSubtitleCues(windowedSubtitles.cues)
+        }
+        #endif
+        rendering.drawCaptions(engine: engine, offset: subtitleOffset)
     }
     private func failPath() {
         guard !dead, !failed, !reconnecting else { return }
@@ -654,7 +706,12 @@ final class PlaybackClient {
     private func startPresentationTimer() {
         presentationTimer?.invalidate()
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reportPresentation() }
+            MainActor.assumeIsolated {
+                self?.reportPresentation()
+                #if os(iOS) || os(tvOS)
+                if self?.windowedSubtitles != nil { self?.drawCaptions() }
+                #endif
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         presentationTimer = timer
@@ -686,6 +743,9 @@ final class PlaybackClient {
         displayObservers.forEach(NotificationCenter.default.removeObserver)
         displayObservers.removeAll()
         dead = true
+        #if os(iOS) || os(tvOS)
+        clearWindowedSubtitles()
+        #endif
         rendering.clearFrozenPicture()
         if let output = frameOutput { outputItem?.remove(output) }
         frameOutput = nil

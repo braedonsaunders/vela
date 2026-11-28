@@ -31,6 +31,7 @@ internal interface PlaybackEngine {
   fun play(playing: Boolean)
   fun volume(value: Float)
   fun seek(seconds: Double)
+  fun windowedSubtitle(url: Uri?) {}
   fun select(type: String, id: Long?)
   /** Subtitle delay in seconds: positive shows cues later (SubtitleDelay). */
   fun subtitleOffset(seconds: Double) {}
@@ -139,6 +140,9 @@ internal class Media3Engine(
     timeshiftStart()?.plus(mediaSeconds) ?: timeline.titleTime(mediaSeconds)
   private var plan: PlaybackPlan? = null
   private var timeline = MediaTimeline()
+  private var windowedTrack: Uri? = null
+  private val windowed = WindowedSubtitles(main, grant,
+    { player.currentPosition * 1000 - subtitleDelay.offsetUs }, { onSubtitleCues(it) })
   private var timeshiftSeek: Double? = null
   private var reportTimeshiftEviction = false
   private var refused = false
@@ -210,7 +214,12 @@ internal class Media3Engine(
       }
       override fun onRenderedFirstFrame() { state.hasFrame = true; update() }
       // libass draws the selected ASS track; Media3's plainer cues for it would be a second copy.
-      override fun onCues(cueGroup: CueGroup) { onSubtitleCues(if (assTrack != null) CueGroup.EMPTY_TIME_ZERO else cueGroup) }
+      override fun onCues(cueGroup: CueGroup) {
+        if (windowedTrack == null) onSubtitleCues(if (assTrack != null) CueGroup.EMPTY_TIME_ZERO else cueGroup)
+      }
+      override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+        if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) windowed.seek()
+      }
       override fun onTracksChanged(tracks: Tracks) {
         updateTracks(tracks)
         // ExoPlayer can otherwise play supported audio while silently omitting unsupported video.
@@ -231,6 +240,7 @@ internal class Media3Engine(
   }
 
   override fun load(url: Uri, plan: PlaybackPlan?, position: Double?, loop: Boolean, recoveryAtMs: Double?, windowOffset: Boolean) {
+    windowedSubtitle(null)
     this.plan = plan
     originalUri = url.takeIf { plan?.selectedPath?.isOriginalFile == true }
     timeline = MediaTimeline.of(plan)
@@ -254,7 +264,7 @@ internal class Media3Engine(
     if (plan?.selectedPath?.transport == "hls") builder.setMimeType(MimeTypes.APPLICATION_M3U8)
     if (plan?.selectedPath?.transport == "dash") builder.setMimeType(MimeTypes.APPLICATION_MPD)
     builder.setSubtitleConfigurations(plan?.subtitleTracks.orEmpty().mapNotNull { track ->
-      if (!track.canRenderExternal) return@mapNotNull null
+      if (!track.canRenderExternal || track.isWindowedSubtitle) return@mapNotNull null
       val uri = track.externalUrl?.let(MediaAccessStore::resolve) ?: return@mapNotNull null
       val mime = when (track.externalFormat?.lowercase()) {
         "srt", "subrip" -> MimeTypes.APPLICATION_SUBRIP
@@ -395,6 +405,7 @@ internal class Media3Engine(
     AudioRoute.markBitstreamStalled(context)
     // A fresh preparation selects tracks again, and the sink now declines every bitstream.
     val position = player.currentPosition
+    windowedSubtitle(null)
     player.stop()
     player.seekTo(position)
     player.prepare()
@@ -402,7 +413,10 @@ internal class Media3Engine(
 
   override fun play(playing: Boolean) { player.playWhenReady = playing }
   override fun volume(value: Float) { player.volume = value }
-  override fun subtitleOffset(seconds: Double) { subtitleDelay.set(seconds) }
+  override fun subtitleOffset(seconds: Double) {
+    subtitleDelay.set(seconds)
+    windowed.seek()
+  }
   override fun speed(value: Double) {
     if (tunnels) selector.parameters = selector.buildUponParameters().setTunnelingEnabled(value == 1.0).build()
     player.playbackParameters = PlaybackParameters(value.toFloat())
@@ -411,9 +425,17 @@ internal class Media3Engine(
     val target = timeshiftStart()?.let { (seconds - it).coerceAtLeast(0.0) } ?: timeline.mediaTime(seconds)
     player.seekTo((target * 1000).toLong())
   }
+  override fun windowedSubtitle(url: Uri?) {
+    if (windowedTrack == url) return
+    windowedTrack = url
+    if (url != null) select("sub", null)
+    windowed.select(url, timeline.origin)
+  }
+
   override fun select(type: String, id: Long?) {
     val trackType = if (type == "audio") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
     val params = selector.buildUponParameters().clearOverridesOfType(trackType).setTrackTypeDisabled(trackType, id == null)
+    if (type == "sub" && windowedTrack != null && id != null) windowedSubtitle(null)
     val choice = choices[id]
     if (choice != null) params.addOverride(TrackSelectionOverride(choice.first.mediaTrackGroup, choice.second))
     selector.parameters = params.build()
@@ -455,7 +477,7 @@ internal class Media3Engine(
     val time = if (player.isPlaying && framePts >= 0 && since in -100..250) framePts / 1000 + since else player.currentPosition
     return ass?.render(track, time - subtitleDelay.offsetUs / 1000, bitmap, width, height, force) ?: -1
   }
-  override fun release() { main.removeCallbacks(tick); player.release(); fontLoader?.shutdownNow(); ass?.release() }
+  override fun release() { main.removeCallbacks(tick); windowed.release(); player.release(); fontLoader?.shutdownNow(); ass?.release() }
 
   // ExoPlayer.release() waits for its playback thread to release the decoder, tens of milliseconds
   // that held the main thread whenever a trailer preview stopped (its hero scrolled away while the
@@ -466,6 +488,7 @@ internal class Media3Engine(
     onFailure = { _, _, _ -> }
     onSubtitleCues = {}
     main.removeCallbacks(tick)
+    windowedSubtitle(null)
     player.stop()
     main.postDelayed({ release() }, RELEASE_AFTER_STOP_MS)
   }

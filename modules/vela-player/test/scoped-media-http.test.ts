@@ -17,7 +17,7 @@ beforeAll(async () => {
   await mkdir(scratch, { recursive: true });
   const ios = join(import.meta.dir, '..', 'ios');
   const compiler = Bun.spawn(['xcrun', 'swiftc', '-swift-version', '5', '-module-cache-path', join(scratch, 'modules'),
-    join(ios, 'MediaAccess.swift'), join(ios, 'ScopedMediaHTTP.swift'), join(ios, 'MediaRedirects.swift'),
+    join(ios, 'MediaAccess.swift'), join(ios, 'ScopedMediaHTTP.swift'), join(ios, 'SubtitleWindow.swift'), join(ios, 'MediaRedirects.swift'),
     join(import.meta.dir, 'fixtures/scoped-http-probe.swift'), '-o', binary], {
     env: { ...process.env, DEVELOPER_DIR: process.env.DEVELOPER_DIR || '/Applications/Xcode.app/Contents/Developer' }, stdout: 'pipe', stderr: 'pipe',
   });
@@ -41,6 +41,10 @@ beforeAll(async () => {
     if (url.pathname === '/grant/transient' && transientReads++ === 0) return new Response(null, { status: 503 });
     if (url.pathname === '/grant/forbidden') return new Response(null, { status: 403 });
     if (url.pathname === '/grant/original-lost') return new Response(null, { status: 409, headers: { 'X-Ether-Playback-Error': 'original_lost' } });
+    if (url.pathname === '/grant/window') return new Response(
+      'WEBVTT\r\n\r\ncue-1\r\n00:01:00.250 --> 00:01:03.125 align:center\r\n<i>Dialogue &amp; signs</i>\r\n',
+      { headers: { 'X-Ether-Subtitle-Complete': '1' } },
+    );
     const body = url.pathname === '/grant/oversized' ? 'x'.repeat(2048) : 'media payload';
     return new Response(body, { status: 206, headers: { 'Content-Range': `bytes 0-${body.length - 1}/${body.length}` } });
   } });
@@ -132,3 +136,12 @@ appleTest('stopping a startup redirect lookup cancels its in-flight HTTP request
   expect(await request('/grant/stall', 'redirect-cancel')).toEqual({ output: 'redirect_cancelled\n', status: 0 });
   expect(seen.length).toBe(1);
 }, 5_000);
+
+
+appleTest('window requests retain the grant and rebase an overlapping cue to media time', async () => {
+  expect(await request('/grant/window?ether_window=1&from_ms=0&ticket=demo%2Bticket', 'subtitle-window')).toEqual({
+    output: 'subtitle_window_ok\n', status: 0,
+  });
+  expect(seen[0]?.headers.get('authorization')).toBe('Bearer test-authorization');
+  expect(seen[0]?.headers.get('range')).toBeNull();
+});
