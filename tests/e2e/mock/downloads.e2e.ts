@@ -4,13 +4,14 @@ import { join } from 'node:path';
 import { expect, type App, type Screen } from 'e2e';
 import { test } from '@e2e-dev/web';
 import { webkit, type Locator, type Page } from 'playwright-core';
+import type { DownloadRead } from '../../../mock-server/downloads';
 import { mutePageMedia, runningBrowserPage } from '../muted-browser';
 
 const titleId = 'title-1-1';
 const titleName = 'The Last Observatory';
 const titleRoute = `/vela/title/${titleId}`;
 const watchPath = `/__admin/download-watch/${titleId}`;
-const ticket = /\/vela\/v0\/download\/[a-f0-9-]+$/;
+const downloadReadsPath = '/__admin/download-reads';
 type Watch = { positionSeconds: number; played: boolean; lastViewedAt?: string };
 
 async function admin(page: Page, path: string, method = 'GET', body?: Record<string, unknown> | null) {
@@ -30,9 +31,12 @@ async function signIn(app: App, screen: Screen) {
   await expect(screen.getByRole('link', { name: 'Home', exact: true })).toBeVisible({ timeout: 30_000 });
 }
 
-function stubPersistence(allow: boolean) {
+function stubStorage(allow: boolean) {
   let persisted = false;
   Object.defineProperties(navigator.storage, {
+    // Exercise real OPFS with a fixed space budget. WebKitGTK can report an
+    // origin quota below Vela's storage reserve after the first write.
+    estimate: { configurable: true, value: async () => ({ quota: 4_000_000_000, usage: 0 }) },
     persisted: { configurable: true, value: async () => persisted },
     persist: { configurable: true, value: async () => (persisted = allow) },
   });
@@ -111,7 +115,7 @@ test('persists a movie, resumes a partial, plays offline, replays progress and d
     const baseline = await admin(page, watchPath) as Watch | null;
     await admin(page, watchPath, 'PUT', { positionSeconds: 0, played: false, favorite: false, watchlisted: false });
     try {
-      await page.addInitScript(stubPersistence, true);
+      await page.addInitScript(stubStorage, true);
       await page.goto(origin + titleRoute);
       const release = await page.evaluate(() =>
         typeof (window as Window & { velaPwa?: { prepareOffline?: () => boolean } }).velaPwa?.prepareOffline === 'function');
@@ -120,8 +124,9 @@ test('persists a movie, resumes a partial, plays offline, replays progress and d
       const action = page.getByTestId('detail-download');
       const row = page.getByTestId(`download-${titleId}`);
       await expect.poll(() => action.getAttribute('aria-label'), { timeout: 30_000 }).toBe('Download');
+      await admin(page, downloadReadsPath, 'DELETE');
       await admin(page, '/__admin/faults', 'POST', { downloadTruncate: 1, bandwidthBps: 24_000_000 });
-      await page.evaluate(stubPersistence, true);
+      await page.evaluate(stubStorage, true);
       await action.press('Enter');
       await expect.poll(() => action.getAttribute('aria-label'), { timeout: 30_000 }).toBe('Downloading');
       await action.press('Enter');
@@ -130,15 +135,20 @@ test('persists a movie, resumes a partial, plays offline, replays progress and d
       await visible(row.getByText(/ · [1-9]\d*%$/));
       await evidence(page, 'progress', release);
       await visible(row.getByText(/^Paused · /), 45_000);
-      // Listen before lifting the fault: core may resume an interrupted transfer by itself as soon as
-      // the network is healthy again, before the Resume press below lands.
-      const resumedResponse = page.waitForResponse(response => ticket.test(response.url()), { timeout: 45_000 });
+      // Observe requests at the server so an automatic resume also counts.
       await admin(page, '/__admin/faults', 'POST', { bandwidthBps: 0 });
       const resume = row.getByRole('button', { name: 'Resume', exact: true });
       if (await resume.isVisible()) await resume.press('Enter').catch(() => undefined);
-      const resumed = await resumedResponse;
-      expect(resumed.status()).toBe(206);
-      expect(resumed.headers()['content-range']).toMatch(/^bytes [1-9]\d*-\d+\/\d+$/);
+      const reads = async () => await admin(page, downloadReadsPath) as DownloadRead[];
+      await expect.poll(async () => (await reads()).length, { timeout: 45_000 }).toBeGreaterThan(1);
+      const [initial, resumed] = await reads();
+      expect(initial.status).toBe(200);
+      expect(initial.etag).toMatch(/^"[a-f0-9]+"$/);
+      expect(resumed.status).toBe(206);
+      expect(resumed.range).toMatch(/^bytes=[1-9]\d*-$/);
+      expect(resumed.ifRange).toBe(initial.etag);
+      expect(resumed.etag).toBe(initial.etag);
+      expect(resumed.contentRange).toMatch(new RegExp(`^bytes ${resumed.range!.slice(6, -1)}-\\d+/\\d+$`));
       const play = row.getByRole('button', { name: 'Play', exact: true });
       await visible(play, 60_000);
       expect(await page.getByTestId('downloads-storage-notice').innerText()).toBe(
@@ -203,10 +213,13 @@ test('persists a movie, resumes a partial, plays offline, replays progress and d
       await expect.poll(() => row.count()).toBe(0);
     } finally {
       await context.setOffline(false);
-      const close = page.getByRole('button', { name: 'Close player', exact: true });
-      if (await close.isVisible()) await close.press('Enter');
-      await admin(page, '/__admin/faults', 'POST', { downloadTruncate: 0, bandwidthBps: 0 });
-      await admin(page, watchPath, 'PUT', baseline);
+      try {
+        const close = page.getByRole('button', { name: 'Close player', exact: true }).first();
+        if (await close.isVisible()) await close.press('Enter');
+      } finally {
+        await admin(page, '/__admin/faults', 'POST', { downloadTruncate: 0, bandwidthBps: 0 });
+        await admin(page, watchPath, 'PUT', baseline);
+      }
     }
   } finally {
     await download.close();
@@ -216,7 +229,7 @@ test('persists a movie, resumes a partial, plays offline, replays progress and d
 test('denied persistence offers Save file and saves an Ether grant through the browser', async ({ app, browser, screen }) => {
   await signIn(app, screen);
   await app.open(titleRoute);
-  await browser.evaluate(stubPersistence, false);
+  await browser.evaluate(stubStorage, false);
   const action = screen.getByTestId('detail-download');
   await expect(action).toHaveAttribute('aria-label', 'Download', { timeout: 30_000 });
   await action.press('Enter');

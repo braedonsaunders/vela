@@ -10,6 +10,15 @@ const ticketLifetime = 15 * 60_000;
 const tickets = new Map<string, { owner: string; resource: string; etag: string; expires: number }>();
 const counts = new Map<string, number>();
 
+export type DownloadRead = {
+  range: string | null;
+  ifRange: string | null;
+  status: number;
+  contentRange: string | null;
+  etag: string | null;
+};
+export const downloadReads: DownloadRead[] = [];
+
 export function downloadFeature(viewerId?: string) {
   const used = viewerId ? counts.get(viewerDay(viewerId)) ?? 0 : 0;
   return { enabled, ...(enabled ? { maxPerDay, remainingToday: maxPerDay - used } : {}) };
