@@ -8,7 +8,8 @@ import { launchMock } from './launch';
 test('original download tickets preserve file identity, support ranges and enforce policy and quota', async () => {
   const root = await mkdtemp(join(tmpdir(), 'vela-mock-download-'));
   const media = Uint8Array.from({ length: 64 }, (_, index) => index);
-  await Bun.write(join(root, 'direct.mp4'), media);
+  await Bun.write(join(root, 'direct.mp4'), new Uint8Array(128));
+  await Bun.write(join(root, 'download.mp4'), media);
   const mock = await launchMock({ VELA_MOCK_DOWNLOADS: '1', VELA_MOCK_MEDIA_ROOT: root });
   try {
     const api = `${mock.url}/vela/v0`;
@@ -28,7 +29,7 @@ test('original download tickets preserve file identity, support ranges and enfor
     await error(await mint('bad-version', 'unavailable'), 409, 'version_unavailable');
     await error(await post('/titles/show-meridian/download', { idempotencyKey: 'show' }, accessToken), 403, 'download_not_allowed');
     const grant = await mint('first').then(response => response.json()) as DownloadGrant;
-    expect(grant).toMatchObject({ byteLength: media.length, mimeType: 'video/mp4', container: 'mp4' });
+    expect(grant).toMatchObject({ byteLength: media.length, mimeType: 'video/mp4', container: 'mp4', sourceId: 'download.mp4' });
     expect(typeof grant.etag).toBe('string');
     expect(await mint('first').then(response => response.json())).toEqual(grant);
     const fresh = await mint('second').then(response => response.json()) as DownloadGrant;
@@ -79,6 +80,7 @@ test('with the sidecar fixture on, a download grant carries an external WebVTT s
     });
     const { accessToken } = await post('/auth/sign-in', { device, idempotencyKey: 'login', username: 'demo', password: 'vela' }).then(response => response.json()) as Tokens;
     const plain = await post('/titles/title-1-1/download', { idempotencyKey: 'plain' }, accessToken).then(response => response.json()) as DownloadGrant;
+    expect(plain.sourceId).toBe('direct.mp4');
     expect(plain.subtitleTracks).toEqual([]);
     await post('/__admin/sidecar', { enabled: true });
     const grant = await post('/titles/title-1-1/download', { idempotencyKey: 'sidecar' }, accessToken).then(response => response.json()) as DownloadGrant;

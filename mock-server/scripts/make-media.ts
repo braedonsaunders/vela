@@ -1,13 +1,11 @@
-import { mkdir } from 'node:fs/promises';
+import { link, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { mediaRoot, fixtureDurationSeconds } from '../media';
 import { mseDescriptor, mseLadder, mseAudioGroup } from '../mse';
 const mseOnly = process.argv.includes('--mse-only');
 const tsOnly = process.argv.includes('--ts-only');
-if (mseOnly && tsOnly) throw new Error('Choose --mse-only or --ts-only');
+const downloadOnly = process.argv.includes('--download-only');
+if (Number(mseOnly) + Number(tsOnly) + Number(downloadOnly) > 1) throw new Error('Choose one fixture mode');
 await mkdir(mediaRoot, { recursive: true });
-if (tsOnly) { await makeTs(); console.log(`TS media ready: ${mediaRoot}`); process.exit(0); }
-if (await Bun.file(`${mediaRoot}/mse.json`).exists()) throw new Error('MSE fixture already generated; do not overwrite media while a player may be using it.');
-for (const [height] of mseLadder) if (await Bun.file(`${mediaRoot}/video${height}/index.m3u8`).exists()) throw new Error(`Existing video${height} playlist; stop players before removing an incomplete MSE generation.`);
 async function ff(args: string[]) {
   const p = Bun.spawn(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', ...args], { stdout: 'inherit', stderr: 'inherit' });
   if (await p.exited) throw new Error('ffmpeg failed');
@@ -28,7 +26,30 @@ async function makeTs() {
 // VELA_MOCK_SILENT_MEDIA=1 makes both audio tracks silence, for players whose sound cannot be muted
 // (a simulator plays through the Mac's speakers).
 const tone = (frequency: number) => process.env.VELA_MOCK_SILENT_MEDIA === '1' ? 'anullsrc=channel_layout=stereo:sample_rate=48000' : `sine=frequency=${frequency}:sample_rate=48000`;
+async function makeDownload() {
+  const target = `${mediaRoot}/download.mp4`;
+  if (await Bun.file(target).exists()) return;
+  const work = await mkdtemp(`${mediaRoot}/.download-`);
+  try {
+    const output = `${work}/fixture.mp4`;
+    // The offline test exercises native blob playback. Keep that file small with one
+    // AAC track, while leaving the larger dual-audio original for streaming coverage.
+    await ff(['-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=24', '-f', 'lavfi', '-i', tone(440),
+      '-t', '32', '-c:v', 'libx264', '-preset', 'veryfast', '-profile:v', 'baseline', '-pix_fmt', 'yuv420p',
+      '-b:v', '1500k', '-g', '96', '-sc_threshold', '0', '-c:a', 'aac', '-ac', '2', '-b:a', '128k',
+      '-movflags', '+faststart', output]);
+    try { await link(output, target); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+}
+if (downloadOnly) { await makeDownload(); process.exit(0); }
+if (tsOnly) { await makeTs(); console.log(`TS media ready: ${mediaRoot}`); process.exit(0); }
+if (await Bun.file(`${mediaRoot}/mse.json`).exists()) throw new Error('MSE fixture already generated; do not overwrite media while a player may be using it.');
+for (const [height] of mseLadder) if (await Bun.file(`${mediaRoot}/video${height}/index.m3u8`).exists()) throw new Error(`Existing video${height} playlist; stop players before removing an incomplete MSE generation.`);
 if (!mseOnly) {
+await makeDownload();
 await ff(['-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=24', '-f', 'lavfi', '-i', tone(440), '-f', 'lavfi', '-i', tone(660), '-t', String(fixtureDurationSeconds), '-map', '0:v', '-map', '1:a', '-map', '2:a', '-c:v', 'libx264', '-preset', 'veryfast', '-profile:v', 'high', '-level:v', '3.1', '-pix_fmt', 'yuv420p', '-b:v', '2200k', '-g', '96', '-keyint_min', '96', '-sc_threshold', '0', '-c:a', 'aac', '-ac', '2', '-b:a', '128k', '-metadata:s:a:0', 'language=eng', '-metadata:s:a:1', 'language=spa', '-movflags', '+faststart', `${mediaRoot}/direct.mp4`]);
 for (const [height, bitrate] of [[360, '500k'], [540, '1100k'], [720, '2200k']] as const) {
   const dir = `${mediaRoot}/v${height}`; await mkdir(dir, { recursive: true });

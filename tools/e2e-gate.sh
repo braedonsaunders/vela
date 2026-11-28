@@ -66,6 +66,8 @@ echo "==> export current Vela web build"
 
 if [ ! -f "$VELA_MOCK_MEDIA_ROOT/master.m3u8" ] || [ ! -f "$VELA_MOCK_MEDIA_ROOT/mse.json" ]; then
   "$VELA_E2E_BUN" mock-server/scripts/make-media.ts
+elif [ ! -f "$VELA_MOCK_MEDIA_ROOT/download.mp4" ]; then
+  "$VELA_E2E_BUN" mock-server/scripts/make-media.ts --download-only
 fi
 if [ ! -f "$VELA_MOCK_MUSIC_ROOT/gapless-sweep-1.m4a" ]; then
   "$VELA_E2E_BUN" mock-server/scripts/make-gapless-media.ts
