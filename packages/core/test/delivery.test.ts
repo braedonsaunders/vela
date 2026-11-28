@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { adaptivePath, deliveryEvidence, deliveryWatch, heardDelivery, measuredThroughput, pathRate, playerAdapts, stepDown, type DeliverySample, type DeliveryWatch } from '../src/delivery';
+import { adaptivePath, deliveryEvidence, deliveryWatch, heardDelivery, measuredThroughput, pathRate, playerAdapts, SERVER_HANDOFF_GRACE_MS, stepDown, type DeliverySample, type DeliveryWatch } from '../src/delivery';
 import type { PlaybackPath, PlaybackPlan } from '../src/wire';
 
 const transcode = (id: string, average: number, peak = average * 1.2): PlaybackPath => ({
@@ -209,4 +209,57 @@ test('waits after seeks the engine makes itself (the TV chrome\'s 10 s steps) ar
   watch = deliveryWatch(); position = 0; bytes = 0; last = 0;
   for (let t = 0; t <= 45; t += 0.25) hear(t, starved(t));
   expect(stepDown(watch, plan(), at(45))).toMatchObject({ pathId: 'quality-720p4000k' });
+});
+
+test('a pending server handoff defers adaptive, fixed and bitrate steps until the grace expires', () => {
+  const pending = { serverHandoff: 'pending' } as const;
+  const watch = feed(deliveryWatch(), 0, 47, starved, 18_000_000);
+  const adaptive = { ...appleDirect(), ...pending };
+  const fixed = plan(pending);
+  const capped = plan({ ...pending, paths: [fixed.paths[0]!] });
+  const options = { serverHandoff: true, bitrateSwitch: true };
+  const boundary = 2000 + SERVER_HANDOFF_GRACE_MS; // First buffering mark at 2 s.
+  for (const candidate of [adaptive, fixed, capped]) {
+    expect(stepDown(watch, candidate, boundary - 1, options)).toBeNull();
+  }
+  expect(stepDown(watch, adaptive, boundary, options)).toMatchObject({ pathId: 'adaptive-hls' });
+  expect(stepDown(watch, fixed, boundary, options)).toMatchObject({ pathId: 'quality-1080p8000k' });
+  expect(stepDown(watch, capped, boundary, options)).toMatchObject({ maxBitrate: 11_700_000 });
+  expect(stepDown(watch, adaptive, boundary, { ...options, viewerChose: true })).toBeNull();
+});
+
+test('grace starts with buffering even when the original has already played for a long time', () => {
+  const smooth = feed(deliveryWatch(), 0, 120, () => 'playing', 18_000_000);
+  const watch = feed(smooth, 120_250, 28, starved, 18_000_000);
+  expect(stepDown(watch, plan(), 148_250)).toMatchObject({ pathId: 'quality-1080p8000k' });
+  expect(stepDown(watch, plan({ serverHandoff: 'pending' }), 148_250, { serverHandoff: true })).toBeNull();
+});
+
+test('a new stretch of buffering gets a fresh grace period after playback recovers', () => {
+  const watch = feed(deliveryWatch(), 0, 54, t => {
+    if ((t >= 2 && t < 9) || (t >= 41 && t < 48) || t >= 51) return 'buffering';
+    return 'playing';
+  }, 18_000_000);
+  expect(stepDown(watch, plan(), 54_000)).toMatchObject({ pathId: 'quality-1080p8000k' });
+  expect(stepDown(watch, plan({ serverHandoff: 'pending' }), 54_000, { serverHandoff: true })).toBeNull();
+});
+
+test('the grace does not restart when a sustained stretch outlasts the evidence window', () => {
+  const watch = feed(deliveryWatch(), 0, 65, t => t % 20 >= 2 && t % 20 < 10 ? 'buffering' : 'playing', 18_000_000);
+  const pending = plan({ serverHandoff: 'pending' });
+  expect(stepDown(watch, pending, 65_000, { serverHandoff: true })).toMatchObject({ pathId: 'quality-1080p8000k' });
+});
+
+test('failure or absent capability allows the normal step while completion starts fresh evidence', () => {
+  const watch = feed(deliveryWatch(), 0, 32, starved, 18_000_000);
+  const pending = { ...appleDirect(), serverHandoff: 'pending' } as const;
+  const step = { pathId: 'adaptive-hls', adaptive: true, throughputBps: 18_000_000 } as const;
+  expect(stepDown(watch, pending, 32_000)).toEqual(step);
+  expect(stepDown(watch, { ...pending, serverHandoff: 'failed' }, 32_000, { serverHandoff: true })).toEqual(step);
+
+  const completed = { ...pending, serverHandoff: 'completed', selectedPathId: 'adaptive-hls', sourceGeneration: 2, seekGeneration: 2 } as const;
+  expect(stepDown(watch, completed, 32_000, { serverHandoff: true })).toBeNull();
+  const fresh = heardDelivery(watch, { sessionId: 's1', sourceGeneration: 2, seekGeneration: 2, state: 'playing' }, 32_250);
+  expect(deliveryEvidence(fresh)).toEqual({ stalls: 0, stalledShare: 0, throughputBps: null });
+  expect(stepDown(fresh, completed, 32_250, { serverHandoff: true })).toBeNull();
 });

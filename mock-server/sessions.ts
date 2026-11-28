@@ -6,6 +6,7 @@ import { mseFixture } from './mse';
 import { trickplayOffer } from './trickplay';
 interface PendingCodecs { neverVerify: boolean; values: Map<string, { videoCodec: string; audioCodec?: string }>; timers: Map<string, ReturnType<typeof setTimeout>> }
 export interface Session { owner: string; mediaToken: string; plan: PlaybackPlan; history: SessionEvent[]; listeners: Map<ReadableStreamDefaultController<Uint8Array>, () => void>; sequence: number; expires: number; pendingCodecs?: PendingCodecs;
+  handoffEvidence?: { source: number; seek: number; buffering: number };
   /** The live event on air on a live channel session (Sports A6); undefined for other sessions. */ liveEvent?: LiveEventRef | null;
   /** `freeze-media`: its playlists still answer but its media segments never do (an engine's reload stuck loading behind a frozen picture). */ mediaFrozen?: boolean }
 export const sessions = new Map<string, Session>();
@@ -207,6 +208,10 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
     }
     plan.selectedPathId = pending.pathId;
   }
+  if (faults.serverHandoffObservations > 0 && adaptive && !request.extraId
+    && plan.selectedPathId === 'direct' && plan.selectedVersionId === plan.versions?.[0]?.id) {
+    plan.serverHandoff = 'pending';
+  }
   sessions.set(id, s); return s;
 }
 export function requestedInit(s: Session, resource: string, authorized: () => boolean) {
@@ -232,6 +237,7 @@ export function requestedInit(s: Session, resource: string, authorized: () => bo
 }
 function switchPath(s: Session, cmd: Extract<SessionCommand, { kind: 'switch' }>) {
   if (!('pathId' in cmd)) return;
+  delete s.plan.serverHandoff;
   s.plan.selectedPathId = cmd.pathId; s.plan.sourceGeneration++; s.plan.positionSeconds = cmd.atSeconds;
 }
 export function applyCommand(s: Session, cmd: SessionCommand) {
@@ -243,6 +249,7 @@ export function applyCommand(s: Session, cmd: SessionCommand) {
     case 'tracks': answerTracks(s.plan, cmd); break;
     case 'switch': switchPath(s, cmd); break;
     case 'version':
+      delete s.plan.serverHandoff;
       s.plan.selectedVersionId = cmd.versionId;
       setPlaying(s.plan);
       s.plan.sourceGeneration++;
@@ -259,6 +266,19 @@ export function observe(s: Session, o: PlayerObservation) {
   if (o.audioTrackId !== undefined && s.plan.audioTracks.some(t => t.id === o.audioTrackId)) s.plan.selectedAudioTrackId = o.audioTrackId;
   if (o.subtitleTrackId === null || s.plan.subtitleTracks.some(t => t.id === o.subtitleTrackId)) s.plan.selectedSubtitleTrackId = o.subtitleTrackId ?? null;
   s.plan.state = o.state === 'buffering' ? 'recovering' : o.state;
+  if (s.plan.serverHandoff === 'pending' && o.state === 'buffering' && faults.serverHandoffObservations > 0) {
+    const { sourceGeneration: source, seekGeneration: seek } = s.plan;
+    if (s.handoffEvidence?.source !== source || s.handoffEvidence?.seek !== seek) {
+      s.handoffEvidence = { source, seek, buffering: 0 };
+    }
+    if (++s.handoffEvidence.buffering >= faults.serverHandoffObservations) {
+      s.plan.selectedPathId = 'transcode';
+      s.plan.serverHandoff = 'completed';
+      s.plan.sourceGeneration++;
+      s.plan.seekGeneration++;
+      s.plan.autoSelectionReason = { code: 'source_delivery', message: 'Automatic switched to adaptive quality to match source delivery.' };
+    }
+  }
   publish(s);
 }
 export function events(s: Session, req: Request, authorized: () => boolean): Response {

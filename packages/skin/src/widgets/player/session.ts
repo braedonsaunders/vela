@@ -371,7 +371,7 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     if (now - deliveryChecked.current < STEP_CHECK_MS) return;
     deliveryChecked.current = now;
     const step = stepDown(delivery.current, plan, now, { adaptive: playerAdapts(plan), bitrateSwitch: bitrateRefused.current !== sessionId,
-      viewerChose: viewerQuality.current === sessionId });
+      serverHandoff: vela.playback.serverHandoff, viewerChose: viewerQuality.current === sessionId });
     if (!step || !plan) return;
     // Once per source: the switch brings new generations, and with them fresh evidence.
     delivery.current = deliveryWatch();

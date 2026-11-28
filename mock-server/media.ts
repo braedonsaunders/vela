@@ -38,6 +38,8 @@ const originalTypes: Record<string, string> = { mkv: 'video/x-matroska', webm: '
 export const originalFixtureName = /^[\w.()-]+\.(mkv|webm|mp4|mov)$/;
 export interface Faults {
   rangeFailSeconds: number; bandwidthBps: number; failEvery: number; truncateEvery: number; stallMs: number; fallbackUnavailable: boolean; capacityExhausted: boolean;
+  /** Buffering observations at the same generations before the fixture completes an adaptive handoff. Zero disables it. */
+  serverHandoffObservations: number;
   originalLost409: number;
   originalLostTruncate: number;
   downloadTruncate: number;
@@ -75,7 +77,7 @@ export interface Faults {
    */
   catchUpFixture: boolean; startStoppedSession: number;
 }
-export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, originalLost409: 0, originalLostTruncate: 0, downloadTruncate: 0, originalLostVersionUnavailable: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0, refreshAbandonMs: 0, audioStartPending: 0, videoStartPending: 0, videoStartPreparing: 0, bootstrapStaleReads: 0, catchUpFixture: false, startStoppedSession: 0 };
+export const faults: Faults = { rangeFailSeconds: 0, bandwidthBps: 0, failEvery: 0, truncateEvery: 0, stallMs: 0, fallbackUnavailable: false, capacityExhausted: false, serverHandoffObservations: 0, originalLost409: 0, originalLostTruncate: 0, downloadTruncate: 0, originalLostVersionUnavailable: false, refreshFailSeconds: 0, refreshFailStatus: 500, refreshStallMs: 0, refreshAbandonMs: 0, audioStartPending: 0, videoStartPending: 0, videoStartPreparing: 0, bootstrapStaleReads: 0, catchUpFixture: false, startStoppedSession: 0 };
 let segmentCount = 0;
 let rangeFailureUntil = 0;
 let rangeFailureSetting = 0;

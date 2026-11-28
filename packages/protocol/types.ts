@@ -82,7 +82,7 @@ export interface ServerCapabilities {
     playlists?: Feature & { maxEntries: number };
     /** A client that sets ClientCapabilities.features.adaptiveHLS gets a multi-variant master (the remux as the top
      * rung when it can, transcode rungs started on demand) on an HLS path marked `adaptive` (Ether 0.3.25). */
-    adaptiveHLS?: Feature;
+    adaptiveHLS?: Feature & { serverHandoff?: boolean };
     /** GET /favorites/titles?role=: a viewer's likes of one role (Liked Songs, saved albums, followed artists). */
     favoritesList?: Feature;
     /** GET /titles/:id/lyrics for playable titles whose source has lyrics. */
@@ -408,6 +408,8 @@ export interface PlaybackPlan extends Generations { sessionId: ID; revision: num
   markers?: SkipMarker[];
   qualityLimitations?: { height: number; reason: string }[];
   selectedVersionId?: ID; versions?: VersionItem[]; rememberedChoice?: RememberedVersionChoice;
+  /** Ether’s automatic handoff from the selected original to an adaptive HLS master. */
+  serverHandoff?: 'pending' | 'completed' | 'failed';
   /** An Auto plan: why Auto admitted this pick (Ether 0.3.25). */ autoSelectionReason?: AutoSelectionReason;
   /** The release actually playing: its versions-row id, or null when it has no row (Auto
    * resolving to a release the menu does not list); with its label ("1080p WEB-DL · DD+ 5.1 ·

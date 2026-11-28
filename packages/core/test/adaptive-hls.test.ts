@@ -9,6 +9,8 @@ const client = { device: { id: 'd', name: 'TV', platform: 'android', appVersion:
 test('the server\'s adaptive-HLS feature survives advertising', async () => {
   const { advertise } = await import('../src/adapter/advertise');
   expect(advertise({} as never, { features: { adaptiveHLS: { available: true } } } as never).features.adaptiveHLS).toEqual({ available: true });
+  const handoff = { available: true, serverHandoff: true };
+  expect(advertise({} as never, { features: { adaptiveHLS: handoff } } as never).features.adaptiveHLS).toEqual(handoff);
   expect(advertise({} as never, { features: {} } as never).features.adaptiveHLS).toBeUndefined();
 });
 
