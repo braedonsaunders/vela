@@ -360,14 +360,16 @@ export interface SwitchBoundary { atSeconds: number; independent: boolean; timel
   /** Source replacement requires this compatibility proof, not just a matching title. */
   compatibility: 'same-source' | 'verified-timeline'; audioTrackIds: ID[]; subtitleTrackIds: ID[] }
 export interface OriginalVideo { isInterlaced?: boolean; fieldOrder?: 'progressive' | 'tt' | 'bb' | 'tb' | 'bt'; rotation?: number; codec?: string; width?: number; height?: number; bitDepth?: number; profile?: string; level?: number; frameRate?: number; colorPrimaries?: string; colorTransfer?: string; colorSpace?: string; colorRange?: string; dvProfile?: number; dvLevel?: number; dvBlSignalCompatibilityId?: number; rpuPresent?: boolean; elPresent?: boolean; blPresent?: boolean }
+export interface AdaptiveUnavailable { reason: string; message?: string }
 export interface PlaybackPathBase { originalVideo?: OriginalVideo; original?: boolean; range?: boolean; byteLength?: number; id: ID; kind: 'direct' | 'remux' | 'transcode'; transport: 'file' | 'hls';
   /** An HLS master of several variants the player adapts across itself (features.adaptiveHLS): no initial rendition is
    * pinned and no switch is sent for bandwidth; explicit quality choices still switch paths. */
   adaptive?: boolean;
-  /** The selected HLS path of a client that asked for adaptive HLS stays single-variant: why, as a code
-   * (`transcoding_disabled`, `shared_audio_unavailable`, `no_compatible_rungs`, a limit's reason), and in the viewer's
-   * language (Ether 0.3.25). */
-  adaptiveUnavailable?: string; adaptiveUnavailableMessage?: string;
+  /** A path of a client that asked for adaptive HLS that does not adapt: why, as a stable code (`original_selected`,
+   * `fixed_quality_selected`, `transcoding_disabled`, `shared_audio_unavailable`, `no_compatible_rungs`, a limit's
+   * reason) and in the viewer's language. Ether 0.3.25 sends `{reason, message}` (docs/protocols/vela-sessions.md);
+   * an early lab build sent the code alone with `adaptiveUnavailableMessage` beside it, still read. */
+  adaptiveUnavailable?: AdaptiveUnavailable | string; adaptiveUnavailableMessage?: string;
   mimeType: string; sourceId?: ID; timelineId?: ID; edition?: string;
   timelineOriginSeconds?: number; initialRenditionId?: ID; audioRenditions?: AudioRendition[];
   /** Output target metadata; readiness remains independent. */

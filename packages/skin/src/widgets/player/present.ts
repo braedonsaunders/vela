@@ -391,17 +391,22 @@ export function qualityLimitReason(code: string | undefined): string {
 
 /** The server's reason a plan has no adaptive path, in the viewer's words: its localized message, else its own
  * text, or a plain line for a bare machine code it does not explain. */
-export function adaptiveUnavailableText(reason: string | undefined, message?: string): string {
-  const text = message?.trim() || reason?.trim() || '';
+export function adaptiveUnavailableText(reason: unknown, message?: unknown): string {
+  const text = (typeof message === 'string' ? message.trim() : '') || (typeof reason === 'string' ? reason.trim() : '');
   if (!text) return '';
   return /^[a-z0-9_.-]+$/.test(text) ? msg('player.quality.adaptiveUnavailable') : text;
 }
 
-/** Why the plan's playing path cannot adapt (Ether 0.3.25 sends `adaptiveUnavailable` and its localized
- * `adaptiveUnavailableMessage` on the selected path), in the viewer's words; '' when it adapts or the server says nothing. */
+/** Why the plan's playing path cannot adapt, in the viewer's words; '' when it adapts or the server says nothing.
+ * Ether 0.3.25 sends `adaptiveUnavailable: {reason, message}` on the path; an early lab build sent the code alone
+ * with `adaptiveUnavailableMessage` beside it. */
 export function adaptiveUnavailableNote(plan: PlaybackPlan | null | undefined): string {
   const path = plan?.paths.find(candidate => candidate.id === plan.selectedPathId);
-  return adaptiveUnavailableText(path?.adaptiveUnavailable, path?.adaptiveUnavailableMessage);
+  if (!path || path.adaptive === true) return '';
+  const given = path.adaptiveUnavailable;
+  return given && typeof given === 'object'
+    ? adaptiveUnavailableText(given.reason, given.message)
+    : adaptiveUnavailableText(given, path.adaptiveUnavailableMessage);
 }
 
 /** The resolution a release label leads with ("1080p WEB-DL · …" → "1080p"), or ''. */

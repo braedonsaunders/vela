@@ -116,3 +116,20 @@ test('the playing path\'s adaptiveUnavailable (Ether\'s contract: a code and a m
   expect(adaptiveUnavailableNote(plan({ adaptive: true }))).toBe('');
   expect(adaptiveUnavailableNote(null)).toBe('');
 });
+
+test('adaptiveUnavailable as Ether 0.3.25 sends it ({reason, message}, the lab on 2026-11-27) reaches the menu without throwing', async () => {
+  const { adaptiveUnavailableNote } = await import('../src/widgets/player/present');
+  // The lab's plan for an opted-in Android TV client: a direct original selected, an adaptive master beside it.
+  const plan = (selected: string) => ({ selectedPathId: selected, paths: [
+    { id: 'primary', kind: 'direct', transport: 'file', original: true,
+      adaptiveUnavailable: { reason: 'original_selected', message: 'The selected original file plays at its source quality.' } },
+    { id: 'adaptive-hls', kind: 'transcode', transport: 'hls', adaptive: true },
+    { id: 'quality-720p4000k-hevc-sdr', kind: 'transcode', transport: 'hls',
+      adaptiveUnavailable: { reason: 'fixed_quality_selected', message: '  ' } },
+    { id: 'odd', kind: 'transcode', transport: 'hls', adaptiveUnavailable: { reason: 42 } },
+  ] }) as never;
+  expect(adaptiveUnavailableNote(plan('primary'))).toBe('The selected original file plays at its source quality.');
+  expect(adaptiveUnavailableNote(plan('adaptive-hls'))).toBe('');
+  expect(adaptiveUnavailableNote(plan('quality-720p4000k-hevc-sdr'))).toBe("Automatic quality isn't available for this title");
+  expect(adaptiveUnavailableNote(plan('odd'))).toBe('');
+});
