@@ -301,6 +301,7 @@ describe('Downloads slice isolation, lifecycle & replacement', () => {
       ready: async () => connection,
       tokens: async () => activeViewer,
       declared: async () => ({ subtitleFormats: ['ass', 'webvtt'] }),
+      declaredForDownload: async () => ({ subtitleFormats: ['ass', 'webvtt'] }),
       key: () => 'idem-1',
     } as unknown as Session;
     const box = new StateBox({

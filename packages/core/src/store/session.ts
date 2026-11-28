@@ -134,6 +134,17 @@ export class Session {
     return this.client;
   }
 
+  /**
+   * What the device can decode, without the viewer's streaming cap: a download keeps the original file
+   * for later, so the network-quality preset (480p on mobile data, say) must not rule out the very file it
+   * is fetching. The server still applies its own download ceilings.
+   */
+  async declaredForDownload(): Promise<V.ClientCapabilities> {
+    await this.media;
+    if (!this.clientValue) throw new Error('Media capabilities are unavailable');
+    return serverFeatures(this.clientValue, this.features);
+  }
+
   get servers(): ServerRegistry {
     return this.registry;
   }

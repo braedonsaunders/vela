@@ -130,3 +130,15 @@ describe('Plex and the cap', () => {
     expect(decidedQuality({ Metadata: [{ Media: [{ width: 1920, height: 1080, bitrate: 9000, videoCodec: 'vp9' }] }] })).toEqual({ width: 1920, height: 1080, bitrate: 9_000_000, videoCodec: 'vp9' });
   });
 });
+
+test('downloads declare what the device decodes, not the streaming preset', async () => {
+  const { Session } = await import('../src/store/session');
+  const { MemoryStore } = await import('./helpers');
+  const media = { containers: ['mp4'], videoCodecs: ['h264'], audioCodecs: ['aac'], subtitleFormats: [], hls: true, mse: false, maxWidth: 1920, maxHeight: 1080 };
+  const session = new Session({ secrets: new MemoryStore(), device: { name: 'Phone', platform: 'android' }, appVersion: '1', media: Promise.resolve(media), artWidth: 1280 } as never);
+  session.setStreamingLimit({ maxWidth: 854, maxHeight: 480, maxBitrate: 1_500_000 });
+  expect(await session.declared()).toMatchObject({ maxWidth: 854, maxHeight: 480, maxBitrate: 1_500_000 });
+  const download = await session.declaredForDownload();
+  expect(download).toMatchObject({ maxWidth: 1920, maxHeight: 1080 });
+  expect(download.maxBitrate).toBeUndefined();
+});

@@ -984,7 +984,7 @@ export class Downloads {
         const { auth } = this.box.get();
         return auth.phase === 'signed-in' && auth.serverId === serverId && auth.viewerId === viewerId;
       };
-      const client = await this.session.declared().catch(() => undefined);
+      const client = await this.session.declaredForDownload().catch(() => undefined);
       const grantKey = this.session.key();
       const resolved = await adapter.resolveDownload(titleId, {
         versionId: options?.versionId,
@@ -1114,7 +1114,7 @@ export class Downloads {
       const adapter = connection.adapter;
       if (!hasMediaDownloads(adapter)) throw new Error('Downloads are not supported on this server');
       if (adapter.downloadsAvailable && !(await adapter.downloadsAvailable())) throw refusedDownload();
-      const client = await this.session.declared().catch(() => undefined);
+      const client = await this.session.declaredForDownload().catch(() => undefined);
       const expires = Date.parse(record.grantExpiresAt ?? '');
       const grantKey = record.grantKey && expires > Date.now() + 30_000 ? record.grantKey : this.session.key();
       const resolved = await adapter.resolveDownload(titleId, {
@@ -1233,7 +1233,7 @@ export class Downloads {
       if (adapter.downloadsAvailable && !(await adapter.downloadsAvailable())) {
         throw new Error('Downloads are not allowed for this account on this server');
       }
-      const client = await this.session.declared().catch(() => undefined);
+      const client = await this.session.declaredForDownload().catch(() => undefined);
       const resolved = await adapter.resolveDownload(titleId, { versionId: options?.versionId, idempotencyKey: this.session.key(), ...(client ? { client } : {}) });
       await this.port.saveFile({
         url: resolved.url,

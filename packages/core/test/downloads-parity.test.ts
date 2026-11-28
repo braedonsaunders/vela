@@ -211,6 +211,7 @@ function harness(port: Port, phase: 'signed-in' | 'offline' = 'signed-in') {
     ready: async () => connection,
     tokens: async () => viewer,
     declared: async () => ({ subtitleFormats: ['webvtt'] }),
+    declaredForDownload: async () => ({ subtitleFormats: ['webvtt'] }),
     key: () => `idem-${resolved.length}`,
   } as unknown as Session;
   const box = new StateBox({
