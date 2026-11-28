@@ -1,3 +1,4 @@
+import { serveMedia } from '../media';
 import { afterEach, expect, test } from 'bun:test';
 import type { PlaybackPlan } from '../../packages/protocol/types';
 import { applyCommand, answerTracks, sidecarFixture, withSidecar, type Session } from '../sessions';
@@ -57,4 +58,33 @@ test('switching editions negotiates the same sidecar and transport as a fresh st
   expect(session.plan.selectedPathId).toBe('remux');
   expect(session.plan.paths.find(path => path.id === session.plan.selectedPathId)?.transport).toBe('hls');
   expect(session.plan.selectedPathId).toBe(fresh.selectedPathId);
+});
+
+
+test('windowed sidecars are advertised on offset HLS and use absolute, overlapping cue times', async () => {
+  Object.assign(sidecarFixture, { enabled: true, windowed: true });
+  const p = { ...plan(), positionSeconds: 0 };
+  withSidecar(p, 'http://mock/sessions/media/s/t');
+  const track = p.subtitleTracks[0]!;
+  expect(track.delivery).toMatchObject({ kind: 'external', format: 'webvtt-window' });
+  expect(p.paths.find(path => path.id === p.selectedPathId)?.timelineOriginSeconds).toBe(60);
+  expect(p.positionSeconds).toBe(60);
+  if (track.delivery?.kind !== 'external') throw new Error('Missing external delivery');
+  const target = new URL(track.delivery.url);
+  const fetchWindow = (from: string) => {
+    target.searchParams.set('from_ms', from);
+    return serveMedia(new Request(target), 'subtitles/window.vtt');
+  };
+  const first = await fetchWindow('60000');
+  expect(first.headers.get('X-Ether-Subtitle-Complete')).toBe('0');
+  const opening = await first.text();
+  expect(opening).toContain('00:01:02.000 --> 00:01:05.000');
+  expect(opening).not.toContain('00:03:14.000');
+  const afterSeek = await fetchWindow('92000');
+  expect(afterSeek.headers.get('X-Ether-Subtitle-Complete')).toBe('1');
+  const later = await afterSeek.text();
+  expect(later).not.toContain('00:01:02.000');
+  expect(later).toContain('00:01:29.000 --> 00:01:36.000');
+  expect(later).toContain('00:03:14.000 --> 00:03:18.000');
+  expect((await fetchWindow('-1')).status).toBe(400);
 });

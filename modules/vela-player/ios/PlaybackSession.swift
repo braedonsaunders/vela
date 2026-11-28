@@ -614,6 +614,12 @@ final class PlaybackSession {
         let selected = plan?.subtitleTrack(report.subtitleTrackId)
         switch sidecar.step(selected, url: selected?.externalURL.flatMap(resolve), loaded: state.loaded) {
         case .add(let url):
+            #if os(iOS) || os(tvOS)
+            if selected?.delivery?.format == "webvtt-window" {
+                player?.selectWindowedSubtitle(url, origin: timeline.origin)
+                return
+            }
+            #endif
             player?.command(["sub-add", url.absoluteString, "select", selected?.externalFormatHint ?? ""])
         case .clear:
             player?.set("sid", "no")

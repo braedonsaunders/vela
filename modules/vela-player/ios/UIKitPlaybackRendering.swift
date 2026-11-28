@@ -85,10 +85,20 @@ final class UIKitPlaybackRendering: PlaybackRendering {
         return nil
         #endif
     }
+    private var windowedSubtitleCues: [SubtitleCue]?
+    func setWindowedSubtitleCues(_ cues: [SubtitleCue]?) {
+        if windowedSubtitleCues != nil, cues == nil {
+            captions.attributedText = nil
+            captions.isHidden = true
+            textKey = ""
+        }
+        windowedSubtitleCues = cues
+    }
+
     func drawCaptions(engine: AetherEngine, offset: Double) {
         guard let surface else { return }
         let time = engine.clock.sourceTime - offset
-        let cues = engine.subtitleCues.filter { $0.startTime <= time && time < $0.endTime }
+        let cues = (windowedSubtitleCues ?? engine.subtitleCues).filter { $0.startTime <= time && time < $0.endTime }
         let imageIDs = Set(cues.compactMap { cue -> Int? in
             if case .image = cue.body { return cue.id }; return nil
         })
@@ -107,7 +117,7 @@ final class UIKitPlaybackRendering: PlaybackRendering {
             textKey = ""
             return
         }
-        if drawStyled(engine: engine, cues: cues, time: time, rect: rect, coded: coded, surface: surface) {
+        if windowedSubtitleCues == nil, drawStyled(engine: engine, cues: cues, time: time, rect: rect, coded: coded, surface: surface) {
             captions.attributedText = nil
             textKey = ""
             return

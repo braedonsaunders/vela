@@ -7,6 +7,7 @@ import FoundationNetworking
 struct ScopedMediaResponse {
     let data: Data
     let totalSize: Int64?
+    let subtitleComplete: Bool
 }
 
 func originalResponseTruncated(expectedLength: Int?, receivedLength: Int) -> Bool {
@@ -27,8 +28,8 @@ final class ReceivedBytes: @unchecked Sendable {
 
 final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let url: URL
-    private let access: VelaMediaAuth
-    private let offset: Int64
+    private let access: VelaMediaAuth?
+    private let offset: Int64?
     private let count: Int
     private let received: ReceivedBytes?
     private let lock = NSLock()
@@ -39,10 +40,11 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
     private var droppedHeaders = false
     private var body = Data()
     private var totalSize: Int64?
+    private var subtitleComplete = false
     private var expectedLength: Int?
     private var failure: Error?
 
-    init(url: URL, access: VelaMediaAuth, offset: Int64, count: Int, received: ReceivedBytes? = nil) {
+    init(url: URL, access: VelaMediaAuth?, offset: Int64?, count: Int, received: ReceivedBytes? = nil) {
         self.url = url
         self.access = access
         self.offset = offset
@@ -51,7 +53,7 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
     }
 
     func run() throws -> ScopedMediaResponse {
-        guard offset >= 0, count > 0, offset <= Int64.max - Int64(count) else { throw URLError(.badURL) }
+        guard (offset ?? 0) >= 0, count > 0, (offset ?? 0) <= Int64.max - Int64(count) else { throw URLError(.badURL) }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
@@ -62,8 +64,8 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
         queue.maxConcurrentOperationCount = 1
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: queue)
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
-        for (name, value) in access.headers(for: url) { request.setValue(value, forHTTPHeaderField: name) }
-        request.setValue("bytes=\(offset)-\(offset + Int64(count) - 1)", forHTTPHeaderField: "Range")
+        for (name, value) in access?.headers(for: url) ?? [:] { request.setValue(value, forHTTPHeaderField: name) }
+        if let offset { request.setValue("bytes=\(offset)-\(offset + Int64(count) - 1)", forHTTPHeaderField: "Range") }
         let task = session.dataTask(with: request)
         lock.lock()
         self.session = session
@@ -85,7 +87,7 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
             received?.markOriginalLost()
             throw NSError(domain: "VelaOriginalLost", code: 1)
         }
-        return ScopedMediaResponse(data: body, totalSize: totalSize)
+        return ScopedMediaResponse(data: body, totalSize: totalSize, subtitleComplete: subtitleComplete)
     }
 
     func cancel() {
@@ -107,13 +109,13 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
         var next = request
         // URLSession copies custom headers on redirect. Strip ALL grant fields, not a list
         // of token spellings, and never restore them after the chain has left its scope.
-        for name in access.fields.keys { next.setValue(nil, forHTTPHeaderField: name) }
-        let scoped = access.headers(for: target)
+        for name in (access?.fields ?? [:]).keys { next.setValue(nil, forHTTPHeaderField: name) }
+        let scoped = access?.headers(for: target) ?? [:]
         droppedHeaders = droppedHeaders || scoped.isEmpty
         if !droppedHeaders {
             for (name, value) in scoped { next.setValue(value, forHTTPHeaderField: name) }
         }
-        next.setValue("bytes=\(offset)-\(offset + Int64(count) - 1)", forHTTPHeaderField: "Range")
+        if let offset { next.setValue("bytes=\(offset)-\(offset + Int64(count) - 1)", forHTTPHeaderField: "Range") }
         completionHandler(next)
     }
 
@@ -130,14 +132,15 @@ final class ScopedMediaRequest: NSObject, URLSessionDataDelegate, @unchecked Sen
             reject(NSError(domain: "VelaOriginalLost", code: 1), completionHandler)
             return
         }
-        if http.statusCode == 416, let totalSize, offset >= totalSize {
+        if http.statusCode == 416, let totalSize, let offset, offset >= totalSize {
             completionHandler(.allow)
             return
         }
-        guard http.statusCode == 206 || (http.statusCode == 200 && offset == 0) else {
+        guard (http.statusCode == 206 && offset != nil) || (http.statusCode == 200 && (offset ?? 0) == 0) else {
             reject(NSError(domain: "VelaMediaHTTP", code: http.statusCode), completionHandler)
             return
         }
+        subtitleComplete = http.statusCode == 200 && http.value(forHTTPHeaderField: "X-Ether-Subtitle-Complete") == "1"
         if http.statusCode == 206 {
             let start = range.dropFirst("bytes ".count).split(separator: "-").first.flatMap { Int64($0) }
             guard range.hasPrefix("bytes "), start == offset else {

@@ -156,6 +156,8 @@ internal class PlanTrack(
   val externalFormat: String?
     get() = deliveryFormat ?: codec
 
+  val isWindowedSubtitle: Boolean get() = isExternal && externalFormat == "webvtt-window"
+
   val canRenderExternal: Boolean
     get() = isExternal && externalFormat?.lowercase() !in listOf("vobsub", "dvd_subtitle", "pgs", "hdmv_pgs_subtitle")
 

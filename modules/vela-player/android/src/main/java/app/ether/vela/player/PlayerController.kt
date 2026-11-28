@@ -424,12 +424,15 @@ internal class PlayerController(
     val plan = plan ?: return
     val path = plan.selectedPath ?: return
     val subtitle = plan.subtitleTrack(report.subtitleTrackId)
+    val window = subtitle?.takeIf { it.isWindowedSubtitle }?.externalUrl?.let(MediaAccessStore::resolve)
+    engine?.windowedSubtitle(window)
     if (state.tracks.isEmpty() || !localSubtitleSelection(path.isOriginalFile, subtitle, report.subtitleClientOnly)) return
     val audioIndex = plan.audioTrack(report.audioTrackId)?.streamIndex
     val audioId = audioIndex?.let { state.trackId("audio", it) }
     if (path.isOriginalFile && audioId != null && state.audioId != audioId) {
       engine?.select("audio", audioId)
     }
+    if (window != null) return
     val subtitleId = subtitle?.let { localSubtitleId(it.id) }
     if (subtitleId != null) {
       if (state.subtitleId != subtitleId) {
@@ -630,6 +633,7 @@ internal class PlayerController(
       }
       report.subtitleTrackId = null
       report.subtitleClientOnly = true
+      engine?.windowedSubtitle(null)
       engine?.select("sub", null)
       return null
     }
@@ -646,8 +650,14 @@ internal class PlayerController(
       report.subtitleTrackId = id
       report.subtitleClientOnly = true
       // A sidecar the plan just added is still being prepared: applyTracks selects it when it appears.
-      if (localId != null) engine?.select("sub", localId)
-      else report.publish(state, pendingSeek, force = true)
+      if (track.isWindowedSubtitle) {
+        engine?.windowedSubtitle(external)
+        report.publish(state, pendingSeek, force = true)
+      } else {
+        engine?.windowedSubtitle(null)
+        if (localId != null) engine?.select("sub", localId)
+        else report.publish(state, pendingSeek, force = true)
+      }
       return null
     }
     val engineId = if (playsOriginal) localSubtitleId(id) else null

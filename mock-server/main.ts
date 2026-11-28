@@ -1411,6 +1411,7 @@ async function dispatch(req: Request): Promise<Response> {
         if (typeof data.selected === 'boolean') sidecarFixture.selected = data.selected;
         if (typeof data.pathId === 'string') sidecarFixture.pathId = data.pathId;
         if (typeof data.versionSwitch === 'boolean') sidecarFixture.versionSwitch = data.versionSwitch;
+        if (typeof data.windowed === 'boolean') sidecarFixture.windowed = data.windowed;
       }
       return json(sidecarFixture);
     }

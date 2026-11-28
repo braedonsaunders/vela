@@ -19,6 +19,22 @@ import Foundation
                 return
             }
             if args.count > 3 {
+                if args[3] == "subtitle-window" {
+                    let clock = SubtitleWindow(origin: 60.5)
+                    let first = clock.cursor(mediaTime: 2.5, previous: nil)
+                    let target = SubtitleWindow.url(URL(string: args[2])!, from: first)!
+                    guard first == 63_000, clock.cursor(mediaTime: 102.499, previous: first) == first,
+                          clock.cursor(mediaTime: 102.5, previous: first) == 163_000,
+                          clock.cursor(mediaTime: 40, previous: nil) == 100_500,
+                          target.query == "ether_window=1&ticket=demo%2Bticket&from_ms=63000" else { exit(2) }
+                    let response = try ScopedMediaRequest(url: target, access: access, offset: nil, count: 1024).run()
+                    let cues = try clock.cues(response.data)
+                    guard response.subtitleComplete, cues.count == 1,
+                          cues[0].start == -0.25, cues[0].end == 2.625,
+                          cues[0].text == "Dialogue & signs" else { exit(2) }
+                    print("subtitle_window_ok")
+                    return
+                }
                 if args[3] == "original-lost" {
                     let received = ReceivedBytes()
                     let request = ScopedMediaRequest(url: URL(string: args[2])!, access: access, offset: 0, count: 1024, received: received)

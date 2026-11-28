@@ -88,6 +88,24 @@ export async function serveMedia(req: Request, resource: string, truncateOrigina
   }
   if (req.headers.has('range') && rangeFailureSetting > 0 && Date.now() < rangeFailureUntil)
     return new Response('Injected temporary range failure', { status: 503 });
+  if (resource === 'subtitles/window.vtt') {
+    const query = new URL(req.url).searchParams;
+    const cursor = query.get('from_ms') ?? '';
+    const from = Number(cursor);
+    if (query.get('ether_window') !== '1' || !/^\d+$/.test(cursor) || !Number.isSafeInteger(from))
+      return new Response('Invalid subtitle window', { status: 400 });
+    const cues = [
+      { start: 62_000, end: 65_000, vtt: '00:01:02.000 --> 00:01:05.000\nVela offset HLS subtitle.' },
+      { start: 89_000, end: 96_000, vtt: '00:01:29.000 --> 00:01:36.000\nVela subtitle across a seek.' },
+      { start: 194_000, end: 198_000, vtt: '00:03:14.000 --> 00:03:18.000\nVela subtitle in a later window.' },
+    ];
+    const selected = cues.filter(cue => cue.end > from && cue.start < from + 120_000);
+    const body = `WEBVTT\n\n${selected.map(cue => cue.vtt).join('\n\n')}\n`;
+    return new Response(req.method === 'HEAD' ? null : body, { headers: {
+      'Content-Type': 'text/vtt; charset=utf-8', 'Cache-Control': 'no-store',
+      'X-Ether-Subtitle-Complete': from + 120_000 >= 198_000 ? '1' : '0',
+    } });
+  }
   if (resource === 'version-subtitles.vtt') {
     return new Response(req.method === 'HEAD' ? null : 'WEBVTT\n\n00:00:00.000 --> 00:03:00.000\nVela cached edition subtitle.\n', {
       headers: { 'Content-Type': 'text/vtt', 'Cache-Control': 'no-store' },

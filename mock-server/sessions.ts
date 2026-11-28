@@ -14,7 +14,7 @@ export const sessions = new Map<string, Session>();
  * external file, beside a French track embedded in the source, as Jellyfin, Emby and Plex sidecars arrive, selected from the start when `selected` (a default or
  * remembered subtitle). The direct MP4 is the original file and `pathId` is where plans start. Track commands are
  * answered as Ether answers them: off the original file, with a new source generation. */
-export const sidecarFixture = { enabled: false, selected: true, pathId: 'direct', versionSwitch: false };
+export const sidecarFixture = { enabled: false, selected: true, pathId: 'direct', versionSwitch: false, windowed: false };
 export function withSidecar(plan: PlaybackPlan, base: string) {
   plan.subtitleTracks = [{ id: 'sub-en', kind: 'subtitle', language: 'en', name: 'English · sidecar', codec: 'webvtt',
     delivery: { kind: 'external', format: 'webvtt', url: `${base}/subtitles.vtt` } },
@@ -31,6 +31,16 @@ export function withSidecar(plan: PlaybackPlan, base: string) {
   if (remux) remux.quality = { width: 1280, height: 720, bitrate: 2200000, codec: 'h264', videoCodec: 'avc1.64001f', codecStatus: 'verified' };
   if (plan.paths.some(path => path.id === sidecarFixture.pathId)) plan.selectedPathId = sidecarFixture.pathId;
   versionSidecar(plan, base);
+  if (sidecarFixture.windowed) {
+    const hls = plan.paths.find(path => path.id === plan.selectedPathId && path.transport === 'hls') ?? remux;
+    if (!hls) return;
+    plan.selectedPathId = hls.id;
+    hls.timelineOriginSeconds = 60;
+    plan.positionSeconds = Math.max(plan.positionSeconds, hls.timelineOriginSeconds);
+    plan.durationSeconds = fixtureDurationSeconds + hls.timelineOriginSeconds;
+    const track = plan.subtitleTracks[0]!;
+    track.delivery = { kind: 'external', format: 'webvtt-window', url: `${base}/subtitles/window.vtt?ether_window=1&from_ms=0` };
+  }
 }
 /** The cached edition has a different sidecar and uses HLS, on start and switch alike. */
 function versionSidecar(plan: PlaybackPlan, base: string) {
