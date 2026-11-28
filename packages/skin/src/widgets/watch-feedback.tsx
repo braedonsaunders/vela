@@ -31,7 +31,7 @@ export function WatchFeedbackProvider({ children, inTitle }: { children: ReactNo
     clear: entry => setFeedback(current => current === entry ? null : current),
   }}>
     {children}
-    {!inTitle ? <View pointerEvents="box-none" style={styles.overlay}><WatchFeedbackToast /></View> : null}
+    {!inTitle ? <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.overlay]}><WatchFeedbackToast /></View> : null}
   </FeedbackContext.Provider>;
 }
 
@@ -69,7 +69,7 @@ export function WatchFeedbackToast({ title }: { title?: string }) {
 }
 
 const styles = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', alignItems: 'center', padding: Platform.isTV ? 48 : 24 },
+  overlay: { justifyContent: 'flex-end', alignItems: 'center', padding: Platform.isTV ? 48 : 24 },
   toast: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 12, maxWidth: '100%',
     marginHorizontal: 'auto', padding: 10, paddingLeft: 16, backgroundColor: '#14151a', borderColor: '#636570', borderWidth: 1, borderRadius: 12 },
   label: { color: '#fff', fontSize: Platform.isTV ? 18 : 15, flexShrink: 1 },
