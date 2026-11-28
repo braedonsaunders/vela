@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { deliveryEvidence, deliveryWatch, heardDelivery, measuredThroughput, pathRate, playerAdapts, stepDown, type DeliverySample, type DeliveryWatch } from '../src/delivery';
+import { adaptivePath, deliveryEvidence, deliveryWatch, heardDelivery, measuredThroughput, pathRate, playerAdapts, stepDown, type DeliverySample, type DeliveryWatch } from '../src/delivery';
 import type { PlaybackPath, PlaybackPlan } from '../src/wire';
 
 const transcode = (id: string, average: number, peak = average * 1.2): PlaybackPath => ({
@@ -126,4 +126,55 @@ test('an adaptive path offered beside what plays is preferred over any fixed run
   expect(stepDown(watch, offered, 45_000)).toEqual({ pathId: 'adaptive', adaptive: true, throughputBps: 18_000_000 });
   // Playing it already: the player adapts, nothing to step to.
   expect(stepDown(watch, plan({ paths: offered.paths, selectedPathId: 'adaptive' }), 45_000, { adaptive: playerAdapts(plan({ paths: offered.paths, selectedPathId: 'adaptive' })) })).toBeNull();
+});
+
+/** Apple's direct play at 1.2 Mbit/s (the lab check): a file it plays ~6 s and waits ~18 s for, with an adaptive master
+ * offered beside it, and no bytes reported to measure the link by. */
+const starvedFile = (t: number) => (t % 24 < 6 ? 'playing' : 'buffering');
+const appleDirect = () => {
+  const master = { ...plan().paths[1]!, id: 'adaptive-hls', kind: 'transcode', readiness: 'ready', url: 'u', adaptive: true, quality: undefined } as PlaybackPath;
+  const primary = { id: 'primary', kind: 'direct', transport: 'file', readiness: 'ready', url: 'f', original: true, mimeType: 'video/x-matroska', qualities: [], boundaries: [] } as unknown as PlaybackPath;
+  return plan({ paths: [primary, master, ...plan().paths.slice(1)] });
+};
+const unmeasured = (seconds: number, pattern: (t: number) => DeliverySample['state']) => {
+  let watch = deliveryWatch();
+  for (let ms = 0; ms <= seconds * 1000; ms += 250)
+    watch = heardDelivery(watch, { sessionId: 's1', sourceGeneration: 1, seekGeneration: 1, state: pattern(ms / 1000), loadProgress: null, bufferAheadSeconds: 1, seekTarget: null }, ms);
+  return watch;
+};
+
+test('stalls alone move a starved stream onto the adaptive path offered beside it; no throughput is needed', () => {
+  const watch = unmeasured(60, starvedFile);
+  expect(deliveryEvidence(watch).throughputBps).toBeNull();
+  expect(stepDown(watch, appleDirect(), 60_000)).toEqual({ pathId: 'adaptive-hls', adaptive: true, throughputBps: null });
+  // A measured link is passed along with it.
+  expect(stepDown(feed(deliveryWatch(), 0, 45, starved, 1_200_000), appleDirect(), 45_000)).toEqual({ pathId: 'adaptive-hls', adaptive: true, throughputBps: 1_200_000 });
+  // Without an adaptive path, a fixed rung still needs a measurement to pick by.
+  const fixedOnly = appleDirect(); fixedOnly.paths = fixedOnly.paths.filter(path => !path.adaptive);
+  expect(stepDown(watch, fixedOnly, 60_000)).toBeNull();
+});
+
+test('the stall rule still holds for the adaptive takeover: early, smooth or one hiccup is no step', () => {
+  // Under EVIDENCE_MS of playing.
+  expect(stepDown(unmeasured(20, starvedFile), appleDirect(), 20_000)).toBeNull();
+  // Smooth playback.
+  expect(stepDown(unmeasured(60, () => 'playing'), appleDirect(), 60_000)).toBeNull();
+  // One wait in the window.
+  expect(stepDown(unmeasured(60, t => (t > 30 && t < 34 ? 'buffering' : 'playing')), appleDirect(), 60_000)).toBeNull();
+  // An adaptive path the server cannot serve now is no target.
+  const preparing = appleDirect(); preparing.paths = preparing.paths.map(path => (path.adaptive ? { ...path, readiness: 'preparing' } as PlaybackPath : path));
+  expect(stepDown(unmeasured(60, starvedFile), preparing, 60_000)).toBeNull();
+});
+
+test('a quality the viewer chose is never overridden, however starved', () => {
+  const watch = unmeasured(60, starvedFile);
+  expect(stepDown(watch, appleDirect(), 60_000, { viewerChose: true })).toBeNull();
+  expect(stepDown(feed(deliveryWatch(), 0, 45, starved, 18_000_000), plan(), 45_000, { viewerChose: true, bitrateSwitch: true })).toBeNull();
+});
+
+test('the adaptive path is one offered beside what plays, ready or on demand', () => {
+  expect(adaptivePath(appleDirect())?.id).toBe('adaptive-hls');
+  expect(adaptivePath({ ...appleDirect(), selectedPathId: 'adaptive-hls' })).toBeUndefined();
+  expect(adaptivePath(plan())).toBeUndefined();
+  expect(adaptivePath(null)).toBeUndefined();
 });

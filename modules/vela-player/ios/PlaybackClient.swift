@@ -332,8 +332,14 @@ final class PlaybackClient {
                     let shown = self.properties["time-pos"] as? Double ?? buffered
                     self.emit("demuxer-cache-time", buffered - engine.clock.currentTime <= 0.05 ? min(buffered, shown) : buffered)
                 }.store(in: &self.subscriptions)
+                // AVPlayer plays a remote HLS itself (nativeRemoteHLS): no Aether demuxer pulls from the source then,
+                // and AVPlayer's own transfer from the origin (its access log) is what arrives. On the loopback and
+                // software routes that figure is the loopback's or the demuxer's, so the demuxer's count stands.
+                let avPlayerFetches = self.remoteHLS && self.headers.isEmpty
                 engine.diagnostics.$liveTelemetry.dropFirst().sink { [weak self] telemetry in
-                    guard let self, let bytes = telemetry?.demuxerBytesFetched else { return }
+                    guard let self, let telemetry else { return }
+                    let demuxed = telemetry.demuxerBytesFetched
+                    let bytes = avPlayerFetches && demuxed == 0 ? telemetry.networkTransferredBytes ?? 0 : demuxed
                     // A new load counts from zero: what the last one fetched stays counted.
                     if bytes < self.fetched { self.fetchedBefore += self.fetched }
                     self.fetched = bytes

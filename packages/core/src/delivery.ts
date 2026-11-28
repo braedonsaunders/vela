@@ -138,8 +138,9 @@ export function measuredThroughput(watch: DeliveryWatch, now: number): number | 
  * server that takes it (Ether 0.3.25), a switch by bitrate: the server's best rung at or under `maxBitrate`. */
 export type StepDown =
   | { pathId: string; rateBps: number; throughputBps: number; adaptive?: undefined }
-  /** The plan's adaptive HLS path (Ether 0.3.25): the player then picks its own rung, down and back up. */
-  | { pathId: string; adaptive: true; throughputBps: number }
+  /** The plan's adaptive HLS path (Ether 0.3.25): the player then picks its own rung, down and back up. Taken on
+   * the stalls alone, so the throughput is null when the engine reports no bytes to measure it by. */
+  | { pathId: string; adaptive: true; throughputBps: number | null }
   | { maxBitrate: number; throughputBps: number };
 
 /** What decides how a step is sent. */
@@ -148,26 +149,38 @@ export interface StepOptions {
   bitrateSwitch?: boolean;
   /** The plan's own playlist adapts (Ether's multi-variant HLS): the player steps down on its own. */
   adaptive?: boolean;
+  /** The viewer chose a quality in this session (a rung, the original, Automatic): an automatic step never
+   * overrides it. */
+  viewerChose?: boolean;
+}
+
+/** The plan's adaptive HLS path offered beside what plays (a multi-variant master the player adapts across, Ether
+ * 0.3.25 `adaptive`), or undefined. */
+export function adaptivePath(plan: PlaybackPlan | null): PlaybackPath | undefined {
+  return plan?.paths.find(path => path.id !== plan.selectedPathId && path.transport === 'hls' && path.adaptive === true
+    && (path.readiness === 'ready' || path.readiness === 'on-demand'));
 }
 
 /**
  * The path to switch to: the plan's adaptive HLS path when it offers one beside what plays, else the server
  * transcode (or the bitrate to ask the server for, StepOptions); null to stay. A step needs EVIDENCE_MS of playing at these
- * generations, STALLS waits for media taking STALLED_SHARE of the wanted time in the window, and a
- * throughput measurement. It takes the best transcode within HEADROOM of that throughput, else the
- * lowest one, and never one that is not clearly below what plays now. Live plans are left to the
- * live machinery.
+ * generations and STALLS waits for media taking STALLED_SHARE of the wanted time in the window. The adaptive path
+ * needs nothing more: the player picks its own rung there, so no throughput has to say which (an engine that reports
+ * no bytes still gets off a stream it cannot keep fed). A fixed rung needs a throughput measurement too: it takes the
+ * best transcode within HEADROOM of that throughput, else the lowest one, and never one that is not clearly below what
+ * plays now. Live plans are left to the live machinery.
  */
 export function stepDown(watch: DeliveryWatch, plan: PlaybackPlan | null, now: number, options: StepOptions = {}): StepDown | null {
-  if (!plan || plan.live || options.adaptive || watch.playedAt === null || now - watch.playedAt < EVIDENCE_MS) return null;
+  if (!plan || plan.live || options.adaptive || options.viewerChose || watch.playedAt === null || now - watch.playedAt < EVIDENCE_MS) return null;
   if (watch.key !== `${plan.sessionId}:${plan.sourceGeneration}:${plan.seekGeneration}`) return null;
   const evidence = deliveryEvidence(watch);
-  if (evidence.stalls < STALLS || evidence.stalledShare < STALLED_SHARE || evidence.throughputBps === null) return null;
+  if (evidence.stalls < STALLS || evidence.stalledShare < STALLED_SHARE) return null;
   // An adaptive path offered beside what plays (direct play, a fixed rung) beats any fixed rung: the player then
   // follows the network down and back up on its own.
-  const adaptive = plan.paths.find(path => path.id !== plan.selectedPathId && path.transport === 'hls' && path.adaptive === true
-    && (path.readiness === 'ready' || path.readiness === 'on-demand'));
-  if (adaptive) return { pathId: adaptive.id, adaptive: true, throughputBps: Math.round(evidence.throughputBps) };
+  const adaptive = adaptivePath(plan);
+  const measured = evidence.throughputBps === null ? null : Math.round(evidence.throughputBps);
+  if (adaptive) return { pathId: adaptive.id, adaptive: true, throughputBps: measured };
+  if (evidence.throughputBps === null) return null;
   const selected = plan.paths.find(path => path.id === plan.selectedPathId);
   const current = selected ? pathRate(selected, plan.durationSeconds) : null;
   const ceiling = current === null ? Infinity : current * MEANINGFUL;

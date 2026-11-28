@@ -722,8 +722,8 @@ final class PlaybackSession {
             return catchUp()
         case "quality", "switchPath":
             let value = (command["renditionId"] as? String) ?? (command["pathId"] as? String) ?? ""
-            // The chrome offers no Automatic row here: it shows one only for engines that choose HLS
-            // renditions themselves (present.ts qualityAuto). A quality is a server path.
+            // A quality is a server path. The chrome's Automatic row here is the plan's adaptive HLS path (`path:<id>`,
+            // present.ts automatic), never an empty choice: AVPlayer adapts across that master itself.
             guard !value.isEmpty else {
                 return "Automatic quality is the server's choice on this player"
             }

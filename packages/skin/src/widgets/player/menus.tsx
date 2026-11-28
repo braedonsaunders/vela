@@ -253,9 +253,11 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
         name={hasVersions ? msg('player.quality.automatic') : msg('player.auto')}
         detail={blocked ? msg('player.qualityUnavailable') : view.lockedQuality ? '' : view.quality}
         selected={!view.lockedQuality}
-        pending={pendingQualityId === 'auto'}
+        pending={pendingQualityId === 'auto' || (!!view.qualityAutoId && pendingQualityId === view.qualityAutoId)}
         enabled={!blocked}
-        onChoose={() => send({ type: 'quality', renditionId: null })}
+        testID="player-quality-auto"
+        // The engine's own choice (null), or the plan's adaptive path a native player adapts across.
+        onChoose={() => { if (view.lockedQuality) send({ type: 'quality', renditionId: view.qualityAutoId }); }}
       />
     ) : null,
     ...(hasVersions ? converted : groups.converted).map(qualityRow),

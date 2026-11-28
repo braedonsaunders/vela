@@ -94,8 +94,12 @@ export interface PlayerView {
   qualities: QualityOption[];
   /** A Plex stream offered without an output size or rendition ladder. */
   serverStream?: { choice: string; selected: boolean };
-  /** The engine picks the rendition itself unless one is locked. */
+  /** An Automatic row: the engine picks the rendition itself unless one is locked, or the player adapts across the
+   * plan's adaptive HLS path (selected unless a quality is locked: a fixed path or the original plays). */
   qualityAuto: boolean;
+  /** What the Automatic row sends: null for the engine's own rendition choice, or `path:<id>` of the plan's adaptive
+   * HLS path, which a native player adapts across (Ether 0.3.25). */
+  qualityAutoId: string | null;
   lockedQuality: string;
   /** The quality playing: a rendition id, or `path:<id>` for a path of one quality. */
   qualityId: string;
@@ -286,7 +290,26 @@ export function unplayableReason(pathId: string, snapshot: Snapshot | null): str
   return msg(reason === 'insecure-page' ? 'player.qualityReason.insecurePage' : 'player.qualityReason.browser');
 }
 
-function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapshot: Snapshot | null): QualityOption[] {
+/** Whether a path is a multi-variant HLS master the player adapts across (Ether 0.3.25 `adaptive`). */
+function adapts(path: Path | undefined): boolean {
+  return path?.transport === 'hls' && path.adaptive === true;
+}
+
+/** The plan's server path of one quality a rung of an adaptive ladder stands for: of the rung's height, its rate the
+ * nearest to the rung's. A player that adapts across the master itself cannot hold one rung of it (AVPlayer, Media3
+ * here): a viewer's rung leaves the adaptive path for that server path, as the protocol has explicit choices do. */
+export function fixedPathFor(plan: PlaybackPlan, current: Path, rung: { height: number; bitrate?: number }): Path | undefined {
+  const rate = (p: Path) => p.quality!.averageBitrate ?? p.quality!.bitrate;
+  return plan.paths
+    .filter(p => p.id !== current.id && !adapts(p) && !p.original && p.quality?.height === rung.height
+      && (p.readiness === 'ready' || p.readiness === 'on-demand')
+      && (!p.sourceId || !current.sourceId || p.sourceId === current.sourceId) && (p.edition ?? '') === (current.edition ?? ''))
+    .sort((a, b) => Math.abs(rate(a) - (rung.bitrate ?? 0)) - Math.abs(rate(b) - (rung.bitrate ?? 0)))[0];
+}
+
+/** `pinsRenditions`: the engine holds one rendition of an HLS ladder itself (the web's); otherwise a rung of an
+ * adaptive path is offered as the server path of its height (fixedPathFor), or unavailable without one. */
+function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapshot: Snapshot | null, pinsRenditions = true): QualityOption[] {
   if (!plan) return [];
   const unplayable = (p: Path) => !!unplayableReason(p.id, snapshot);
   const originals = plan.paths
@@ -323,17 +346,23 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapsho
     if (index >= 0) ladder[index] = { ...ladder[index]!, ...entry };
     else ladder.push(entry);
   }
+  // A rung of an adaptive path the engine cannot hold is the server path of its height (fixedPathFor).
+  const held = pinsRenditions || !adapts(current);
+  const fixed = new Map(held ? [] : ladder.map(q => [q.id, fixedPathFor(plan, current!, q)] as const));
   const renditions = ladder.map(
-    (q): QualityOption => ({
-      id: q.id,
-      aliases: [],
-      resolution: resolutionOf(q),
-      traits: [q.videoCodec ? codecName(q.videoCodec) : '', rangeName(q.dynamicRange)].filter(Boolean).join(' · '),
-      rate: rate(q.bitrate),
-      needs: needs(q.bitrate),
-      disabledReason: '',
-      original: false,
-    }),
+    (q): QualityOption => {
+      const path = fixed.get(q.id);
+      return {
+        id: held || !path ? q.id : `path:${path.id}`,
+        aliases: [],
+        resolution: resolutionOf(q),
+        traits: [q.videoCodec ? codecName(q.videoCodec) : '', rangeName(q.dynamicRange)].filter(Boolean).join(' · '),
+        rate: rate(q.bitrate),
+        needs: needs(q.bitrate),
+        disabledReason: held ? '' : path ? unplayableReason(path.id, snapshot) : msg('player.qualityUnavailable'),
+        original: false,
+      };
+    },
   );
   const switchable = siblings(plan, current)
     .filter(p => !p.original && p.id !== 'primary' && !(p.kind === 'direct' && p.transport === 'file'))
@@ -361,6 +390,8 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapsho
       byResolution.set(option.resolution, option);
   }
   for (const option of [...originals, ...renditions, ...switchable]) option.aliases = [option.id];
+  // A rung offered as a server path is still that rung.
+  if (!held) ladder.forEach((q, i) => { if (renditions[i]!.id !== q.id) renditions[i]!.aliases.push(q.id); });
   for (const option of [...renditions, ...switchable]) {
     const chosen = byResolution.get(option.resolution)!;
     if (!chosen.aliases.includes(option.id)) chosen.aliases.push(option.id);
@@ -534,7 +565,7 @@ function lastFor<A extends unknown[], R>(make: (...args: A) => R): (...args: A) 
 const audioOptions = lastFor((planned: AnyTrack[], observed: AnyTrack[]) => trackOptions(planned, observed));
 const subtitleOptions = lastFor((planned: AnyTrack[], observed: AnyTrack[]) => trackOptions(planned, observed, true));
 const qualityOptions = lastFor((plan: PlaybackPlan | null, path: Path | undefined, renditions: Snapshot['renditions'] | undefined,
-  unplayable: Snapshot['unplayablePaths']) => qualities(plan, path, { renditions, unplayablePaths: unplayable } as Snapshot));
+  unplayable: Snapshot['unplayablePaths'], pinsRenditions: boolean) => qualities(plan, path, { renditions, unplayablePaths: unplayable } as Snapshot, pinsRenditions));
 const formatOf = lastFor((format: Snapshot['format']) => formatLines(format));
 const chapterMarks = lastFor((chapters: PlaybackPlan['chapters'] | undefined, duration: number): ChapterMark[] => (chapters ?? []).map(c => ({
   id: c.id,
@@ -566,6 +597,7 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
   const style = snapshot?.subtitleStyle;
   const rendition = snapshot?.backend === 'mse' || snapshot?.diagnostics?.implementation === 'vela-core';
   const playing = playingRelease(plan);
+  const auto = automatic(plan, path, rendition, snapshot?.renditions?.length ?? 0);
   return {
     state,
     playing: state === 'playing',
@@ -599,9 +631,10 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     subtitleLook: subtitleLookOf(snapshot?.subtitleStyleAvailable, style),
     subtitleOffset: style && Number.isFinite(style.offsetSeconds) ? style.offsetSeconds : null,
     // Of the report, only its renditions and unplayable paths make the rows.
-    qualities: qualityOptions(plan, path, snapshot?.renditions, snapshot?.unplayablePaths),
+    qualities: qualityOptions(plan, path, snapshot?.renditions, snapshot?.unplayablePaths, rendition),
     serverStream: unnamed ? serverStreamOf(`path:${unnamed.id}`, path?.id === unnamed.id) : undefined,
-    qualityAuto: rendition && Math.max(path?.qualities.length ?? 0, snapshot?.renditions?.length ?? 0) > 1,
+    qualityAuto: auto.offered,
+    qualityAutoId: auto.id,
     lockedQuality: lockedQuality(snapshot, path),
     qualityId: snapshot?.renditions?.some(q => q.id === snapshot.renditionId) || path?.qualities.some(q => q.id === snapshot?.renditionId)
       ? snapshot!.renditionId!
@@ -621,6 +654,18 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     reason: snapshot?.failure?.message ?? '',
     recoverable: snapshot?.failure?.recoverable ?? true,
   };
+}
+
+/**
+ * The Automatic row: an engine that picks HLS renditions itself (the web's) offers its own over a ladder of more than
+ * one (sent as null). Any other player adapts only across the plan's adaptive HLS path (Ether 0.3.25 `adaptive`):
+ * Automatic is that path, checked while it plays, and picking it from a fixed rung or the original returns to it.
+ */
+export function automatic(plan: PlaybackPlan | null, path: Path | undefined, pinsRenditions: boolean, reported = 0): { offered: boolean; id: string | null } {
+  if (pinsRenditions && Math.max(path?.qualities.length ?? 0, reported) > 1) return { offered: true, id: null };
+  const adaptive = adapts(path) ? path : plan?.paths.find(p => adapts(p) && (p.readiness === 'ready' || p.readiness === 'on-demand')
+    && (!p.sourceId || !path?.sourceId || p.sourceId === path.sourceId));
+  return adaptive ? { offered: true, id: `path:${adaptive.id}` } : { offered: false, id: null };
 }
 
 /** Where the bubble's left edge sits: centred on the target, clamped to the timeline. */

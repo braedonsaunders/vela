@@ -117,9 +117,13 @@ route drops to audio only (`[SWHost] background audio-only`), restoring the pict
 player view out of its window in the background, which `VelaPlayerView` no longer treats as leaving the
 page, and the player's JavaScript keeps a playing iPhone or iPad session (`stopsInBackground`). Apple TV,
 Android and a paused iPhone keep stopping the session as the app leaves and starting it again on return;
-previews and tiles set `backgroundPlaybackEnabled = false`. The quality menu never offers Automatic here:
-it is shown only for engines that pick HLS renditions themselves (`present.ts` `qualityAuto`); an HLS
-rung the chrome offers maps to the server path of the same height (`VelaPlan.switchTarget`).
+previews and tiles set `backgroundPlaybackEnabled = false`. The quality menu's Automatic row here is the
+plan's adaptive HLS path (Ether's multi-variant master, `present.ts` `automatic`): checked while it plays, and
+picking it from a fixed rung or the original switches back to it. AVPlayer cannot hold one rung of that master, so a
+rung the chrome offers is the server path of the same height (`present.ts` `fixedPathFor`, `VelaPlan.switchTarget`).
+A stream the network cannot keep fed moves onto the adaptive path on stalls alone (core `delivery.ts` `stepDown`);
+the bytes Aether fetches (`demuxerBytesFetched`, or AVPlayer's own transfer on its remote-HLS route) are the
+snapshot's `loadProgress`, which measures the throughput the observations report and a fixed-rung step needs.
 
 **Not available on Apple TV.** DTS bitstreaming (tvOS has no DTS output; DTS-HD MA decodes losslessly
 to PCM, DTS:X heights render as above). Any compressed passthrough other than what AVPlayer forwards

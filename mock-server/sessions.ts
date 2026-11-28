@@ -144,8 +144,16 @@ export async function createSession(owner: string, request: PlaybackRequest, pen
     ...versionData,
   };
   // A client that adapts across an HLS master itself (Ether 0.3.25 features.adaptiveHLS) gets the multi-rendition
-  // transcode as an adaptive path.
-  if (request.client.features?.adaptiveHLS) for (const path of plan.paths) if (path.id === 'transcode') path.adaptive = true;
+  // transcode as an adaptive path, and each of its rungs as a path of one quality beside it (Ether's fixed rungs), which
+  // a viewer's explicit quality switches to.
+  const adaptive = request.client.features?.adaptiveHLS ? plan.paths.find(path => path.id === 'transcode') : undefined;
+  if (adaptive) {
+    adaptive.adaptive = true;
+    for (const rung of adaptive.qualities) plan.paths.push({ id: `quality-${rung.height}p`, kind: 'transcode', transport: 'hls', readiness: 'ready',
+      url: `${base}/fixed-${rung.height}.m3u8`, mimeType: adaptive.mimeType, sourceId: adaptive.sourceId, timelineId: adaptive.timelineId,
+      quality: { width: rung.width, height: rung.height, codec: 'h264', bitrate: rung.bitrate, averageBitrate: Math.round(rung.bitrate * 0.8) },
+      qualities: [], boundaries: adaptive.boundaries });
+  }
   if (plan.versions?.length) setPlaying(plan);
   if (!request.channelId && available && request.client.mse && request.allowTranscode !== false && !faults.fallbackUnavailable) {
     const mse = await mseFixture(base);

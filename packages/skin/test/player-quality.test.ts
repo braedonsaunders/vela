@@ -223,3 +223,64 @@ test('a Plex subtitle titled with its language code and format is named by its l
     { id: 'en-sdh', name: 'English SDH SRT', detail: '' },
   ]);
 });
+
+/** Ether 0.3.25 for an adaptive-HLS client: direct play of the original, an adaptive master beside it (its ladder
+ * H.264 rungs; no source id, as Ether sends it) and fixed HEVC rungs. */
+function adaptivePlan(selected = 'adaptive-hls'): PlaybackPlan {
+  const base = { sourceId: 'src', timelineId: 'src', transport: 'hls', kind: 'transcode', qualities: [], boundaries: [] };
+  const fixed = (height: number, average: number) => ({ ...base, id: `quality-${height}p${average}`, readiness: 'on-demand',
+    quality: { width: height * 16 / 9, height, codec: 'hevc', codecStatus: 'pending', bitrate: average * 1200, averageBitrate: average * 1000 } });
+  return { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, selectedPathId: selected, paths: [
+    { ...base, id: 'primary', kind: 'direct', transport: 'file', readiness: 'ready', original: true, originalVideo: { codec: 'h264', width: 1920, height: 1080 } },
+    { kind: 'transcode', transport: 'hls', id: 'adaptive-hls', adaptive: true, readiness: 'ready', boundaries: [],
+      qualities: [[720, 4_200_000], [480, 1_700_000], [360, 1_000_000]].map(([height, bitrate]) => ({ id: `rung-${height}`, width: height! * 16 / 9, height, bitrate, videoCodec: 'avc1.64001f' })) },
+    fixed(1080, 8640), fixed(720, 6640), fixed(720, 4640), fixed(480, 2140),
+  ], audioTracks: [], subtitleTracks: [] } as unknown as PlaybackPlan;
+}
+const aether = (sourceId: string, extra: Partial<Snapshot> = {}) => ({ sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId, state: 'playing',
+  renditions: [], renditionId: null, lockedQuality: null, backend: 'aether-hls', throughputHistory: [], capabilities: {}, ...extra }) as unknown as Snapshot;
+
+test('while the adaptive path plays on a native player, Automatic is offered and checked, with the rung playing as detail', () => {
+  const view = present(adaptivePlan(), aether('adaptive-hls', { video: { width: 852, height: 480, codec: 'h264' } } as Partial<Snapshot>));
+  expect(view.qualityAuto).toBe(true);
+  expect(view.qualityAutoId).toBe('path:adaptive-hls');
+  expect(view.lockedQuality).toBe('');
+  expect(view.quality).toContain('480p');
+  // Before the first report too.
+  expect(present(adaptivePlan(), null).qualityAuto).toBe(true);
+});
+
+test('a rung of the adaptive ladder is the server path of its height on a native player, the nearest rate', () => {
+  const view = present(adaptivePlan(), aether('adaptive-hls'));
+  const rung720 = view.qualities.find(q => q.resolution === '720p')!;
+  // The 4.2 Mbit/s rung: the 4.6 Mbit/s fixed rung, not the 6.6.
+  expect(rung720.id).toBe('path:quality-720p4640');
+  expect(rung720.aliases).toContain('rung-720');
+  expect(rung720.disabledReason).toBe('');
+  // No fixed path of 360p: shown, but it cannot be held.
+  expect(view.qualities.find(q => q.resolution === '360p')!.disabledReason).not.toBe('');
+});
+
+test('on a fixed rung or the original, Automatic is offered unchecked and returns to the adaptive path', () => {
+  const rung = present(adaptivePlan('quality-720p4640'), aether('quality-720p4640'));
+  expect(rung.qualityAuto).toBe(true);
+  expect(rung.qualityAutoId).toBe('path:adaptive-hls');
+  expect(rung.lockedQuality).toBe('path:quality-720p4640');
+  const original = present(adaptivePlan('primary'), aether('primary'));
+  expect(original.qualityAuto).toBe(true);
+  expect(original.lockedQuality).toBe('path:primary');
+  expect(qualityReached('path:adaptive-hls', aether('adaptive-hls', { waiting: false } as Partial<Snapshot>), adaptivePlan())).toBe(true);
+});
+
+test('without an adaptive path a native player has no Automatic row; the web keeps its own rendition choice', () => {
+  const none = adaptivePlan('primary'); none.paths = none.paths.filter(path => !path.adaptive);
+  expect(present(none, aether('primary')).qualityAuto).toBe(false);
+  // The web engine picks HLS renditions itself: its Automatic is its own (null), and a rung stays a rung.
+  const web = present(plan(), { sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId: 'hls', backend: 'mse', renditions: [], throughputHistory: [], capabilities: {} } as unknown as Snapshot);
+  expect(web.qualityAuto).toBe(true);
+  expect(web.qualityAutoId).toBeNull();
+  expect(web.qualities.find(q => q.resolution === '1080p')!.id).toBe('hls-1080');
+  const webAdaptive = present(adaptivePlan(), aether('adaptive-hls', { backend: 'mse' } as Partial<Snapshot>));
+  expect(webAdaptive.qualityAutoId).toBeNull();
+  expect(webAdaptive.qualities.find(q => q.resolution === '720p')!.id).toBe('rung-720');
+});

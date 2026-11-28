@@ -367,6 +367,21 @@ describe('mock server: catalogue and live', () => {
     expect(adaptive.paths.find(path => path.id === 'transcode')?.adaptive).toBe(true);
     const plain = await (await start()).json() as V.PlaybackPlan;
     expect(plain.paths.some(path => path.adaptive)).toBe(false);
+    expect(plain.paths.some(path => path.id.startsWith('quality-'))).toBe(false);
+    // Each rung is a fixed path beside it, a playlist of that one rung.
+    const rungs = adaptive.paths.filter(path => path.id.startsWith('quality-'));
+    expect(rungs.map(path => path.quality?.height)).toEqual([360, 540, 720]);
+    const playlist = await (await fetch(new URL(rungs[0]!.url!, `${mock.url}/vela/v0/`))).text();
+    expect(playlist).toContain('v360/index.m3u8');
+    expect(playlist).not.toContain('v720/index.m3u8');
+    expect(playlist).toContain('a_en/index.m3u8');
+    // A native player switches from where it plays: the adaptive path starts at the boundary before it.
+    const at = { sourceGeneration: adaptive.sourceGeneration, seekGeneration: adaptive.seekGeneration };
+    const switched = await post(`/sessions/${adaptive.sessionId}/commands`, { kind: 'switch', pathId: 'transcode', atSeconds: 13.7, ...at, idempotencyKey: key() }, authed(tokens));
+    expect(switched.status).toBe(200);
+    const after = await switched.json() as V.PlaybackPlan;
+    expect(after.selectedPathId).toBe('transcode');
+    expect(after.positionSeconds).toBe(12);
   });
 
   test.skipIf(!mediaGenerated)('a switch by bitrate takes the best rung under the cap, at the session position; none fits is 422', async () => {
