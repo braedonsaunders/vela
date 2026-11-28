@@ -90,6 +90,10 @@ status=0
 (
   # Match CI: use only the local export and mock fixtures for every request.
   unset VELA_E2E_SERVER
+  if [ "$(uname -s)" = Linux ]; then
+    # WebKitGTK can prefer host VA-API decoders over the software decoder used in CI.
+    export GST_PLUGIN_FEATURE_RANK=avdec_h264:512
+  fi
   run_gate "deterministic web gate (Chromium + WebKit)" --config e2e.mock.config.ts --target mock-chromium,mock-webkit
 ) || status=1
 run_gate "lab web gate (Chromium + WebKit)" --target chromium,webkit || status=1

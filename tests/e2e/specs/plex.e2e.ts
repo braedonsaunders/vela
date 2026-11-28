@@ -72,7 +72,7 @@ describe('Plex-mode release gate', { session: 'lab-viewer' }, () => {
     const scrubber = screen.getByTestId('player-scrub');
     await expect(scrubber).toBeEnabled({ timeout: 30_000 });
     const seekPosition = 225;
-    const captionPosition = 242;
+    const captionPosition = 243;
     const duration = Number(await scrubber.getAttribute('aria-valuemax'));
     expect(duration).toBeGreaterThan(captionPosition);
     const box = await scrubber.boundingBox();
