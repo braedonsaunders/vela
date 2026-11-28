@@ -79,6 +79,12 @@ direct/native/muxed paths and live remain unchanged. The descriptor is local bui
 metadata, not an unauthenticated HTTP resource. Media resources use session grants
 and the same fault injection as muxed segments.
 
+A client declaring `features.adaptiveHLS` (Vela's native apps) gets the `transcode` master marked `adaptive`
+beside direct play, and each of its rungs as a fixed path (`quality-360p`, `quality-540p`, `quality-720p`, each a
+one-variant playlist `fixed-<height>.m3u8` with both audio renditions), as Ether 0.3.25 offers them. A `switch` to the
+adaptive path or a fixed rung from a position between boundaries (a native player's own position) starts at the
+boundary at or before it, as Ether does; every other path still needs a proven boundary.
+
 `bun mock-server/scripts/make-media.ts --ts-only` adds `ts360/`, `ts540/`,
 `ts720/` and `ts-master.m3u8` for native MPEG-TS HLS qualification (full generation
 also creates them). It remuxes the existing English muxed variants, refuses to
