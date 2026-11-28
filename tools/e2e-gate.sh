@@ -47,7 +47,7 @@ mkdir -p "$session_parent"
 chmod 700 "$session_parent"
 session_dir=$(mktemp -d "$session_parent/lab-sessions.XXXXXX")
 export VELA_E2E_SESSION_DIR=$session_dir
-export VELA_E2E_STATIC_ROOT=${VELA_E2E_STATIC_ROOT:-$session_dir/web}
+export VELA_E2E_STATIC_ROOT=$session_dir/web
 
 cleanup_sessions() {
   [ -n "$session_dir" ] || return 0
@@ -57,15 +57,12 @@ cleanup_sessions() {
 }
 trap 'cleanup_sessions || true' EXIT
 
-if [ ! -f "$VELA_E2E_STATIC_ROOT/index.html" ]; then
-  echo "==> export current Vela web build"
-  (
-    cd apps/vela
-    VELA_WEB_BASE=/vela \
-      EXPO_PUBLIC_VELA_PLAYER_ASSETS=0000000000000000000000000000000000000000000000000000000000000000 \
-      "$VELA_E2E_BUN" x expo export --platform web --output-dir "$VELA_E2E_STATIC_ROOT"
-  )
-fi
+echo "==> export current Vela web build"
+(
+  cd apps/vela
+  EXPO_PUBLIC_VELA_PLAYER_ASSETS=0000000000000000000000000000000000000000000000000000000000000000 \
+    "$VELA_E2E_BUN" run export:web --output-dir "$VELA_E2E_STATIC_ROOT"
+)
 
 if [ ! -f "$VELA_MOCK_MEDIA_ROOT/master.m3u8" ] || [ ! -f "$VELA_MOCK_MEDIA_ROOT/mse.json" ]; then
   "$VELA_E2E_BUN" mock-server/scripts/make-media.ts
@@ -90,7 +87,11 @@ run_gate() {
 }
 
 status=0
-run_gate "deterministic web gate (Chromium + WebKit)" --config e2e.mock.config.ts --target mock-chromium,mock-webkit || status=1
+(
+  # Match CI: use only the local export and mock fixtures for every request.
+  unset VELA_E2E_SERVER
+  run_gate "deterministic web gate (Chromium + WebKit)" --config e2e.mock.config.ts --target mock-chromium,mock-webkit
+) || status=1
 run_gate "lab web gate (Chromium + WebKit)" --target chromium,webkit || status=1
 cleanup_sessions || status=1
 

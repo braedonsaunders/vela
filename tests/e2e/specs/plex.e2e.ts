@@ -10,6 +10,7 @@ describe('Plex-mode release gate', { session: 'lab-viewer' }, () => {
     test.skip(!process.env.VELA_E2E_PLEX_TOKEN_FILE, 'Plex owner token is not configured');
 
     const plexClientIds = new Set<string>();
+    let requestedBurnedSubtitles = false;
     const plexDirect = /^https:\/\/[^/]+\.plex\.direct(?::\d+)?\//;
     await browser.route(plexDirect, async route => {
       const url = new URL(route.request.url);
@@ -19,6 +20,10 @@ describe('Plex-mode release gate', { session: 'lab-viewer' }, () => {
       }
       const id = route.request.headers['x-plex-client-identifier'];
       if (id) plexClientIds.add(id);
+      if (url.pathname.startsWith('/video/:/transcode/universal/')
+        && url.searchParams.get('subtitles') === 'burn') {
+        requestedBurnedSubtitles = true;
+      }
       if (url.pathname === '/:/timeline') {
         await route.fulfill({ status: 200, body: '' });
         return;
@@ -60,23 +65,22 @@ describe('Plex-mode release gate', { session: 'lab-viewer' }, () => {
     const englishPgs = screen.getByRole('radio', /^(?:English, |en )PGS$/);
     await expect(englishPgs).toBeVisible({ timeout: 30_000 });
     await expect(englishPgs).toBeChecked();
+    expect(requestedBurnedSubtitles).toBe(true);
     await expect(screen.getByRole('radio', 'Off')).toBeVisible();
     await screen.getByTestId('player-cc-button').tap();
-    await browser.evaluate(() => {
-      const visit = (root: Document | ShadowRoot): HTMLVideoElement | null => {
-        const direct = root.querySelector('video');
-        if (direct) return direct;
-        for (const element of root.querySelectorAll<HTMLElement>('*')) {
-          const found = element.shadowRoot ? visit(element.shadowRoot) : null;
-          if (found) return found;
-        }
-        return null;
-      };
-      const video = visit(document);
-      if (video) video.currentTime = 225;
-      return null;
-    });
-    await new Promise<void>(resolve => setTimeout(resolve, 5_000));
+    // Seek through the player so a server-controlled transcode can request a new stream.
+    const scrubber = screen.getByTestId('player-scrub');
+    await expect(scrubber).toBeEnabled({ timeout: 30_000 });
+    const seekPosition = 225;
+    const captionPosition = 242;
+    const duration = Number(await scrubber.getAttribute('aria-valuemax'));
+    expect(duration).toBeGreaterThan(captionPosition);
+    const box = await scrubber.boundingBox();
+    expect(box).not.toBeNull();
+    await scrubber.tap({ position: { x: box!.width * seekPosition / duration, y: box!.height / 2 } });
+    // Wait for the burned-in cue, beyond the slider's optimistic seek position.
+    await expect.poll(async () => Number(await scrubber.getAttribute('aria-valuenow')), { timeout: 45_000 })
+      .toBeGreaterThanOrEqual(captionPosition);
     await expect(screen.getByRole('button', 'Pause')).toBeVisible();
     await app.screenshot('plex-burn-in-captions');
 
