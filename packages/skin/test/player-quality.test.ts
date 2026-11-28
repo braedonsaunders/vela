@@ -223,3 +223,40 @@ test('a Plex subtitle titled with its language code and format is named by its l
     { id: 'en-sdh', name: 'English SDH SRT', detail: '' },
   ]);
 });
+
+test('on a player that adapts itself (Media3, AVPlayer), the plan\'s adaptive master is the Automatic row, and its rungs are not pinnable rows', () => {
+  // The lab's plan for an opted-in Android TV client (Ether 0.3.25, 2026-11-27): the direct original selected, an
+  // adaptive master beside it whose qualities are its rungs, and fixed HEVC rungs.
+  const base = { sourceId: 'src', timelineId: 'src', qualities: [], boundaries: [] };
+  const lab = (selected: string) => ({ sessionId: 's', sourceGeneration: 1, seekGeneration: 1, selectedPathId: selected, paths: [
+    { ...base, id: 'primary', kind: 'direct', transport: 'file', readiness: 'ready', original: true, originalVideo: { codec: 'h264', width: 1920, height: 1080 },
+      adaptiveUnavailable: { reason: 'original_selected', message: 'The selected original file plays at its source quality.' } },
+    { ...base, id: 'adaptive-hls', kind: 'transcode', transport: 'hls', readiness: 'ready', adaptive: true,
+      qualities: [['base', 720, 5_030_000], ['480p1500k-h264-sdr', 480, 2_030_000], ['360p800k-h264-sdr', 360, 1_190_000]]
+        .map(([id, height, bitrate]) => ({ id, width: Math.round(Number(height) * 16 / 9), height, bitrate, videoCodec: 'avc1.64001f' })) },
+    { ...base, id: 'quality-1080p20000k-hevc-sdr', kind: 'transcode', transport: 'hls', readiness: 'on-demand',
+      quality: { width: 1920, height: 1080, codec: 'hevc', bitrate: 24_075_000 }, adaptiveUnavailable: { reason: 'fixed_quality_selected' } },
+  ], audioTracks: [], subtitleTracks: [] }) as unknown as PlaybackPlan;
+  const media3 = (sourceId: string) => ({ sessionId: 's', sourceGeneration: 1, seekGeneration: 1, sourceId, renditions: [], throughputHistory: [],
+    diagnostics: { implementation: 'media3' }, capabilities: { pip: false, fullscreen: false, audioSwitch: false } }) as unknown as Snapshot;
+
+  // Playing the adaptive master: Automatic, selected, and no rung row that the player cannot pin.
+  const adaptive = present(lab('adaptive-hls'), media3('adaptive-hls'));
+  expect(adaptive.qualityAuto).toBe(true);
+  expect(adaptive.autoPath).toBe('path:adaptive-hls');
+  expect(adaptive.lockedQuality).toBe('');
+  expect(adaptive.qualities.map(q => q.id)).toEqual(['path:primary', 'path:quality-1080p20000k-hevc-sdr']);
+  // Playing the original: Automatic is offered (choosing it switches to the master), the original is the locked choice.
+  const direct = present(lab('primary'), media3('primary'));
+  expect(direct.qualityAuto).toBe(true);
+  expect(direct.autoPath).toBe('path:adaptive-hls');
+  expect(direct.lockedQuality).toBe('path:primary');
+  expect(qualityReached('path:adaptive-hls', { ...media3('adaptive-hls'), state: 'playing', waiting: false } as Snapshot, lab('adaptive-hls'))).toBe(true);
+  // An engine that pins renditions itself (MSE) keeps the master's rungs and its own Automatic.
+  const mse = present(lab('adaptive-hls'), { ...media3('adaptive-hls'), backend: 'mse', diagnostics: { implementation: 'mse' } } as unknown as Snapshot);
+  expect(mse.autoPath).toBe('');
+  expect(mse.qualities.map(q => q.id)).toContain('480p1500k-h264-sdr');
+  // A plan without an adaptive path changes nothing.
+  const plain = lab('primary'); plain.paths = plain.paths.filter(p => p.id !== 'adaptive-hls');
+  expect(present(plain, media3('primary'))).toMatchObject({ qualityAuto: false, autoPath: '' });
+});

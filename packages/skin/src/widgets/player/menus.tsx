@@ -253,9 +253,13 @@ export function qualityMenuRows({ look, view, plan, blocked, send, switchVersion
         name={hasVersions ? msg('player.quality.automatic') : msg('player.auto')}
         detail={blocked ? msg('player.qualityUnavailable') : view.lockedQuality ? '' : view.quality}
         selected={!view.lockedQuality}
-        pending={pendingQualityId === 'auto'}
+        pending={pendingQualityId === 'auto' || (!!view.autoPath && pendingQualityId === view.autoPath)}
         enabled={!blocked}
-        onChoose={() => send({ type: 'quality', renditionId: null })}
+        // A player that adapts across the plan's adaptive master itself reaches Automatic by switching to that path.
+        onChoose={() => {
+          if (!view.autoPath) send({ type: 'quality', renditionId: null });
+          else if (view.lockedQuality) send({ type: 'quality', renditionId: view.autoPath });
+        }}
       />
     ) : null,
     ...(hasVersions ? converted : groups.converted).map(qualityRow),

@@ -96,6 +96,9 @@ export interface PlayerView {
   serverStream?: { choice: string; selected: boolean };
   /** The engine picks the rendition itself unless one is locked. */
   qualityAuto: boolean;
+  /** The choice behind the Automatic row on a player that adapts across the plan's adaptive HLS master itself
+   * (Media3, AVPlayer): `path:<adaptive path>`; '' where Automatic is the engine's own rendition choice. */
+  autoPath: string;
   lockedQuality: string;
   /** The quality playing: a rendition id, or `path:<id>` for a path of one quality. */
   qualityId: string;
@@ -286,7 +289,14 @@ export function unplayableReason(pathId: string, snapshot: Snapshot | null): str
   return msg(reason === 'insecure-page' ? 'player.qualityReason.insecurePage' : 'player.qualityReason.browser');
 }
 
-function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapshot: Snapshot | null): QualityOption[] {
+/** The plan's adaptive HLS master for what plays (Ether 0.3.25 `adaptive`): the playing path or one beside it. */
+function adaptivePathOf(plan: PlaybackPlan | null, current: Path | undefined): Path | undefined {
+  if (!plan) return undefined;
+  const adapts = (p: Path) => p.adaptive === true && p.transport === 'hls' && (p.readiness === 'ready' || p.readiness === 'on-demand');
+  return current && adapts(current) ? current : siblings(plan, current).find(adapts);
+}
+
+function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapshot: Snapshot | null, pinnable = true): QualityOption[] {
   if (!plan) return [];
   const unplayable = (p: Path) => !!unplayableReason(p.id, snapshot);
   const originals = plan.paths
@@ -314,8 +324,9 @@ function qualities(plan: PlaybackPlan | null, current: Path | undefined, snapsho
     });
   // Plex/Jellyfin may publish a fixed HLS URL; its ladder arrives from the
   // engine's manifest probe rather than the server plan.
-  const ladder = [...(current?.qualities ?? [])];
-  for (const q of snapshot?.renditions ?? []) {
+  // An adaptive master on a player that adapts itself has no rendition to pin: its rungs are the Automatic row's.
+  const ladder = pinnable ? [...(current?.qualities ?? [])] : [];
+  for (const q of pinnable ? snapshot?.renditions ?? [] : []) {
     if (!q.height || !q.width) continue;
     const entry = { id: q.id, width: q.width, height: q.height, bitrate: q.bitrateBps || q.bandwidth,
       videoCodec: q.codec ?? '', dynamicRange: q.dynamicRange, codecStatus: q.codecStatus, url: '' };
@@ -532,7 +543,7 @@ function lastFor<A extends unknown[], R>(make: (...args: A) => R): (...args: A) 
 const audioOptions = lastFor((planned: AnyTrack[], observed: AnyTrack[]) => trackOptions(planned, observed));
 const subtitleOptions = lastFor((planned: AnyTrack[], observed: AnyTrack[]) => trackOptions(planned, observed, true));
 const qualityOptions = lastFor((plan: PlaybackPlan | null, path: Path | undefined, renditions: Snapshot['renditions'] | undefined,
-  unplayable: Snapshot['unplayablePaths']) => qualities(plan, path, { renditions, unplayablePaths: unplayable } as Snapshot));
+  unplayable: Snapshot['unplayablePaths'], pinnable: boolean) => qualities(plan, path, { renditions, unplayablePaths: unplayable } as Snapshot, pinnable));
 const formatOf = lastFor((format: Snapshot['format']) => formatLines(format));
 const chapterMarks = lastFor((chapters: PlaybackPlan['chapters'] | undefined, duration: number): ChapterMark[] => (chapters ?? []).map(c => ({
   id: c.id,
@@ -563,6 +574,8 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
   const facts = stats(snapshot);
   const style = snapshot?.subtitleStyle;
   const rendition = snapshot?.backend === 'mse' || snapshot?.diagnostics?.implementation === 'vela-core';
+  // A player that does not pin HLS renditions adapts across the plan's adaptive master by itself: Automatic is that path.
+  const adaptive = rendition ? undefined : adaptivePathOf(plan, path);
   const playing = playingRelease(plan);
   return {
     state,
@@ -597,9 +610,10 @@ export function present(plan: PlaybackPlan | null, own: Snapshot | null): Player
     subtitleLook: subtitleLookOf(snapshot?.subtitleStyleAvailable, style),
     subtitleOffset: style && Number.isFinite(style.offsetSeconds) ? style.offsetSeconds : null,
     // Of the report, only its renditions and unplayable paths make the rows.
-    qualities: qualityOptions(plan, path, snapshot?.renditions, snapshot?.unplayablePaths),
+    qualities: qualityOptions(plan, path, snapshot?.renditions, snapshot?.unplayablePaths, !(adaptive && adaptive.id === path?.id)),
     serverStream: unnamed ? serverStreamOf(`path:${unnamed.id}`, path?.id === unnamed.id) : undefined,
-    qualityAuto: rendition && Math.max(path?.qualities.length ?? 0, snapshot?.renditions?.length ?? 0) > 1,
+    qualityAuto: !!adaptive || (rendition && Math.max(path?.qualities.length ?? 0, snapshot?.renditions?.length ?? 0) > 1),
+    autoPath: adaptive ? `path:${adaptive.id}` : '',
     lockedQuality: lockedQuality(snapshot, path),
     qualityId: snapshot?.renditions?.some(q => q.id === snapshot.renditionId) || path?.qualities.some(q => q.id === snapshot?.renditionId)
       ? snapshot!.renditionId!
