@@ -127,3 +127,35 @@ test('an adaptive path offered beside what plays is preferred over any fixed run
   // Playing it already: the player adapts, nothing to step to.
   expect(stepDown(watch, plan({ paths: offered.paths, selectedPathId: 'adaptive' }), 45_000, { adaptive: playerAdapts(plan({ paths: offered.paths, selectedPathId: 'adaptive' })) })).toBeNull();
 });
+
+test('waits after seeks the engine makes itself (the TV chrome\'s 10 s steps) are not evidence; a starved stream still is', () => {
+  // tx1-box, 2026-11-27: direct play on a healthy link, five 10 s steps 2-3 s apart and a scrub, each followed by a
+  // 1-6 s refill at the same generations. Before, that read as six stalls and stepped a healthy original down.
+  const at = (t: number) => t * 1000;
+  let watch = deliveryWatch(), position = 0, bytes = 0, last = 0;
+  const hear = (t: number, state: string, jump = 0) => {
+    if (state === 'playing') position += t - last;
+    position += jump;
+    bytes += 500_000 * (t - last);
+    last = t;
+    watch = heardDelivery(watch, { sessionId: 's1', sourceGeneration: 1, seekGeneration: 1, state, loadProgress: bytes, bufferAheadSeconds: 3, seekTarget: null, position, speed: 1 }, at(t));
+  };
+  for (let t = 0; t <= 31; t += 0.25) hear(t, 'playing');
+  for (const start of [31.25, 33.5, 35.75, 38, 40.25]) {
+    hear(start, 'buffering', 10);
+    for (let t = start + 0.25; t < start + 1.5; t += 0.25) hear(t, 'buffering');
+    for (let t = start + 1.5; t < start + 2.25; t += 0.25) hear(t, 'playing');
+  }
+  for (let t = 42.5; t < 66; t += 0.25) hear(t, 'playing');
+  hear(66, 'buffering', 30);
+  for (let t = 66.25; t <= 72; t += 0.25) hear(t, 'buffering');
+  for (let t = 72.25; t <= 73; t += 0.25) hear(t, 'playing');
+  expect(deliveryEvidence(watch).stalls).toBe(0);
+  expect(stepDown(watch, plan(), at(73))).toBeNull();
+  // A backward step is a seek too; the position held still through a wait is not.
+  expect(heardDelivery(watch, { sessionId: 's1', sourceGeneration: 1, seekGeneration: 1, state: 'buffering', position: position - 10, speed: 1 }, at(73.25)).marks).toHaveLength(1);
+  // A starved stream whose position moves only while it plays still steps down.
+  watch = deliveryWatch(); position = 0; bytes = 0; last = 0;
+  for (let t = 0; t <= 45; t += 0.25) hear(t, starved(t));
+  expect(stepDown(watch, plan(), at(45))).toMatchObject({ pathId: 'quality-720p4000k' });
+});

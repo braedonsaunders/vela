@@ -3,7 +3,9 @@
 // second. Such a session steps down to one of the plan's server transcodes (its `paths`, the quality
 // menu's choices) whose rate the measured throughput carries with room to spare. Only evidence counts:
 // playback that keeps stopping to wait for media while the player is loading flat out. A start, a seek
-// or a switch (new generations) starts the evidence over, so their own waits never count, and steps only
+// or a switch starts the evidence over, so their own waits never count: a switch and a server seek bring
+// new generations, and a seek the engine makes itself (the TV chrome's 10 s steps, a scrub, a chapter) moves
+// the position further than the clock explains. Steps only
 // ever go down: a viewer who wants more picks it in the quality menu, and that pick is never undone here.
 // Pure: the caller owns the clock.
 import type { PlaybackPath, PlaybackPlan } from './wire';
@@ -18,9 +20,12 @@ export interface DeliverySample {
   /** Media bytes received so far by this engine (Snapshot.loadProgress on Android); only growth counts. */
   loadProgress?: number | null;
   bufferAheadSeconds?: number | null;
+  /** Where playback stands (seconds) and how fast it moves: a jump the clock does not explain is a seek. */
+  position?: number | null;
+  speed?: number | null;
 }
 
-interface Mark { at: number; bytes: number | null; state: string; ahead: number }
+interface Mark { at: number; bytes: number | null; state: string; ahead: number; position: number | null }
 
 export interface DeliveryWatch {
   /** `session:source:seek`: evidence belongs to one source at one seek. */
@@ -44,22 +49,36 @@ const FULL_BUFFER_SECONDS = 40;
 export const HEADROOM = 0.65;
 /** A step goes at least this far down, or it is not worth a switch. */
 const MEANINGFUL = 0.85;
+/** A position this far ahead of what the clock explains, or this far behind where it was, is a seek (a wait
+ * only ever holds the position still). */
+const SEEK_AHEAD_SECONDS = 2;
+const SEEK_BACK_SECONDS = 1;
 
 export function deliveryWatch(): DeliveryWatch {
   return { key: '', playedAt: null, marks: [] };
 }
 
 const keyOf = (s: DeliverySample) => `${s.sessionId ?? ''}:${s.sourceGeneration ?? 0}:${s.seekGeneration ?? 0}`;
+const finite = (value: number | null | undefined): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+/** Whether the position moved since the last mark in a way playing does not: a seek the engine made itself. */
+function seeked(last: Mark | undefined, position: number | null, speed: number | null, now: number): boolean {
+  if (!last || last.position === null || position === null) return false;
+  const moved = position - last.position;
+  const explained = Math.max(0, now - last.at) / 1000 * (speed !== null && speed > 0 ? speed : 1);
+  return moved > explained + SEEK_AHEAD_SECONDS || moved < -SEEK_BACK_SECONDS;
+}
 
 /** Fold a snapshot in. */
 export function heardDelivery(watch: DeliveryWatch, sample: DeliverySample, now: number): DeliveryWatch {
   const key = keyOf(sample);
-  const fresh = key !== watch.key;
   const state = sample.state ?? 'loading';
+  const position = finite(sample.position);
+  const fresh = key !== watch.key || seeked(watch.marks.at(-1), position, finite(sample.speed), now);
   // A seek in flight waits for the viewer's new position, not for the network.
-  if (sample.seekTarget != null && !fresh) return watch;
-  const bytes = typeof sample.loadProgress === 'number' && Number.isFinite(sample.loadProgress) ? sample.loadProgress : null;
-  const mark: Mark = { at: now, bytes, state, ahead: sample.bufferAheadSeconds ?? 0 };
+  if (sample.seekTarget != null && key === watch.key) return watch;
+  const bytes = finite(sample.loadProgress);
+  const mark: Mark = { at: now, bytes, state, ahead: sample.bufferAheadSeconds ?? 0, position };
   const marks = (fresh ? [] : watch.marks).filter(m => now - m.at <= WINDOW_MS);
   marks.push(mark);
   const playedAt = fresh ? (state === 'playing' ? now : null) : watch.playedAt ?? (state === 'playing' ? now : null);
