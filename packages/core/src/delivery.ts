@@ -32,6 +32,8 @@ export interface DeliveryWatch {
   key: string;
   /** When playback first played at these generations (ms), or null before it has. */
   playedAt: number | null;
+  /** Start and most recent wait of the current stretch of recurring buffering. */
+  stalling: { since: number; last: number } | null;
   /** Snapshots in the last WINDOW_MS, oldest first. */
   marks: Mark[];
 }
@@ -40,6 +42,10 @@ export interface DeliveryWatch {
 export const WINDOW_MS = 60_000;
 /** Playing this long at the generations, at least, before a step: one hiccup after a start is not a verdict. */
 export const EVIDENCE_MS = 30_000;
+/** Time to give Ether after a stretch of recurring stalls begins. */
+export const SERVER_HANDOFF_GRACE_MS = 45_000;
+/** Ether's repeat-buffering window. A recovery this long starts a new stretch. */
+const SERVER_HANDOFF_EPISODE_WINDOW_MS = 30_000;
 /** Waits for media (after playing) in the window, and the share of the wanted time they took, that make a stall. */
 export const STALLS = 2;
 export const STALLED_SHARE = 0.2;
@@ -55,7 +61,7 @@ const SEEK_AHEAD_SECONDS = 2;
 const SEEK_BACK_SECONDS = 1;
 
 export function deliveryWatch(): DeliveryWatch {
-  return { key: '', playedAt: null, marks: [] };
+  return { key: '', playedAt: null, stalling: null, marks: [] };
 }
 
 const keyOf = (s: DeliverySample) => `${s.sessionId ?? ''}:${s.sourceGeneration ?? 0}:${s.seekGeneration ?? 0}`;
@@ -74,7 +80,8 @@ export function heardDelivery(watch: DeliveryWatch, sample: DeliverySample, now:
   const key = keyOf(sample);
   const state = sample.state ?? 'loading';
   const position = finite(sample.position);
-  const fresh = key !== watch.key || seeked(watch.marks.at(-1), position, finite(sample.speed), now);
+  const previous = watch.marks.at(-1);
+  const fresh = key !== watch.key || seeked(previous, position, finite(sample.speed), now);
   // A seek in flight waits for the viewer's new position, not for the network.
   if (sample.seekTarget != null && key === watch.key) return watch;
   const bytes = finite(sample.loadProgress);
@@ -82,7 +89,16 @@ export function heardDelivery(watch: DeliveryWatch, sample: DeliverySample, now:
   const marks = (fresh ? [] : watch.marks).filter(m => now - m.at <= WINDOW_MS);
   marks.push(mark);
   const playedAt = fresh ? (state === 'playing' ? now : null) : watch.playedAt ?? (state === 'playing' ? now : null);
-  return { key, playedAt, marks };
+  let stalling = fresh ? null : watch.stalling;
+  if (!fresh && state === 'buffering' && previous?.state === 'playing') {
+    const since = stalling && now - stalling.last < SERVER_HANDOFF_EPISODE_WINDOW_MS ? stalling.since : now;
+    stalling = { since, last: now };
+  } else if (stalling && (state === 'buffering' || previous?.state === 'buffering')) {
+    stalling = { ...stalling, last: now };
+  } else if (stalling && now - stalling.last >= SERVER_HANDOFF_EPISODE_WINDOW_MS) {
+    stalling = null;
+  }
+  return { key, playedAt, stalling, marks };
 }
 
 export interface DeliveryEvidence {
@@ -168,6 +184,8 @@ export interface StepOptions {
   bitrateSwitch?: boolean;
   /** The plan's own playlist adapts (Ether's multi-variant HLS): the player steps down on its own. */
   adaptive?: boolean;
+  /** The server can switch an eligible original to adaptive HLS on its own. */
+  serverHandoff?: boolean;
   /** The viewer chose a quality in this session (a rung, the original, Automatic): an automatic step never
    * overrides it. */
   viewerChose?: boolean;
@@ -194,6 +212,8 @@ export function stepDown(watch: DeliveryWatch, plan: PlaybackPlan | null, now: n
   if (watch.key !== `${plan.sessionId}:${plan.sourceGeneration}:${plan.seekGeneration}`) return null;
   const evidence = deliveryEvidence(watch);
   if (evidence.stalls < STALLS || evidence.stalledShare < STALLED_SHARE) return null;
+  if (options.serverHandoff && plan.serverHandoff === 'pending'
+    && (!watch.stalling || now - watch.stalling.since < SERVER_HANDOFF_GRACE_MS)) return null;
   // An adaptive path offered beside what plays (direct play, a fixed rung) beats any fixed rung: the player then
   // follows the network down and back up on its own.
   const adaptive = adaptivePath(plan);

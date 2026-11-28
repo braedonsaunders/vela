@@ -85,6 +85,11 @@ one-variant playlist `fixed-<height>.m3u8` with both audio renditions), as Ether
 adaptive path or a fixed rung from a position between boundaries (a native player's own position) starts at the
 boundary at or before it, as Ether does; every other path still needs a proven boundary.
 
+Set `serverHandoffObservations` through `POST /__admin/faults` to advertise server handoff and start
+eligible VOD plans as pending. That many buffering observations at the same generations complete
+the handoff via SSE. Set it to zero to disable the fault. With the generated media and Chrome
+available, run `VELA_HANDOFF_E2E=1 bun test apps/vela/test/e2e/server-handoff.test.ts` from the root.
+
 `bun mock-server/scripts/make-media.ts --ts-only` adds `ts360/`, `ts540/`,
 `ts720/` and `ts-master.m3u8` for native MPEG-TS HLS qualification (full generation
 also creates them). It remuxes the existing English muxed variants, refuses to

@@ -176,6 +176,8 @@ const COLD_VERSIONS_SECONDS = 4;
 const TRICKPLAY_OFFER_MS = 20_000;
 
 export class Playback {
+  get serverHandoff(): boolean { return this.session.features?.adaptiveHLS?.serverHandoff === true; }
+
   /** The current playback's own token: work for an older one stops when this changes. */
   private run: object | undefined;
   private abandoned: V.PlaybackPlan | null = null;
