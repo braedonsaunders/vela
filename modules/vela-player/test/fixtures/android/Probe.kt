@@ -111,6 +111,8 @@ fun main() {
   check(!missingSupportedVideo(false, false, false, true))
   check(!missingSupportedVideo(true, true, true, true))
   check(!missingSupportedVideo(true, false, false, false))
+  check(localMedia("file") && localMedia("content"))
+  check(!localMedia("https") && !localMedia("http") && !localMedia(null))
   check(originalLostResponse(409, "original_lost"))
   check(!originalLostResponse(409, "other"))
   check(!originalLostResponse(410, "original_lost"))

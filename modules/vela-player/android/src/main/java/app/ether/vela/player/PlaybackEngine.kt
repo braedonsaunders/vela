@@ -146,6 +146,8 @@ internal class Media3Engine(
   private var timeshiftSeek: Double? = null
   private var reportTimeshiftEviction = false
   private var refused = false
+  /** The media is a file on the device (a download): nothing to fall back to. */
+  private var localFile = false
   private var loggedLiveWindow = false
   private val choices = mutableMapOf<Long, Pair<Tracks.Group, Int>>()
   private val liveWindow = Timeline.Window()
@@ -224,7 +226,7 @@ internal class Media3Engine(
         updateTracks(tracks)
         // ExoPlayer can otherwise play supported audio while silently omitting unsupported video.
         val video = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
-        if (!refused && missingSupportedVideo(tracks.groups.isNotEmpty(), video.isNotEmpty(), video.any { it.isSupported },
+        if (!refused && missingSupportedVideo(tracks.groups.isNotEmpty(), video.isNotEmpty(), video.any { it.isSupported(localFile) },
             plan?.paths?.any { it.expectsVideo } == true)) {
           refused = true
           onFailure(PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, false, false)
@@ -253,6 +255,7 @@ internal class Media3Engine(
     state.live = null
     state.position = position ?: 0.0
     refused = false
+    localFile = localMedia(url.scheme)
     loggedLiveWindow = false
     val builder = MediaItem.Builder().setUri(url)
     // Disable Media3's automatic live offset correction; explicit seeks still work.

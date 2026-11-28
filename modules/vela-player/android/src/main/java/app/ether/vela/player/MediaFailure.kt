@@ -17,6 +17,13 @@ internal fun originalEndedEarly(positionSeconds: Double, durationSeconds: Double
 
 
 /** Extractors can omit an unsupported video stream while retaining perfectly playable audio. */
+/**
+ * A file on the device (a download) has no server to fall back to, so video a decoder reports as beyond
+ * its rated capabilities still counts: Media3 plays it, usually fine (1080p60 AVC on a MediaTek phone).
+ * A stream refuses it instead, so the server can transcode.
+ */
+internal fun localMedia(scheme: String?) = scheme == "file" || scheme == "content"
+
 internal fun missingSupportedVideo(hasTracks: Boolean, hasVideo: Boolean, supportedVideo: Boolean, expectsVideo: Boolean) =
   hasTracks && ((hasVideo && !supportedVideo) || (!hasVideo && expectsVideo))
 
