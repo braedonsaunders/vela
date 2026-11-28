@@ -1368,6 +1368,14 @@ async function api(req: Request, url: URL, body: any): Promise<Response> {
           sourceGeneration: body.sourceGeneration, seekGeneration: body.seekGeneration };
         byBitrate = true;
       }
+      // A native player switches from where it plays (its position, not a boundary); Ether starts the adaptive path and
+      // its fixed rungs at the boundary at or before it. The mock does so for those paths only.
+      if (body.kind === 'switch' && 'pathId' in body && Number.isFinite(body.atSeconds)) {
+        const p = s.plan.paths.find(p => p.id === body.pathId);
+        const at = body.atSeconds as number;
+        const boundary = p && (p.adaptive || /^quality-\d+p$/.test(p.id)) ? p.boundaries.filter(b => b.atSeconds <= at).at(-1) : undefined;
+        if (boundary) body = { ...body, atSeconds: boundary.atSeconds };
+      }
       if (body.kind === 'switch' && 'pathId' in body) { const p = s.plan.paths.find(p => p.id === body.pathId); if (!p) fail('not-found', 'path_not_found', 'Unknown path'); if (p.kind === 'transcode' && faults.capacityExhausted) fail('capacity', 'capacity_exhausted', 'Mock capacity exhausted'); if (p.kind === 'transcode' && faults.fallbackUnavailable) fail('source', 'fallback_unavailable', 'Fallback unavailable'); if (!byBitrate && !sidecarFixture.enabled && !p.boundaries.some(b => b.atSeconds === body.atSeconds && (!s.plan.selectedAudioTrackId || b.audioTrackIds.includes(s.plan.selectedAudioTrackId)) && (!s.plan.selectedSubtitleTrackId || b.subtitleTrackIds.includes(s.plan.selectedSubtitleTrackId)))) fail('conflict', 'unsafe_boundary', 'No proven switch boundary'); }
       if (body.kind === 'stop') { recordPlayback(s, false); lastStopped.set(s.owner, s.plan.sessionId); }
       applyCommand(s, body); return json(s.plan);

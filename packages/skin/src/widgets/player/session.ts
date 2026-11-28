@@ -37,9 +37,11 @@ export interface LiveSessionOwner {
   updatePlan(plan: PlaybackPlan): void;
 }
 
-/** Media3 (Android) plays a server path at the one rate it has: a stream the network cannot carry steps down
- * to a server transcode (core delivery.ts). The engine reports the bytes it receives (loadProgress). */
-const STEPS_DOWN = Platform.OS === 'android';
+/** Media3 (Android) and Aether (iOS, tvOS) play a server path at the one rate it has: a stream the network cannot
+ * carry steps down to the plan's adaptive HLS path, else a server transcode (core delivery.ts). Both engines report
+ * the bytes they receive (loadProgress), which measure the throughput the observations report. The web engine picks
+ * HLS renditions itself and asks for no adaptive path. */
+const STEPS_DOWN = Platform.OS === 'android' || Platform.OS === 'ios';
 /** How often the evidence is weighed (snapshots arrive four times a second). */
 const STEP_CHECK_MS = 1000;
 /** How long the step-down notice stands. */
@@ -365,10 +367,11 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
     const now = Date.now();
     delivery.current = heardDelivery(delivery.current, next, now);
     // The evidence is kept either way (it measures the throughput the observations report); a quality the viewer
-    // picked is never overridden.
-    if (viewerQuality.current === sessionId || now - deliveryChecked.current < STEP_CHECK_MS) return;
+    // picked is never overridden (viewerChose).
+    if (now - deliveryChecked.current < STEP_CHECK_MS) return;
     deliveryChecked.current = now;
-    const step = stepDown(delivery.current, plan, now, { adaptive: playerAdapts(plan), bitrateSwitch: bitrateRefused.current !== sessionId });
+    const step = stepDown(delivery.current, plan, now, { adaptive: playerAdapts(plan), bitrateSwitch: bitrateRefused.current !== sessionId,
+      viewerChose: viewerQuality.current === sessionId });
     if (!step || !plan) return;
     // Once per source: the switch brings new generations, and with them fresh evidence.
     delivery.current = deliveryWatch();
@@ -384,7 +387,8 @@ export function usePlaybackSession(target: PlaybackTarget, owner?: LiveSessionOw
       setQualityNotice(msg('player.quality.steppedDown', { quality: `≤ ${mbps(step.maxBitrate)} Mb/s` }));
       return;
     }
-    console.info(`Vela playback: stepping down to ${step.pathId} (${step.adaptive ? 'adaptive' : `${mbps(step.rateBps)} Mbit/s`}) at ${mbps(step.throughputBps)} Mbit/s measured`);
+    const measured = step.throughputBps === null ? 'no throughput measured' : `${mbps(step.throughputBps)} Mbit/s measured`;
+    console.info(`Vela playback: stepping down to ${step.pathId} (${step.adaptive ? 'adaptive' : `${mbps(step.rateBps)} Mbit/s`}) at ${measured}`);
     nextId.current += 1;
     setSent({ command: { id: nextId.current, type: 'quality', renditionId: `path:${step.pathId}` }, on: plan.sessionId });
     if (step.adaptive) { setQualityNotice(msg('player.quality.steppedDownAdaptive')); return; }
