@@ -1,12 +1,10 @@
-// Secrets natively: the Keychain on iOS and tvOS, the Keystore on Android, through
-// expo-secure-store's synchronous calls. Readable after the first unlock, so a session survives
-// a reboot and background work, and never synced to other devices.
-import * as SecureStore from 'expo-secure-store';
-import { cachedSecretStore, type SecretStore } from '@vela/core';
+import { Platform } from 'react-native';
+import { appleInstallStorage, preferences } from './preferences';
+import { initializeAppleInstall } from './install-state';
+import { secureStorage } from './secure-storage';
 
-const OPTIONS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY };
+// React Native reports iOS for both iPhone/iPad and tvOS. Android's Keystore
+// keys and the app's SecureStore preferences are cleared by uninstall.
+if (Platform.OS === 'ios') initializeAppleInstall(preferences, appleInstallStorage());
 
-export const secrets: SecretStore = cachedSecretStore({
-  get: key => SecureStore.getItem(key, OPTIONS),
-  set: (key, value) => SecureStore.setItem(key, value, OPTIONS),
-});
+export const secrets = secureStorage;

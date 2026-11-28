@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { offersSignInAgain, reconnectNote, SIGN_IN_AGAIN_AFTER_FAILURES } from '../src/widgets/auth/connect/reconnect-note';
+import { offersSignInAgain, reconnectActions, reconnectNote, SIGN_IN_AGAIN_AFTER_FAILURES } from '../src/widgets/auth/connect/reconnect-note';
 
 test('the reconnect screen counts down to the next attempt, rounding up and never showing 0', () => {
   const now = 1_000_000;
@@ -24,4 +24,11 @@ test('Sign in again joins Retry once restoring has failed repeatedly, never on t
   expect(offersSignInAgain({ failures: 1 })).toBe(false);
   expect(offersSignInAgain({ failures: 2 })).toBe(true);
   expect(offersSignInAgain({ failures: 9 })).toBe(true);
+});
+
+test('the reconnecting screen offers the server chooser immediately, including while offline with downloads', () => {
+  const handlers = { choose: () => {}, retry: () => {} };
+  const choose = { action: 'choose', label: 'Use a different server', testID: 'auth-choose-server', onPress: handlers.choose } as const;
+  expect(reconnectActions({}, handlers)).toContainEqual(choose);
+  expect(reconnectActions({ failures: 2 }, { ...handlers, downloads: () => {}, signInAgain: () => {} })).toContainEqual(choose);
 });

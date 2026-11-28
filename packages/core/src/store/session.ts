@@ -249,6 +249,12 @@ export class Session {
     return this.connection(selectedId);
   }
 
+  clearSelection(): void {
+    if (this.activeId === '') return;
+    this.activeId = '';
+    this.resetServer();
+  }
+
   select(id: string): Connection {
     this.registry.select(id);
     return this.selected();

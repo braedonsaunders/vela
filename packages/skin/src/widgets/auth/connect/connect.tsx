@@ -13,6 +13,7 @@ import { Credentials } from './credentials';
 import type { ServerActions, ServerProbe, ServersView } from './model';
 import { PlexStep } from './plex';
 import { Reconnecting } from './reconnecting';
+import { chooseDifferentServer } from './reconnect-note';
 import { ServerRow } from './server-row';
 
 export interface ConnectProps {
@@ -47,7 +48,7 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
   const kind = record?.kind ?? auth?.serverKind;
   const branded = !!brandingName && (target === servers.selectedId || target === auth?.serverId);
   const name = branded ? brandingName! : record?.name || 'server';
-  useEffect(() => { if (serverId) send({type: 'server', serverId}); }, [serverId]);
+  useEffect(() => { if (serverId) send({ type: 'sync-server', serverId }); }, [serverId]);
   useEffect(() => { send({ type: 'servers', count: servers.list.length }); }, [servers.list.length]);
   useEffect(() => { if (auth?.phase === 'signed-in' && (step.page === 'signin' || step.page === 'code')) onClose?.(); }, [auth?.phase, step.page, onClose]);
   const back = () => {
@@ -99,6 +100,14 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
   }, [auth?.quick, step.page, target]);
   const offline = step.page === 'signin' && target === auth?.serverId && auth?.phase === 'offline';
   const savedOffline = offline && !!auth.viewerId;
+  const chooseServer = () => {
+    setError('');
+    setNote('');
+    if (step.page === 'server-plex') authActions?.cancelPlex();
+    if (step.page === 'code') { void authActions?.cancelQuick(); actions.jellyfinQuickCancel(); }
+    if (kind === 'plex') actions.plexCancel();
+    send({ type: 'choose' });
+  };
   const title = savedOffline ? "You're offline" : step.page === 'choose' ? 'Choose a server' : step.page === 'add' ? 'Add a server' : step.page === 'plex' || step.page === 'server-plex' ? 'Sign in with Plex' : step.page === 'code' ? 'Use a code' : `Sign in to ${name}`;
   // Fabric ignores the no-common-ligatures font variant. Non-joiners keep the ffl glyphs distinct.
   const displayTitle = savedOffline ? title.replace('ffl', 'f\u200cf\u200cl') : title;
@@ -107,15 +116,16 @@ export function Connect({ servers, actions, onClose, onDownloads, auth, authActi
     <View style={{ gap: layout?.tight ? 4 : 12 }}>
       {flow.history.length || onClose ? <Pill label={flow.history.length ? 'Back' : 'Cancel'} height={44} align="flex-start" onPress={back} testID="auth-back" /> : null}
       {!layout?.minimal ? <Heading title={displayTitle} accessibilityLabel={savedOffline ? title : undefined} /> : null}
+      {!!target && !offline ? <Pill {...chooseDifferentServer} height={44} disabled={busy} onPress={chooseServer} /> : null}
     </View>
     {step.page === 'choose' ? <>
       <Pill label="Add a server" height={44} onPress={() => send({type: 'add'})} testID="auth-add" />
       <ScrollView style={{ flexShrink: 1, minHeight: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled">
-        {servers.list.map(server => <ServerRow key={server.id} server={server.selected && brandingName ? { ...server, name: brandingName } : server} busy={busy} onSelect={select} onRemove={id => void run(() => actions.remove(id))} />)}
+        {servers.list.map(server => <ServerRow key={server.id} server={server.selected && brandingName ? { ...server, name: brandingName } : server} busy={busy} removable={!server.selected || (server.id !== 'ether' && auth?.phase !== 'signed-in')} onSelect={select} onRemove={id => void run(() => actions.remove(id))} />)}
       </ScrollView>
     </> : step.page === 'add' ? <AddressStep servers={[]} busy={busy} probe={url => actions.probe(url)} onAdd={add} onSelect={select} onRemove={id => void run(() => actions.remove(id))} onPlex={() => { send({type: 'plex'}); void run(() => actions.plexStart()); }} error="" />
     : step.page === 'server-plex' ? <PlexStep link={auth?.plex ?? null} busy={busy} starting={busy && !auth?.plex} error={auth?.error ?? ''} onStart={() => void run(() => authActions!.startPlex())} onChoose={() => {}} onChooseProfile={(id, pin) => void run(() => authActions!.choosePlexProfile(id, pin))} onCancel={back} />
-    : offline ? <Reconnecting name={name} auth={auth} busy={busy} onDownloads={onDownloads} onRetry={() => void run(() => authActions?.retry?.() ?? Promise.resolve())} onSignInAgain={authActions?.signInAgain ? () => void run(() => authActions.signInAgain!()) : undefined} />
+    : offline ? <Reconnecting name={name} auth={auth} busy={busy} onChooseServer={chooseServer} onDownloads={onDownloads} onRetry={() => void run(() => authActions?.retry?.() ?? Promise.resolve())} onSignInAgain={authActions?.signInAgain ? () => void run(() => authActions.signInAgain!()) : undefined} />
     : step.page === 'plex' || kind === 'plex' ? <PlexStep link={servers.plex} busy={busy} starting={busy && !servers.plex} error="" onStart={() => void run(() => actions.plexStart())} onChoose={id => void run(async () => { const result = await actions.plexChoose(id); if (!result.error && result.id) { setNote(result.note ?? ''); setAdded({id: result.id, name: 'server', kind: result.note ? 'ether' : 'plex'}); send({type: 'server', serverId: result.id}); } return result; })} onChooseProfile={(id, pin) => void run(() => actions.plexChooseProfile(id, pin))} onCancel={back} />
     : step.page === 'code' ? <View style={{ gap: layout?.gap ?? 18, alignItems: 'center' }}>
       {quick?.code ? <CodeTiles code={quick.code} testID="connect-code" /> : <Waiting>Requesting a code…</Waiting>}

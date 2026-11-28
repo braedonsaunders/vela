@@ -1,5 +1,4 @@
-// One of your servers on Connect: its name, kind and state; choosing it switches to it, and a
-// server other than the current one can be removed.
+// A saved server's name, kind and state, with controls to select it or remove it.
 import { View } from 'react-native';
 import { msg } from '@vela/core';
 import { APressable, Glyph, NO_RING, overlaid, useInteraction, Words } from '../../common/controls';
@@ -19,11 +18,13 @@ export function serverDetail(server: ServerOption): string {
 export function ServerRow({
   server,
   busy,
+  removable = !server.selected,
   onSelect,
   onRemove,
 }: {
   server: ServerOption;
   busy: boolean;
+  removable?: boolean;
   onSelect(id: string): void;
   onRemove(id: string): void;
 }) {
@@ -88,18 +89,19 @@ export function ServerRow({
         </View>
         {server.selected ? <Glyph symbol="checkmark" size={14} color={look.ui.accent} /> : null}
       </APressable>
-      {server.selected ? null : (
+      {removable ? (
         <APressable
           onPress={() => onRemove(server.id)}
           disabled={busy}
           accessibilityRole="button"
           accessibilityLabel={msg('connect.remove', { name: server.name })}
+          testID={`server-remove-${server.id}`}
           style={[look.box(removeRows), NO_RING]}
           {...remove.handlers}
         >
           <Glyph symbol="close" size={14} color={look.ui.ink} />
         </APressable>
-      )}
+      ) : null}
     </View>
   );
 }
